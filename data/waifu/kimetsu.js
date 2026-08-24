@@ -1,0 +1,15 @@
+export const waifus = [
+  { name: "Nezuko Kamado", series: "Kimetsu no Yaiba", age: 14, height: "153 cm", weight: "45 kg", tier: "Common", personality: "dandere" },
+  { name: "Kanao Tsuyuri", series: "Kimetsu no Yaiba", age: 16, height: "155 cm", weight: "44 kg", tier: "Common", personality: "kuudere" },
+  { name: "Aoi Kanzaki", series: "Kimetsu no Yaiba", age: 15, height: "154 cm", weight: "44 kg", tier: "Common", personality: "tsundere" },
+  { name: "Makomo", series: "Kimetsu no Yaiba", age: 11, height: "140 cm", weight: "36 kg", tier: "Common", personality: "dandere" },
+  { name: "Tamayo", series: "Kimetsu no Yaiba", age: 500, height: "162 cm", weight: "47 kg", tier: "Common", personality: "onee-san" },
+  { name: "Shinobu Kocho", series: "Kimetsu no Yaiba", age: 18, height: "151 cm", weight: "37 kg", tier: "Rare", personality: "tsundere" },
+  { name: "Mitsuri Kanroji", series: "Kimetsu no Yaiba", age: 19, height: "167 cm", weight: "56 kg", tier: "Rare", personality: "deredere" },
+  { name: "Naho Takada", series: "Kimetsu no Yaiba", age: 14, height: "152 cm", weight: "43 kg", tier: "Rare", personality: "genki" },
+  { name: "Amane Ubuyashiki", series: "Kimetsu no Yaiba", age: 27, height: "160 cm", weight: "46 kg", tier: "Rare", personality: "kuudere" },
+  { name: "Makio", series: "Kimetsu no Yaiba", age: 21, height: "170 cm", weight: "54 kg", tier: "Epic", personality: "genki" },
+  { name: "Hinatsuru", series: "Kimetsu no Yaiba", age: 22, height: "167 cm", weight: "50 kg", tier: "Epic", personality: "kuudere" },
+  { name: "Suma", series: "Kimetsu no Yaiba", age: 19, height: "164 cm", weight: "48 kg", tier: "Epic", personality: "himedere" },
+  { name: "Daki", series: "Kimetsu no Yaiba", age: 100, height: "168 cm", weight: "52 kg", tier: "Legendary", personality: "himedere" },
+];

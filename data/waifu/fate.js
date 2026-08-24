@@ -1,0 +1,17 @@
+export const waifus = [
+  { name: "Rin Tohsaka", series: "Fate", age: 17, height: "158 cm", weight: "47 kg", tier: "Common", personality: "tsundere" },
+  { name: "Sakura Matou", series: "Fate", age: 16, height: "156 cm", weight: "46 kg", tier: "Common", personality: "dandere" },
+  { name: "Illyasviel", series: "Fate", age: 18, height: "133 cm", weight: "34 kg", tier: "Common", personality: "himedere" },
+  { name: "Mash Kyrielight", series: "Fate", age: 17, height: "157 cm", weight: "46 kg", tier: "Common", personality: "dandere" },
+  { name: "Kiyohime", series: "Fate", age: 20, height: "156 cm", weight: "45 kg", tier: "Common", personality: "yandere" },
+  { name: "Mordred", series: "Fate", age: 19, height: "154 cm", weight: "42 kg", tier: "Rare", personality: "tsundere" },
+  { name: "Jeanne d'Arc", series: "Fate", age: 19, height: "159 cm", weight: "47 kg", tier: "Rare", personality: "deredere" },
+  { name: "Nero Claudius", series: "Fate", age: 19, height: "150 cm", weight: "42 kg", tier: "Rare", personality: "himedere" },
+  { name: "Tamamo no Mae", series: "Fate", age: 20, height: "160 cm", weight: "45 kg", tier: "Rare", personality: "deredere" },
+  { name: "Rider (Medusa)", series: "Fate", age: 25, height: "172 cm", weight: "57 kg", tier: "Rare", personality: "kuudere" },
+  { name: "Lancer (Scathach)", series: "Fate", age: 30, height: "168 cm", weight: "55 kg", tier: "Epic", personality: "onee-san" },
+  { name: "Artoria Pendragon", series: "Fate", age: 24, height: "154 cm", weight: "42 kg", tier: "Mythic", personality: "kuudere" },
+  { name: "Ishtar", series: "Fate", age: 17, height: "158 cm", weight: "47 kg", tier: "Epic", personality: "himedere" },
+  { name: "Ereshkigal", series: "Fate", age: 17, height: "157 cm", weight: "47 kg", tier: "Legendary", personality: "dandere" },
+  { name: "Queen Medb", series: "Fate", age: 20, height: "168 cm", weight: "53 kg", tier: "Legendary", personality: "himedere" },
+];

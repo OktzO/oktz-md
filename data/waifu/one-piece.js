@@ -1,0 +1,16 @@
+export const waifus = [
+  { name: "Nami", series: "One Piece", age: 20, height: "170 cm", weight: "50 kg", tier: "Common", personality: "tsundere" },
+  { name: "Nico Robin", series: "One Piece", age: 30, height: "188 cm", weight: "60 kg", tier: "Common", personality: "kuudere" },
+  { name: "Tashigi", series: "One Piece", age: 24, height: "170 cm", weight: "50 kg", tier: "Common", personality: "dandere" },
+  { name: "Perona", series: "One Piece", age: 25, height: "160 cm", weight: "45 kg", tier: "Common", personality: "himedere" },
+  { name: "Kalifa", series: "One Piece", age: 29, height: "185 cm", weight: "58 kg", tier: "Common", personality: "ojou-sama" },
+  { name: "Carrot", series: "One Piece", age: 15, height: "151 cm", weight: "42 kg", tier: "Common", personality: "genki" },
+  { name: "Vivi", series: "One Piece", age: 18, height: "169 cm", weight: "47 kg", tier: "Rare", personality: "deredere" },
+  { name: "Koala", series: "One Piece", age: 22, height: "166 cm", weight: "49 kg", tier: "Rare", personality: "genki" },
+  { name: "Rebecca", series: "One Piece", age: 16, height: "171 cm", weight: "52 kg", tier: "Rare", personality: "dandere" },
+  { name: "Reiju Vinsmoke", series: "One Piece", age: 24, height: "180 cm", weight: "58 kg", tier: "Rare", personality: "kuudere" },
+  { name: "Jewelry Bonney", series: "One Piece", age: 24, height: "174 cm", weight: "55 kg", tier: "Epic", personality: "genki" },
+  { name: "Hiyori Kozuki", series: "One Piece", age: 26, height: "170 cm", weight: "52 kg", tier: "Epic", personality: "dandere" },
+  { name: "Shirahoshi", series: "One Piece", age: 17, height: "1187 cm", weight: "650 kg", tier: "Epic", personality: "dandere" },
+  { name: "Boa Hancock", series: "One Piece", age: 31, height: "191 cm", weight: "60 kg", tier: "Legendary", personality: "tsundere" },
+];

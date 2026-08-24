@@ -1,0 +1,16 @@
+export const waifus = [
+  { name: "Ochaco Uraraka", series: "My Hero Academia", age: 16, height: "156 cm", weight: "43 kg", tier: "Common", personality: "deredere" },
+  { name: "Momo Yaoyorozu", series: "My Hero Academia", age: 16, height: "173 cm", weight: "54 kg", tier: "Common", personality: "ojou-sama" },
+  { name: "Tsuyu Asui", series: "My Hero Academia", age: 16, height: "150 cm", weight: "40 kg", tier: "Common", personality: "kuudere" },
+  { name: "Mina Ashido", series: "My Hero Academia", age: 16, height: "159 cm", weight: "47 kg", tier: "Common", personality: "genki" },
+  { name: "Kyoka Jiro", series: "My Hero Academia", age: 16, height: "154 cm", weight: "44 kg", tier: "Common", personality: "tsundere" },
+  { name: "Toru Hagakure", series: "My Hero Academia", age: 16, height: "152 cm", weight: "43 kg", tier: "Common", personality: "genki" },
+  { name: "Eri", series: "My Hero Academia", age: 7, height: "115 cm", weight: "20 kg", tier: "Rare", personality: "dandere" },
+  { name: "Camie Utsushimi", series: "My Hero Academia", age: 16, height: "162 cm", weight: "48 kg", tier: "Rare", personality: "himedere" },
+  { name: "Mei Hatsume", series: "My Hero Academia", age: 16, height: "162 cm", weight: "49 kg", tier: "Rare", personality: "genki" },
+  { name: "Midnight", series: "My Hero Academia", age: 31, height: "175 cm", weight: "55 kg", tier: "Rare", personality: "himedere" },
+  { name: "Mt. Lady", series: "My Hero Academia", age: 23, height: "180 cm", weight: "60 kg", tier: "Rare", personality: "himedere" },
+  { name: "Mirko", series: "My Hero Academia", age: 28, height: "175 cm", weight: "58 kg", tier: "Epic", personality: "genki" },
+  { name: "Himiko Toga", series: "My Hero Academia", age: 17, height: "157 cm", weight: "45 kg", tier: "Epic", personality: "yandere" },
+  { name: "Lady Nagant", series: "My Hero Academia", age: 32, height: "172 cm", weight: "55 kg", tier: "Legendary", personality: "kuudere" },
+];

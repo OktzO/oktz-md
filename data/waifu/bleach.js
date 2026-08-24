@@ -1,0 +1,16 @@
+export const waifus = [
+  { name: "Orihime Inoue", series: "Bleach", age: 16, height: "157 cm", weight: "45 kg", tier: "Common", personality: "deredere" },
+  { name: "Rukia Kuchiki", series: "Bleach", age: 15, height: "144 cm", weight: "33 kg", tier: "Common", personality: "kuudere" },
+  { name: "Rangiku Matsumoto", series: "Bleach", age: 23, height: "172 cm", weight: "56 kg", tier: "Common", personality: "onee-san" },
+  { name: "Soi Fon", series: "Bleach", age: 22, height: "150 cm", weight: "38 kg", tier: "Common", personality: "tsundere" },
+  { name: "Isane Kotetsu", series: "Bleach", age: 24, height: "166 cm", weight: "52 kg", tier: "Common", personality: "dandere" },
+  { name: "Tatsuki Arisawa", series: "Bleach", age: 16, height: "166 cm", weight: "51 kg", tier: "Common", personality: "genki" },
+  { name: "Yachiru Kusajishi", series: "Bleach", age: 10, height: "109 cm", weight: "23 kg", tier: "Rare", personality: "genki" },
+  { name: "Nanao Ise", series: "Bleach", age: 20, height: "166 cm", weight: "52 kg", tier: "Rare", personality: "kuudere" },
+  { name: "Kukaku Shiba", series: "Bleach", age: 27, height: "170 cm", weight: "55 kg", tier: "Rare", personality: "onee-san" },
+  { name: "Senna", series: "Bleach", age: 16, height: "155 cm", weight: "44 kg", tier: "Rare", personality: "dandere" },
+  { name: "Nelliel Tu", series: "Bleach", age: 20, height: "175 cm", weight: "57 kg", tier: "Epic", personality: "deredere" },
+  { name: "Tier Harribel", series: "Bleach", age: 25, height: "178 cm", weight: "60 kg", tier: "Epic", personality: "kuudere" },
+  { name: "Retsu Unohana", series: "Bleach", age: 100, height: "170 cm", weight: "52 kg", tier: "Legendary", personality: "onee-san" },
+  { name: "Yoruichi Shihoin", series: "Bleach", age: 100, height: "156 cm", weight: "42 kg", tier: "Legendary", personality: "onee-san" },
+];
