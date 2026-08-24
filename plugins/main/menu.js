@@ -675,31 +675,9 @@ ${readmore}${s}`
 
         break;
 
-      case 3:
-        const content = {
-          buttonsMessage: {
-            buttons: [
-              {
-                buttonId: `${m.prefix}owner`,
-                buttonText: {
-                  displayText: '🧀 Owner',
-                },
-                type: 1,
-              },
-              {
-                buttonId: `${m.prefix}allmenu`,
-                buttonText: {
-                  displayText: '💐 Allmenu',
-                },
-                type: 1,
-              },
-            ],
-            locationMessage: {
-              jpegThumbnail: await sharp(fs.readFileSync(config.assets["ourin"])).resize(300, 170).toBuffer(),
-              name: config.bot.name,
-              address: `Versi saat ini: ${config.bot.version}`
-            },
-            contentText: `🥞 *Hello Brother*
+      case 3: {
+        const jpegThumbnail = await sharp(fs.readFileSync(config.assets["ourin"])).resize(300, 170).toBuffer();
+        const bodyText = `🥞 *Hello Brother*
 
 Welcome to ${config.bot?.name}, Our bot will help you
 
@@ -716,20 +694,67 @@ Welcome to ${config.bot?.name}, Our bot will help you
 > 🍗 *Exp*: ${user.exp || 0}
 > 🥩 *Energi*: ${user.energi || 0}
 > 🎏 *Koin*: ${user.koin || 0}
-> 🍬 *Register*: ${user.isRegistered ? "Sudah" : "Belum"}`,
-            footerText: '🍔 Silahkan pilih dari salah satu tombol di bawah',
-            headerType: 6,
-          },
-        };
+> 🍬 *Register*: ${user.isRegistered ? "Sudah" : "Belum"}`;
+        const footerText = '🍔 Silahkan pilih dari salah satu tombol di bawah';
 
-        const msg = generateWAMessageFromContent(m.chat, content, {
-          userJid: sock.user.jid,
-        });
+        const msg = generateWAMessageFromContent(m.chat, {
+          viewOnceMessage: {
+            message: {
+              messageContextInfo: {},
+              interactiveMessage: {
+                header: {
+                  hasMediaAttachment: true,
+                  locationMessage: {
+                    degreesLatitude: 0,
+                    degreesLongitude: 0,
+                    name: config.bot.name,
+                    address: `Versi saat ini: ${config.bot.version}`,
+                    jpegThumbnail,
+                  },
+                },
+                body: { text: bodyText },
+                footer: { text: footerText },
+                nativeFlowMessage: {
+                  buttons: [
+                    {
+                      name: "single_select",
+                      buttonParamsJson: JSON.stringify({
+                        title: "🍃 Menu Utama",
+                        sections: [
+                          {
+                            title: "Berikut adalah pilihan nya",
+                            rows: zann_pengin_rehat,
+                          },
+                        ],
+                        icon: "DEFAULT",
+                      }),
+                    },
+                    {
+                      name: "quick_reply",
+                      buttonParamsJson: JSON.stringify({
+                        display_text: "🧀 Owner",
+                        id: `${m.prefix}owner`,
+                      }),
+                    },
+                    {
+                      name: "quick_reply",
+                      buttonParamsJson: JSON.stringify({
+                        display_text: "💐 Allmenu",
+                        id: `${m.prefix}allmenu`,
+                      }),
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        }, { userJid: sock.user.jid });
 
         await sock.relayMessage(m.chat, msg.message, {
           messageId: msg.key.id,
         });
         break
+      }
 
       case 4: {
         const thumbnail = await sharp(fs.readFileSync(config.assets["ourin"])).resize(300, 300).toBuffer()
