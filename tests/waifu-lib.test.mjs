@@ -53,13 +53,38 @@ describe("Waifu lib", () => {
 
   it("rollEvent respects 18% chance and gates", () => {
     let hit = 0;
-    for (let i = 0; i < 1000; i++) if (rollEvent({ married: false, phase: "approach", personality: "genki" }, mulberry32(i))) hit++;
+    for (let i = 0; i < 1000; i++) if (rollEvent({ married: false, phase: "approach", personality: "genki", name: "Miku" }, mulberry32(i))) hit++;
     assert.ok(hit > 100 && hit < 260, `hit=${hit}`);
     // event intim phase never fires in approach
     for (let i = 0; i < 200; i++) {
-      const e = rollEvent({ married: false, phase: "approach", personality: "genki" }, mulberry32(i));
+      const e = rollEvent({ married: false, phase: "approach", personality: "genki", name: "Miku" }, mulberry32(i));
       if (e) assert.ok(!["intimate", "confess"].includes(e.id));
     }
+  });
+
+  it("rollEvent text renders waifu name as string, no undefined/function", () => {
+    for (let i = 0; i < 500; i++) {
+      const e = rollEvent({ married: false, phase: "approach", personality: "genki", name: "Miku" }, mulberry32(i));
+      if (!e) continue;
+      assert.strictEqual(typeof e.text, "string");
+      assert.ok(!e.text.includes("undefined"), e.text);
+      assert.ok(!e.text.includes("function"), e.text);
+    }
+    for (let i = 0; i < 500; i++) {
+      const e = rollEvent({ married: true, phase: "married", personality: "deredere", name: "Miku" }, mulberry32(i));
+      if (!e) continue;
+      assert.strictEqual(typeof e.text, "string");
+      assert.ok(!e.text.includes("undefined"), e.text);
+      assert.ok(!e.text.includes("function"), e.text);
+    }
+  });
+
+  it("applyAction honors multOverride (nextMult 0.8)", () => {
+    const waifu = { personality: "tsundere", name: "Miku" };
+    // jalan_taman likes tsundere ×1.2, biasa ×1.0, rng 0 → base 10, mult 0.8 → 10*0.96 = 9.6 → 10
+    const r = applyAction("jalan_taman", waifu, "biasa", () => 0, 0.8);
+    assert.equal(r.change, 10);
+    assert.equal(applyAction("jalan_taman", waifu, "biasa", () => 0, 1).change, 12);
   });
 
   it("getDailyMood deterministic per day+jid", () => {
@@ -99,8 +124,17 @@ describe("Waifu lib", () => {
     const history = Array.from({ length: 100 }, () => ({ name: "C", series: "S", tier: "Common" }));
     const s = albumStats(history, { totalGacha: 100, byTier: { Common: 100 }, pityCounter: 3, rarest: { name: "C", tier: "Common" }, marriedCount: 0 });
     assert.ok(s.luck < 1, s.luck);
+    assert.equal(s.last10.length, 10);
     const myth = albumStats([{ name: "M", series: "S", tier: "Mythic" }], { totalGacha: 1, byTier: { Mythic: 1 }, rarest: { name: "M", tier: "Mythic" }, marriedCount: 0 });
     assert.ok(myth.luck > 1, myth.luck);
+  });
+
+  it("albumStats luck uses all-time byTier, not capped last-100 history", () => {
+    // 300 pulls, all Common (capped history only holds last 100)
+    const history = Array.from({ length: 100 }, () => ({ name: "C", series: "S", tier: "Common" }));
+    const s = albumStats(history, { totalGacha: 300, byTier: { Common: 300 }, pityCounter: 3, rarest: { name: "C", tier: "Common" }, marriedCount: 0 });
+    assert.equal(s.luck, 0.44); // 300/300/2.25
+    assert.equal(s.last10.length, 10);
   });
 
   it("DOWRY has all tiers", () => {

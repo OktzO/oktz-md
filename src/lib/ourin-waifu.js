@@ -83,15 +83,15 @@ const EVENTS = [
   { id: "rain", phase: "any", text: (n) => `🌧️ Hujan deras turun! Kalian berbagi satu payung, bahu menempel bahu. *${n}* tersenyum malu.`, aff: 5 },
   { id: "wallet", phase: "any", text: () => `💸 Kamu menemukan dompet di jalan dan mengembalikannya. Rezeki mengalir!`, koin: () => 1000 + Math.floor(Math.random() * 24001) },
   { id: "rival", phase: "any", text: (n) => `😠 Seorang rival mendekati *${n}*! Ia gelisah dan mood-nya turun.`, aff: -4, yandereAff: 5 },
-  { id: "idol", phase: "any", text: () => `🎤 Idola favoritnya lewat di jalanan! *${n}* kegirangan dan mood-nya naik.`, aff: 6, mood: "ceria" },
+  { id: "idol", phase: "any", text: (n) => `🎤 Idola favoritnya lewat di jalanan! *${n}* kegirangan dan mood-nya naik.`, aff: 6, mood: "ceria" },
   { id: "cat", phase: "any", text: () => `🐱 Seekor kucing lucu tersangkut di pohon. Kalian menyelamatkannya!`, aff: (p) => (p === "deredere" || p === "genki" ? 9 : 4) },
   { id: "lottery", phase: "any", text: () => `🎰 Tiket lotre jatuh dari langit! Kamu coba keberuntunganmu...`, koin: () => (Math.random() < 0.5 ? 20000 + Math.floor(Math.random() * 40001) : 0) },
-  { id: "late", phase: "any", text: () => `📉 Kamu hampir telat janji temu! *${n}* cemberut sepanjang hari.`, mood: "sedih", nextMult: 0.8 },
-  { id: "anniv", phase: "any", marriedOnly: true, text: () => `💍 Kenangan hari pernikahan kalian teringat kembali. *${n}* terharu.`, aff: 6 },
+  { id: "late", phase: "any", text: (n) => `📉 Kamu hampir telat janji temu! *${n}* cemberut sepanjang hari.`, mood: "sedih", nextMult: 0.8 },
+  { id: "anniv", phase: "any", marriedOnly: true, text: () => `💍 Kenangan hari pernikahan kalian teringat kembali. Kalian terharu bersama.`, aff: 6 },
   { id: "intimate", phase: "intim", text: (n) => `🔥 Momen kalian berlanjut. *${n}* berbisik pelan, "jangan berhenti..."`, aff: 10 },
   { id: "rainbow", phase: "approach", text: () => `🌈 Pelangi muncul setelah hujan reda. Kalian berhenti untuk mengabadikannya.`, aff: 5 },
   { id: "confess", phase: "intim", text: (n) => `💞 *${n}* mengaku bahwa ia mulai benar-benar mencintaimu.`, aff: 8 },
-  { id: "gift", phase: "married", marriedOnly: true, text: () => `🎁 Hadiah kejutan kecil dari *${n}* untukmu.`, koin: () => 2000 + Math.floor(Math.random() * 9001) },
+  { id: "gift", phase: "married", marriedOnly: true, text: () => `🎁 Hadiah kejutan kecil untukmu sebagai pasangan.`, koin: () => 2000 + Math.floor(Math.random() * 9001) },
 ];
 
 export function rollWaifu(pityCounter = 0, rng = Math.random) {
@@ -106,12 +106,13 @@ export function rollWaifu(pityCounter = 0, rng = Math.random) {
   return eligible[eligible.length - 1];
 }
 
-export function applyAction(key, waifu, moodType = "biasa", rng = Math.random) {
+export function applyAction(key, waifu, moodType = "biasa", rng = Math.random, multOverride = 1) {
   const a = ACTIONS[key];
   if (!a || !waifu || !waifu.personality) return null;
   const [min, max] = a.base;
   let base = min + rng() * (max - min);
   let mult = MOOD_MULT[moodType] || 1;
+  mult *= multOverride;
   const tag = PERSONALITY_TAG[waifu.personality] || { like: [], dislike: [] };
   if (a.likes.includes(waifu.personality) || tag.like.includes(key)) mult *= 1.2;
   else if (a.dislikes.includes(waifu.personality) || tag.dislike.includes(key)) mult *= 0.7;
@@ -119,7 +120,7 @@ export function applyAction(key, waifu, moodType = "biasa", rng = Math.random) {
   return { key, phase: a.phase, change, exp: a.exp, text: a.text(waifu.name) };
 }
 
-export function rollEvent({ married, phase, personality } = {}, rng = Math.random) {
+export function rollEvent({ married, phase, personality, name } = {}, rng = Math.random) {
   if (rng() > EVENT_CHANCE) return null;
   const pool = EVENTS.filter(e => {
     if (e.marriedOnly && !married) return false;
@@ -130,7 +131,7 @@ export function rollEvent({ married, phase, personality } = {}, rng = Math.rando
   const e = pool[Math.floor(rng() * pool.length)];
   let aff = typeof e.aff === "function" ? e.aff(personality) : (e.aff || 0);
   if (e.id === "rival" && personality === "yandere") aff = e.yandereAff;
-  return { id: e.id, text: e.text, aff, koin: e.koin ? e.koin() : 0, mood: e.mood || null, nextMult: e.nextMult || 1 };
+  return { id: e.id, text: typeof e.text === "function" ? e.text(name) : e.text, aff, koin: e.koin ? e.koin() : 0, mood: e.mood || null, nextMult: e.nextMult || 1 };
 }
 
 export function getDailyMood(senderJid, dateStr) {
@@ -176,7 +177,8 @@ export async function jealousyCheck({ m, sock, db, command }) {
 
 export function albumStats(history = [], stats = {}) {
   const total = stats.totalGacha || 0;
-  const actual = history.reduce((s, h) => s + (TIER_VALUE[h.tier] || 1), 0);
+  const byTier = stats.byTier || {};
+  const actual = (byTier.Common || 0) * TIER_VALUE.Common + (byTier.Rare || 0) * TIER_VALUE.Rare + (byTier.Epic || 0) * TIER_VALUE.Epic + (byTier.Legendary || 0) * TIER_VALUE.Legendary + (byTier.Mythic || 0) * TIER_VALUE.Mythic;
   const luck = total > 0 ? actual / total / TIER_EXPECTED : 0;
   return {
     total,

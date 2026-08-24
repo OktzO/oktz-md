@@ -3,7 +3,7 @@ import { getDatabase } from "../../src/lib/ourin-database.js";
 import te from "../../src/lib/ourin-error.js";
 import { prepareWAMessageMedia, generateWAMessageFromContent } from "ourin";
 import { addExpWithLevelCheck } from "../../src/lib/ourin-level.js";
-import { rollWaifu, applyAction, rollEvent, getDailyMood, albumStats, DOWRY } from "../../src/lib/ourin-waifu.js";
+import { rollWaifu, applyAction, rollEvent, getDailyMood, DOWRY } from "../../src/lib/ourin-waifu.js";
 
 const pluginConfig = {
   name: ["gachawaifu", "waifuaction", "tinggalinwaifu", "waifuku", "istriku"],
@@ -259,6 +259,13 @@ async function handler(m, { sock }) {
 
     const action = (m.args[0] || "").toLowerCase();
     const waifu = user.waifu;
+    if (!waifu.personality) {
+      let h = 0;
+      for (const c of waifu.name) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+      waifu.personality = ["tsundere", "deredere", "kuudere", "dandere", "genki"][h % 5];
+      user.waifu = waifu;
+      db.setUser(m.sender, user);
+    }
     const mood = moodState(user, m);
     const sendMenu = (title, options) => sendWaifuMessage(m, sock, waifu, title, options.map(([label, id]) => ({ name: "quick_reply", buttonParamsJson: JSON.stringify({ display_text: label, id: `${m.prefix}waifuaction ${id}` }) })));
 
@@ -350,7 +357,8 @@ async function handler(m, { sock }) {
       return m.reply(`🎁 *${waifu.name}* memberi hadiah harian!\n💰 +${koin.toLocaleString()} Koin\n✨ +${exp} EXP${bonus}`);
     }
 
-    const result = applyAction(action, waifu, mood);
+    const mult = waifu.nextMultUntil && Date.now() < new Date(waifu.nextMultUntil).getTime() ? 0.8 : 1;
+    const result = applyAction(action, waifu, mood, undefined, mult);
     if (!result) { m.react("❓"); return m.reply(`Aksi tidak dikenali. Gunakan tombol waifu.`); }
 
     if (result.phase === "married" && !waifu.married) { m.react("⛔"); return m.reply(`Aksi ini hanya untuk pasangan suami istri!`); }
@@ -372,7 +380,7 @@ async function handler(m, { sock }) {
     let eventBlock = "";
     let eventExp = 0;
     let eventKoin = 0;
-    const ev = rollEvent({ married: waifu.married, phase: result.phase, personality: waifu.personality });
+    const ev = rollEvent({ married: waifu.married, phase: result.phase, personality: waifu.personality, name: waifu.name });
     if (ev) {
       newAff += ev.aff;
       eventKoin = ev.koin || 0;

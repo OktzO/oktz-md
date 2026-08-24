@@ -1,4 +1,3 @@
-import { getDatabase } from "../../src/lib/ourin-database.js";
 import { searchPool } from "../../data/waifu/index.js";
 
 const pluginConfig = {
@@ -24,9 +23,9 @@ function tierEmoji(t) {
 }
 
 async function handler(m, { sock }) {
-  const db = getDatabase();
   const args = m.args || [];
-  const nav = ["prev", "next"].includes((args[0] || "").toLowerCase()) ? args[0].toLowerCase() : null;
+  const first = (args[0] || "").toLowerCase();
+  const nav = (first === "prev" || first === "next") && args.length > 1 ? first : null;
   const query = (nav ? args.slice(1) : args).join(" ").trim();
   const key = `${m.sender}:${query.toLowerCase()}`;
   let page = Math.max(0, pages.get(key) || 0);
