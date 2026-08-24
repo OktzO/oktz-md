@@ -1,9 +1,9 @@
+import * as _tesseract from "tesseract.js";
 import te from "../../src/lib/ourin-error.js";
 import { sendToolsPreview } from "../../src/lib/ourin-context.js";
 
-// Lazy load: engine OCR + language model berat, jangan di-load saat boot.
-async function getTesseract() {
-  return import("tesseract.js");
+function getTesseract() {
+  return _tesseract;
 }
 const pluginConfig = {
   name: "ocr",

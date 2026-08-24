@@ -1,13 +1,8 @@
 import yts from "yt-search";
 import { generateWAMessageFromContent, proto } from "ourin";
 import axios from "axios";
+import sharp from "sharp";
 import config from "../../config.js";
-
-let _sharp;
-async function getSharp() {
-  if (!_sharp) _sharp = (await import("sharp")).default;
-  return _sharp;
-}
 
 const pluginConfig = {
   name: "yts",
@@ -44,7 +39,7 @@ async function handler(m, { sock, text }) {
     const firstVideo = videos[0];
 
     const imageResponse = await axios.get(firstVideo.thumbnail, { responseType: "arraybuffer" });
-    const thumbnailBuffer = await (await getSharp())(imageResponse.data).resize(300, 170).jpeg().toBuffer();
+    const thumbnailBuffer = await sharp(imageResponse.data).resize(300, 170).jpeg().toBuffer();
 
     const contentText = `✨ *HASIL PENCARIAN YOUTUBE* ✨
 

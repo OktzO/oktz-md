@@ -72,6 +72,7 @@ import path from "path";
 import { exec } from "child_process";
 import axios from "axios";
 import * as timeHelper from "./lib/ourin-time.js";
+import sharp from "sharp";
 const safe = (fn) => {
   try {
     return fn();
@@ -111,7 +112,12 @@ let FormData,
   sendGoodbyeMessage,
   autoJoinDetector,
   isMutedMember,
-  isMutegc;
+  isMutegc,
+  resepAnswerHandler,
+  stickerlyAnswerHandler,
+  caiAnswerHandler,
+  caiChatHandler,
+  comparationAnswerHandler;
 
 try {
   FormData = (await import("form-data")).default || (await import("form-data"));
@@ -157,6 +163,23 @@ try {
   srtAnswerHandler = (await import("../plugins/owner/srt.js"))
     .srtAnswerHandler;
 } catch (e) { }
+try {
+  resepAnswerHandler = (await import("../plugins/search/resep.js"))
+    .resepAnswerHandler;
+} catch { }
+try {
+  stickerlyAnswerHandler = (await import("../plugins/sticker/stickerly.js"))
+    .stickerlyAnswerHandler;
+} catch { }
+try {
+  const caiPlugin = await import("../plugins/ai/characterai.js");
+  caiAnswerHandler = caiPlugin.caiAnswerHandler;
+  caiChatHandler = caiPlugin.caiChatHandler;
+} catch { }
+try {
+  comparationAnswerHandler = (await import("../plugins/search/comparation.js"))
+    .comparationAnswerHandler;
+} catch { }
 try {
   checkAfk = (await import("../plugins/group/afk.js")).checkAfk;
 } catch { }
@@ -654,6 +677,7 @@ async function messageHandler(msg, sock, options = {}) {
           sender: m.sender,
           message: m.body,
           messageType: m.type,
+          device: deviceHint || "Unknown",
           isForwarded: m.message?.[m.type]?.contextInfo?.isForwarded || false,
           isNewsletter:
             m.isNewsletter ||
@@ -1019,6 +1043,13 @@ async function messageHandler(msg, sock, options = {}) {
       } catch (e) { }
     }
 
+    if (caiChatHandler && !m.isCommand && m.body) {
+      try {
+        const caiHandled = await caiChatHandler(m, sock);
+        if (caiHandled) return;
+      } catch (e) { }
+    }
+
     if (handleAutoDownload && m.body) {
       try {
         handleAutoDownload(m, sock, m.body);
@@ -1197,6 +1228,42 @@ async function messageHandler(msg, sock, options = {}) {
       }
     } catch (e) {
       console.error("[Handler] Dungeon answer error:", e.message);
+    }
+
+    try {
+      if (resepAnswerHandler) {
+        const handled = await resepAnswerHandler(m, sock);
+        if (handled) return;
+      }
+    } catch (e) {
+      console.error("[Handler] Resep answer error:", e.message);
+    }
+
+    try {
+      if (stickerlyAnswerHandler) {
+        const handled = await stickerlyAnswerHandler(m, sock);
+        if (handled) return;
+      }
+    } catch (e) {
+      console.error("[Handler] Stickerly answer error:", e.message);
+    }
+
+    try {
+      if (caiAnswerHandler) {
+        const handled = await caiAnswerHandler(m, sock);
+        if (handled) return;
+      }
+    } catch (e) {
+      console.error("[Handler] CAI answer error:", e.message);
+    }
+
+    try {
+      if (comparationAnswerHandler) {
+        const handled = await comparationAnswerHandler(m, sock);
+        if (handled) return;
+      }
+    } catch (e) {
+      console.error("[Handler] Comparation answer error:", e.message);
     }
 
     try {
@@ -1452,84 +1519,29 @@ async function messageHandler(msg, sock, options = {}) {
       if (similarityEnabled) {
         const suggestions = findSimilarCommands(m.command, allCommands, {
           maxResults: 1,
-          minSimilarity: 0.6,
-          maxDistance: 3,
+          minSimilarity: 0.8,
+          maxDistance: 2,
         });
 
         if (suggestions.length > 0) {
-          const message = formatSuggestionMessage(
-            m.command,
-            suggestions,
-            m.prefix,
-            m,
-          );
-          try {
-            const { prepareWAMessageMedia } = await import("ourin");
-            const media = await prepareWAMessageMedia(
-              { image: fs.readFileSync(config.assets["ourin"]) },
-              { upload: sock.waUploadToServer }
-            );
+          const suggestedCommand = m.prefix + suggestions[0].command;
+          const simpleMessage = `I'm sorry, but I don't have that command :(\n\nDid you mean this command?\n⇒ *${suggestedCommand}*`;
 
-            await sock.relayMessage(
+          try {
+            await sock.sendPreview(
               m.chat,
               {
-                viewOnceMessage: {
-                  message: {
-                    messageContextInfo: {},
-                    interactiveMessage: {
-                      header: {
-                        title: "",
-                        subtitle: "",
-                        hasMediaAttachment: true,
-                        imageMessage: media.imageMessage
-                      },
-                      body: {
-                        text: message.message
-                      },
-                      footer: {
-                        text: "Mungkin maksud kamu adalah command ini"
-                      },
-                      contextInfo: {
-                        isForwarded: true,
-                        forwardingScore: 9,
-                        participant: "0@s.whatsapp.net",
-                        quotedMessage: {
-                          conversation: `🔍 Command Tidak Ditemukan`
-                        },
-                        mentionedJid: [m.sender]
-                      },
-                      nativeFlowMessage: {
-                        messageParamsJson: JSON.stringify({
-                          limited_time_offer: {
-                            text: `Saran Command`,
-                            url: "",
-                            copy_code: config.bot.name,
-                            expiration_time: Date.now() + 1000000,
-                          },
-                          bottom_sheet: {
-                            in_thread_buttons_limit: 2,
-                            divider_indices: [1, 2, 3],
-                            list_title: "Saran Command",
-                            button_title: "🎯 Pilih Command",
-                          },
-                          tap_target_configuration: {
-                            title: " X ",
-                            description: "Close",
-                            canonical_url: "https://ourin.site",
-                            domain: "ourin.example",
-                            button_index: 0,
-                          },
-                        }),
-                        buttons: message.interactiveButtons
-                      }
-                    }
-                  }
-                }
+                caption: config.info.website + "\n" + simpleMessage,
+                url: config.info.website,
+                title: "Command not found",
+                description: `Suggestions Command | ${config.bot.name}`,
+                jpegThumbnail: await sharp(fs.readFileSync(config.assets["ourin2"])).resize(300, 300).toBuffer(),
+                previewType: 1,
               },
-              {}
+              { quoted: m }
             );
           } catch (err) {
-            console.error("[Similarity] Gagal mengirim pesan similarity relay:", err.message);
+            console.error("[Similarity] Gagal mengirim pesan similarity preview:", err.message);
           }
         }
       }
@@ -1729,7 +1741,7 @@ async function messageHandler(msg, sock, options = {}) {
       db.setting("energi") !== undefined
         ? db.setting("energi")
         : config.energi?.enabled !== false;
-        
+
     const capEnergiOverrides = db.setting("capenergi") || {};
     const pluginEnergiCost = capEnergiOverrides[plugin.config.name] !== undefined ? capEnergiOverrides[plugin.config.name] : (plugin.config.energi || 0);
 
@@ -1795,6 +1807,14 @@ async function messageHandler(msg, sock, options = {}) {
 
     db.incrementStat("commandsExecuted");
     db.incrementStat(`command_${m.command}`);
+
+    if (user) {
+      const todayStr = new Date().toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' });
+      if (user.lastActiveDate !== todayStr) {
+        const newActiveDays = (user.activeDays || 0) + 1;
+        db.setUser(m.sender, { lastActiveDate: todayStr, activeDays: newActiveDays });
+      }
+    }
 
     if (db.setting("autoTyping") ?? config.features?.autoTyping) {
       sock.sendPresenceUpdate("paused", m.chat).catch(() => { });

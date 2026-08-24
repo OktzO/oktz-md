@@ -103,15 +103,13 @@ async function handler(m, { sock }) {
 
   if (!pluginName) {
     return m.reply(
-      `📦 *ɢᴇᴛ ᴘʟᴜɢɪɴ*\n\n` +
-      `> Dapatkan source code plugin\n\n` +
-      `╭┈┈⬡「 📋 *ғᴏʀᴍᴀᴛ* 」\n` +
-      `┃ .getplugin <nama>\n` +
-      `╰┈┈┈┈┈┈┈┈⬡\n\n` +
-      `*Contoh:*\n` +
-      `> .getplugin menu\n` +
-      `> .getplugin sticker\n` +
-      `> .getplugin game/tebakgambar`,
+      `Halo *${m.pushName}*, sepertinya kamu lupa memasukkan nama plugin yang ingin dicari.\n\n` +
+      `Silakan gunakan format berikut:\n` +
+      `- .getplugin <nama plugin>\n\n` +
+      `Contoh penggunaan:\n` +
+      `- .getplugin menu\n` +
+      `- .getplugin sticker\n` +
+      `- .getplugin game/tebakgambar`
     );
   }
 
@@ -139,13 +137,12 @@ async function handler(m, { sock }) {
 
   if (!pluginInfo) {
     const similar = getSimilarPlugins(pluginName, pluginsDir);
-    let text = `❌ *ᴘʟᴜɢɪɴ ᴛɪᴅᴀᴋ ᴅɪᴛᴇᴍᴜᴋᴀɴ*\n\n`;
-    text += `> Plugin \`${pluginName}\` tidak ditemukan\n\n`;
+    let text = `Maaf ya *${m.pushName}*, plugin dengan nama *${pluginName}* tidak dapat ditemukan.\n\n`;
 
     if (similar.length > 0) {
-      text += `*Mungkin maksud kamu:*\n`;
+      text += `Mungkin maksud kamu salah satu dari plugin ini:\n`;
       similar.forEach((s) => {
-        text += `> - \`${s}\`\n`;
+        text += `- ${s}\n`;
       });
     }
 
@@ -154,37 +151,19 @@ async function handler(m, { sock }) {
 
   const code = fs.readFileSync(pluginInfo.path);
 
-  if (code.length > 10000) {
-    return await sock.sendMessage(m.chat, {
-      document: code.toString("utf-8"),
-      fileName: pluginInfo.file,
-      fileLength: 999999999,
-      caption: `🦪 Halo Ownerku ${m.pushName}, berikut ini adalah source code dari plugin yang kamu minta
-      
-Kamu bisa simpan dokumen diatas, atau  kamu juga bisa copy code lewat tombol dibawah
-
-❓ *Kenapa Lewat Dokumen?*
-Karena baris kode terlalu panjang, takutnya kalau pakai code block bisa bikin fc :(`,
-      footer: "🍙 Bisa copy code dibawah",
-      interactiveButtons: [
-        {
-          name: 'cta_copy',
-          buttonParamsJson: JSON.stringify({
-            display_text: '🥠 Copy Code nya',
-            copy_code: code
-          })
-        }
-      ]
-    }, { quoted: m });
-  }
-
-  await new AIRich(sock)
-    .addText(
-      `🍿 Hallo Ownerku ${m.pushName}, berikut ini adalah source code dari plugin yang kamu minta\n- 🥗 Nama Plugin : ${pluginInfo.file}\n- ☘ Category : ${pluginInfo.category}\n\n`,
-    )
-    .addCode("javascript", code.toString("utf-8"))
-    .addText("\n\nNote : copy dulu code diatas")
-    .send(m.chat);
+  return await sock.sendMessage(m.chat, {
+    text: "Langsung aja, pencet tombol dibawah",
+    footer: config.bot.name,
+    interactiveButtons: [
+      {
+        name: "cta_copy",
+        buttonParamsJson: JSON.stringify({
+          display_text: "Salin Kode",
+          copy_code: code.toString("utf-8")
+        })
+      }
+    ]
+  }, { quoted: m });
 }
 
 export { pluginConfig as config, handler };

@@ -124,7 +124,9 @@ function imageToWebpFFmpeg(buffer) {
 function videoToWebpFFmpeg(buffer, options = {}) {
     return new Promise((resolve, reject) => {
         const tmpDir = getTempDir();
-        const inputPath = path.join(tmpDir, `vid_${Date.now()}_${Crypto.randomBytes(4).toString('hex')}.mp4`);
+        const isGif = buffer.slice(0, 4).toString("hex") === "47494638";
+        const ext = isGif ? "gif" : "mp4";
+        const inputPath = path.join(tmpDir, `vid_${Date.now()}_${Crypto.randomBytes(4).toString('hex')}.${ext}`);
         const outputPath = path.join(tmpDir, `animated_${Date.now()}_${Crypto.randomBytes(4).toString('hex')}.webp`);
         
         fs.writeFileSync(inputPath, buffer);
@@ -186,15 +188,23 @@ async function addExifToWebp(webpBuffer, options = {}) {
 }
 
 async function createStickerFromImage(imageBuffer, options = {}) {
-    const webpBuffer = await imageToWebpFFmpeg(imageBuffer);
+    const isWebp = imageBuffer.slice(0, 4).toString("hex") === "52494646";
+    const webpBuffer = isWebp ? imageBuffer : await imageToWebpFFmpeg(imageBuffer);
     return await addExifToWebp(webpBuffer, options);
 }
 
 async function createStickerFromVideo(videoBuffer, options = {}) {
-    const webpBuffer = await videoToWebpFFmpeg(videoBuffer, {
-        duration: options.duration || 5,
-        fps: options.fps || 15
-    });
+    const isWebp = videoBuffer.slice(0, 4).toString("hex") === "52494646";
+    let webpBuffer;
+    
+    if (isWebp) {
+        webpBuffer = videoBuffer;
+    } else {
+        webpBuffer = await videoToWebpFFmpeg(videoBuffer, {
+            duration: options.duration || 5,
+            fps: options.fps || 15
+        });
+    }
     return await addExifToWebp(webpBuffer, {
         packname: options.packname,
         author: options.author,

@@ -45,10 +45,11 @@ async function handler(m, { sock }) {
 
   if (!name) {
     return m.reply(
-      `🗑️ *DEL PLUGIN*\n\n` +
-        `Hapus plugin berdasarkan nama\n\n` +
-        `*Contoh:*\n` +
-        `\`${m.prefix}delplugin bliblidl\``,
+      `Halo *${m.pushName}*, sepertinya kamu lupa memasukkan nama plugin yang ingin dihapus.\n\n` +
+      `Silakan gunakan format perintah berikut:\n` +
+      `- .delplugin <nama plugin>\n\n` +
+      `Contoh penggunaan:\n` +
+      `- .delplugin bliblidl`
     );
   }
 
@@ -60,7 +61,7 @@ async function handler(m, { sock }) {
 
     if (!found) {
       await m.react("❌");
-      return m.reply(`❌ *GAGAL*\n\nPlugin \`${name}\` tidak ditemukan`);
+      return m.reply(`Maaf *${m.pushName}*, plugin dengan nama ${name} tidak dapat ditemukan.`);
     }
 
     let unloadResult = { success: false };
@@ -71,15 +72,14 @@ async function handler(m, { sock }) {
     fs.unlinkSync(found.path);
 
     await m.react("✅");
-    return m.reply(
-      `✅ *PLUGIN DIHAPUS*\n\n` +
-        `╭─〔 *DETAIL* 〕───⬣\n` +
-        `│ File: \`${found.file}\`\n` +
-        `│ Folder: \`${found.folder}\`\n` +
-        `│ Unload: ${unloadResult.success ? "✅ Sukses" : "⚠️ Pending"}\n` +
-        `╰───────⬣\n\n` +
-        `Plugin sudah dihapus dan tidak aktif!`,
-    );
+    let replyText =
+      `Proses selesai! Plugin berhasil dihapus dari sistem.\n\n` +
+      `- File: ${found.file}\n` +
+      `- Folder: ${found.folder}\n` +
+      `- Status Unload: ${unloadResult.success ? "Berhasil" : "Pending"}\n\n` +
+      `Plugin tersebut sudah dihapus dan tidak aktif lagi.`;
+
+    return m.reply(replyText);
   } catch (error) {
     await m.react("☢");
     await m.reply(te(m.prefix, m.command, m.pushName));

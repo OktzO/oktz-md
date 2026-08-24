@@ -31,54 +31,51 @@ function getNumber(jid) {
     return clean ? clean.split('@')[0] : null
 }
 
-function hasAccess(senderJid, isOwner, pteroConfig) {
+function getLegacyData() {
+    const p = path.join(process.cwd(), 'database', 'cpanel', 'legacy_sellers.json')
+    if (fs.existsSync(p)) {
+        try { return JSON.parse(fs.readFileSync(p, 'utf8')) } catch { return { sellers: [], ownerPanels: [] } }
+    }
+    return { sellers: [], ownerPanels: [] }
+}
+
+function saveLegacyData(data) {
+    try {
+        const dir = path.join(process.cwd(), 'database', 'cpanel')
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+        const p = path.join(dir, 'legacy_sellers.json')
+        fs.writeFileSync(p, JSON.stringify(data, null, 2), 'utf8')
+        return true
+    } catch (e) {
+        console.error('[Panel] Failed to save legacy data:', e.message)
+        return false
+    }
+}
+
+function hasAccess(senderJid, isOwner, legacyData) {
     if (isOwner) return true
     const cleanSender = cleanJid(senderJid)?.split('@')[0]
     if (!cleanSender) return false
-    const ownerPanels = pteroConfig?.ownerPanels || []
+    const ownerPanels = legacyData?.ownerPanels || []
     return ownerPanels.includes(cleanSender)
-}
-
-function saveConfig() {
-    try {
-        const configPath = path.join(process.cwd(), 'config.js')
-        let content = fs.readFileSync(configPath, 'utf8')
-        
-        const sellersStr = JSON.stringify(config.pterodactyl.sellers || [])
-        content = content.replace(
-            /sellers:\s*\[.*?\]/s,
-            `sellers: ${sellersStr}`
-        )
-        
-        const ownerPanelsStr = JSON.stringify(config.pterodactyl.ownerPanels || [])
-        content = content.replace(
-            /ownerPanels:\s*\[.*?\]/s,
-            `ownerPanels: ${ownerPanelsStr}`
-        )
-        
-        fs.writeFileSync(configPath, content, 'utf8')
-        return true
-    } catch (e) {
-        console.error('[Panel] Failed to save config:', e.message)
-        return false
-    }
 }
 
 function handler(m, { sock }) {
     const db = getDatabase()
     const cmd = m.command.toLowerCase()
-    const pteroConfig = config.pterodactyl
     
-    if (!hasAccess(m.sender, m.isOwner, pteroConfig)) {
+    let legacyData = getLegacyData()
+    if (config.pterodactyl) {
+        config.pterodactyl.sellers = legacyData.sellers
+        config.pterodactyl.ownerPanels = legacyData.ownerPanels
+    }
+    
+    if (!hasAccess(m.sender, m.isOwner, legacyData)) {
         return m.reply(`❌ *ᴀᴋsᴇs ᴅɪᴛᴏʟᴀᴋ*\n\n> Fitur ini hanya untuk Owner atau Owner Panel.`)
     }
     
-    if (!pteroConfig) {
-        return m.reply(`❌ Konfigurasi pterodactyl tidak ditemukan di config.js`)
-    }
-    
-    if (!pteroConfig.sellers) {
-        pteroConfig.sellers = []
+    if (!legacyData.sellers) {
+        legacyData.sellers = []
     }
     
     const isAdd = ['addseller', 'addreseller'].includes(cmd)
@@ -86,13 +83,13 @@ function handler(m, { sock }) {
     const isList = ['listseller', 'listreseller'].includes(cmd)
     
     if (isList) {
-        if (pteroConfig.sellers.length === 0) {
+        if (legacyData.sellers.length === 0) {
             return m.reply(`📋 *ᴅᴀꜰᴛᴀʀ sᴇʟʟᴇʀ/ʀᴇsᴇʟʟᴇʀ*\n\n> Belum ada seller terdaftar.`)
         }
         
         let txt = `📋 *ᴅᴀꜰᴛᴀʀ sᴇʟʟᴇʀ/ʀᴇsᴇʟʟᴇʀ*\n\n`
-        txt += `> Total: *${pteroConfig.sellers.length}* seller\n\n`
-        pteroConfig.sellers.forEach((s, i) => {
+        txt += `> Total: *${legacyData.sellers.length}* seller\n\n`
+        legacyData.sellers.forEach((s, i) => {
             txt += `${i + 1}. \`${s}\`\n`
         })
         txt += `\n> _Seller bisa create server (1gb-10gb v1/v2/v3)_`
@@ -120,20 +117,20 @@ function handler(m, { sock }) {
     }
     
     if (isAdd) {
-        if (pteroConfig.sellers.includes(targetUser)) {
+        if (legacyData.sellers.includes(targetUser)) {
             return m.reply(`❌ \`${targetUser}\` sudah menjadi seller.`)
         }
         
         let roleChanged = ''
-        const ownerIdx = (pteroConfig.ownerPanels || []).indexOf(targetUser)
+        const ownerIdx = (legacyData.ownerPanels || []).indexOf(targetUser)
         if (ownerIdx !== -1) {
-            pteroConfig.ownerPanels.splice(ownerIdx, 1)
+            legacyData.ownerPanels.splice(ownerIdx, 1)
             roleChanged = `\n> ⚡ Auto-downgrade dari Owner Panel ke Seller`
         }
         
-        pteroConfig.sellers.push(targetUser)
+        legacyData.sellers.push(targetUser)
         
-        if (saveConfig()) {
+        if (saveLegacyData(legacyData)) {
             m.react('✅')
             return m.reply(
                 `✅ *sᴇʟʟᴇʀ ᴅɪᴛᴀᴍʙᴀʜᴋᴀɴ*\n\n` +
@@ -141,31 +138,30 @@ function handler(m, { sock }) {
                 `┃ 📱 ɴᴏᴍᴏʀ: \`${targetUser}\`\n` +
                 `┃ 🏷️ sᴛᴀᴛᴜs: \`Seller/Reseller\`\n` +
                 `┃ 🔓 ᴀᴋsᴇs: \`Create Server (1gb-10gb v1-v3)\`\n` +
-                `┃ 📊 ᴛᴏᴛᴀʟ: \`${pteroConfig.sellers.length}\` seller\n` +
+                `┃ 📊 ᴛᴏᴛᴀʟ: \`${legacyData.sellers.length}\` seller\n` +
                 `╰┈┈⬡${roleChanged}`
             )
         } else {
-            pteroConfig.sellers = pteroConfig.sellers.filter(s => s !== targetUser)
-            return m.reply(`❌ Gagal menyimpan ke config.js`)
+            return m.reply(`❌ Gagal menyimpan ke database`)
         }
     }
     
     if (isDel) {
-        if (!pteroConfig.sellers.includes(targetUser)) {
+        if (!legacyData.sellers.includes(targetUser)) {
             return m.reply(`❌ \`${targetUser}\` bukan seller.`)
         }
         
-        pteroConfig.sellers = pteroConfig.sellers.filter(s => s !== targetUser)
+        legacyData.sellers = legacyData.sellers.filter(s => s !== targetUser)
         
-        if (saveConfig()) {
+        if (saveLegacyData(legacyData)) {
             m.react('✅')
             return m.reply(
                 `✅ *sᴇʟʟᴇʀ ᴅɪʜᴀᴘᴜs*\n\n` +
                 `> Nomor: \`${targetUser}\`\n` +
-                `> Total: *${pteroConfig.sellers.length}* seller`
+                `> Total: *${legacyData.sellers.length}* seller`
             )
         } else {
-            return m.reply(`❌ Gagal menyimpan ke config.js`)
+            return m.reply(`❌ Gagal menyimpan ke database`)
         }
     }
 }

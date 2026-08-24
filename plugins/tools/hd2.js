@@ -1,16 +1,9 @@
-import { upload, get } from "../../src/scraper/hd.js";
 import axios from "axios";
-import config from "../../config.js";
-
-let _sharp;
-async function getSharp() {
-  if (!_sharp) _sharp = (await import("sharp")).default;
-  return _sharp;
-}
 import FormData from "form-data";
-import path from "path";
-import fs from "fs";
+import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
+import _sharp from 'sharp';
+
 const pluginConfig = {
   name: "hd2",
   alias: ["enhance2", "upscale2", "aienhancer"],
@@ -26,14 +19,22 @@ const pluginConfig = {
   energi: 2,
   isEnabled: true,
 };
+
 async function handler(m, { sock }) {
   const isImage = m.isImage || (m.quoted && m.quoted.type === "imageMessage");
+
   if (!isImage) {
-    return m.reply(
-      `✨ *ʜᴅ ᴇɴʜᴀɴᴄᴇ ᴠ2*\n\n> Kirim/reply gambar untuk di-enhance\n\n\`${m.prefix}hd2\`\n\n> 🕕 Proses membutuhkan waktu ±1 menit`,
-    );
+    let help = `✨ *FITUR HD ENHANCE V2*\n\n`
+    help += `Tingkatkan resolusi gambar kamu menjadi jauh lebih HD dan tajam menggunakan AI!\n\n`
+    help += `*Cara Penggunaan:*\n`
+    help += `- Kirim gambar dan tambahkan pesan *${m.prefix}hd2*\n`
+    help += `- Atau balas (reply) gambar yang sudah terkirim dengan perintah *${m.prefix}hd2*\n\n`
+    help += `_Proses rendering mungkin memerlukan waktu beberapa detik hingga satu menit._`
+    return m.reply(help);
   }
-  m.react("🕕");
+
+  await m.react("🕕");
+
   try {
     let buffer;
     if (m.quoted && m.quoted.isMedia) {
@@ -41,52 +42,48 @@ async function handler(m, { sock }) {
     } else if (m.isMedia) {
       buffer = await m.download();
     }
+
     if (!buffer) {
-      m.react("❌");
-      return m.reply(`❌ Gagal mendownload gambar`);
+      await m.react("❌");
+      return m.reply(`Maaf, sistem gagal mengunduh gambar yang kamu berikan. Silakan coba kirim ulang gambarnya!`);
     }
-    await m.reply(
-      `🕕 *ᴍᴇᴍᴘʀᴏsᴇs ɢᴀᴍʙᴀʀ...*\n\n> Estimasi waktu: ±1 menit\n> Mohon tunggu...`,
-    );
-    const temp = path.join(process.cwd(), "temp", "hd.jpg");
-    fs.writeFileSync(temp, buffer);
-    const codes = await upload(temp);
-    fs.unlinkSync(temp);
-    const uplot = codes.code;
-    await new Promise((resolve) => setTimeout(resolve, 10000));
-    let result = await get(uplot);
-    while (result.status === "waiting") {
-      await new Promise((resolve) => setTimeout(resolve, 6000));
-      result = await get(uplot);
+
+    const form = new FormData();
+    form.append("image", buffer, { filename: "image.jpg", contentType: "image/jpeg" });
+    form.append("type", "upscale");
+    form.append("scale", "2");
+
+    const response = await axios.post("https://my.izuka-api.xyz/api/tools/imglarger", form, {
+      headers: form.getHeaders(),
+      timeout: 60000
+    });
+
+    const data = response.data;
+    if (!data || !data.status || !data.result) {
+      await m.react("❌");
+      return m.reply(`Maaf, AI gagal memproses gambarmu kali ini. Silakan coba lagi dalam beberapa saat!`);
     }
-    if (!result) {
-      m.react("❌");
-      return m.reply(`❌ Gagal enhance gambar. Coba lagi nanti.`);
-    }
-    m.react("✅");
+
+    await m.react("✅");
+
+    const thumbBuffer = await _sharp(buffer).resize(50, 50).jpeg({ quality: 30 }).toBuffer();
+
     await sock.sendMessage(
       m.chat,
       {
-        document: { url: result.downloadUrls[0] },
-        mimetype: "image/png",
-        jpegThumbnail: await (
-          await getSharp()
-        )(
-          await axios
-            .get(result.downloadUrls[0], { responseType: "arraybuffer" })
-            .then((res) => Buffer.from(res.data)),
-        )
-          .resize(50, 50)
-          .jpeg({ quality: 30 })
-          .toBuffer(),
-        fileLength: 99999999999999,
-        fileName: `CONVERTED BY ${config.bot.name}`,
+        document: { url: data.result },
+        mimetype: "image/jpeg",
+        jpegThumbnail: thumbBuffer,
+        fileName: `HD_BY_${config.bot.name}.jpg`,
       },
       { quoted: m },
     );
+
   } catch (error) {
-    m.react("☢");
+    console.error("[HD2 Plugin Error]", error);
+    await m.react("☢");
     m.reply(te(m.prefix, m.command, m.pushName));
   }
 }
+
 export { pluginConfig as config, handler };

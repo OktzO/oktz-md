@@ -47,12 +47,14 @@ async function handler(m, { sock }) {
     }
 
     const isStory = url.includes("/stories/");
-    let caption = `📸 *Instagram ${isStory ? "Story" : "Downloader"}*\n`;
-    if (result.username && result.username !== "-")
-      caption += `👤 @${result.username}\n`;
-    if (result.likes && result.likes !== "-") caption += `❤️ ${result.likes}\n`;
-    if (result.comment && result.comment !== "-")
-      caption += `💬 ${result.comment}\n`;
+    let caption = `📸 *Instagram ${isStory ? "Story" : "Downloader"}*\n\n`;
+    if (result.username && result.username !== "-") {
+      caption += `👤 *Author*: @${result.username}\n`;
+    }
+    if (result.caption) {
+      caption += `📝 *Caption*:\n${result.caption}\n`;
+    }
+    caption = caption.trim();
 
     for (const item of result.media) {
       if (item.type === "video" || item.type === "mp4") {

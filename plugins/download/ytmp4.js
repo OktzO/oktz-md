@@ -17,29 +17,21 @@ const pluginConfig = {
 async function getVideoDownloadUrl(url) {
   try {
     const { data } = await axios.get(
-      `https://firefly.maiku.my.id/api/ytdown?apikey=${config.APIkey.firefly}&url=${encodeURIComponent(url)}`
+      `https://my.izuka-api.xyz/api/downloader/ytmp4?url=${encodeURIComponent(url)}`
     );
 
-    if (data?.status && data?.data?.mediaItems) {
-      const mediaItems = data.data.mediaItems;
-      const video = mediaItems.find(m => m.type === "Video" && m.mediaQuality === "HD") ||
-        mediaItems.find(m => m.type === "Video" && m.mediaQuality === "SD") ||
-        mediaItems.find(m => m.type === "Video");
-
-      if (video && video.mediaUrl) {
-        let attempts = 0;
-        while (attempts < 10) {
-          const { data: fileData } = await axios.get(video.mediaUrl);
-          if (fileData?.status === "completed" && fileData?.fileUrl) {
-            return fileData.fileUrl;
-          }
-          await new Promise(resolve => setTimeout(resolve, 3000));
-          attempts++;
+    if (data?.status && data?.result?.video_normal) {
+      const videos = data.result.video_normal.filter(v => v.ext === "mp4");
+      if (videos.length > 0) {
+        videos.sort((a, b) => parseInt(b.quality) - parseInt(a.quality));
+        if (videos[0] && videos[0].url) {
+          return videos[0].url;
         }
-        throw new Error("Timeout processing video");
       }
     }
-  } catch { }
+  } catch (e) {
+    console.error("[YTMP4 Izuka API Error]", e.message);
+  }
 
   const fallback = await ytdl(url, "mp4");
   if (fallback?.status && fallback?.dl) {

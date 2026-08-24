@@ -1,11 +1,11 @@
 {
   "name": "ourin-md",
-  "version": "3.2.0",
+  "version": "3.3.1",
   "description": "WhatsApp Multi-Device Bot dengan sistem plugin modular",
   "main": "index.js",
   "scripts": {
-    "start": "set NODE_ENV=development&& node index.js",
-    "dev": "node index.js",
+    "start": "set NODE_ENV=development&& node --max-old-space-size=512 --expose-gc index.js",
+    "dev": "node --max-old-space-size=512 --expose-gc index.js",
     "test": "node --test tests/",
     "lint": "eslint plugins/",
     "postinstall": "node -e \"try{require('sharp')}catch(e){require('child_process').execSync('npm rebuild sharp --foreground-scripts',{stdio:'inherit'})}\""
@@ -44,9 +44,8 @@
     "@napi-rs/canvas": "^0.1.88",
     "@sptzx/request": "^1.0.0-rc.1",
     "@vitalets/google-translate-api": "^9.2.1",
-    "@vreden/youtube_scraper": "^1.2.8",
     "acorn": "^8.16.0",
-    "adm-zip": "^0.5.17",
+    "adm-zip": "^0.6.0",
     "archiver": "^7.0.1",
     "awesome-phonenumber": "^7.7.0",
     "axios": "^1.13.2",
@@ -68,7 +67,6 @@
     "google-tts-api": "^2.0.2",
     "gradient-string": "^2.0.2",
     "gsmarena-api": "^2.0.5",
-    "gtts": "^0.2.1",
     "he": "^1.2.0",
     "jsdom": "^28.1.0",
     "katex": "^0.16.45",
@@ -83,19 +81,18 @@
     "node-upload-images": "^1.0.1",
     "node-webpmux": "^3.2.1",
     "openpgp": "^6.3.0",
-    "ourin": "npm:ourin-baileys@^9.0.11",
+    "ourin": "npm:ourin-baileys@^9.0.21",
     "p-queue": "^9.1.0",
     "pino": "^9.14.0",
     "qrcode": "^1.5.4",
     "qs": "^6.14.1",
     "rate-limiter-flexible": "^9.1.1",
-    "sharp": "^0.32.2",
+    "sharp": "^0.35.3",
     "ssh2": "^1.17.0",
     "tesseract.js": "^7.0.0",
     "tough-cookie": "^6.0.0",
     "undici": "^7.22.0",
     "unfurl.js": "^6.4.0",
-    "wa-sticker-formatter": "^4.4.4",
     "yt-search": "^2.13.1",
     "zencf": "^2.0.3"
   },
@@ -104,5 +101,15 @@
     "eslint": "^10.2.1",
     "globals": "^17.5.0",
     "nodemon": "^3.1.11"
+  },
+  "overrides": {
+    "axios": "$axios",
+    "form-data": "^4.0.5",
+    "image-size": "^2.0.0",
+    "minimatch": "^3.1.2",
+    "file-type": "^21.3.0",
+    "qs": "^6.14.1",
+    "esbuild": "^0.28.0",
+    "clean-jsdoc-theme": "^5.1.1"
   }
 }

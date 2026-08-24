@@ -1,15 +1,13 @@
-
 import crypto from "crypto";
 import axios from "axios";
+import yts from "yt-search";
 import fs from "fs";
 import path from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
-import yts from "yt-search";
 import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
-import { saluranCtx } from "../../src/lib/ourin-context.js";
-import ytdl, { fallbackToMp3Buffer } from "../../src/scraper/ytdl.js";
+
 const run = promisify(exec);
 const pluginConfig = {
   name: "playch",
@@ -22,39 +20,17 @@ const pluginConfig = {
   energi: 1,
   isEnabled: true,
 };
+
 function pickVideo(search) {
   const v = search?.videos || [];
   return v.find((x) => x.seconds && x.seconds < 900) || v[0] || null;
 }
+
 function formatViews(n) {
   if (!n) return "0";
   if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
   if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
   return n.toString();
-}
-
-async function getPlayChAudioDownload(url) {
-  try {
-    const apiUrl = `https://api.cuki.biz.id/api/downloader/ytmp3?apikey=${config.APIkey.cuki}&url=${encodeURIComponent(url)}&quality=128`;
-    const res = await axios.get(apiUrl, { timeout: 30000 });
-    const data = res.data;
-
-    if (data.success && data.data?.audio?.download?.downloadUrl) {
-      return { 
-        download: data.data.audio.download.downloadUrl, 
-        title: data.data.metadata?.title || "Audio"
-      };
-    }
-  } catch (err) {
-    console.error("[PlayCh API error]", err.message);
-  }
-
-  const fallback = await ytdl(url, "mp3");
-  if (fallback?.status && fallback?.dl) {
-    return { download: fallback.dl, title: fallback.title, isFallback: true };
-  }
-
-  throw new Error(fallback?.mess || "Gagal mendapatkan audio saluran URL");
 }
 
 async function toOggOpus(mp3Buf) {
@@ -91,6 +67,7 @@ function generateWaveform(audioBuf, samples = 64) {
   }
   return waveform;
 }
+
 async function handler(m, { sock }) {
   const raw = m.text?.trim() || "";
   let chId = config?.saluran?.id;
@@ -120,6 +97,12 @@ async function handler(m, { sock }) {
     if (!video) return m.reply(`❌ Video tidak ditemukan`);
 
     const ytChannel = video.author?.name || video.author?.username || "Unknown";
+    
+    const res = await axios.get(`https://api.azbry.com/api/download/ytmp3?url=${encodeURIComponent(video.url)}`, { timeout: 60000 });
+    const data = res.data;
+    if (!data.status || !data.result || !data.result.download) {
+       throw new Error("Gagal mengambil audio dari API");
+    }
 
     let info = `🎵 *NOW PLAYING (SALURAN)*\n\n`;
     info += `📌 *Judul:* ${video.title}\n\n`;
@@ -139,19 +122,11 @@ async function handler(m, { sock }) {
 
     await sock.sendMedia(m.chat, video.thumbnail, info, m, { type: "image" });
 
-    const audio = await getPlayChAudioDownload(video.url);
-
     m.react("🎵");
-    const mp3Buf = audio.isFallback
-      ? await fallbackToMp3Buffer(audio.download)
-      : Buffer.from(
-        (
-          await axios.get(audio.download, {
-            responseType: "arraybuffer",
-            timeout: 60000,
-          })
-        ).data,
-      );
+
+    const audioRes = await axios.get(data.result.download, { responseType: "arraybuffer", timeout: 60000 });
+    const mp3Buf = Buffer.from(audioRes.data);
+
     if (mp3Buf.length < 50000) throw new Error("Audio terlalu kecil");
     const opusBuf = await toOggOpus(mp3Buf);
     if (opusBuf.length < 10000) throw new Error("Konversi opus gagal");

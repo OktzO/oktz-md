@@ -19,7 +19,7 @@ const pluginConfig = {
 
 async function handler(m, { sock }) {
     const text = m.text?.trim()
-    
+
     if (!text) {
         return m.reply(
             `🎭 *ᴇᴍᴏᴊɪ ᴍɪx*\n\n` +
@@ -27,38 +27,39 @@ async function handler(m, { sock }) {
             `> Contoh: \`${m.prefix}emojimix 😂🔥\``
         )
     }
-    
+
     const emojiRegex = /\p{Extended_Pictographic}/gu
     const emojis = text.match(emojiRegex)
-    
+
     if (!emojis || emojis.length < 2) {
         return m.reply(`❌ Masukkan minimal 2 emoji!\n\nContoh: ${m.prefix}emojimix 😂🔥`)
     }
-    
+
     const emoji1 = emojis[0]
     const emoji2 = emojis[1]
-    
+
     m.react('🕕')
-    
+
     try {
-        const apiUrl = `https://tenor.googleapis.com/v2/featured?key=AIzaSyAyimkuYQYF_FXVALexPuGQctUWRURdCYQ&contentfilter=high&media_filter=png_transparent&component=proactive&collection=emoji_kitchen_v5&q=${encodeURIComponent(emoji1)}_${encodeURIComponent(emoji2)}`
-        
+        const apiUrl = `https://api.neoxr.eu/api/emoji?q=${encodeURIComponent(emoji1 + '_' + emoji2)}&apikey=${config.APIkey.neoxr}`
+
         const data = await f(apiUrl)
-        
-        if (!data.results || data.results.length === 0) {
+
+        if (!data.status || !data.data?.url) {
             return m.reply(`❌ Kombinasi emoji tidak ditemukan!\n\nCoba emoji lain.`)
         }
-        
-        const imageUrl = data.results[0].url
-        
+
+        const imageUrl = data.data.url
+
         await sock.sendImageAsSticker(m.chat, imageUrl, m, {
             packname: config.sticker.packname,
             author: config.sticker.author
         })
-        
+
         m.react('✅')
-        
+
     } catch (err) {
+        console.log(err)
         m.react('☢')
         m.reply(te(m.prefix, m.command, m.pushName))
     }

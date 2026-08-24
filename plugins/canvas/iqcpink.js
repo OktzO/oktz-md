@@ -23,7 +23,7 @@ const pluginConfig = {
 };
 
 let fontsLoaded = false;
-const BG_URL   = "https://cdn.jsdelivr.net/gh/ryyntwx/allimagerin@main/Iqcbyrin.png";
+const BG_URL   = "https://files.catbox.moe/2fsv03.png";
 let bgImgBuffer = null;
 
 const INTER_FONTS = [

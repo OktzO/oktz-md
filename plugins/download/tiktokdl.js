@@ -1,5 +1,4 @@
 import axios from "axios";
-import { AIRich } from "../../src/lib/ourin-builder.js";
 
 async function tiktokDl(url) {
   function formatNumber(integer) {
@@ -132,57 +131,69 @@ async function handler(m, { sock }) {
   m.react("🕕");
   try {
     const result = await tiktokDl(text);
-    const builder = new AIRich(sock);
+
+    const musicButton = {
+      name: "quick_reply",
+      buttonParamsJson: JSON.stringify({
+        display_text: "🎵 Ambil Music",
+        id: `${prefix}ttmp3 ${text}`,
+      }),
+    };
 
     if (result.durations > 0 && result.duration !== "0 Seconds") {
-      const builder = new AIRich(sock);
-      let zann = await result.data.find(
-        (e) => e.type == "nowatermark_hd" || e.type == "nowatermark",
-      );
-      builder.addVideo(zann.url);
+      const videoItem = result.data.find(
+        (e) => e.type === "nowatermark_hd" || e.type === "nowatermark",
+      ) || result.data[0];
 
-      const authorText = `> 👤 *Author:* ${result.author.nickname} (@${result.author.fullname})\n`;
-      const descText = `> 📝 *Caption:* ${result.title || "-"}\n`;
-      const musicText = `> 🎵 *Music:* ${result.music_info.title} - ${result.music_info.author}\n`;
-      const durationText = result.durations > 0 ? `> ⏱️ *Duration:* ${result.duration}\n` : "";
-      const infoText = `> 📅 *Uploaded:* ${result.taken_at}\n${durationText}> 🌎 *Region:* ${result.region}`;
-      builder.addText("# TIKTOK DOWNLOADER\n\n" + authorText + descText + musicText + infoText);
+      const caption =
+        `🎵 *𝗧 𝗜 𝗞 𝗧 𝗢 𝗞  -  𝗗 𝗢 𝗪 𝗡 𝗟 𝗢 𝗔 𝗗 𝗘 𝗥*\n\n` +
+        `- Author: *${result.author.nickname}* (${result.author.fullname})\n` +
+        `- Caption: ${result.title || "-"}\n` +
+        `- Music: ${result.music_info.title} - ${result.music_info.author}\n` +
+        `- Duration: ${result.duration}\n` +
+        `- Uploaded: ${result.taken_at}\n` +
+        `- Region: ${result.region}\n\n` +
+        `*Statistik Video:*\n` +
+        `- Views: *${result.stats.views}*\n` +
+        `- Likes: *${result.stats.likes}*\n` +
+        `- Comments: *${result.stats.comment}*\n` +
+        `- Shares: *${result.stats.share}*\n` +
+        `- Downloads: *${result.stats.download}*`;
 
-      builder.addTable([
-        ["👀 Views", "❤️ Likes", "💬 Comments", "🔁 Shares", "📥 Downloads"],
-        [result.stats.views, result.stats.likes, result.stats.comment, result.stats.share, result.stats.download]
-      ]);
-
-      const aiMsg = await builder.send(m.chat, { quoted: m });
-
-      await sock.sendMessage(
-        m.chat,
-        {
-          footer: "> 🌿 Mau dapetin audio nya juga? kalau mau bisa tekan tombol dibawah",
-          text: "",
-          interactiveButtons: [
-            {
-              name: "quick_reply",
-              buttonParamsJson: JSON.stringify({
-                title: "📩 Unduh Audionya",
-                id: `${m.prefix}ttmp3 ${text}`,
-              }),
-            },
-          ],
-        },
-        { quoted: m }
-      );
+      await sock.sendButton(m.chat, videoItem.url, caption, m, {
+        type: "video",
+        buttons: [musicButton],
+      });
     } else {
-      const sabila = result.data?.map((zan) => ({
+      const caption =
+        `📸 *𝗧 𝗜 𝗞 𝗧 𝗢 𝗞  -  𝗗 𝗢 𝗪 𝗡 𝗟 𝗢 𝗔 𝗗 𝗘 𝗥*\n\n` +
+        `- Author: *${result.author.nickname}* (${result.author.fullname})\n` +
+        `- Caption: ${result.title || "-"}\n` +
+        `- Music: ${result.music_info.title} - ${result.music_info.author}\n` +
+        `- Uploaded: ${result.taken_at}\n` +
+        `- Region: ${result.region}\n\n` +
+        `*Statistik Konten:*\n` +
+        `- Views: *${result.stats.views}*\n` +
+        `- Likes: *${result.stats.likes}*\n` +
+        `- Comments: *${result.stats.comment}*\n` +
+        `- Shares: *${result.stats.share}*\n` +
+        `- Downloads: *${result.stats.download}*`;
+
+      const slides = result.data?.map((zan, idx) => ({
         image: { url: zan.url },
-      }));
+        caption: idx === 0 ? caption : "",
+      })) || [];
       await sock.sendMessage(
         m.chat,
         {
-          albumMessage: sabila,
+          albumMessage: slides,
         },
         { quoted: m },
       );
+
+      await sock.sendButton(m.chat, null, `📸 Slide berhasil dikirim!\nTekan tombol di bawah untuk ambil music.`, m, {
+        buttons: [musicButton],
+      });
     }
     m.react("✅");
   } catch (e) {

@@ -1,9 +1,9 @@
+import _sharp from 'sharp'
 import axios from "axios";
 import config from "../../config.js";
 
-let _sharp;
-async function getSharp() {
-  if (!_sharp) _sharp = (await import("sharp")).default;
+function getSharp() {
+
   return _sharp;
 }
 import te from "../../src/lib/ourin-error.js";

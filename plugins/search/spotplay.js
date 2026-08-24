@@ -1,5 +1,5 @@
+import axios from "axios";
 import te from "../../src/lib/ourin-error.js";
-import ourinApi from "../../src/lib/ourin-apimanager.js";
 
 const pluginConfig = {
   name: "spotplay",
@@ -8,7 +8,7 @@ const pluginConfig = {
   description: "Putar musik dari Spotify",
   usage: ".spotplay <query>",
   example: ".spotplay neffex grateful",
-  cooldown: 20,
+  cooldown: 15,
   energi: 1,
   isEnabled: true,
 };
@@ -18,33 +18,41 @@ async function handler(m, { sock }) {
   if (!query)
     return m.reply(`⚠️ *ᴄᴀʀᴀ ᴘᴀᴋᴀɪ*\n\n> \`${m.prefix}spotplay <query>\``);
 
-  m.react("🕕");
+  await m.react("🕕");
 
   try {
-    const data = await ourinApi.azbry.spotplay(query, {
-      timeout: 30000,
-      headers: {
-        "user-agent": "Mozilla/5.0",
-      },
-    });
+    const searchUrl = `https://my.izuka-api.xyz/api/search/spotify-search?query=${encodeURIComponent(query)}`;
+    const searchRes = await axios.get(searchUrl, { timeout: 30000 });
+    const searchData = searchRes.data;
 
-    if (!data?.status || !data?.result?.downloadLink) {
-      throw new Error(data?.message || "Lagu Spotify tidak ditemukan");
+    if (!searchData?.status || !searchData?.result || searchData.result.length === 0) {
+      await m.react("❌");
+      return m.reply("❌ Lagu Spotify tidak ditemukan.");
     }
 
-    const result = data.result;
+    const firstTrack = searchData.result[0];
+    const dlUrl = `https://my.izuka-api.xyz/api/downloader/spotify?url=${encodeURIComponent(firstTrack.url)}`;
+    const dlRes = await axios.get(dlUrl, { timeout: 30000 });
+    const dlData = dlRes.data;
 
-    await sock.sendMedia(m.chat, result.downloadLink, null, m, {
+    if (!dlData?.status || !dlData?.result?.download_url) {
+      await m.react("❌");
+      return m.reply("❌ Gagal mengambil link download lagu Spotify.");
+    }
+
+    const result = dlData.result;
+
+    await sock.sendMedia(m.chat, result.download_url, null, m, {
       type: "audio",
       mimetype: "audio/mpeg",
       ptt: false,
       fileName: `${result.artist || "Spotify"} - ${result.title || "audio"}.mp3`,
     });
 
-    m.react("✅");
+    await m.react("✅");
   } catch (e) {
-    console.log(e);
-    m.react("☢");
+    console.error("[Spotplay Error]", e);
+    await m.react("☢");
     m.reply(te(m.prefix, m.command, m.pushName));
   }
 }

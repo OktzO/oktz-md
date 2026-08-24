@@ -23,16 +23,11 @@ import {
 } from "./ourin-context.js";
 import config from "../../config.js";
 import fs from "fs";
+import sharp from "sharp";
 let fetchBuffer;
 try {
   fetchBuffer = (await import("./ourin-utils.js")).fetchBuffer;
 } catch { }
-
-let _sharp;
-async function getSharp() {
-  if (!_sharp) _sharp = (await import("sharp")).default;
-  return _sharp;
-}
 
 const WIN_MESSAGES = [
   "🌟 *GG WP! Otakmu encer!*",
@@ -112,7 +107,7 @@ class OurinGames {
               url: `${config.info.website}`,
               title: cfg.title,
               description: cfg.description,
-              jpegThumbnail: await (await getSharp())(fs.readFileSync(config.assets["ourin2"])).resize(300, 300).toBuffer(),
+              jpegThumbnail: await sharp(fs.readFileSync(config.assets["ourin2"])).resize(300, 300).toBuffer(),
               previewType: 0,
             },
           );

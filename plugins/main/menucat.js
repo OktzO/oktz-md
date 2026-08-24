@@ -3,6 +3,7 @@ import { getCasesByCategory } from "../../case/ourin.js";
 import { prepareWAMessageMedia, generateWAMessageFromContent } from "ourin";
 import config from "../../config.js";
 import axios from "axios";
+import sharp from "sharp";
 import {
   getCommandsByCategory,
   getCategories,
@@ -11,12 +12,6 @@ import {
 import { getDatabase } from "../../src/lib/ourin-database.js";
 import { getTimeGreeting } from "../../src/lib/ourin-formatter.js";
 import fs from "fs"
-
-let _sharp;
-async function getSharp() {
-  if (!_sharp) _sharp = (await import("sharp")).default;
-  return _sharp;
-}
 
 const pluginConfig = {
   name: "menucat",
@@ -324,7 +319,7 @@ async function handler(m, { sock, db }) {
             }
           }
 
-          const thumbnail = await (await getSharp())(fs.readFileSync(config.assets["ourin"])).resize(300, 300).toBuffer()
+          const thumbnail = await sharp(fs.readFileSync(config.assets["ourin"])).resize(300, 300).toBuffer()
           const qOrder = {
             key: { fromMe: false, participant: '0@s.whatsapp.net', remoteJid: m.sender },
             message: { locationMessage: { degreesLatitude: 0, degreesLongitude: 0, name: await weatherMenu(), jpegThumbnail: thumbnail } }
@@ -521,7 +516,7 @@ async function handler(m, { sock, db }) {
           }
         }
 
-        const thumbnail = await (await getSharp())(fs.readFileSync(config.assets["ourin"])).resize(300, 300).toBuffer()
+        const thumbnail = await sharp(fs.readFileSync(config.assets["ourin"])).resize(300, 300).toBuffer()
         const qOrder = {
           key: { fromMe: false, participant: '0@s.whatsapp.net', remoteJid: m.sender },
           message: { locationMessage: { degreesLatitude: 0, degreesLongitude: 0, name: await weatherMenu(), jpegThumbnail: thumbnail } }
@@ -590,7 +585,7 @@ async function handler(m, { sock, db }) {
           }
         }
 
-        const thumbnail = await (await getSharp())(fs.readFileSync(config.assets["ourin"])).resize(300, 300).toBuffer()
+        const thumbnail = await sharp(fs.readFileSync(config.assets["ourin"])).resize(300, 300).toBuffer()
 
         const msg6 = generateWAMessageFromContent(m.chat, {
           viewOnceMessage: {

@@ -54,12 +54,12 @@ async function handler(m, { sock }) {
 
   if (!quoted) {
     return m.reply(
-      `🔄 *GANTI CODE*\n\n` +
-        `Reply code plugin baru dengan caption:\n` +
-        `\`${m.prefix}ganticode\` - Auto detect\n` +
-        `\`${m.prefix}ganticode namafile\` - Custom nama\n` +
-        `\`${m.prefix}ganticode namafile folder\` - Custom nama + folder\n\n` +
-        `⚠️ *PERINGATAN:*\nCode lama akan di-backup sebelum diganti`,
+      `Halo *${m.pushName}*, sepertinya kamu belum mereply kode plugin barunya.\n\n` +
+      `Silakan reply kode plugin yang baru dengan perintah:\n` +
+      `- .ganticode (untuk deteksi otomatis)\n` +
+      `- .ganticode <nama file> (untuk nama kustom)\n` +
+      `- .ganticode <nama file> <folder> (untuk kustom nama dan folder)\n\n` +
+      `Tenang saja, kode yang lama akan otomatis dibackup sebelum diganti.`
     );
   }
 
@@ -72,19 +72,19 @@ async function handler(m, { sock }) {
     try {
       code = (await quoted.download()).toString();
     } catch (e) {
-      return m.reply(`❌ *GAGAL*\n\nGagal download file`);
+      return m.reply(`Maaf *${m.pushName}*, proses gagal karena file tidak dapat diunduh.`);
     }
   }
 
   if (!code || code.length < 50) {
-    return m.reply(`❌ *GAGAL*\n\nCode terlalu pendek atau tidak valid`);
+    return m.reply(`Maaf *${m.pushName}*, proses gagal karena kode terlalu pendek atau tidak valid.`);
   }
 
   const hasExport = code.includes("module.exports") || code.includes("export ");
   const hasConfig = code.includes("pluginConfig") || code.includes("config");
   if (!hasExport || !hasConfig) {
     return m.reply(
-      `❌ *GAGAL*\n\nCode bukan format plugin yang valid\nHarus ada export dan config`,
+      `Maaf *${m.pushName}*, proses gagal karena kode bukan format plugin yang valid. Pastikan ada export dan config di dalamnya.`
     );
   }
 
@@ -96,14 +96,14 @@ async function handler(m, { sock }) {
 
   if (!fileName) {
     return m.reply(
-      `❌ *GAGAL*\n\nTidak bisa mendeteksi nama plugin\nGunakan \`${m.prefix}ganticode <namafile>\``,
+      `Maaf *${m.pushName}*, aku tidak bisa mendeteksi nama pluginnya. Silakan gunakan perintah dengan format .ganticode <nama file>.`
     );
   }
 
   fileName = fileName.toLowerCase().replace(/[^a-z0-9\-_]/g, "");
 
   if (!fileName) {
-    return m.reply(`❌ *GAGAL*\n\nNama file tidak valid`);
+    return m.reply(`Maaf *${m.pushName}*, proses gagal karena nama file tidak valid.`);
   }
 
   await m.react("🕕");
@@ -159,26 +159,24 @@ async function handler(m, { sock }) {
     await m.react("✅");
 
     let replyText =
-      `✅ *CODE ${isNewFile ? "DITAMBAH" : "DIGANTI"}*\n\n` +
-      `╭─〔 *DETAIL* 〕───⬣\n` +
-      `│ File: \`${fileName}.js\`\n` +
-      `│ Folder: \`${targetFolder}\`\n` +
-      `│ Size: \`${code.length} bytes\`\n`;
+      `Proses selesai! Kode plugin berhasil ${isNewFile ? "ditambahkan" : "diperbarui"}.\n\n` +
+      `- File: ${fileName}.js\n` +
+      `- Folder: ${targetFolder}\n` +
+      `- Ukuran: ${code.length} bytes\n`;
 
     if (!isNewFile) {
-      replyText += `│ Old Size: \`${oldSize} bytes\`\n`;
+      replyText += `- Ukuran Lama: ${oldSize} bytes\n`;
     }
 
     replyText +=
-      ` │ 🔄 Hot Reload: ${reloadResult.success ? "✅ Sukses" : "⚠️ Pending"}\n` +
-      `╰───────⬣\n\n`;
+      `- Status Reload: ${reloadResult.success ? "Berhasil" : "Pending"}\n\n`;
 
     if (backupPath) {
       const relBackup = path.relative(process.cwd(), backupPath);
-      replyText += `💾 *Backup:*\n\`${relBackup}\`\n\n`;
+      replyText += `File lama sudah dibackup dengan aman di lokasi berikut:\n${relBackup}\n\n`;
     }
 
-    replyText += `Plugin sudah aktif dan siap digunakan!`;
+    replyText += `Plugin sudah aktif dan siap digunakan, silakan dicoba ya!`;
 
     return m.reply(replyText);
   } catch (error) {

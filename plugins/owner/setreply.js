@@ -70,7 +70,7 @@ const VARIANTS = {
   v9: {
     id: 9,
     name: "FAKE ORDER",
-    desc: "Teks dengan fake quoted order message",
+    desc: "Teks dengan fake quoted order message ( gak direkomendasikan )",
     emoji: "🍙",
   },
   v10: {
@@ -81,8 +81,8 @@ const VARIANTS = {
   },
   v11: {
     id: 11,
-    name: "ANIMATED BOT NAME",
-    desc: "Teks animasi loop bertahap mengambil dari nama bot",
+    name: "PREVIEW",
+    desc: "Link preview",
     emoji: "🌀",
   },
 };
@@ -99,16 +99,10 @@ async function handler(m, { sock, db }) {
 
     db.setting("replyVariant", selected.id);
     await db.save();
-
-    let warningMsg = "";
-    if (selected.id === 11) {
-      warningMsg = `\n\n⚠ *PERINGATAN KHUSUS V11:*\n_Penggunaan variant animasi ini memiliki kemungkinan dapat menyebabkan nomor bot ter-banned, kinerja panel melambat, dan spam di console._`;
-    }
-
     await m.reply(
       `✅ *REPLY VARIANT DIUBAH*\n\n` +
       `${selected.emoji} *V${selected.id} — ${selected.name}*\n` +
-      `_${selected.desc}_` + warningMsg,
+      `_${selected.desc}_`,
     );
     return;
   }
@@ -137,8 +131,7 @@ async function handler(m, { sock, db }) {
   const bodys =
     `💬📨 *REPLY VARIANT*\n\n` +
     `Atur tampilan balasan bot ketika membalas pesan user 💬✨\n` +
-    `Variant aktif saat ini: *V${current} — ${VARIANTS[`v${current}`]?.name || "Unknown"}* 🎯\n\n` +
-    `⚠ *PERINGATAN:*\n_Khusus penggunaan v11 (Animasi) berisiko menyebabkan nomor bot ter-banned, panel melambat, & spam di console._\n\n`
+    `Variant aktif saat ini: *V${current} — ${VARIANTS[`v${current}`]?.name || "Unknown"}* 🎯\n\n`
 
   await sock.sendButton(
     m.chat,

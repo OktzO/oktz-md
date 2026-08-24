@@ -73,7 +73,7 @@ async function handler(m, { sock }) {
         if (!videoStream) throw new Error('Stream video tidak ditemukan')
 
         const size = 512
-        
+
         const canvas = createCanvas(size, size)
         const ctx = canvas.getContext('2d')
 
@@ -88,13 +88,13 @@ async function handler(m, { sock }) {
 
             let fontSize = Math.floor(width / 8)
             ctx.font = `bold ${fontSize}px Impact, Arial`
-            
+
             while (ctx.measureText(text).width > width - 20) {
                 fontSize -= 2
                 ctx.font = `bold ${fontSize}px Impact, Arial`
                 if (fontSize < 10) break
             }
-            
+
             ctx.lineWidth = Math.floor(fontSize / 6)
             ctx.strokeText(text, x, y)
             ctx.fillText(text, x, y)
@@ -139,7 +139,7 @@ async function handler(m, { sock }) {
             fs.unlinkSync(inputVideo)
             fs.unlinkSync(outputVideo)
             fs.unlinkSync(overlayImage)
-        } catch (e) {}
+        } catch (e) { }
 
     } catch (error) {
         m.react('☢')

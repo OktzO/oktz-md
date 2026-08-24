@@ -2,8 +2,8 @@ import { downloadMediaMessage } from "ourin";
 import { isLid, lidToJid, lidToJidSafe } from "./ourin-lid.js";
 import config from "../../config.js";
 const messageCache = new Map();
-const CACHE_EXPIRY = 30 * 60 * 1000;
-const CACHE_MAX_SIZE = 5000;
+const CACHE_EXPIRY = 10 * 60 * 1000;
+const CACHE_MAX_SIZE = 500;
 
 function gpMsg(key, replacements = {}) {
   const defaults = {

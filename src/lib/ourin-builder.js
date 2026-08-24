@@ -33,14 +33,9 @@ const VERSION = '4.6';
 
 import { generateWAMessageFromContent, prepareWAMessageMedia } from 'ourin';
 import crypto from 'crypto';
+import sharp from 'sharp';
 import ffmpeg from 'fluent-ffmpeg';
 import { PassThrough, Readable } from 'stream';
-
-let _sharp;
-async function getSharp() {
-    if (!_sharp) _sharp = (await import('sharp')).default;
-    return _sharp;
-}
 
 function extractIE(text, { extract = true, hyperlink = true, citation = true, latex = true } = {}) {
     if (!extract) {
@@ -241,7 +236,6 @@ class Toolkit {
     }
 
     static async resize(buffer, x, y, fit = 'cover') {
-        const sharp = await getSharp();
         return await sharp(buffer)
             .resize(x, y, {
                 fit,

@@ -5,6 +5,7 @@ import {
   proto,
 } from "ourin";
 import { createCanvas, loadImage, GlobalFonts } from "@napi-rs/canvas";
+import _sharp from "sharp";
 import config from "../../config.js";
 import {
   formatUptime,
@@ -18,12 +19,11 @@ import { getDatabase } from "../../src/lib/ourin-database.js";
 import fs from "fs";
 import path from "path";
 
-let _sharp;
-async function getSharp() {
-  if (!_sharp) _sharp = (await import("sharp")).default;
+function getSharp() {
   return _sharp;
 }
 import axios from "axios";
+import sharp from "sharp";
 const pluginConfig = {
   name: "menu",
   alias: ["help", "bantuan", "commands", "m"],
@@ -695,7 +695,7 @@ ${readmore}${s}`
               },
             ],
             locationMessage: {
-              jpegThumbnail: await (await getSharp())(fs.readFileSync(config.assets["ourin"])).resize(300, 170).toBuffer(),
+              jpegThumbnail: await sharp(fs.readFileSync(config.assets["ourin"])).resize(300, 170).toBuffer(),
               name: config.bot.name,
               address: `Versi saat ini: ${config.bot.version}`
             },
@@ -732,7 +732,7 @@ Welcome to ${config.bot?.name}, Our bot will help you
         break
 
       case 4: {
-        const thumbnail = await (await getSharp())(fs.readFileSync(config.assets["ourin"])).resize(300, 300).toBuffer()
+        const thumbnail = await sharp(fs.readFileSync(config.assets["ourin"])).resize(300, 300).toBuffer()
         const qvideo = {
           key: {
             fromMe: false,
@@ -899,7 +899,7 @@ Enjoy your use brother.`
             return "Cuaca tidak tersedia"
           }
         }
-        const thumbnail = await (await getSharp())(fs.readFileSync(config.assets["ourin"])).resize(300, 300).toBuffer()
+        const thumbnail = await sharp(fs.readFileSync(config.assets["ourin"])).resize(300, 300).toBuffer()
         const qOrder = {
           key: {
             fromMe: false,
@@ -1083,7 +1083,7 @@ _i am an automated system (WhatsApp bot) that can help to do something search an
           topCmdText += `╭   • Belum ada command\n╰➤------------------------------\n`
         }
 
-        const thumbnail = await (await getSharp())(fs.readFileSync(config.assets["ourin"])).resize(300, 300).toBuffer()
+        const thumbnail = await sharp(fs.readFileSync(config.assets["ourin"])).resize(300, 300).toBuffer()
         const msg6 = generateWAMessageFromContent(m.chat, {
           viewOnceMessage: {
             message: {
@@ -1223,7 +1223,7 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
 
         const { getAssetBuffer } = await import("../../src/lib/ourin-asset-manager.js");
         const imageBuffer = await getAssetBuffer("ourin2");
-        const sharp = await getSharp();
+        const sharp = (await import("sharp")).default;
         const stickerBuf = await sharp(imageBuffer).resize(512, 512).webp().toBuffer();
 
         const { prepareWAMessageMedia } = await import("ourin");
@@ -1313,6 +1313,175 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
           }
         }, {});
 
+        break;
+      }
+      case 8: {
+        function runtimeStr(seconds) {
+          seconds = Number(seconds);
+          const d = Math.floor(seconds / (3600 * 24));
+          if (d > 0) return `${d} hari`;
+          const h = Math.floor((seconds % (3600 * 24)) / 3600);
+          if (h > 0) return `${h} jam`;
+          const m = Math.floor((seconds % 3600) / 60);
+          if (m > 0) return `${m} menit`;
+          const s = Math.floor(seconds % 60);
+          return `${s} detik`;
+        }
+
+        const toMathSansBold = (text) => {
+          const chars = {
+            A: "𝗔", B: "𝗕", C: "𝗖", D: "𝗗", E: "𝗘", F: "𝗙", G: "𝗚", H: "𝗛", I: "𝗜", J: "𝗝", K: "𝗞", L: "𝗟", M: "𝗠",
+            N: "𝗡", O: "𝗢", P: "𝗣", Q: "𝗤", R: "𝗥", S: "𝗦", T: "𝗧", U: "𝗨", V: "𝗩", W: "𝗪", X: "𝗫", Y: "𝗬", Z: "𝗭"
+          };
+          return text.toUpperCase().split("").map(c => chars[c] || c).join("");
+        };
+
+        const botName = config.bot?.name || "velyx store";
+        const botModeLower = (config.mode || "public").toLowerCase();
+        const botPrefix = config.command?.prefix || ".";
+        const runTime = runtimeStr(process.uptime());
+
+        const userName = m.pushName || "User";
+        const userStatus = m.isPremium ? "premium" : "free";
+        const userRole = m.isOwner ? "owner" : "user";
+        const dbUser = db.getUser(m.sender);
+        const userLimit = (dbUser?.limit === Infinity || dbUser?.limit === null || dbUser?.limit === undefined) ? "unlimited" : dbUser.limit;
+
+        const userLevel = dbUser?.level || 1;
+        let userRank = "🛡️ Warrior";
+        if (userLevel >= 10) userRank = "⭐ Elite";
+        if (userLevel >= 20) userRank = "🎖️ Master";
+        if (userLevel >= 40) userRank = "💪 Grandmaster";
+        if (userLevel >= 60) userRank = "💜 Epic";
+        if (userLevel >= 80) userRank = "⚔️ Legend";
+        if (userLevel >= 100) userRank = "🐉 Mythic";
+
+        const userJabatan = m.isOwner ? "[ Owner ]" : (m.isPremium ? "[ Premium ]" : "[ User ]");
+        const userKoin = dbUser?.koin || 0;
+        const userExp = dbUser?.exp || 0;
+        const hariKe = dbUser?.activeDays || 0;
+
+        let case7Text = `*YOUR STATUS*\n`;
+        case7Text += `❑ Role: ${userJabatan}\n`;
+        case7Text += `❑ Rank: ${userRank}\n`;
+        case7Text += `❑ Level: ${userLevel}\n`;
+        case7Text += `❑ Coin: ${userKoin}\n`;
+        case7Text += `❑ Exp: ${userExp}\n`;
+        case7Text += `❑ Energy: ${userLimit}\n\n`;
+        case7Text += `Hello, my friend *"${m.pushName}"*!\nHow are you today? You're feeling well, right?\n\nYou've been online for *${hariKe} days*\n\n`;
+
+        const readmore = String.fromCharCode(8206).repeat(4001);
+        case7Text += readmore + "";
+
+        const { sorted } = getSortedCategories(m, botMode);
+
+        const catMap = {
+          info: "INFO BOT",
+          jadibot: "JADI BOT",
+          economy: "EKONOMI",
+          main: "MAIN MENU",
+          owner: "OWNER MENU"
+        };
+
+        for (const cat of sorted) {
+          const catName = catMap[cat.cat.toLowerCase()] || cat.cat.toUpperCase();
+          case7Text += `*${catName}*\n`;
+          for (const cmd of cat.cmds) {
+            case7Text += `⇨ ${botPrefix}${cmd}\n`;
+          }
+          case7Text += `\n`;
+        }
+        case7Text = case7Text.trimEnd();
+
+        const { getAssetBuffer } = await import("../../src/lib/ourin-asset-manager.js");
+        const imageBuffer = await getAssetBuffer("ourin");
+        const favB = await getAssetBuffer("ourin2");
+        const sharp = (await import("sharp")).default;
+        const thumbBuf = await sharp(imageBuffer).resize(1280, 720).jpeg().toBuffer();
+        const favBuf = await sharp(favB).resize(512, 512).jpeg().toBuffer();
+
+        const { prepareWAMessageMedia, generateWAMessageFromContent } = await import("ourin");
+        const uploadMedia = await prepareWAMessageMedia({ image: thumbBuf }, { upload: sock.waUploadToServer, mediaTypeOverride: "thumbnail-link" });
+        const uploadFav = await prepareWAMessageMedia({ image: favBuf }, { upload: sock.waUploadToServer, mediaTypeOverride: "thumbnail-link" });
+
+        const randomTitles = [
+          "Keep up the great work! 🌟",
+          "Don't forget to smile today 😊",
+          "Keep smiling and stay positive! ✨",
+          "What a beautiful day to create something 💻",
+          "Thank you for using this bot 🙏",
+          "Hope you have a wonderful day! 🌸",
+          "Don't forget to take a break 🍵",
+          "Start your day with a positive mindset 😇"
+        ];
+        const randomTitle = randomTitles[Math.floor(Math.random() * randomTitles.length)];
+
+        let cuacaStr = "Cerah";
+        let suhuStr = "30°C";
+        try {
+          const { data } = await axios.get("https://wttr.in/Jakarta?format=%C|%t", { timeout: 3000 });
+          if (data) {
+            const parts = data.split('|');
+            if (parts.length === 2) {
+              cuacaStr = parts[0].trim();
+              suhuStr = parts[1].trim();
+            }
+          }
+        } catch (e) { }
+        const displayWeather = `${cuacaStr} | ${suhuStr}`;
+        const senderNum = m.sender.split('@')[0];
+
+        const msg = generateWAMessageFromContent(m.chat, {
+          extendedTextMessage: {
+            text: config.info.website + " " + case7Text,
+            matchedText: config.info.website,
+            title: randomTitle,
+            description: `Hey ${m.pushName}, My name is ${botName}!`,
+            jpegThumbnail: uploadMedia.imageMessage.jpegThumbnail || thumbBuf,
+            previewType: 1,
+            thumbnailWidth: uploadMedia.imageMessage.width || 512,
+            thumbnailHeight: uploadMedia.imageMessage.height || 512,
+            thumbnailDirectPath: uploadMedia.imageMessage.directPath,
+            thumbnailSha256: uploadMedia.imageMessage.fileSha256,
+            thumbnailEncSha256: uploadMedia.imageMessage.fileEncSha256,
+            mediaKey: uploadMedia.imageMessage.mediaKey,
+            mediaKeyTimestamp: uploadMedia.imageMessage.mediaKeyTimestamp,
+            faviconMMSMetadata: {
+              thumbnailDirectPath: uploadFav.imageMessage.directPath,
+              thumbnailSha256: uploadFav.imageMessage.fileSha256,
+              thumbnailEncSha256: uploadFav.imageMessage.fileEncSha256,
+              mediaKey: uploadFav.imageMessage.mediaKey,
+              mediaKeyTimestamp: uploadFav.imageMessage.mediaKeyTimestamp,
+              thumbnailHeight: uploadFav.imageMessage.height || 512,
+              thumbnailWidth: uploadFav.imageMessage.width || 512
+            },
+            contextInfo: {
+              mentionedJid: [m.sender],
+              isForwarded: true,
+              forwardingScore: 999,
+              forwardedNewsletterMessageInfo: {
+                newsletterJid: config.saluran.id,
+                newsletterName: config.saluran.name
+              }
+            }
+          }
+        }, {
+          quoted: {
+            key: {
+              fromMe: false,
+              participant: "0@s.whatsapp.net",
+              remoteJid: "status@broadcast"
+            },
+            message: {
+              contactMessage: {
+                displayName: displayWeather,
+                vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:${displayWeather}\nTEL;type=CELL;type=VOICE;waid=${senderNum}:+${senderNum}\nEND:VCARD`
+              }
+            }
+          }
+        });
+
+        await sock.relayMessage(m.chat, msg.message, { messageId: msg.key.id });
         break;
       }
       default:

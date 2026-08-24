@@ -1,7 +1,4 @@
-import axios from "axios";
 import te from "../../src/lib/ourin-error.js";
-import cfg from "../../config.js";
-import { ImageUploadService } from "node-upload-images";
 
 const config = {
   name: "remini",
@@ -15,10 +12,31 @@ const config = {
   isEnabled: true,
 };
 
-async function ul(buf) {
-  const service = new ImageUploadService("new.fastpic.org");
-  const { directLink } = await service.uploadFromBinary(buf, "img.png");
-  return directLink;
+/**
+ * @credit: ren-offc
+ * @noted: don't delete the credit
+ */
+async function photoihancer(imageBuffer, method = 1) {
+  const blob = new Blob([imageBuffer], { type: 'image/jpeg' });
+
+  const form = new FormData();
+  form.set('method', String(method));
+  form.set('is_pro_version', 'true');
+  form.set('is_enhancing_more', 'false');
+  form.set('max_image_size', 'high');
+  form.set('file', blob, 'file.jpg');
+
+  const res = await fetch('https://ihancer.com/api/enhance', {
+    method: 'POST',
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36',
+      'Referer': 'https://ihancer.com/app/',
+    },
+    body: form,
+  });
+
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return Buffer.from(await res.arrayBuffer());
 }
 
 async function handler(m, { sock }) {
@@ -26,7 +44,7 @@ async function handler(m, { sock }) {
 
   if (!img) {
     return m.reply(
-      `*🪁 HD IMAGE*\n> Reply gambar\n\n\`\`\`${m.prefix}remini\`\`\``,
+      `*🪁 HD IMAGE*\n> Reply gambar yang mau dijernihkan\n\n\`\`\`${m.prefix}remini\`\`\``
     );
   }
 
@@ -35,31 +53,22 @@ async function handler(m, { sock }) {
   try {
     let b = m.quoted?.isMedia ? await m.quoted.download() : await m.download();
 
-    const u = await ul(b);
-    let resultUrl = null;
+    const enhancedBuffer = await photoihancer(b);
 
-    try {
-      const apiUrl = `https://api-faa.my.id/faa/hdv2?url=${encodeURIComponent(u)}`;
-      const res = await axios.get(apiUrl);
-      if (res.data.status && res.data.result) {
-        resultUrl = res.data.result;
-      } else {
-        throw new Error("API Faa response invalid");
-      }
-    } catch (err) {
-      throw new Error("Gagal melakukan upscale, coba lagi.");
-    }
-
-    if (!resultUrl) {
-      throw new Error("Gagal melakukan upscale, coba lagi.");
-    }
+    await sock.sendMessage(
+      m.chat,
+      {
+        image: enhancedBuffer,
+        caption: `✅ *BERHASIL*\n\n> Gambar telah berhasil di-upscale dan dijernihkan.`,
+      },
+      { quoted: m }
+    );
 
     m.react("✅");
-    await sock.sendMedia(m.chat, resultUrl, null, m, { type: "image" });
-  } catch (e) {
-    console.log(e);
-    m.react("☢");
-    m.reply(te(m.prefix, m.command, m.pushName));
+  } catch (err) {
+    console.error("[HD Error]", err);
+    m.react("❌");
+    m.reply("Maaf, terjadi kesalahan saat memproses gambar dari scraper. Coba lagi nanti ya.");
   }
 }
 

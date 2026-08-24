@@ -112,15 +112,20 @@ async function handler(m, { sock }) {
       let failedCount = 0;
       for (const groupId of unlistedGroups) {
         try {
-          await sock.sendText(
-            groupId,
-            `⛔ Grup ini tidak terdaftar dalam sistem sewa.\nBot akan meninggalkan grup ini.\n\nHubungi owner untuk sewa bot.`,
-            null,
-            {
-              contextInfo: saluranCtx(),
-            },
-          );
-          await new Promise((r) => setTimeout(r, 2000));
+          try {
+            await sock.sendText(
+              groupId,
+              `⛔ Grup ini tidak terdaftar dalam sistem sewa.\nBot akan meninggalkan grup ini.\n\nHubungi owner untuk sewa bot.`,
+              null,
+              {
+                contextInfo: saluranCtx(),
+              },
+            );
+            await new Promise((r) => setTimeout(r, 2000));
+          } catch (err) {
+            // Abaikan error jika gagal mengirim pesan (misal grup dikunci admin)
+          }
+
           await sock.groupLeave(groupId);
           leftCount++;
           await new Promise((r) => setTimeout(r, 3000));
@@ -166,15 +171,20 @@ async function handler(m, { sock }) {
       let failedCount = 0;
       for (const groupId of unlistedGroups) {
         try {
-          await sock.sendText(
-            groupId,
-            `👋 Grup ini tidak terdaftar dalam sistem sewa.\nBot akan meninggalkan grup ini.\n\nHubungi owner untuk sewa bot.`,
-            null,
-            {
-              contextInfo: saluranCtx(),
-            },
-          );
-          await new Promise((r) => setTimeout(r, 3000));
+          try {
+            await sock.sendText(
+              groupId,
+              `👋 Grup ini tidak terdaftar dalam sistem sewa.\nBot akan meninggalkan grup ini.\n\nHubungi owner untuk sewa bot.`,
+              null,
+              {
+                contextInfo: saluranCtx(),
+              },
+            );
+            await new Promise((r) => setTimeout(r, 3000));
+          } catch (err) {
+            // Abaikan error pesan agar bot tetap bisa keluar
+          }
+
           await sock.groupLeave(groupId);
           leftCount++;
           await new Promise((r) => setTimeout(r, 5000));

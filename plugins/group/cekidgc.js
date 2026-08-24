@@ -1,13 +1,8 @@
+import sharp from "sharp";
 import config from "../../config.js";
 import axios from "axios";
 import { generateWAMessageFromContent, proto } from "ourin";
 import te from "../../src/lib/ourin-error.js";
-
-let _sharp;
-async function getSharp() {
-  if (!_sharp) _sharp = (await import("sharp")).default;
-  return _sharp;
-}
 
 const pluginConfig = {
   name: "cekidgc",
@@ -156,7 +151,6 @@ async function handler(m, { sock }) {
     if (ppBuffer) {
       let headerMedia = null;
       try {
-        const sharp = await getSharp();
         const resized = await sharp(ppBuffer)
           .resize(300, 300, { fit: "cover" })
           .jpeg({ quality: 80 })

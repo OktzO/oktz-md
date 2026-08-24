@@ -8,6 +8,7 @@ import {
 } from "ourin";
 import { AIRich } from "../../src/lib/ourin-builder.js";
 import axios from "axios";
+import sharp from "sharp";
 const pluginConfig = {
   name: "owner",
   alias: ["creator", "dev", "developer"],

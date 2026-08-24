@@ -37,12 +37,13 @@ const VARIANTS = {
   5: { name: "Simple", desc: "Pesan teks simple + foto profile", emoji: "✨" },
   6: { name: "Video", desc: "Kirim video ucapan selamat tinggal", emoji: "🎥" },
   7: { name: "Interactive Quoted", desc: "Interactive message dengan fake quoted", emoji: "💬" },
+  8: { name: "Super Simple", desc: "Pesan teks sangat singkat tanpa hiasan", emoji: "👋" },
 };
 async function handler(m, { sock, db }) {
   const args = m.args || [];
   const variant = args[0]?.toLowerCase();
   const current = db.setting("goodbyeType") || 1;
-  if (variant && /^v?[1-7]$/.test(variant)) {
+  if (variant && /^v?[1-8]$/.test(variant)) {
     const id = parseInt(variant.replace("v", ""));
     db.setting("goodbyeType", id);
     await db.save();
@@ -83,6 +84,7 @@ async function handler(m, { sock, db }) {
     `- *V5 Simple* ✨ — Pesan teks sederhana disertai foto profile member yang keluar, tidak terlalu mencolok namun informatif\n\n` +
     `- *V6 Video* 🎥 — Mengirimkan video perpisahan yang estetik dilengkapi caption otomatis untuk member\n\n` +
     `- *V7 Interactive Quoted* 💬 — Mengirimkan pesan interaktif dan fake quoted dari orang yang keluar\n\n` +
+    `- *V8 Super Simple* 👋 — Pesan teks sangat singkat tanpa hiasan (Contoh: Goodbye @user, dari grup...)\n\n` +
     `> Pilih tipe goodbye dari tombol di bawah 👇`;
   await sock.sendButton(
     m.chat,

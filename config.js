@@ -18,9 +18,15 @@ const config = {
     usePairingCode: true, // true = Pairing Code, false = QR Code
   },
 
+  fake_call: {
+    active: false,
+    usePairing: true,
+    dir: "./session_voip",
+  },
+
   bot: {
     name: "Oktz Bot", // Nama bot
-    version: "3.2", // Versi bot
+    version: "3.3.1", // Versi bot
     number: "6285143885645", // Nomor WA bot (di-overwrite otomatis saat koneksi terbuka)
     developer: "Zann", // Nama developer
   },
@@ -46,8 +52,7 @@ const config = {
     "ourin-mp4": "./assets/video/ourin-mp4.mp4",
     "ourin-mp3": "./assets/audio/ourin-mp3.mp3",
     "ourin-font": "./assets/ourin-font.ttf",
-    "ourin-kertas": "./assets/image/ourin-kertas.jpg",
-    "test": "./assets/image/test.webp"
+    "ourin-kertas": "./assets/image/ourin-kertas.jpg"
   },
 
   mode: "public",

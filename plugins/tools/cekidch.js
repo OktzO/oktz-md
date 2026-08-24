@@ -36,24 +36,25 @@ async function handler(m, { sock }) {
 
     if (!text) {
         return m.reply(
-            `── .✦ 𝗖𝗘𝗞 𝗜𝗗 𝗖𝗛𝗔𝗡𝗡𝗘𝗟 ✦. ── 𝜗ৎ\n\n` +
-            `> Masukkan link channel WhatsApp\n\n` +
-            `> \`${m.prefix}cekidch https://whatsapp.com/channel/xxxxx\``
+            `ℹ️ *INFORMASI PENGGUNAAN*\n\n` +
+            `Silakan masukkan link channel WhatsApp yang ingin Anda cek informasinya secara detail.\n\n` +
+            `*CONTOH PENGGUNAAN:*\n` +
+            `• \`${m.prefix}cekidch https://whatsapp.com/channel/xxxxx\``
         )
     }
 
     if (!text.includes('https://whatsapp.com/channel/')) {
-        return m.reply(`── .✦ ──\n\n> Link channel tidak valid .☘︎ ݁˖`)
+        return m.reply(`❌ *LINK TIDAK VALID*\n\nPastikan link yang Anda masukkan adalah link channel WhatsApp yang sah dan benar.`)
     }
 
     m.react('🕕')
 
     try {
         const metadata = await sock.cekIDSaluran(text)
- 
+
         if (!metadata?.id) {
-            m.react('✘')
-            return m.reply(`── .✦ ──\n\n> Channel tidak ditemukan .☘︎ ݁˖`)
+            m.react('❌')
+            return m.reply(`❌ *CHANNEL TIDAK DITEMUKAN*\n\nMaaf, sistem tidak dapat menemukan informasi dari channel tersebut. Mungkin link sudah kedaluwarsa atau channel telah dihapus.`)
         }
 
         const chName = metadata.name || 'Unknown'
@@ -62,33 +63,33 @@ async function handler(m, { sock }) {
         const chDesc = metadata.description || '—'
         const chVerified = metadata.verification === 'VERIFIED' ? '✓ Verified' : 'Unverified'
         const chCreated = formatDate(metadata.creation_time)
-        const chPicUrl = metadata.preview === "https://mmg.whatsapp.net" ? "https://athars.space/uploads/de11c461.jpg" : metadata.preview
+        const chPicUrl = metadata.preview === "https://mmg.whatsapp.net" ? "https://files.catbox.moe/lp9tpd.jpg" : metadata.preview
 
         const descPreview = chDesc.length > 120 ? chDesc.slice(0, 120) + '...' : chDesc
 
         const infoText =
-            `── .✦ 𝗖𝗛𝗔𝗡𝗡𝗘𝗟 𝗜𝗡𝗙𝗢 ✦. ──\n\n` +
-            `╭─〔 *${chName}* 〕───⬣\n` +
-            `│  ✦ ɴᴀᴍᴀ       : *${chName}*\n` +
-            `│  ✦ ɪᴅ            : \`${chId}\`\n` +
-            `│  ✦ sᴜʙsᴄʀɪʙᴇʀ : *${formatSubs(chSubs)}*\n` +
-            `│  ✦ sᴛᴀᴛᴜs     : *${chVerified}*\n` +
-            `│  ✦ ᴅɪʙᴜᴀᴛ      : *${chCreated}*\n` +
-            `│  ✦ ᴅᴇsᴋʀɪᴘsɪ  : ${descPreview}\n` +
-            `╰──────────────⬣`
+            `Berikut adalah detail informasi lengkap mengenai channel yang Anda cari:\n\n` +
+            `*RINCIAN CHANNEL:*\n` +
+            `• Nama: *${chName}*\n` +
+            `• ID Channel: \`${chId}\`\n` +
+            `• Subscriber: *${formatSubs(chSubs)}*\n` +
+            `• Status: *${chVerified}*\n` +
+            `• Dibuat Pada: *${chCreated}*\n\n` +
+            `*DESKRIPSI:*\n` +
+            `${descPreview}`
 
         const buttons = [
             {
                 name: 'cta_copy',
                 buttonParamsJson: JSON.stringify({
-                    display_text: '✦ Copy ID Channel',
+                    display_text: '📋 Ambil ID Saluran nya',
                     copy_code: chId
                 })
             },
             {
                 name: 'cta_url',
                 buttonParamsJson: JSON.stringify({
-                    display_text: '✦ Buka Channel',
+                    display_text: '🔗 Buka Channel nya',
                     url: text
                 })
             }
@@ -103,7 +104,7 @@ async function handler(m, { sock }) {
 
     } catch (error) {
         console.error('[CekIdCh] Error:', error.message)
-        m.react('☢')
+        m.react('❌')
         m.reply(te(m.prefix, m.command, m.pushName))
     }
 }

@@ -61,6 +61,12 @@ const VARIANTS = {
     desc: "Location Message dengan Buttons",
     emoji: "📍",
   },
+  v8: {
+    id: 8,
+    name: "THUMBNAIL",
+    desc: "Thumbnail Image",
+    emoji: "📍",
+  },
 };
 
 async function handler(m, { sock, db }) {

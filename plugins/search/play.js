@@ -1,18 +1,12 @@
-/**
- * Nama Plugin: Play
- * Pembuat Code: Zann
- * Saluran: https://whatsapp.com/channel/0029Vb7g5Qt90x2yn7bOlM2U
- */
-
-import yts from "yt-search";
 import axios from "axios";
-import ytdl, { fallbackToMp3Buffer } from "../../src/scraper/ytdl.js";
+import yts from "yt-search";
 import config from "../../config.js";
+
 const pluginConfig = {
   name: "play",
   alias: ["playaudio"],
   category: "search",
-  description: "Putar musik dari YouTube (Siputzx API)",
+  description: "Putar musik dari YouTube",
   usage: ".play <query>",
   example: ".play komang",
   cooldown: 15,
@@ -27,30 +21,6 @@ function formatViews(n) {
   return n.toString();
 }
 
-async function getPlayAudioDownload(url) {
-  try {
-    const apiUrl = `https://api.cuki.biz.id/api/downloader/ytmp3?apikey=${config.APIkey.cuki}&url=${encodeURIComponent(url)}&quality=128`;
-    const res = await axios.get(apiUrl, { timeout: 30000 });
-    const data = res.data;
-
-    if (data.success && data.data?.audio?.download?.downloadUrl) {
-      return { 
-        download: data.data.audio.download.downloadUrl, 
-        title: data.data.metadata?.title || "Audio"
-      };
-    }
-  } catch (err) {
-    console.error("[Play API error]", err.message);
-  }
-
-  const fallback = await ytdl(url, "mp3");
-  if (fallback?.status && fallback?.dl) {
-    return { download: fallback.dl, title: fallback.title, isFallback: true };
-  }
-
-  throw new Error(fallback?.mess || "Gagal mendapatkan audio play URL");
-}
-
 async function handler(m, { sock, text }) {
   const query = m.text?.trim();
   if (!query)
@@ -60,9 +30,15 @@ async function handler(m, { sock, text }) {
 
   try {
     const search = await yts(query);
-    if (!search.videos.length) throw "Video tidak ditemukan";
-
+    if (!search.videos.length) throw new Error("Video tidak ditemukan");
     const video = search.videos[0];
+
+    const res = await axios.get(`https://api.azbry.com/api/download/ytmp3?url=${encodeURIComponent(video.url)}`, { timeout: 60000 });
+    const data = res.data;
+    
+    if (!data.status || !data.result || !data.result.download) {
+       throw new Error("Gagal mengambil audio dari API");
+    }
 
     let info = `🎵 *NOW PLAYING*\n\n`;
     info += `📌 *Judul:* ${video.title}\n\n`;
@@ -94,25 +70,19 @@ async function handler(m, { sock, text }) {
       },
     );
 
-    const audio = await getPlayAudioDownload(video.url);
+    const audioRes = await axios.get(data.result.download, { responseType: "arraybuffer", timeout: 60000 });
+    const audioBuffer = Buffer.from(audioRes.data);
 
-    if (audio.isFallback) {
-      const mp3Buffer = await fallbackToMp3Buffer(audio.download);
-      await sock.sendMessage(
-        m.chat,
-        {
-          audio: mp3Buffer,
-          mimetype: "audio/mpeg",
-          ptt: false,
-          fileName: `${audio.title || video.title || "audio"}.mp3`,
-        },
-        { quoted: m },
-      );
-    } else {
-      await sock.sendMedia(m.chat, audio.download, video.title, m, {
-        type: "audio",
-      });
-    }
+    await sock.sendMessage(
+      m.chat,
+      {
+        audio: audioBuffer,
+        mimetype: "audio/mpeg",
+        ptt: false,
+        fileName: `${video.title}.mp3`,
+      },
+      { quoted: m },
+    );
 
     m.react("✅");
   } catch (err) {

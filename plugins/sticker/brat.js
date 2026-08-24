@@ -124,8 +124,7 @@ async function handler(m, { sock }) {
   m.react("🕕");
 
   try {
-    const url = ourinApi.yupra.url("/api/image/brat", { text });
-    await sock.sendImageAsSticker(m.chat, url, m, {
+    await sock.sendImageAsSticker(m.chat, `https://api.nexray.eu.cc/maker/brat?text=${encodeURIComponent(text)}`, m, {
       packname: config.sticker.packname,
       author: config.sticker.author,
     });

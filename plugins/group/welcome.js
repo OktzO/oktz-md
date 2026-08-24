@@ -343,6 +343,11 @@ async function sendWelcomeMessage(sock, groupJid, participant, groupMeta) {
       await sock.relayMessage(groupJid, msg.message, {
         messageId: msg.key.id,
       });
+    } else if (welcomeType === 8) {
+      await sock.sendMessage(groupJid, {
+        text: `Hai @${userName}, welcome to grup ${groupName}`,
+        mentions: [realParticipant],
+      });
     } else {
       await sock.sendMessage(groupJid, {
         text: text,

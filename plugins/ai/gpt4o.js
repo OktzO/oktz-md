@@ -28,11 +28,12 @@ async function handler(m, { sock }) {
   m.react("🕕");
 
   try {
-    const data = `https://api.cuki.biz.id/api/ai/gpt?apikey=${config.APIkey.cuki}&question=${encodeURIComponent(text)}`
+    const data = `https://api.nexray.eu.cc/ai/gpt-3.5-turbo?text=${encodeURIComponent(text)}`
     const res = await fetch(data)
     const json = await res.json()
+    if (!json.status || !json.result) throw new Error("Gagal mendapatkan response")
     m.react("✅");
-    await m.reply(`${json.results}`);
+    await m.reply(`${json.result}`);
   } catch (error) {
     console.log(error);
     m.react("☢");

@@ -113,10 +113,12 @@ async function family100AnswerHandler(m, sock) {
   const session = getSession(chatId);
 
   if (!session || session.gameType !== "family100") return false;
-  if (!isReplyToGame(m, session)) return false;
+  if (!m.body || m.isCommand) return false;
 
-  const userAnswer = (m.body || "").toLowerCase().trim();
-  if (!userAnswer || userAnswer.startsWith(".")) return false;
+  const userAnswer = m.body.toLowerCase().trim();
+  if (!userAnswer) return false;
+
+  const isQuotingGame = isReplyToGame(m, session);
 
   if (isSurrender(userAnswer)) {
     const answered = session.answered || [];
@@ -143,9 +145,12 @@ async function family100AnswerHandler(m, sock) {
   const answered = session.answered || [];
 
   if (answered.includes(userAnswer)) {
-    await m.react("⚠️");
-    await m.reply(`Hayo lho, jawaban *${userAnswer}* udah ada yang jawab tadi kak! Cari yang lain dong 😂✨`);
-    return true;
+    if (isQuotingGame) {
+      await m.react("⚠️");
+      await m.reply(`Hayo lho, jawaban *${userAnswer}* udah ada yang jawab tadi kak! Cari yang lain dong 😂✨`);
+      return true;
+    }
+    return false;
   }
 
   const matchIndex = correctAnswers.findIndex((ans) => {
@@ -207,9 +212,14 @@ async function family100AnswerHandler(m, sock) {
     }
   }
 
+  if (isQuotingGame) {
+    await m.react("❌");
+    await m.reply(`Tettt! ❌ Salah kak! Coba dipikir-pikir lagi deh 😂🧠`);
+    return true;
+  }
+
   await m.react("❌");
-  await m.reply(`Tettt! ❌ Salah kak! Coba dipikir-pikir lagi deh 😂🧠`);
-  return true;
+  return false;
 }
 
 function getSimilarity(str1, str2) {

@@ -1,10 +1,12 @@
 import axios from 'axios'
 import config from '../../config.js'
+import AdmZip from 'adm-zip'
+
 const pluginConfig = {
     name: 'deploy',
     alias: ['vercel'],
     category: 'owner',
-    description: 'Deploy HTML ke Vercel (reply code / file)',
+    description: 'Deploy HTML atau file ZIP ke Vercel',
     usage: '.deploy <namawebsite>',
     example: '.deploy mysite',
     isOwner: true,
@@ -18,61 +20,76 @@ const pluginConfig = {
 
 async function handler(m, { sock }) {
     const name = m.args[0]
-    if (!name) {
+
+    if (!name || !m.quoted) {
         return m.reply(
-`🚀 *DEPLOY*
-
-> Masukkan nama website
-> Reply kode HTML atau file .html
-
-Contoh:
-.deploy mysite`
-        )
-    }
-
-    if (!m.quoted) {
-        return m.reply(
-`❌ *HTML TIDAK DITEMUKAN*
-
-> Reply pesan berisi HTML
-> atau reply file .html`
+            `ℹ️ *INFORMASI PENGGUNAAN*\n\n` +
+            `Fitur ini digunakan untuk melakukan *deploy* (hosting) kode HTML atau file proyek lengkap (ZIP) secara langsung ke Vercel.\n\n` +
+            `*CONTOH PENGGUNAAN:*\n` +
+            `• Reply teks/kode HTML dengan perintah: \`${m.prefix}deploy namasitus\`\n` +
+            `• Reply file \`.html\` atau \`.zip\` dengan perintah: \`${m.prefix}deploy namasitus\``
         )
     }
 
     const token = config.vercel?.token
     if (!token) {
-        return m.reply('❌ *Vercel token belum diset*')
+        return m.reply(`❌ *TOKEN BELUM DIATUR*\n\nToken Vercel belum dikonfigurasi di pengaturan sistem. Silakan atur \`config.vercel.token\` terlebih dahulu.`)
     }
 
-    m.react('🚀')
+    m.react('🕕')
 
-    let htmlContent
+    let filesPayload = []
+    let isZip = false
 
     try {
-        if (m.quoted.text || m.quoted.body) {
-            htmlContent = m.quoted.text || m.quoted.body
+        if (m.quoted.mimetype === 'application/zip' || (m.quoted.filename && m.quoted.filename.endsWith('.zip'))) {
+            isZip = true
+            const buffer = await m.quoted.download()
+            const zip = new AdmZip(buffer)
+            const zipEntries = zip.getEntries()
+
+            for (const entry of zipEntries) {
+                if (entry.isDirectory) continue
+                if (entry.entryName.includes('__MACOSX')) continue
+
+                filesPayload.push({
+                    file: entry.entryName,
+                    data: entry.getData().toString('base64'),
+                    encoding: 'base64'
+                })
+            }
+
+            if (filesPayload.length === 0) {
+                m.react('❌')
+                return m.reply(`❌ *FILE ZIP KOSONG*\n\nFile ZIP yang Anda unggah tidak berisi file apapun. Pastikan file ZIP tersebut berisi proyek HTML/Web statis.`)
+            }
         } else if (
             m.quoted.mimetype === 'text/html' ||
-            (m.quoted.filename && m.quoted.filename.endsWith('.html'))
+            (m.quoted.filename && (m.quoted.filename.endsWith('.html') || m.quoted.filename.endsWith('.htm')))
         ) {
             const buffer = await m.quoted.download()
-            htmlContent = buffer.toString()
+            filesPayload.push({
+                file: 'index.html',
+                data: buffer.toString('utf-8')
+            })
+        } else if (m.quoted.text || m.quoted.body) {
+            let htmlContent = m.quoted.text || m.quoted.body
+            if (!/<html|<!doctype html|<head|<body/i.test(htmlContent)) {
+                htmlContent = `<!DOCTYPE html>\n<html lang="id">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<title>${name}</title>\n</head>\n<body>\n${htmlContent}\n</body>\n</html>`
+            }
+
+            filesPayload.push({
+                file: 'index.html',
+                data: htmlContent
+            })
         } else {
             m.react('❌')
             return m.reply(
-`❌ *FORMAT TIDAK DIDUKUNG*
-
-> Reply teks HTML
-> atau file .html`
-            )
-        }
-
-        if (!/<html|<!doctype html|<head|<body/i.test(htmlContent)) {
-            m.react('❌')
-            return m.reply(
-`❌ *BUKAN HTML VALID*
-
-> Pastikan berisi struktur HTML`
+                `❌ *FORMAT TIDAK DIDUKUNG*\n\n` +
+                `Sistem hanya mendukung deploy dari format berikut:\n` +
+                `• Teks kode HTML\n` +
+                `• Dokumen \`.html\`\n` +
+                `• Dokumen arsip \`.zip\``
             )
         }
 
@@ -80,12 +97,7 @@ Contoh:
             name,
             project: name,
             target: 'production',
-            files: [
-                {
-                    file: 'index.html',
-                    data: htmlContent
-                }
-            ],
+            files: filesPayload,
             projectSettings: {
                 framework: null
             }
@@ -123,23 +135,18 @@ Contoh:
                 domains.find(d => d.name.endsWith('.vercel.app'))?.name ||
                 domain
         } catch {
-            // fallback tetap ke default domain
+            // fallback ke default domain jika gagal mengambil data domain
         }
 
         m.react('✅')
 
         await m.reply(
-`╭──「 *DEPLOY SUCCESS* 」
-│
-│ 🌐 Nama     : ${name}
-│ ☁️ Platform : Vercel
-│ 📄 Type     : Static HTML
-│ ⚙️ Status   : Building
-│
-│ 🔗 URL
-│ https://${domain}
-│
-╰────────────────`
+            `✅ *DEPLOY BERHASIL*\n\n` +
+            `Proyek Anda telah berhasil diunggah ke Vercel dan saat ini sedang dalam proses penyebaran (building). Anda dapat segera mengaksesnya melalui tautan berikut.\n\n` +
+            `*RINCIAN DEPLOY:*\n` +
+            `• Nama Proyek: *${name}*\n` +
+            `• Tipe Proyek: *${isZip ? 'ZIP Archive (Banyak File)' : 'Static HTML (File Tunggal)'}*\n` +
+            `• Tautan: https://${domain}`
         )
 
     } catch (error) {
@@ -150,13 +157,7 @@ Contoh:
             error.response?.data?.message ||
             error.message
 
-        m.reply(
-`╭──「 *DEPLOY FAILED* 」
-│
-│ ❌ ${err}
-│
-╰────────────────`
-        )
+        m.reply(`❌ *DEPLOY GAGAL*\n\nTerjadi kesalahan saat mencoba mengunggah proyek ke Vercel.\n\n*Penyebab Error:*\n> ${err}`)
     }
 }
 

@@ -15,9 +15,9 @@ const pluginConfig = {
 async function getAudioDownload(url) {
   try {
     const { data } = await axios.get(
-      `https://api.nexray.eu.cc/downloader/v1/ytmp3?url=${encodeURIComponent(url)}`,
+      `https://my.izuka-api.xyz/api/downloader/ytmp3?url=${encodeURIComponent(url)}`, { timeout: 60000 }
     );
-    const download = data?.result?.url;
+    const download = data?.result?.download_url;
     const title = data?.result?.title;
     if (download) {
       return { download, title };
@@ -35,7 +35,7 @@ async function getAudioDownload(url) {
 async function handler(m, { sock }) {
   const url = m.text?.trim();
   if (!url)
-    return m.reply(`Contoh: ${m.prefix}ytmp4 https://youtube.com/watch?v=xxx`);
+    return m.reply(`Contoh: ${m.prefix}ytmp3 https://youtube.com/watch?v=xxx`);
   if (!url.includes("youtube.com") && !url.includes("youtu.be"))
     return m.reply("❌ URL harus YouTube");
 
@@ -66,9 +66,9 @@ async function handler(m, { sock }) {
     }
     m.react("✅");
   } catch (err) {
-    console.error("[YTMP4]", err);
+    console.error("[YTMP3]", err);
     m.react("❌");
-    m.reply("Gagal mengunduh video.");
+    m.reply("Gagal mengunduh audio.");
   }
 }
 

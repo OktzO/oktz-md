@@ -15,9 +15,6 @@ const pluginConfig = {
     isEnabled: true
 }
 function handler(m, { sock }) {
-    if (!config.isOwner(m.sender)) {
-        return m.reply('❌ *Owner Only!*')
-    }
     const template = `
 const pluginConfig = {
     name: 'example',

@@ -20,26 +20,24 @@ const pluginConfig = {
 async function handler(m, { sock }) {
     const input = m.text?.trim() || ''
     const parts = input.split(/[&,]/).map(s => s.trim()).filter(s => s)
-    
+
     if (parts.length < 2) {
         return m.reply(`🎮 *ʙʟᴜᴇ ᴀʀᴄʜɪᴠᴇ ʟᴏɢᴏ*\n\n> Masukkan 2 teks untuk logo\n\n> Contoh: ${m.prefix}balogo Blue & Archive`)
     }
-    
+
     const textL = parts[0]
     const textR = parts[1]
-    
+
     m.react('🕕')
-    
+
     try {
-        const apiUrl = `https://api.nexray.web.id/maker/balogo?text=${encodeURIComponent(textL)} ${encodeURIComponent(textR)}`
-        const response = await f(apiUrl, 'arrayBuffer')
-        
-        await sock.sendMedia(m.chat, Buffer.from(response), null, m, {
+
+        await sock.sendMedia(m.chat, `https://api.nexray.web.id/maker/balogo?text=${encodeURIComponent(textL)} ${encodeURIComponent(textR)}`, null, m, {
             type: 'image',
         })
-        
+
         m.react('✅')
-        
+
     } catch (error) {
         m.react('☢')
         m.reply(te(m.prefix, m.command, m.pushName))

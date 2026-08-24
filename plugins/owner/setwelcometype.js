@@ -37,12 +37,13 @@ const VARIANTS = {
   5: { name: "Simple", desc: "Pesan teks simple + foto profile", emoji: "✨" },
   6: { name: "Video", desc: "Kirim video perkenalan", emoji: "🎥" },
   7: { name: "Interactive Quoted", desc: "Interactive message dengan fake quoted", emoji: "💬" },
+  8: { name: "Super Simple", desc: "Pesan teks sangat singkat tanpa hiasan", emoji: "👋" },
 };
 async function handler(m, { sock, db }) {
   const args = m.args || [];
   const variant = args[0]?.toLowerCase();
   const current = db.setting("welcomeType") || 1;
-  if (variant && /^v?[1-7]$/.test(variant)) {
+  if (variant && /^v?[1-8]$/.test(variant)) {
     const id = parseInt(variant.replace("v", ""));
     db.setting("welcomeType", id);
     await db.save();
@@ -83,6 +84,7 @@ async function handler(m, { sock, db }) {
     `- *V5 Simple* ✨ — Pesan teks sederhana disertai foto profile member yang join, tidak terlalu mencolok namun informatif\n\n` +
     `- *V6 Video* 🎥 — Mengirimkan video sambutan menarik dilengkapi caption selamat datang untuk member\n\n` +
     `- *V7 Interactive Quoted* 💬 — Mengirimkan pesan interaktif dan fake quoted dari orang yang join\n\n` +
+    `- *V8 Super Simple* 👋 — Pesan teks sangat singkat tanpa hiasan (Contoh: Hai @user, welcome to grup...)\n\n` +
     `> Pilih tipe welcome dari tombol di bawah 👇`;
   await sock.sendButton(
     m.chat,

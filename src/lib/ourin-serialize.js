@@ -31,9 +31,11 @@ import {
 } from "./ourin-lid.js";
 import util from "util";
 import axios from "axios";
+import sharp from "sharp";
 import fsc from "fs";
 import { getDatabase } from "./ourin-database.js";
 import { saluranCtx } from "./ourin-context.js";
+import { LRUCache } from "lru-cache";
 import { getAssetBuffer } from "./ourin-asset-manager.js";
 let _prefixCache = null;
 let _prefixCacheTime = 0;
@@ -64,11 +66,11 @@ function invalidatePrefixCache() {
   _prefixCacheTime = 0;
 }
 
-const _thumbCache = {};
+const _thumbCache = new LRUCache({ max: 50, ttl: 10 * 60 * 1000 });
 async function getCachedThumb(filePath) {
-  if (_thumbCache[filePath] !== undefined) return _thumbCache[filePath];
+  if (!filePath) return null;
+  if (_thumbCache.has(filePath)) return _thumbCache.get(filePath);
 
-  // Try AssetManager first if it's a known file name
   const basename = filePath ? filePath.split('/').pop().split('.')[0] : null;
   if (basename) {
     const assetBuf = getAssetBuffer(basename);
@@ -78,42 +80,51 @@ async function getCachedThumb(filePath) {
   try {
     if (filePath && filePath.startsWith("http")) {
       const res = await axios.get(filePath, { responseType: "arraybuffer", timeout: 5000 });
-      _thumbCache[filePath] = Buffer.from(res.data);
+      const buf = Buffer.from(res.data);
+      _thumbCache.set(filePath, buf);
+      return buf;
     } else if (fsc.existsSync(filePath)) {
-      _thumbCache[filePath] = fsc.readFileSync(filePath);
+      const buf = fsc.readFileSync(filePath);
+      _thumbCache.set(filePath, buf);
+      return buf;
     } else {
-      _thumbCache[filePath] = null;
+      _thumbCache.set(filePath, null);
+      return null;
     }
   } catch {
-    _thumbCache[filePath] = null;
+    _thumbCache.set(filePath, null);
+    return null;
   }
-  return _thumbCache[filePath];
 }
 
-let _sharpThumbCache = {};
+const _sharpThumbCache = new LRUCache({ max: 50, ttl: 10 * 60 * 1000 });
 let _sharpInstance = null;
 async function _getSharp() {
   if (!_sharpInstance) _sharpInstance = (await import("sharp")).default;
   return _sharpInstance;
 }
 async function getCachedSharpThumb(filePath, w, h) {
+  if (!filePath) return null;
   const key = `${filePath}_${w}x${h}`;
-  if (_sharpThumbCache[key] !== undefined) return _sharpThumbCache[key];
+  if (_sharpThumbCache.has(key)) return _sharpThumbCache.get(key);
   try {
     const raw = await getCachedThumb(filePath);
     if (raw) {
       const sharp = await _getSharp();
-      _sharpThumbCache[key] = await sharp(raw).resize(w, h).toBuffer();
+      const buf = await sharp(raw).resize(w, h).toBuffer();
+      _sharpThumbCache.set(key, buf);
+      return buf;
     } else {
-      _sharpThumbCache[key] = null;
+      _sharpThumbCache.set(key, null);
+      return null;
     }
   } catch {
-    _sharpThumbCache[key] = null;
+    _sharpThumbCache.set(key, null);
+    return null;
   }
-  return _sharpThumbCache[key];
 }
 
-const _ppCache = new Map();
+const _ppCache = new LRUCache({ max: 100, ttl: 5 * 60 * 1000 });
 const PP_CACHE_TTL = 5 * 60 * 1000;
 
 /**
@@ -251,6 +262,8 @@ function getMessageBody(message, type) {
         return "";
       }
     case "pollCreationMessage":
+    case "pollCreationMessageV2":
+    case "pollCreationMessageV3":
       return messageContent.name || "";
     default:
       return "";
@@ -864,7 +877,6 @@ async function serialize(sock, msg, store = {}) {
         },
       };
 
-      const sharp = await _getSharp();
       return sock.sendMessage(
         await ensureResolved(m.chat),
         {
@@ -931,7 +943,6 @@ async function serialize(sock, msg, store = {}) {
         },
       );
     } else if (replyVariant === 5) {
-      const sharp = await _getSharp();
       const thumbnailBuf = srtImage || getAssetBuffer("ourin");
       const fakeOrder = {
         key: {
@@ -968,7 +979,6 @@ async function serialize(sock, msg, store = {}) {
         }
       );
     } else if (replyVariant === 6) {
-      const sharp = await _getSharp();
       return sock.sendMessage(
         await ensureResolved(m.chat),
         {
@@ -991,7 +1001,6 @@ async function serialize(sock, msg, store = {}) {
       );
     } else if (replyVariant === 7) {
       const thumbnailBuf = srtImage || getAssetBuffer("ourin");
-      const sharp = await _getSharp();
 
       const msg = generateWAMessageFromContent(m.chat, {
         viewOnceMessage: {
@@ -1030,46 +1039,49 @@ async function serialize(sock, msg, store = {}) {
       });
     } else if (replyVariant === 8) {
       const thumbnailBuf = srtImage || getAssetBuffer("ourin");
-      const sharp = await _getSharp();
 
       return await sock.relayMessage(m.chat, {
-        interactiveMessage: {
-          header: {
-            title: config?.bot?.name
-          },
-          body: {
-            text
-          },
-          nativeFlowMessage: {
-            buttons: [
-              {
-                name: "inapp_signup",
-                buttonParamsJson: "{}"
+        viewOnceMessage: {
+          message: {
+            interactiveMessage: {
+              header: {
+                title: config?.bot?.name
+              },
+              body: {
+                text
+              },
+              nativeFlowMessage: {
+                buttons: [
+                  {
+                    name: "inapp_signup",
+                    buttonParamsJson: "{}"
+                  }
+                ]
+              },
+              contextInfo: {
+                mentionedJid: options?.mentions || [m?.sender] || [],
+                groupMentions: [],
+                statusAttributions: [],
+                participant: m?.sender,
+                quotedMessage: {
+                  orderMessage: {
+                    orderId: "8999999999999",
+                    thumbnail: await sharp(thumbnailBuf).resize(300, 300).toBuffer(),
+                    itemCount: 999,
+                    status: 1,
+                    surface: 1,
+                    message: m?.body,
+                    orderTitle: "blablabla",
+                    sellerJid: "0@s.whatsapp.net",
+                    totalAmount1000: 0,
+                    totalCurrencyCode: "IDR"
+                  }
+                },
+                remoteJid: m.chat,
+                forwardingScore: 999,
+                isForwarded: true
               }
-            ]
-          },
-          contextInfo: {
-            mentionedJid: options?.mentions || [m?.sender] || [],
-            groupMentions: [],
-            statusAttributions: [],
-            participant: m?.sender,
-            quotedMessage: {
-              orderMessage: {
-                orderId: "8999999999999",
-                thumbnail: await sharp(thumbnailBuf).resize(300, 300).toBuffer(),
-                itemCount: 999,
-                status: 1,
-                surface: 1,
-                message: m?.body,
-                orderTitle: "blablabla",
-                sellerJid: "0@s.whatsapp.net",
-                totalAmount1000: 0,
-                totalCurrencyCode: "IDR"
-              }
-            },
-            remoteJid: m.chat,
-            forwardingScore: 999,
-            isForwarded: true
+            }
           }
         }
       }, {
@@ -1088,7 +1100,7 @@ async function serialize(sock, msg, store = {}) {
             "surface": "CATALOG",
             "message": text,
             "orderTitle": "CONTOL",
-            "token": "whyuxD",
+            "token": "SDsdafma",
             "totalAmount1000": "0",
             "totalCurrencyCode": "IDR",
             "messageVersion": 1,
@@ -1128,12 +1140,6 @@ async function serialize(sock, msg, store = {}) {
         {}
       )
     } else if (replyVariant === 11) {
-      const delay = (ms) => new Promise(r => setTimeout(r, ms));
-      const chars = [...config.bot.name];
-
-      const sentMsg = await sock.sendMessage(m.chat, { text: "..." }, { quoted: quotedMsg });
-      const key = sentMsg.key;
-
       const getRandomSrtImage = () => {
         try {
           if (db?.setting?.('srtEnabled')) {
@@ -1149,37 +1155,64 @@ async function serialize(sock, msg, store = {}) {
         } catch (e) { }
         return null;
       };
-      (async () => {
-        try {
-          let iteration = 0;
-          while (iteration < 100) {
-            let currentTitle = "";
-            for (const char of chars) {
-              currentTitle += char;
-              const randomThumbBuf = getRandomSrtImage() || srtImage || getAssetBuffer("ourin");
-              await sock.sendMessage(m.chat, {
-                text: `${config.info.website}\n\n${text}`,
-                edit: key,
-                linkPreview: {
-                  "matched-text": config.info.website,
-                  title: currentTitle,
-                  description: "Bot WhatsApp Multi Device",
-                  jpegThumbnail: randomThumbBuf
-                }
-              });
 
-              await delay(2000);
-              iteration++;
-              if (iteration >= 100) break;
+      const randomImg = getRandomSrtImage();
+      const thumbnailBuf = randomImg || srtImage || await getAssetBuffer("ourin");
+      const { prepareWAMessageMedia } = await import("ourin");
+
+      const thumbBuf1280 = await sharp(thumbnailBuf).resize(300, 300).jpeg().toBuffer();
+      const favBuf512 = await sharp(thumbnailBuf).resize(512, 512).jpeg().toBuffer();
+
+      const uploadMedia = await prepareWAMessageMedia({ image: thumbBuf1280 }, { upload: sock.waUploadToServer, mediaTypeOverride: "thumbnail-link" });
+      const uploadFav = await prepareWAMessageMedia({ image: favBuf512 }, { upload: sock.waUploadToServer, mediaTypeOverride: "thumbnail-link" });
+
+      const botName = config.bot?.name || "Ourin-AI";
+      const senderNum = m.sender.split('@')[0];
+
+      const msg = generateWAMessageFromContent(m.chat, {
+        extendedTextMessage: {
+          text: config.info.website + "\n" + text,
+          matchedText: config.info.website,
+          title: botName,
+          description: `Hello ${m.pushName || "User"}`,
+          jpegThumbnail: await sharp(thumbnailBuf).resize(256, 256).jpeg({ quality: 80 }).toBuffer(),
+          previewType: 1,
+          faviconMMSMetadata: {
+            thumbnailDirectPath: uploadFav.imageMessage.directPath,
+            thumbnailSha256: uploadFav.imageMessage.fileSha256,
+            thumbnailEncSha256: uploadFav.imageMessage.fileEncSha256,
+            mediaKey: uploadFav.imageMessage.mediaKey,
+            mediaKeyTimestamp: uploadFav.imageMessage.mediaKeyTimestamp,
+            thumbnailHeight: uploadFav.imageMessage.height || 512,
+            thumbnailWidth: uploadFav.imageMessage.width || 512
+          },
+          contextInfo: {
+            mentionedJid: options?.mentions || [m?.sender] || [],
+            isForwarded: true,
+            forwardingScore: 999,
+            forwardedNewsletterMessageInfo: {
+              newsletterJid: config.saluran?.id,
+              newsletterName: config.saluran?.name
             }
-            await delay(5000);
           }
-        } catch (e) {
-          console.error("V11 Animation error:", e);
         }
-      })();
+      }, {
+        quoted: {
+          key: {
+            fromMe: false,
+            participant: "0@s.whatsapp.net",
+            remoteJid: "status@broadcast"
+          },
+          message: {
+            contactMessage: {
+              displayName: botName,
+              vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:${botName}\nTEL;type=CELL;type=VOICE;waid=${senderNum}:+${senderNum}\nEND:VCARD`
+            }
+          }
+        }
+      });
 
-      return sentMsg;
+      return sock.relayMessage(m.chat, msg.message, { messageId: msg.key.id });
     }
 
     return sock.sendMessage(

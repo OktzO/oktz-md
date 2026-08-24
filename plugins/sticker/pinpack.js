@@ -1,12 +1,11 @@
+import _sharp from 'sharp'
 import axios from "axios";
 import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
 import { f } from "../../src/lib/ourin-http.js";
 import { addExifToWebp } from "../../src/lib/ourin-exif.js";
 
-let _sharp;
-async function getSharp() {
-  if (!_sharp) _sharp = (await import("sharp")).default;
+function getSharp() {
   return _sharp;
 }
 

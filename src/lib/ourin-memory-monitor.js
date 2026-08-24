@@ -1,6 +1,6 @@
 import { logger } from "./ourin-logger.js";
-const RSS_LIMIT = 1024 * 1024 * 1024;
-const CHECK_INTERVAL = 5 * 60 * 1000;
+const RSS_LIMIT = 550 * 1024 * 1024;
+const CHECK_INTERVAL = 2 * 60 * 1000;
 
 let monitorTimer = null;
 
@@ -14,14 +14,10 @@ function startMemoryMonitor() {
   monitorTimer = setInterval(() => {
     const mem = process.memoryUsage();
 
-    if (global.gc && mem.heapUsed > 500 * 1024 * 1024) global.gc();
-
-    if (mem.rss >= RSS_LIMIT) {
-      logger.warn(
-        "memory",
-        `RSS ${formatMB(mem.rss)} exceeded ${formatMB(RSS_LIMIT)} limit, restarting`,
-      );
-      process.exit(1);
+    if (global.gc) {
+      if (mem.rss > 400 * 1024 * 1024 || mem.heapUsed > 250 * 1024 * 1024) {
+        global.gc();
+      }
     }
 
     logger.system(
@@ -33,7 +29,7 @@ function startMemoryMonitor() {
   if (monitorTimer.unref) monitorTimer.unref();
   logger.success(
     "memory",
-    `monitoring active, limit ${formatMB(RSS_LIMIT)}, check every ${CHECK_INTERVAL / 60000}m`,
+    `Pantau RAM aktif, limit ${formatMB(RSS_LIMIT)}, cek tiap ${CHECK_INTERVAL / 60000} menit`,
   );
 }
 

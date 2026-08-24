@@ -365,6 +365,11 @@ async function sendGoodbyeMessage(sock, groupJid, participant, groupMeta) {
       await sock.relayMessage(groupJid, msg.message, {
         messageId: msg.key.id,
       });
+    } else if (goodbyeType === 8) {
+      await sock.sendMessage(groupJid, {
+        text: `Goodbye @${userName}, from grup ${groupName}`,
+        mentions: [realParticipant],
+      });
     } else {
       let canvasBuffer = null;
       try {

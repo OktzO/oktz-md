@@ -1,15 +1,10 @@
+import sharp from 'sharp'
 import fs from 'fs'
 import path from 'path'
 import te from '../../src/lib/ourin-error.js'
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
 import ffmpeg from 'fluent-ffmpeg'
 ffmpeg.setFfmpegPath(ffmpegInstaller.path)
-
-let _sharp
-async function getSharp() {
-    if (!_sharp) _sharp = (await import('sharp')).default
-    return _sharp
-}
 
 const pluginConfig = {
     name: 'tovideo',
@@ -39,7 +34,7 @@ function getTempDir() {
 }
 
 async function webpToGif(buffer) {
-    const sharp = await getSharp()
+
     const meta = await sharp(buffer).metadata()
     if (!meta.pages || meta.pages <= 1) return null
     return sharp(buffer, { animated: true, pages: -1 }).gif({ loop: 0 }).toBuffer()
@@ -140,7 +135,7 @@ async function handler(m, { sock }) {
 
         if (!animated) {
 
-            const pngBuffer = await (await getSharp())(buffer).png().toBuffer()
+            const pngBuffer = await sharp(buffer).png().toBuffer()
             await sock.sendMessage(m.chat, {
                 image: pngBuffer,
                 caption: `✅ *ʙᴇʀʜᴀsɪʟ*\n\n> Sticker statis → gambar`
