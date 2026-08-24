@@ -1,10 +1,10 @@
-# Ourin-MD v3.2.0
+# Ourin-MD v3.3.1
 
 **WhatsApp Multi-Device Bot** — Modular plugin-based bot built on `ourin-baileys` (fork of `@whiskeysockets/baileys`). Written in ESM JavaScript, requires Node >=22.
 
 ## Fitur Utama
 
-- **Plugin System** — 815+ plugin, 34 kategori. Hot-reload di development.
+- **Plugin System** — 823+ plugin, 34 kategori. Hot-reload di development.
 - **Dual Routing** — Plugin-based (majoritas) + Case-based (built-in, di `case/ourin.js`).
 - **Multi Storage** — lowdb (JSON file) + Turso (libsql) untuk session & data.
 - **Group Protection** — Antilink, anti-toxic, anti-spam, anti-hidetag, anti-viewonce, anti-remove, anti-bot, anti-document, anti-sticker, anti-media, anti-phishing, anti-judol.
@@ -12,6 +12,7 @@
 - **AI Integration** — Gemini, Claude, DeepSeek, Qwen3, GPT5, auto-AI chat, image generation (txt2img, img2img).
 - **Downloaders** — YouTube (mp3/mp4), TikTok, Instagram, Twitter, Facebook, SoundCloud, Spotify, Reddit, Terabox, DailyMotion, Likee, Douyin, dll.
 - **Scrapers** — 59+ scraper modules (Google, Pinterest, GSMArena, dll).
+- **Subsystems** — memory monitor, temp cleaner, data pruner, sholat/notif/JPM scheduler, OTP poller, jadibot auto-restore.
 - **RPG System** — Level, XP, inventory, shop, mining, fishing, hunting, crafting, dungeon, clan.
 - **Store System** — Jual-beli item, transaksi, profit.
 - **Panel Management** — Pterodactyl, Vercel deploy, VPS (Linode, DigitalOcean), CPanel.
@@ -52,6 +53,8 @@ node index.js    # production
 ```bash
 npm test         # node --test tests/
 ```
+
+Suite `node:test`: `tests/number-match.security.test.mjs` (strict owner-number matching), `tests/turso-*.test.mjs` (Turso DB/session/helper). `tests/OURIN/` berisi fixture runtime (copy bot untuk integration test).
 
 ## Environment Variables
 

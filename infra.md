@@ -1,4 +1,4 @@
-# Infra — Ourin-MD v3.2.0
+# Infra — Ourin-MD v3.3.1
 
 ## Arsitektur Garis Besar
 
@@ -7,25 +7,25 @@ index.js                  → entry point, init semua subsystem
 config.js                 → config tunggal + helper functions (isOwner, isPremium, dll)
 case/ourin.js             → case-based command handler (minor, ~5 built-in commands)
 src/connection.js         → WhatsApp WebSocket connection (Baileys)
-src/handler.js            → message router (2234 line, pusat routing)
+src/handler.js            → message router (2254 line, pusat routing)
 src/lib/*                 → 68 library modules
 src/scraper/*             → 59 scraper modules
-plugins/<kategori>/*.js   → 815+ plugin files (34 kategori)
+plugins/<kategori>/*.js   → 823 plugin files (34 kategori)
 assets/                   → media assets (images, fonts, audio, video)
 database/                 → runtime data files (JSON, lowdb)
 session/                  → WhatsApp session files
-tests/                    → node:test tests
+tests/                    → node:test (4 suite) + fixtures tests/OURIN/
 ```
 
 ## Alur Eksekusi
 
 ```
 1. index.js: main()
-   ├── initDatabase()        → lowdb + Turso
-   ├── preloadAssets()       → cache assets ke memory
-   ├── loadPlugins()         → scan plugins/*, load + register tiap plugin
-   ├── initScheduler()       → cron jobs
-   ├── setupAntiCrash()      → global error handlers
+   ├── setupAntiCrash()     → global error handlers
+   ├── initDatabase()       → lowdb + Turso
+   ├── preloadAssets()      → cache assets ke memory
+   ├── loadPlugins()        → scan plugins/*, load + register tiap plugin
+   ├── initScheduler()      → cron jobs
    └── startConnection()     → WhatsApp WebSocket
         ├── onRawMessage     → anti-tag status
         ├── onMessage        → messageHandler() (core router)
@@ -34,7 +34,11 @@ tests/                    → node:test tests
         ├── onGroupSettingsUpdate → groupSettingsHandler()
         ├── onStubMessage    → anti-remove
         └── onConnectionUpdate
-             └── connection "open" → init scheduler, jadibot restore, monitor, dll
+             └── connection "open" → loadScheduledMessages, startGroupScheduleChecker,
+                 startSewaChecker, initScheduler, initAutoJpmScheduler,
+                 initSholatScheduler, initNotifScheduler, initSahurCron,
+                 restore jadibot sessions, startMemoryMonitor, startTempCleaner,
+                 startDailyPruner
 ```
 
 ## Message Routing (`handler.js`)
@@ -121,31 +125,40 @@ messageHandler(msg, sock)
 
 | Kategori | Jumlah | Fungsi |
 |----------|--------|--------|
-| owner | 147 | Eval, exec,管理等 |
-| group | 101 | Antilink, welcome, mute, dll |
+| owner | 147 | Eval, exec, manage bot, cap energi/premium |
+| group | 101 | Antilink, welcome, mute, warn, dll |
 | rpg | 67 | RPG game system |
-| tools | 53 | Utility tools |
+| tools | 55 | Utility tools |
 | cek | 48 | Quiz/check personality |
-| ai | 45 | AI chat integration |
-| search | 40 | Search engines |
+| ai | 47 | AI chat integration + image gen |
+| search | 45 | Search engines |
 | game | 36 | Interactive games |
-| fun | 32 | Fun commands |
-| download | 25 | Media downloaders |
-| panel | 22 | Hosting panel |
-| canvas | 20 | Image generation |
-| sticker | 18 | Sticker creation |
+| fun | 35 | Fun commands |
+| canvas | 31 | Image generation |
+| download | 26 | Media downloaders |
+| sticker | 22 | Sticker creation |
+| panel | 22 | Hosting panel (Pterodactyl, DO, Linode, CPanel) |
+| main | 20 | Core commands (menu, ping, stats) |
 | user | 17 | User profile |
+| stalker | 15 | Profile stalking |
 | store | 14 | Store system |
-| stalker | 14 | Profile stalking |
+| info | 14 | Information |
 | random | 12 | Random content |
 | clan | 9 | Clan system |
 | primbon | 8 | Fortune telling |
 | vps | 6 | VPS management |
 | religi | 4 | Religious content |
 | asupan | 4 | Social media content |
-| info | 13 | Information |
-| main | 20 | Core commands |
-| + others | ~15 | Convert, media, nsfw, jpm, pushkontak, tts, utility, islamic, anime, ephoto |
+| utility | 3 | Notifikasi makan/tidur, inspect |
+| anime | 3 | Top anime, waifu, auto-anime |
+| tts | 2 | Text-to-speech |
+| nsfw | 2 | NSFW (gated) |
+| media | 2 | Media processing |
+| islamic | 2 | Quran, murrotal |
+| pushkontak | 1 | Push contact massal |
+| jpm | 1 | Jadwal pesan massal |
+| ephoto | 1 | Ephoto templates |
+| convert | 1 | Audio converter |
 
 ## Case Commands
 
@@ -161,3 +174,11 @@ Built-in di `case/ourin.js`:
 - `config.dev.debugLog` → stack trace di error
 - Anti-crash: uncaughtException + unhandledRejection handler
 - SIGINT/SIGTERM: save database, exit safe
+
+## Testing
+
+`npm test` → `node --test tests/`
+
+- `number-match.security.test.mjs` — verifikasi `isOwner` strict equality (anti privilege escalation via partial match)
+- `turso-db.test.mjs`, `turso-helper.test.mjs`, `turso-session.test.mjs` — Turso DB + session auth state
+- `tests/OURIN/` — fixture: full copy struktur bot + database sampel untuk integration test
