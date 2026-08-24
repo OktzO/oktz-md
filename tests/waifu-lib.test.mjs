@@ -58,7 +58,7 @@ describe("Waifu lib", () => {
     // event intim phase never fires in approach
     for (let i = 0; i < 200; i++) {
       const e = rollEvent({ married: false, phase: "approach", personality: "genki" }, mulberry32(i));
-      if (e) assert.notEqual(e.phase, "intim");
+      if (e) assert.ok(!["intimate", "confess"].includes(e.id));
     }
   });
 

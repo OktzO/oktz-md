@@ -164,7 +164,7 @@ export async function jealousyCheck({ m, sock, db, command }) {
   const drop = married
     ? Math.floor(Math.random() * 3) + 1
     : Math.floor(Math.random() * 6) + 3;
-  user.waifu.affection = Math.max(0, (user.waifu.affection || 50) - drop);
+  user.waifu.affection = Math.max(0, (user.waifu.affection ?? 50) - drop);
   user.waifu.lastJealousAt = now;
   db.setUser(m.sender, user);
   const msg = married
