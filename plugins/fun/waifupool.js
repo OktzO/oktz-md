@@ -25,9 +25,14 @@ function tierEmoji(t) {
 
 async function handler(m, { sock }) {
   const db = getDatabase();
-  const query = (m.args.join(" ") || "").trim();
+  const args = m.args || [];
+  const nav = ["prev", "next"].includes((args[0] || "").toLowerCase()) ? args[0].toLowerCase() : null;
+  const query = (nav ? args.slice(1) : args).join(" ").trim();
   const key = `${m.sender}:${query.toLowerCase()}`;
-  const page = Math.max(0, pages.get(key) || 0);
+  let page = Math.max(0, pages.get(key) || 0);
+  if (nav === "next") page++;
+  if (nav === "prev") page--;
+  page = Math.max(0, page);
   const PAGE_SIZE = 10;
 
   const pool = searchPool(query);
