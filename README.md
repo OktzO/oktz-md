@@ -1,122 +1,285 @@
-# Ourin-MD v3.3.1
+<div align="center">
 
-**WhatsApp Multi-Device Bot** — Modular plugin-based bot built on `ourin-baileys` (fork of `@whiskeysockets/baileys`). Written in ESM JavaScript, requires Node >=22.
+# ⚡ OURIN-MD v3.3.1
+### Next-Generation Modular WhatsApp Multi-Device Bot
 
-## Fitur Utama
+[![Node Version](https://img.shields.io/badge/Node.js-%3E%3D22.0.0-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
+[![Engine](https://img.shields.io/badge/Baileys-ourin--baileys%20v9-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](https://github.com/whiskeysockets/Baileys)
+[![Database](https://img.shields.io/badge/Database-Turso%20%26%20LowDB-4ff8d2?style=for-the-badge&logo=sqlite&logoColor=black)](https://turso.tech)
+[![Plugins](https://img.shields.io/badge/Plugins-825%2B%20Loaded-blueviolet?style=for-the-badge&logo=speedtest&logoColor=white)](#-kategori-plugin-34-kategori)
+[![License](https://img.shields.io/badge/License-ISC-orange?style=for-the-badge)](LICENSE)
 
-- **Plugin System** — 823+ plugin, 34 kategori. Hot-reload di development.
-- **Dual Routing** — Plugin-based (majoritas) + Case-based (built-in, di `case/ourin.js`).
-- **Multi Storage** — lowdb (JSON file) + Turso (libsql) untuk session & data.
-- **Group Protection** — Antilink, anti-toxic, anti-spam, anti-hidetag, anti-viewonce, anti-remove, anti-bot, anti-document, anti-sticker, anti-media, anti-phishing, anti-judol.
-- **Games** — Tebak gambar, tebak kata, family 100, RPG (adventure, mining, fishing, etc), Minecraft simulation, Fisch game, snakes & ladders, tictactoe, suit PvP, dungeon, dll.
-- **AI Integration** — Gemini, Claude, DeepSeek, Qwen3, GPT5, auto-AI chat, image generation (txt2img, img2img).
-- **Downloaders** — YouTube (mp3/mp4), TikTok, Instagram, Twitter, Facebook, SoundCloud, Spotify, Reddit, Terabox, DailyMotion, Likee, Douyin, dll.
-- **Scrapers** — 59+ scraper modules (Google, Pinterest, GSMArena, dll).
-- **Subsystems** — memory monitor, temp cleaner, data pruner, sholat/notif/JPM scheduler, OTP poller, jadibot auto-restore.
-- **RPG System** — Level, XP, inventory, shop, mining, fishing, hunting, crafting, dungeon, clan.
-- **Store System** — Jual-beli item, transaksi, profit.
-- **Panel Management** — Pterodactyl, Vercel deploy, VPS (Linode, DigitalOcean), CPanel.
-- **Jadibot** — Sub-bot system: pengguna bisa jadi bot sendiri.
-- **JPM (Jadwal Pesan Massal)** — Broadcast terjadwal.
-- **Scheduler** — Cron jobs, daily reset, notification scheduler, prayer time scheduler, auto-backup, auto-JPM.
-- **Sewa (Rental)** — Group rental with expiry, auto-kick.
-- **Auto-download** — Auto-detect link dari pesan & download otomatis.
-- **Smart Triggers** — Auto-reply based on keyword.
-- **Canvas** — Welcome/goodbye card generator, brat-style text, carbon code image, sticker maker.
-- **Primbon** — Ramalan jodoh, watak, weton, dll.
-- **Stalker** — Stalk IG, ML, FF, TikTok, dll.
-- **NSFW Protection** — Anti-NSFW content detection.
+<p align="center">
+  <b>Modern, Ultra-Fast, Memory-Optimized WhatsApp Bot Architecture</b><br>
+  Dibangun menggunakan ES Module native, hot-reload dynamic plugin loader, sistem dual-routing, serta manajemen memori canggih dengan Turso LibSQL persistence.
+</p>
 
-## Cara Install
+---
 
+[Fitur Utama](#-fitur-utama) •
+[Struktur File](#-struktur-proyek) •
+[Instalasi](#-instalasi--menjalankan) •
+[Konfigurasi](#-konfigurasi) •
+[Panduan Plugin](#-panduan-membuat-plugin) •
+[Testing](#-testing--keamanan)
+
+---
+
+</div>
+
+## 🚀 Fitur Utama
+
+<table>
+<tr>
+<td width="50%">
+
+### 🧠 AI & Intelligent Chat
+- **Multi-Model Provider:** Integrasi Gemini, Claude, DeepSeek, Qwen3, GPT-5.
+- **Image Generation:** Text-to-Image & Image-to-Image engine.
+- **Smart Triggers:** Auto-reply cerdas berbasis context & keyword.
+
+### 🛡️ Group Security & Protection
+- **Full Guard System:** Anti-Link, Anti-Toxic, Anti-Spam, Anti-Bot.
+- **Media Protection:** Anti-ViewOnce, Anti-Sticker, Anti-Document.
+- **Safety Enforcement:** Anti-Hidetag, Anti-Phishing, Anti-Judol.
+- **Rental (Sewa Grup):** Auto-join, durasi sewa, & auto-kick expired.
+
+### 🎮 Gaming, RPG & Economy
+- **Full RPG System:** Dungeon, Mining, Fishing, Hunting, Crafting, Clan.
+- **Economy:** Limit/Energi system, Bank, Store, Market transaksi.
+- **Casual & Interactive:** Tebak Gambar, Tebak Kata, Family 100, Fisch, Chess, TicTacToe, Suit PvP.
+
+</td>
+<td width="50%">
+
+### 📥 Media Downloaders & Scrapers
+- **Social Downloader:** YouTube (Audio/Video), TikTok (No WM), IG, FB, Twitter/X, Spotify, SoundCloud, Terabox, Douyin.
+- **59+ Scraper Modules:** Pinterest, Google Search, GSMArena, Anime info, lirik lagu, dan scraper kustom.
+
+### ⚙️ DevOps & Cloud Management
+- **Panel Hosting:** Pterodactyl server manager & Vercel deployment.
+- **Server Control:** VPS Management (Linode, DigitalOcean, CPanel).
+- **Sub-Bot:** Jadibot multi-session system dengan auto-restore.
+
+### ⚡ Infrastructure & Resiliency
+- **Dual Routing Engine:** Plugin-based (dynamic) + Case-based fallback.
+- **Hybrid Storage:** LowDB (local JSON) + Turso LibSQL (remote cloud).
+- **Anti-Crash Guard:** Uncaught exception filter & auto network recover.
+
+</td>
+</tr>
+</table>
+
+---
+
+## 📂 Struktur Proyek
+
+```text
+ourin-md/
+├── 📁 assets/                 # Asset statis bot
+│   ├── 📁 audio/              # Sound effects & voice prompts
+│   ├── 📁 fonts/              # Custom typography & canvas fonts
+│   ├── 📁 image/              # Banner, avatar default, menu thumbnails
+│   ├── 📁 kertas/             # Template magernulis / canvas note
+│   └── 📁 video/              # Video intros & template media
+├── 📁 case/                   # Built-in fast commands handler
+│   └── ourin.js               # Direct switch-case execution
+├── 📁 database/               # Local JSON storage fallback
+│   ├── 📁 autoreply_media/    # Storage media respon otomatis
+│   ├── 📁 cpanel/             # Database akun & order cpanel
+│   └── 📁 main/               # User state, inventory, & global data
+├── 📁 docs/                   # Spesifikasi arsitektur & rencana proyek
+├── 📁 plugins/                # 825+ Dynamic Plugins (34 Kategori)
+│   ├── 📁 ai/                 # OpenAI, Gemini, Claude, prompt generator
+│   ├── 📁 anime/              # Anime info, picture stream, tracer
+│   ├── 📁 download/           # TikTok, YT, IG, Spotify downloaders
+│   ├── 📁 game/               # Tebak-tebakan, kuis, multiplayer mini-games
+│   ├── 📁 group/              # Admin tools, group protection, settings
+│   ├── 📁 owner/              # Evaluator, exec, broadcast, backup
+│   ├── 📁 panel/              # Pterodactyl & hosting automation
+│   ├── 📁 rpg/                # Mining, clan, inventory, levelup
+│   ├── 📁 search/             # Web search, scraper query
+│   ├── 📁 sticker/            # Sticker converter, meme maker, brat
+│   └── ...                    # (Lihat tabel kategori lengkap di bawah)
+├── 📁 src/                    # Bot Core Engine
+│   ├── 📁 data/               # Data statis (Tebakan, Asmaul Husna, NSFW)
+│   ├── 📁 database/           # Schema handler & database sync adapter
+│   ├── 📁 lib/                # Memory cleaner, scheduler, image renderer
+│   ├── 📁 scraper/            # Scraper functions & extraction modules
+│   ├── connection.js          # Socket connection & auth event handler
+│   └── handler.js             # Message router, middleware, spam blocker
+├── 📁 tests/                  # Test suite (Node native test runner)
+├── config.js                  # Konfigurasi sentral bot
+├── index.js                   # Application entrypoint & worker supervisor
+└── package.json               # Manifest dependencies & project scripts
+```
+
+### 📦 Kategori Plugin (34 Kategori)
+
+| Kategori | Deskripsi | Kategori | Deskripsi |
+|---|---|---|---|
+| `ai` | Artificial Intelligence & LLM | `media` | Audio/video processing |
+| `anime` | Info anime, komik & wallpaper | `nsfw` | Filter & NSFW tools |
+| `asupan` | Short video & media feeder | `owner` | Command khusus owner |
+| `canvas` | Image rendering & dynamic card | `panel` | Panel Pterodactyl automation |
+| `cek` | Tracker & checker tool | `primbon` | Weton, ramalan & primbon Jawa |
+| `clan` | Sistem guild/clan RPG | `pushkontak` | Bulk contact helper |
+| `convert` | Media converter & format changer | `random` | Random generator & quotes |
+| `download` | Media downloader multi-platform | `religi` | Doa & info keagamaan |
+| `ephoto` | Text generator & visual effect | `rpg` | Sistem petualangan RPG |
+| `fun` | Mini text game & hiburan | `search` | Multi-engine web scraper |
+| `game` | Game grup & interaktif | `stalker` | Profil & username stalker |
+| `group` | Manajemen & proteksi grup | `sticker` | Pembuat stiker & watermark |
+| `info` | Bot information & stats | `store` | Toko digital & transaksi |
+| `islamic` | Al-Qur'an, Jadwal Sholat | `tools` | Utilities harian & converter |
+| `jpm` | Jadwal Pesan Massal (Broadcast) | `tts` | Text-to-speech multi-language |
+| `main` | Menu & core navigation | `user` | Profil & pendaftaran user |
+| `utility` | System toolkit & diagnostics | `vps` | VPS / cloud server control |
+
+---
+
+## 🛠️ Instalasi & Menjalankan
+
+### Persyaratan Sistem
+- **Node.js:** `>= 22.0.0`
+- **FFmpeg:** Terpasang pada sistem (atau otomatis via binary package)
+- **RAM:** Minimal 512 MB (Rekomendasi 1 GB+)
+
+### 1. Clone & Install Dependencies
 ```bash
-git clone <repo-url>
+git clone https://github.com/username/ourin-md.git
 cd ourin-md
 npm install
 ```
 
-Edit `config.js`:
-- `session.pairingNumber` — nomor WA tujuan
-- `session.usePairingCode` — true = pairing code, false = QR
-- `owner.number` — nomor owner
-
-## Cara Run
-
-```bash
-npm start        # NODE_ENV=development
-npm run dev      # development
-node index.js    # production
+### 2. Konfigurasi Environment (`.env`)
+Buat file `.env` jika menggunakan cloud database Turso:
+```env
+TURSO_URL=libsql://your-database-name.turso.io
+TURSO_AUTH_TOKEN=your-auth-token
+NODE_ENV=production
 ```
 
-## Testing
+### 3. Menjalankan Bot
 
 ```bash
-npm test         # node --test tests/
+# Mode Development (Hot-Reload & Garbage Collection Exposed)
+npm run dev
+
+# Mode Start Development
+npm start
+
+# Mode Production
+node index.js
 ```
 
-Suite `node:test`: `tests/number-match.security.test.mjs` (strict owner-number matching), `tests/turso-*.test.mjs` (Turso DB/session/helper). `tests/OURIN/` berisi fixture runtime (copy bot untuk integration test).
+---
 
-## Environment Variables
+## ⚙️ Konfigurasi (`config.js`)
 
-| Variable | Fungsi |
-|----------|--------|
-| `TURSO_URL` | Turso database URL |
-| `TURSO_AUTH_TOKEN` | Turso auth token |
-| `NODE_ENV` | Set ke `development` untuk dev mode |
+Pengaturan sentral bot terdapat pada file `config.js`:
 
-## Config Penting di `config.js`
+```javascript
+export default {
+  // Mode Operasional
+  mode: "public",                // "public" (semua user) | "self" (hanya owner)
+  
+  // Sesi & Pairing
+  session: {
+    usePairingCode: true,        // true = Pairing Code, false = QR Code
+    pairingNumber: "628xxx",     // Nomor WhatsApp bot (format: 628xxx)
+  },
 
-| Key | Default | Fungsi |
-|-----|---------|--------|
-| `mode` | `"public"` | Mode bot (public/self) |
-| `command.prefix` | `"."` | Prefix command |
-| `features.autoRead` | `true` | Auto-read pesan |
-| `features.antiCall` | `false` | Tolak panggilan |
-| `features.smartTriggers` | `false` | Auto-reply trigger |
-| `registration.enabled` | `false` | Wajib daftar dulu |
-| `energi.enabled` | `true` | Limit/energi system |
-| `turso.enabled` | `true` | Pakai Turso session |
-| `turso.url` | env/fallback | Turso URL |
-| `backup.enabled` | `false` | Auto-backup |
-| `dev.enabled` | auto | Dev mode (hot-reload) |
+  // Owner Setting
+  owner: {
+    name: "Zann",
+    number: "628xxx",            // Nomor owner utama
+  },
 
-## Struktur Plugin
+  // Command & Behavior
+  command: {
+    prefix: ".",                 // Simbol prefix command bot
+  },
+  
+  features: {
+    autoRead: true,              // Otomatis read pesan masuk
+    antiCall: false,             // Blokir/tolak panggilan otomatis
+    smartTriggers: false,        // Auto-reply berbasis kata kunci
+  },
 
-Setiap plugin di `plugins/<kategori>/<nama>.js` harus export:
+  energi: {
+    enabled: true,               // Sistem batas limit/energi
+    default: 25,                 // Default energi user baru
+  },
 
-```js
+  turso: {
+    enabled: true,               // Aktifkan sinkronisasi Turso LibSQL
+  }
+};
+```
+
+---
+
+## 🧩 Panduan Membuat Plugin
+
+Setiap plugin baru diletakkan di `plugins/<kategori>/<nama-plugin>.js` menggunakan format ES Module:
+
+```javascript
+/**
+ * Plugin Template - Ourin-MD
+ */
 export const config = {
-  name: "commandname",          // required
-  alias: ["alias1", "alias2"],  // optional
-  category: "kategori",         // otomatis dari folder
-  description: "...",           // optional
-  usage: "...",                 // optional
-  isOwner: false,               // owner-only
-  isPremium: false,             // premium-only
-  isGroup: false,               // group-only
-  isPrivate: false,             // private-only
-  isAdmin: false,               // admin grup required
-  isBotAdmin: false,            // bot harus admin
-  cooldown: 3,                  // detik
-  limit: 1,                     // energi per use
+  name: "ping",                         // Nama command utama (wajib)
+  alias: ["p", "speed", "test"],        // Alias command (opsional)
+  category: "utility",                  // Kategori plugin
+  description: "Cek responsivitas bot", // Deskripsi command
+  usage: ".ping",                       // Cara penggunaan
+  
+  // Permission & Flags
+  isOwner: false,                       // Khusus owner bot
+  isPremium: false,                     // Khusus user premium
+  isGroup: false,                       // Khusus pesan grup
+  isPrivate: false,                     // Khusus private chat (PC)
+  isAdmin: false,                       // User harus admin grup
+  isBotAdmin: false,                    // Bot harus jadi admin grup
+  
+  // Rate Limit & Cost
+  cooldown: 3,                          // Cooldown per-eksekusi (detik)
+  limit: 1                              // Konsumsi energi/limit per-use
 };
 
 export async function handler(m, { sock, store, config, plugins }) {
-  // handler logic
+  const start = Date.now();
+  await m.reply("Pong!");
+  const latency = Date.now() - start;
+  await m.reply(`⚡ Kecepatan respon: *${latency}ms*`);
 }
 ```
 
-## Case System
+---
 
-Built-in commands di `case/ourin.js` (bukan plugin):
-- `cping`, `cspeed`, `clatency` — ping test
-- `listallcase`, `lcase`, `caselist`, `allcase` — lihat case list
-- `listallplugin`, `lplugin`, `pluginlist`, `allplugin` — lihat plugin list
+## 🧪 Testing & Keamanan
 
-## Error Handling
+Project ini menggunakan Node.js native test runner:
 
-Anti-crash protection aktif otomatis. Uncaught exceptions & unhandled rejections ditangkap tanpa mematikan process. Error network umum (ECONNRESET, EPIPE, dll) di-ignore.
+```bash
+# Jalankan seluruh unit test
+npm test
+```
 
-## License
+### Arsitektur Keamanan & Stabilitas
+- **Strict Number Matching:** Verifikasi ketat JID WhatsApp owner tanpa bypass spoofing format.
+- **Anti-Crash Guard:** Global uncaught exception handler memastikan bot tetap aktif saat terjadi transient network error.
+- **Memory & Resource Monitor:** Automatic temp cleaner dan Garbage Collection watcher mencegah kebocoran memori (OOM).
 
-ISC — by Zann
+---
+
+## 📄 Lisensi & Kredit
+
+- **Author:** [Zann](https://github.com)
+- **Base Engine:** [`ourin-baileys`](https://www.npmjs.com/package/ourin-baileys) (Fork of `@whiskeysockets/baileys`)
+- **License:** Distributed under the **ISC License**.
+
+<div align="center">
+  <sub>Dibuat dengan ❤️ untuk ekosistem bot WhatsApp yang lebih andal dan efisien.</sub>
+</div>
