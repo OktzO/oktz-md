@@ -27,6 +27,14 @@ import { husbus as tokyoRevengers } from "./tokyo-revengers.js";
 import { husbus as opm } from "./one-punch-man.js";
 import { husbus as deathNote } from "./death-note.js";
 import { husbus as codeGeass } from "./code-geass.js";
+import { husbus as fma } from "./fullmetal-alchemist.js";
+import { husbus as tokyoGhoul } from "./tokyo-ghoul.js";
+import { husbus as sds } from "./seven-deadly-sins.js";
+import { husbus as kaguya } from "./kaguya.js";
+import { husbus as cote } from "./cote.js";
+import { husbus as assassClass } from "./assassination-classroom.js";
+import { husbus as oregairu } from "./oregairu.js";
+import { husbus as bakaTest } from "./baka-to-test.js";
 
 export const TIER_WEIGHTS = { Common: 55, Rare: 25, Epic: 13, Legendary: 5.5, Mythic: 1.5 };
 export const VALID_HUSB_PERSONALITIES = [
@@ -38,6 +46,7 @@ const FRANCHISES = [
   naruto, onePiece, bleach, jujutsu, kimetsu, mha, aot, dragonBall,
   hunterXHunter, blackClover, haikyuu, kuroko, blueLock, fairyTail, sao, rezero, fate, genshin,
   honkaiStarRail, bsd, spyFamily, chainsaw, tokyoRevengers, opm, deathNote, codeGeass,
+  fma, tokyoGhoul, sds, kaguya, cote, assassClass, oregairu, bakaTest,
 ];
 
 let cache = null;
