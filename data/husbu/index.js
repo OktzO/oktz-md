@@ -19,6 +19,14 @@ import { husbus as sao } from "./sword-art-online.js";
 import { husbus as rezero } from "./rezero.js";
 import { husbus as fate } from "./fate.js";
 import { husbus as genshin } from "./genshin-impact.js";
+import { husbus as honkaiStarRail } from "./honkai-star-rail.js";
+import { husbus as bsd } from "./bungo-stray-dogs.js";
+import { husbus as spyFamily } from "./spy-x-family.js";
+import { husbus as chainsaw } from "./chainsaw-man.js";
+import { husbus as tokyoRevengers } from "./tokyo-revengers.js";
+import { husbus as opm } from "./one-punch-man.js";
+import { husbus as deathNote } from "./death-note.js";
+import { husbus as codeGeass } from "./code-geass.js";
 
 export const TIER_WEIGHTS = { Common: 55, Rare: 25, Epic: 13, Legendary: 5.5, Mythic: 1.5 };
 export const VALID_HUSB_PERSONALITIES = [
@@ -29,6 +37,7 @@ export const VALID_HUSB_PERSONALITIES = [
 const FRANCHISES = [
   naruto, onePiece, bleach, jujutsu, kimetsu, mha, aot, dragonBall,
   hunterXHunter, blackClover, haikyuu, kuroko, blueLock, fairyTail, sao, rezero, fate, genshin,
+  honkaiStarRail, bsd, spyFamily, chainsaw, tokyoRevengers, opm, deathNote, codeGeass,
 ];
 
 let cache = null;
