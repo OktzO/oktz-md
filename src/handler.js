@@ -1802,8 +1802,8 @@ async function messageHandler(msg, sock, options = {}) {
     await plugin.handler(m, context);
 
     if (["fun", "game"].includes(plugin.config.category)) {
-      const { jealousyCheck } = await import("./lib/ourin-waifu.js");
-      await jealousyCheck({ m, sock, db, command: m.command }).catch(() => {});
+      const { jealousyCheckAll } = await import("./lib/ourin-romance.js");
+      await jealousyCheckAll({ m, sock, db, command: m.command }).catch(() => {});
     }
 
     if (!m.isOwner && !m.isPartner && plugin.config.cooldown > 0) {
