@@ -428,11 +428,43 @@ async function startConnection(options = {}) {
       const statusMsg = STATUS_MESSAGES[sc] || `❔ Unknown (kode: ${sc})`;
       colors.logger.warn("whatsapp", `terputus — ${statusMsg}`);
       if (sc === DisconnectReason.loggedOut || sc === 401) {
-        colors.logger.error(
-          "whatsapp",
-          "sesi habis — hapus folder storage lalu restart",
-        );
-        connectionState.reconnectAttempts = 0;
+        connectionState.reconnectAttempts++;
+        const m = config.session?.maxReconnectAttempts || 5;
+        if (connectionState.reconnectAttempts <= m) {
+          colors.logger.error(
+            "whatsapp",
+            `sesi habis — hapus sesi (${connectionState.reconnectAttempts}/${m}), pairing baru otomatis`,
+          );
+          try {
+            const sessionPath = path.join(
+              process.cwd(),
+              "storage",
+              config.session?.folderName || "session",
+            );
+            if (fs.existsSync(sessionPath)) {
+              fs.rmSync(sessionPath, { recursive: true, force: true });
+            }
+          } catch (e) { }
+          if (TURSO_ENABLED) {
+            try {
+              const { deleteTursoSession } =
+                await import("./lib/ourin-turso-session.js");
+              await deleteTursoSession("main");
+            } catch (e) {
+              colors.logger.warn("whatsapp", `gagal hapus sesi turso: ${e.message}`);
+            }
+          }
+          setTimeout(
+            () => startConnection(options),
+            config.session?.reconnectInterval || 15e3,
+          );
+        } else {
+          colors.logger.error(
+            "whatsapp",
+            "sesi tetap ditolak setelah beberapa kali coba — butuh intervensi manual (nomor dibanned / register ulang)",
+          );
+          connectionState.reconnectAttempts = 0;
+        }
         return;
       }
 
@@ -1334,6 +1366,11 @@ async function logout() {
 
     if (fs.existsSync(sessionPath)) {
       fs.rmSync(sessionPath, { recursive: true, force: true });
+    }
+
+    if (config.turso?.enabled && config.turso?.url) {
+      const { deleteTursoSession } = await import("./lib/ourin-turso-session.js");
+      await deleteTursoSession("main");
     }
 
     connectionState.isConnected = false;

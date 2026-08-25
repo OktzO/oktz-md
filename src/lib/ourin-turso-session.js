@@ -49,6 +49,7 @@ async function loadState(scope) {
       set: async (data) => {
         const client = getTursoClient();
         if (!client) return;
+        const statements = [];
         for (const [type, entries] of Object.entries(data)) {
           for (const [id, value] of Object.entries(entries)) {
             const cacheKey = `${scope}:${type}`;
@@ -60,11 +61,14 @@ async function loadState(scope) {
               const first = local.keys().next().value;
               local.delete(first);
             }
-            await client.execute({
+            statements.push({
               sql: 'INSERT INTO session_keys (scope, category, id, data, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(scope, category, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at',
               args: [scope, type, id, JSON.stringify(value, BufferJSON.replacer), Date.now()],
             });
           }
+        }
+        if (statements.length > 0) {
+          await client.batch(statements, "write");
         }
       },
       getMany: async (type) => {
@@ -101,7 +105,9 @@ async function saveCreds(scope, creds) {
 
 async function deleteTursoSession(scope) {
   const client = getTursoClient();
-  keysCache.delete(scope + ':session');
+  for (const k of keysCache.keys()) {
+    if (k.startsWith(scope + ':')) keysCache.delete(k);
+  }
   if (!client) return;
   try {
     await client.execute({ sql: 'DELETE FROM session_creds WHERE scope = ?', args: [scope] });

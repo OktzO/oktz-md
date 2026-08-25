@@ -55,7 +55,7 @@ Audit method: read every hot file (`index.js`, `src/connection.js`, `src/handler
 | File:line | Issue | Why accepted |
 |-----------|-------|--------------|
 | `src/lib/ourin-jadibot-database.js:5` | `jadibotDatabases` cache never deleted on `stopJadibot` | Needs export + stopJadibot integration; entries bounded by distinct jadibots ever started. Suggested follow-up: `deleteJadibotDb(id)` called from `stopJadibot`. |
-| `src/lib/ourin-turso-session.js:4` | `keysCache` leaves ~6 scope keys per deleted session | Bounded by capped inner maps (1000); low frequency. |
+| `src/lib/ourin-turso-session.js:4` | `keysCache` leaves ~6 scope keys per deleted session | **FIXED in follow-up audit (2026-08-25): `deleteTurboSession` now clears every category key for the scope, not just `:session`.** |
 | `src/lib/ourin-jadibot-manager.js:377` | per-child `groupMetadataCache` never cleared | Dies with the child socket/session; bounded by groups per active jadibot. |
 | `plugins/main/carifitur.js:66` | `loadAllPlugins()` uses `__dirname` (undefined in ESM) → always throws → generic error reply; per-invocation scan is therefore **never actually executed** | Pre-existing bug, not a leak. Fix (if feature wanted): `fileURLToPath(import.meta.url)` + module-level cache. |
 | `plugins/rpg/breeding.js:119` | `petStorage.push` no sell/release path | DB array, bounded by active players × level≥5 pets; rate-limited. |
@@ -102,3 +102,48 @@ Audit method: read every hot file (`index.js`, `src/connection.js`, `src/handler
 - `tests/memory-leaks.test.mjs` — 4 new regression tests (scheduler, antispam, waifupool).
 
 Test status: `node --test tests/` → **48 pass, 0 fail** (was 44).
+
+---
+
+## Follow-up 2026-08-25: WhatsApp auth session lifecycle (main scope)
+
+Session invalidation previously dead-ended: `loggedOut`/401 only logged "hapus folder storage lalu restart" and returned, leaving the process alive on a dead socket until a human intervened. Also `logout()` and `deleteTurboSession()` never cleaned up fully, and per-key Turso writes were non-atomic.
+
+### S1. Main-session auto-recovery — `src/connection.js`
+
+**Before (silent dead-end):** disconnect with `loggedOut`/401 → log message telling a human to manually delete storage and restart → `return`. No local folder removal, no Turso row removal, no reconnect. Process stayed alive, disconnected, forever.
+
+**After:** `loggedOut`/401 now:
+1. Deletes local `storage/<session folder>` (same path `logout()` uses).
+2. Calls `deleteTurboSession("main")` when `config.turso.enabled && config.turso.url` (mirrors `stopJadibot(jid, true)`).
+3. Schedules `startConnection(options)` after `config.session.reconnectInterval || 15s` → new pairing code / QR generated automatically.
+
+Retry-storm guard: reuses the bounded convention from the 440 branch — counts up through `maxReconnectAttempts` (default 5), and after the cap logs a clear "needs manual intervention (banned / re-register)" state instead of looping forever. On successful `connection === "open"`, `reconnectAttempts` resets to 0 as before.
+
+**Full end-to-end flow now:** disconnect reason received → session folder + Turso row (all categories) wiped → `startConnection()` re-inits auth state (fresh, unregistered) → `usePairingCode`? pairing code : QR printed → user pairs. No manual restart.
+
+### S2. `logout()` also clears Turso — `src/connection.js`
+
+**Before:** removed local folder + `sock.logout()`, but left stale `session_creds`/`session_keys` rows for `scope: "main"` in Turso. Next boot, `loadState("main")` loaded those stale creds → immediate re-`loggedOut`.
+
+**After:** `logout()` additionally calls `deleteTurboSession("main")` (guarded on `config.turso.enabled && config.turso.url`, same as `stopJadibot`). Stale creds never survive a deliberate logout.
+
+### S3. Atomic per-key Turso writes — `src/lib/ourin-turso-session.js`
+
+**Before:** `keys.set()` looped `await client.execute()` once per key — a crash / dropped connection / Turso hiccup mid-loop left Signal ratchet state (session/pre-key/sender-key) torn between DB and WhatsApp's expectations. Plausible real cause of unexplained invalid sessions.
+
+**After:** builds one `statements[]` array (all types × ids) and runs `client.batch(statements, "write")` — atomic all-or-nothing. In-memory `keysCache` update logic unchanged. `saveCreds()` verified single-row upsert → no change needed.
+
+### S4. `deleteTurboSession` cache invalidation — `src/lib/ourin-turso-session.js`
+
+**Before:** only `keysCache.delete(scope + ":session")` — left `pre-key`, `sender-key`, `app-state-sync-*`, etc. cached in memory. A re-paired session under the same scope could be served stale in-memory state instead of fresh empty state.
+
+**After:** iterates `keysCache` and deletes every key whose prefix matches `` `${scope}:` ``. Safe when Turso disabled (`getTurboClient()` returns null → no-op, cache wipe still correct). Shared with `stopJadibot` — that caller re-verified, no change needed.
+
+### Changes made
+
+- `src/lib/ourin-turso-session.js` — `keys.set()` batches; `deleteTurboSession()` wipes all scope categories from `keysCache`.
+- `src/connection.js` — `loggedOut`/401 auto-clears session + Turso + reconnects with bounded retry; `logout()` deletes Turso row.
+- `tests/turso-session-atomic.test.mjs` — new: batch atomicity (single `batch()` call, all rows land), failure atomicity (no partial rows), scope-wide cache clear.
+
+Test status: `node --test tests/` → **83 pass, 0 fail** (was 48).
