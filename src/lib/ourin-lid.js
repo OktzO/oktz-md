@@ -589,12 +589,27 @@ function cacheLidJid(lid, jid) {
 async function resolveFromSock(jid, sock) {
   if (!jid || !sock) return jid;
   try {
+    const cached = getCachedJid(jid);
+    if (cached && !isLid(cached) && !isLidConverted(cached)) {
+      return cached;
+    }
+    if (isLid(jid)) {
+      const swJid = jid.replace("@lid", "@s.whatsapp.net");
+      const cachedSw = getCachedJid(swJid);
+      if (cachedSw && !isLid(cachedSw) && !isLidConverted(cachedSw)) {
+        cacheLidJid(jid, cachedSw);
+        return cachedSw;
+      }
+    }
     const repo = sock.signalRepository || sock.repository;
     if (repo?.lidMapping?.getPNForLID) {
-      const pn = await repo.lidMapping.getPNForLID(jid);
-      if (pn && !isLid(pn) && !isLidConverted(pn)) {
-        cacheLidJid(jid, pn);
-        return pn;
+      let probe = jid;
+      if (isLidConverted(jid)) probe = jid.replace("@s.whatsapp.net", "@lid");
+      const pn = await repo.lidMapping.getPNForLID(probe);
+      const pnClean = pn ? decodeAndNormalize(pn) : null;
+      if (pnClean && !isLid(pnClean) && !isLidConverted(pnClean)) {
+        cacheLidJid(jid, pnClean);
+        return pnClean;
       }
     }
 

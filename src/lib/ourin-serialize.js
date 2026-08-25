@@ -551,10 +551,15 @@ async function serialize(sock, msg, store = {}) {
       m.chat = remoteJidAlt;
     } else {
       const resolved = resolveAnyLidToJid(m.chat, []);
-      if (resolved && !isLidConverted(resolved)) {
+      if (resolved && !isLid(resolved) && !isLidConverted(resolved)) {
         m.chat = resolved;
       } else if (m.fromMe) {
         m.chat = decodeAndNormalize(sock.user.id);
+      } else {
+        const sockResolved = await resolveFromSock(m.chat, sock);
+        if (sockResolved && !isLid(sockResolved) && !isLidConverted(sockResolved)) {
+          m.chat = sockResolved;
+        }
       }
     }
     m.key.remoteJid = m.chat;
@@ -618,6 +623,11 @@ async function serialize(sock, msg, store = {}) {
   }
   m.sender = senderJid;
   m.senderNumber = m.sender ? m.sender.replace(/@.+/g, "") : "";
+
+  if (!m.isGroup && !m.isNewsletter && m.sender && (isLid(m.chat) || isLidConverted(m.chat))) {
+    m.chat = m.sender;
+    m.key.remoteJid = m.sender;
+  }
 
   if (m.isGroup && m.sender) {
     m.key.participant = m.sender;
