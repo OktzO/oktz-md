@@ -17,8 +17,6 @@ const pluginConfig = {
   isEnabled: true,
 };
 
-const filmSessions = new Map();
-
 async function handler(m, { sock }) {
   const args = m.args || [];
   const query = args.join(" ").trim();
@@ -48,15 +46,6 @@ async function handler(m, { sock }) {
     }
 
     const films = data.data.slice(0, 10);
-
-    filmSessions.set(m.sender, {
-      films,
-      timestamp: Date.now(),
-    });
-
-    setTimeout(() => {
-      filmSessions.delete(m.sender);
-    }, 300000);
 
     let text = `🎬 *ʜᴀsɪʟ ᴘᴇɴᴄᴀʀɪᴀɴ*\n\n`;
     text += `> Ditemukan *${films.length}* film untuk "${query}"\n\n`;

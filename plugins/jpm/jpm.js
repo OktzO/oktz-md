@@ -621,6 +621,10 @@ async function handleJpmMain(m, sock, db, fullInput) {
       mediaType,
       timestamp: Date.now(),
     };
+    const ts = jpmSessions[m.sender].timestamp;
+    setTimeout(() => {
+      if (jpmSessions[m.sender]?.timestamp === ts) delete jpmSessions[m.sender];
+    }, 10 * 60 * 1000);
   }
 
   return sendInteractiveJpm(m, sock, db, contentInfo);

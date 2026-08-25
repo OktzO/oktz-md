@@ -14,6 +14,7 @@ import {
   getPluginsByCategory,
 } from "../../src/lib/ourin-plugins.js";
 import { getCasesByCategory, getCaseCount } from "../../case/ourin.js";
+import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 
 let _sharp;
 async function getSharp() {
@@ -131,8 +132,8 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
   let imageBuffer = null;
   let thumbBuffer = null;
   try {
-    imageBuffer = fs.readFileSync(botConfig.assets["ourin"]);
-    thumbBuffer = fs.readFileSync(botConfig.assets["ourin2"]);
+    imageBuffer = getAssetBuffer("ourin");
+    thumbBuffer = getAssetBuffer("ourin2");
   } catch (e) { }
 
   const weatherCodeMap = {
@@ -256,7 +257,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
         break;
       case 2:
         const media = await prepareWAMessageMedia({
-          image: fs.readFileSync(config.assets["ourin"])
+          image: getAssetBuffer("ourin")
         }, { upload: sock.waUploadToServer })
         await sock.relayMessage(
           m.chat,
@@ -342,7 +343,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
           }
         }
 
-        const thumbnail = await (await getSharp())(fs.readFileSync(config.assets["ourin"])).resize(300, 300).toBuffer()
+        const thumbnail = await (await getSharp())(getAssetBuffer("ourin")).resize(300, 300).toBuffer()
         const qOrder = {
           key: { fromMe: false, participant: '0@s.whatsapp.net', remoteJid: m.sender },
           message: { locationMessage: { degreesLatitude: 0, degreesLongitude: 0, name: await weatherMenu(), jpegThumbnail: thumbnail } }
@@ -411,7 +412,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
           }
         }
 
-        const thumbnail = await (await getSharp())(fs.readFileSync(config.assets["ourin"])).resize(300, 300).toBuffer()
+        const thumbnail = await (await getSharp())(getAssetBuffer("ourin")).resize(300, 300).toBuffer()
 
         const msg6 = generateWAMessageFromContent(m.chat, {
           viewOnceMessage: {

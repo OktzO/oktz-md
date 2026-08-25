@@ -250,6 +250,12 @@ async function handler(m, { sock, db }) {
     tempFile: tempFile,
     timestamp: Date.now(),
   });
+  const pendTs = pendingSwgcV2.get(m.sender).timestamp;
+  setTimeout(() => {
+    if (pendingSwgcV2.get(m.sender)?.timestamp === pendTs) {
+      pendingSwgcV2.delete(m.sender);
+    }
+  }, 10 * 60 * 1000);
 
   try {
     global.isFetchingGroups = true;

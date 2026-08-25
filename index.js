@@ -362,24 +362,13 @@ async function main() {
         initAutoJpmScheduler(sock);
         initSholatScheduler(sock);
         initNotifScheduler(sock);
-        try {
-          const { initSahurCron } =
-            await import("./plugins/religi/autosahur.js");
-          initSahurCron(sock);
-        } catch { }
-        try {
-          startOrderPoller(sock);
-        } catch { }
-        try {
-          const { startOtpPoller: _startOtp } =
-            await import("./src/lib/ourin-otp-poller.js");
-          _startOtp(sock);
-        } catch { }
 
         try {
-          const { getAllJadibotSessions, restartJadibotSession } =
+          const { getAllJadibotSessions, isJadibotActive, restartJadibotSession } =
             await import("./src/lib/ourin-jadibot-manager.js");
-          const sessions = getAllJadibotSessions();
+          const sessions = getAllJadibotSessions().filter(
+            (s) => !isJadibotActive(s.jid),
+          );
           if (sessions.length > 0) {
             logger.info("JADIBOT", `Restoring ${sessions.length} session(s)`);
             for (const session of sessions) {

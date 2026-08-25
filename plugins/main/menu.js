@@ -16,6 +16,7 @@ import {
   getCategories,
 } from "../../src/lib/ourin-plugins.js";
 import { getDatabase } from "../../src/lib/ourin-database.js";
+import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import fs from "fs";
 import path from "path";
 
@@ -448,8 +449,8 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
   let videoBuffer = null;
 
   try {
-    imageBuffer = fs.readFileSync(botConfig.assets["ourin"])
-    thumbBuffer = fs.readFileSync(botConfig.assets["ourin2"])
+    imageBuffer = getAssetBuffer("ourin")
+    thumbBuffer = getAssetBuffer("ourin2")
   } catch (e) {
     console.error("Gagal load assets:", e.message);
   }
@@ -481,7 +482,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
       case 1:
         if (imageBuffer) {
           await sock.sendMessage(m.chat, {
-            image: fs.readFileSync(config.assets["ourin"]),
+            image: getAssetBuffer("ourin"),
             caption: ``,
             footer: `Hai @${m.pushName} 👋
             
@@ -568,7 +569,7 @@ Tekan tombol dibawah untuk info lebih lanjut dan untuk memilih kategori
           s += "╰─⬣\n\n"
         });
         const media = await prepareWAMessageMedia({
-          image: fs.readFileSync(config.assets["ourin"])
+          image: getAssetBuffer("ourin")
         }, { upload: sock.waUploadToServer })
         const readmore = String.fromCharCode(8206).repeat(4001)
         await sock.relayMessage(
@@ -676,7 +677,7 @@ ${readmore}${s}`
         break;
 
       case 3: {
-        const jpegThumbnail = await sharp(fs.readFileSync(config.assets["ourin"])).resize(300, 170).toBuffer();
+        const jpegThumbnail = await sharp(getAssetBuffer("ourin")).resize(300, 170).toBuffer();
         const bodyText = `🥞 *Hello Brother*
 
 Welcome to ${config.bot?.name}, Our bot will help you
@@ -757,7 +758,7 @@ Welcome to ${config.bot?.name}, Our bot will help you
       }
 
       case 4: {
-        const thumbnail = await sharp(fs.readFileSync(config.assets["ourin"])).resize(300, 300).toBuffer()
+        const thumbnail = await sharp(getAssetBuffer("ourin")).resize(300, 300).toBuffer()
         const qvideo = {
           key: {
             fromMe: false,
@@ -924,7 +925,7 @@ Enjoy your use brother.`
             return "Cuaca tidak tersedia"
           }
         }
-        const thumbnail = await sharp(fs.readFileSync(config.assets["ourin"])).resize(300, 300).toBuffer()
+        const thumbnail = await sharp(getAssetBuffer("ourin")).resize(300, 300).toBuffer()
         const qOrder = {
           key: {
             fromMe: false,
@@ -1108,7 +1109,7 @@ _i am an automated system (WhatsApp bot) that can help to do something search an
           topCmdText += `╭   • Belum ada command\n╰➤------------------------------\n`
         }
 
-        const thumbnail = await sharp(fs.readFileSync(config.assets["ourin"])).resize(300, 300).toBuffer()
+        const thumbnail = await sharp(getAssetBuffer("ourin")).resize(300, 300).toBuffer()
         const msg6 = generateWAMessageFromContent(m.chat, {
           viewOnceMessage: {
             message: {

@@ -4,8 +4,17 @@ import { join } from "path";
 
 const lidCache = new Map();
 const LID_CACHE_PATH = join(process.cwd(), "database", "lid-cache.json");
+const LID_CACHE_MAX = 10000;
 let _persistDirty = false;
 let _persistTimer = null;
+
+function trimLidCache() {
+  if (lidCache.size <= LID_CACHE_MAX) return;
+  const excess = lidCache.size - LID_CACHE_MAX;
+  const keys = [...lidCache.keys()];
+  for (let i = 0; i < excess; i++) lidCache.delete(keys[i]);
+  markDirty();
+}
 
 function loadPersistentCache() {
   try {
@@ -16,6 +25,7 @@ function loadPersistentCache() {
           if (!lidCache.has(k)) lidCache.set(k, v);
         }
       }
+      trimLidCache();
     }
   } catch {}
 }
@@ -91,6 +101,7 @@ function cacheParticipantLids(participants = []) {
       const lidNumber = pLid.replace("@lid", "");
       lidCache.set(lidNumber + "@s.whatsapp.net", pJid);
       markDirty();
+      trimLidCache();
     }
   }
 }

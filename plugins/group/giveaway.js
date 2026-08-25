@@ -358,8 +358,11 @@ async function endGiveaway(giveawayId, sock, db) {
   }
 }
 
+let _giveawayChecker = null;
+
 function startGiveawayChecker(sock, db) {
-  new CronJob(
+  if (_giveawayChecker) _giveawayChecker.stop();
+  _giveawayChecker = new CronJob(
     "* * * * *",
     async () => {
       try {
@@ -382,6 +385,7 @@ function startGiveawayChecker(sock, db) {
     true,
     "Asia/Jakarta",
   );
+  return _giveawayChecker;
 }
 
 const createCmds = ["giveawaycreate", "gacreate", "buatgiveaway"];
@@ -421,6 +425,13 @@ async function handler(m, { sock }) {
       prizeName: null,
       prizeDetails: null,
     });
+    const sessTs = createSessions.get(m.sender).step;
+    setTimeout(() => {
+      const cur = createSessions.get(m.sender);
+      if (cur && cur.step === sessTs && cur.chatId === m.chat) {
+        createSessions.delete(m.sender);
+      }
+    }, 10 * 60 * 1000);
 
     await m.reply(
       "🎁 *GIVEAWAY CREATOR*\n\n" +

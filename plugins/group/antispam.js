@@ -118,6 +118,13 @@ async function checkSpam(m, sock, db) {
     userData.lastMessage = now
     spamTracker.set(chatKey, userData)
 
+    if (spamTracker.size > 5000) {
+        const cutoff = now - 600_000
+        for (const [k, v] of spamTracker) {
+            if (v.lastMessage < cutoff) spamTracker.delete(k)
+        }
+    }
+
     if (userData.count >= 5) {
         return true
     }
@@ -184,4 +191,4 @@ async function handleSpamAction(m, sock, db) {
     }
 }
 
-export { pluginConfig as config, handler, checkSpam, handleSpamAction }
+export { pluginConfig as config, handler, checkSpam, handleSpamAction, spamTracker }

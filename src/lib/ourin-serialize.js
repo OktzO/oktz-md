@@ -61,6 +61,25 @@ function getCachedPrefixes() {
   return _prefixCache;
 }
 
+let _srtFiles = null;
+const _srtImgCache = new Map();
+
+function getCachedSrtImage() {
+  const shuffleDir = join(process.cwd(), "assets", "image", "shuffle");
+  if (!existsSync(shuffleDir)) return null;
+  if (!_srtFiles) {
+    _srtFiles = fsc
+      .readdirSync(shuffleDir)
+      .filter((f) => f.match(/\.(jpg|jpeg|png)$/i));
+  }
+  if (_srtFiles.length === 0) return null;
+  const randFile = _srtFiles[Math.floor(Math.random() * _srtFiles.length)];
+  if (!_srtImgCache.has(randFile)) {
+    _srtImgCache.set(randFile, fsc.readFileSync(join(shuffleDir, randFile)));
+  }
+  return _srtImgCache.get(randFile);
+}
+
 function invalidatePrefixCache() {
   _prefixCache = null;
   _prefixCacheTime = 0;
@@ -831,14 +850,7 @@ async function serialize(sock, msg, store = {}) {
     let srtImage = null;
     try {
       if (db?.setting?.('srtEnabled')) {
-        const shuffleDir = join(process.cwd(), 'assets', 'image', 'shuffle');
-        if (existsSync(shuffleDir)) {
-          const files = fsc.readdirSync(shuffleDir).filter(f => f.endsWith('.jpg') || f.endsWith('.png') || f.endsWith('.jpeg'));
-          if (files.length > 0) {
-            const randFile = files[Math.floor(Math.random() * files.length)];
-            srtImage = fsc.readFileSync(join(shuffleDir, randFile));
-          }
-        }
+        srtImage = getCachedSrtImage();
       }
     } catch (e) { }
 
@@ -1143,14 +1155,7 @@ async function serialize(sock, msg, store = {}) {
       const getRandomSrtImage = () => {
         try {
           if (db?.setting?.('srtEnabled')) {
-            const shuffleDir = join(process.cwd(), 'assets', 'image', 'shuffle');
-            if (existsSync(shuffleDir)) {
-              const files = fsc.readdirSync(shuffleDir).filter(f => f.match(/\.(jpg|jpeg|png)$/i));
-              if (files.length > 0) {
-                const randFile = files[Math.floor(Math.random() * files.length)];
-                return fsc.readFileSync(join(shuffleDir, randFile));
-              }
-            }
+            return getCachedSrtImage();
           }
         } catch (e) { }
         return null;

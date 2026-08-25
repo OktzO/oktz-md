@@ -11,6 +11,7 @@ import {
 } from "../../src/lib/ourin-plugins.js";
 import { getDatabase } from "../../src/lib/ourin-database.js";
 import { getTimeGreeting } from "../../src/lib/ourin-formatter.js";
+import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import fs from "fs"
 
 const pluginConfig = {
@@ -232,7 +233,7 @@ async function handler(m, { sock, db }) {
         case 2: {
           const media = await prepareWAMessageMedia(
             {
-              image: fs.readFileSync(config.assets["ourin2"]),
+              image: getAssetBuffer("ourin2"),
             },
             { upload: sock.waUploadToServer },
           );
@@ -319,7 +320,7 @@ async function handler(m, { sock, db }) {
             }
           }
 
-          const thumbnail = await sharp(fs.readFileSync(config.assets["ourin"])).resize(300, 300).toBuffer()
+          const thumbnail = await sharp(getAssetBuffer("ourin")).resize(300, 300).toBuffer()
           const qOrder = {
             key: { fromMe: false, participant: '0@s.whatsapp.net', remoteJid: m.sender },
             message: { locationMessage: { degreesLatitude: 0, degreesLongitude: 0, name: await weatherMenu(), jpegThumbnail: thumbnail } }
@@ -422,7 +423,7 @@ async function handler(m, { sock, db }) {
       case 2: {
         const media = await prepareWAMessageMedia(
           {
-            image: fs.readFileSync(config.assets["ourin2"]),
+            image: getAssetBuffer("ourin2"),
           },
           { upload: sock.waUploadToServer },
         );
@@ -516,7 +517,7 @@ async function handler(m, { sock, db }) {
           }
         }
 
-        const thumbnail = await sharp(fs.readFileSync(config.assets["ourin"])).resize(300, 300).toBuffer()
+        const thumbnail = await sharp(getAssetBuffer("ourin")).resize(300, 300).toBuffer()
         const qOrder = {
           key: { fromMe: false, participant: '0@s.whatsapp.net', remoteJid: m.sender },
           message: { locationMessage: { degreesLatitude: 0, degreesLongitude: 0, name: await weatherMenu(), jpegThumbnail: thumbnail } }
@@ -585,7 +586,7 @@ async function handler(m, { sock, db }) {
           }
         }
 
-        const thumbnail = await sharp(fs.readFileSync(config.assets["ourin"])).resize(300, 300).toBuffer()
+        const thumbnail = await sharp(getAssetBuffer("ourin")).resize(300, 300).toBuffer()
 
         const msg6 = generateWAMessageFromContent(m.chat, {
           viewOnceMessage: {

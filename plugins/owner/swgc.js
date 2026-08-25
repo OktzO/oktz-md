@@ -277,6 +277,12 @@ async function handler(m, { sock, db }) {
     tempFile: tempFile,
     timestamp: Date.now(),
   });
+  const pendTs = pendingSwgc.get(m.sender).timestamp;
+  setTimeout(() => {
+    if (pendingSwgc.get(m.sender)?.timestamp === pendTs) {
+      pendingSwgc.delete(m.sender);
+    }
+  }, 10 * 60 * 1000);
 
   try {
     global.isFetchingGroups = true;

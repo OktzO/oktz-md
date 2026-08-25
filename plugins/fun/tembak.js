@@ -129,6 +129,13 @@ async function handler(m, { sock }) {
     timestamp: Date.now(),
   };
 
+  const sessKey = `${m.chat}_${targetJid}`;
+  const sessTs = global.tembakSessions[sessKey].timestamp;
+  setTimeout(() => {
+    const cur = global.tembakSessions[sessKey];
+    if (cur && cur.timestamp === sessTs) delete global.tembakSessions[sessKey];
+  }, 3600000);
+
   await m.react("💘");
 
   const ctx = saluranCtx();

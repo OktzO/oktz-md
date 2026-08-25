@@ -45,18 +45,20 @@ async function handler(m, { sock }) {
         
         sock.ev.on('presence.update', presenceHandler)
         
-        const batchSize = 10
-        for (let i = 0; i < participants.length; i += batchSize) {
-            const batch = participants.slice(i, i + batchSize)
-            await Promise.all(batch.map(p => 
-                sock.presenceSubscribe(p.id).catch(() => {})
-            ))
-            await new Promise(resolve => setTimeout(resolve, 500))
+        try {
+            const batchSize = 10
+            for (let i = 0; i < participants.length; i += batchSize) {
+                const batch = participants.slice(i, i + batchSize)
+                await Promise.all(batch.map(p => 
+                    sock.presenceSubscribe(p.id).catch(() => {})
+                ))
+                await new Promise(resolve => setTimeout(resolve, 500))
+            }
+            
+            await new Promise(resolve => setTimeout(resolve, 5000))
+        } finally {
+            sock.ev.off('presence.update', presenceHandler)
         }
-        
-        await new Promise(resolve => setTimeout(resolve, 5000))
-        
-        sock.ev.off('presence.update', presenceHandler)
         
         const onlineMembers = Object.keys(presences)
         const mentions = onlineMembers

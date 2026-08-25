@@ -181,6 +181,12 @@ function isOnCooldown(userId) {
 
 function setCooldown(userId) {
   userCooldowns.set(userId, Date.now());
+  if (userCooldowns.size > 1000) {
+    const cutoff = Date.now() - COOLDOWN_MS;
+    for (const [k, v] of userCooldowns) {
+      if (v < cutoff) userCooldowns.delete(k);
+    }
+  }
 }
 
 function saveToHistory(autoai, senderNumber, role, content) {
@@ -188,6 +194,7 @@ function saveToHistory(autoai, senderNumber, role, content) {
   if (!autoai.sessions[senderNumber]) {
     autoai.sessions[senderNumber] = { history: [] };
   }
+  autoai.sessions[senderNumber].lastActive = Date.now();
   const history = autoai.sessions[senderNumber].history;
   history.push({
     role,
@@ -196,6 +203,12 @@ function saveToHistory(autoai, senderNumber, role, content) {
   });
   if (history.length > 20) {
     autoai.sessions[senderNumber].history = history.slice(-20);
+  }
+  if (Object.keys(autoai.sessions).length > 200) {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    for (const [num, sess] of Object.entries(autoai.sessions)) {
+      if ((sess.lastActive || 0) < cutoff) delete autoai.sessions[num];
+    }
   }
 }
 
@@ -1033,7 +1046,6 @@ async function handleAutoAI(m, sock) {
     }
 
     saveToHistory(autoai, senderNumber, "assistant", cleanResponse);
-    db.save();
 
     await sock.sendPresenceUpdate("paused", m.chat);
 

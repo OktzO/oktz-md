@@ -18,7 +18,15 @@ const pluginConfig = {
     isEnabled: true
 };
 
-const sessions = {};
+const sessions = new Map();
+
+function saveSession(userJid, sessionId) {
+  sessions.set(userJid, sessionId);
+  if (sessions.size > 500) {
+    const firstKey = sessions.keys().next().value;
+    if (firstKey) sessions.delete(firstKey);
+  }
+}
 
 const systemPrompt = `Kamu adalah asisten AI yang cerdas dan canggih (Ourin AI).
 Gunakan format markdown secara ketat:
@@ -44,7 +52,7 @@ async function handler(m, { sock }) {
     await m.react('🕕');
 
     const userJid = m.sender;
-    const sessionId = sessions[userJid] || null;
+    const sessionId = sessions.get(userJid) || null;
 
     try {
         const result = await gemini({
@@ -54,7 +62,7 @@ async function handler(m, { sock }) {
         });
 
         if (result && result.sessionId) {
-            sessions[userJid] = result.sessionId;
+            saveSession(userJid, result.sessionId);
         }
 
         const replyText = result.text || '';

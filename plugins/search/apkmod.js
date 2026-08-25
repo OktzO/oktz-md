@@ -67,13 +67,6 @@ async function handler(m, { sock }) {
       id: `${m.prefix}apkmod-get ${i + 1} ${text}`,
     }));
 
-    global.apkmodSession = global.apkmodSession || {};
-    global.apkmodSession[m.sender] = {
-      results: apps,
-      query: text,
-      timestamp: Date.now(),
-    };
-
     m.react("✅");
 
     await sock.sendButton(

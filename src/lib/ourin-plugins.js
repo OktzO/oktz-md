@@ -589,9 +589,11 @@ function unloadPlugin(name) {
     removePluginFromStore(plugin);
 
     if (plugin.filePath) {
-      try {
-        // require.cache removed
-      } catch {}
+      // ESM: no module unload API exists. Modules loaded via loadPlugin(_, bustCache=true)
+      // (hotReloadPlugin) stay referenced by Node's module map for the process lifetime.
+      // That path only runs when config.dev.enabled && watchPlugins — a dev-only tradeoff.
+      // Old instances are still dropped from pluginStore, so commands stop resolving to them;
+      // the code+module graph is only reclaimed on process restart.
     }
 
     logger.warn("plugin", `unloaded: ${primaryName}`);

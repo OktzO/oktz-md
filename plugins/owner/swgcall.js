@@ -181,6 +181,12 @@ async function handler(m, { sock, db }) {
       tempFile,
       timestamp: Date.now(),
     });
+    const pendTs = global._swgcallPending.get(m.sender).timestamp;
+    setTimeout(() => {
+      if (global._swgcallPending.get(m.sender)?.timestamp === pendTs) {
+        global._swgcallPending.delete(m.sender);
+      }
+    }, 10 * 60 * 1000);
 
     const mediaType = rawContent.text
       ? "Teks"

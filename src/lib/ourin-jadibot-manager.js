@@ -332,7 +332,14 @@ async function startJadibot(sock, m, userJid, usePairing = true) {
     if (Date.now() - lastAttempt < 60000) {
       throw new Error("Tunggu 1 menit sebelum mencoba lagi.");
     }
+    if (lastAttempt) rateLimit.delete(id);
     rateLimit.set(id, Date.now());
+    if (rateLimit.size > 100) {
+      const cutoff = Date.now() - 60000;
+      for (const [k, v] of rateLimit) {
+        if (v < cutoff) rateLimit.delete(k);
+      }
+    }
   }
 
   const authPath = getJadibotAuthPath(userJid);

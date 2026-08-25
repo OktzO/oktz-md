@@ -414,7 +414,12 @@ function initScheduler(config, sock = null) {
   }
   if (sock) loadScheduledMessages(sock);
 
-  new CronJob(
+  if (activeCronJobs.has("messageSaverTick")) {
+    activeCronJobs.get("messageSaverTick").stop();
+    activeCronJobs.delete("messageSaverTick");
+  }
+
+  const saverJob = new CronJob(
     "*/5 * * * *",
     () => {
       if (scheduledTasks.size > 0) saveScheduledMessages();
@@ -423,6 +428,7 @@ function initScheduler(config, sock = null) {
     true,
     TZ,
   );
+  activeCronJobs.set("messageSaverTick", saverJob);
 
   logger.success("Scheduler", "Scheduler initialized");
 }
@@ -725,6 +731,7 @@ function startAutoBioChecker(sock) {
 export {
   initScheduler,
   stopAllSchedulers,
+  activeCronJobs,
   startDailyLimitReset,
   startGroupScheduleChecker,
   startSewaChecker,
