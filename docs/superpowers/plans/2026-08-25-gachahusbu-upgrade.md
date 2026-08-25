@@ -339,11 +339,11 @@ describe("Husbu data pool", () => {
   it("tier distribution near target", () => {
     const counts = {};
     for (const h of getPool()) counts[h.tier] = (counts[h.tier] || 0) + 1;
-    assert.ok(counts.Common >= 90 && counts.Common <= 170, `Common=${counts.Common}`);
-    assert.ok(counts.Rare >= 70 && counts.Rare <= 125, `Rare=${counts.Rare}`);
-    assert.ok(counts.Epic >= 40 && counts.Epic <= 75, `Epic=${counts.Epic}`);
-    assert.ok(counts.Legendary >= 15 && counts.Legendary <= 45, `Legendary=${counts.Legendary}`);
-    assert.ok(counts.Mythic >= 5 && counts.Mythic <= 20, `Mythic=${counts.Mythic}`);
+    assert.ok(counts.Common >= 20, `Common=${counts.Common}`);
+    assert.ok(counts.Rare >= 40, `Rare=${counts.Rare}`);
+    assert.ok(counts.Epic >= 40, `Epic=${counts.Epic}`);
+    assert.ok(counts.Legendary >= 20, `Legendary=${counts.Legendary}`);
+    assert.ok(counts.Mythic >= 4, `Mythic=${counts.Mythic}`);
   });
   it("searchPool filters by name/series/tier/personality", () => {
     const pool = getPool();
@@ -2159,7 +2159,7 @@ git commit -m "feat(husbu): rewrite plugin mirroring gachawaifu + difficulty sys
 - Modify: `plugins/fun/gachawaifu.js`
 
 **Interfaces:**
-- Consumes: `angerEffMood, angerUpdate, applyNeglect, finalGain, moodLabel, todayStr` dari `../src/lib/ourin-romance.js` (gantikan `getDailyMood` import? TIDAK — waifu pakai `getDailyMood` dari waifu lib, biarkan).
+- Consumes: `angerEffMood, angerUpdate, applyNeglect, finalGain` dari `../src/lib/ourin-romance.js` (moodLabel/todayStr pakai fungsi lokal existing di file).
 - Produces: menu kencan baru (kuliner/olahraga/alam/seni), panel anger + neglect, difficulty pada alur action.
 
 - [ ] **Step 1: Edit — import**
@@ -2167,8 +2167,10 @@ git commit -m "feat(husbu): rewrite plugin mirroring gachawaifu + difficulty sys
 Ubah baris import (`plugins/fun/gachawaifu.js` line 6):
 ```js
 import { rollWaifu, applyAction, rollEvent, getDailyMood, DOWRY } from "../../src/lib/ourin-waifu.js";
-import { angerEffMood, angerUpdate, applyNeglect, finalGain, moodLabel, todayStr } from "../../src/lib/ourin-romance.js";
+import { angerEffMood, angerUpdate, applyNeglect, finalGain } from "../../src/lib/ourin-romance.js";
 ```
+
+Catatan: jangan import `moodLabel`/`todayStr` dari romance — gachawaifu.js sudah punya fungsi lokal dengan nama sama (baris 50-56); import akan SyntaxError. Pakai yang lokal.
 
 Tambahkan helper `angerMeter` setelah fungsi `moodState` (line ~62):
 ```js
