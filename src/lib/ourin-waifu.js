@@ -1,23 +1,9 @@
 // src/lib/ourin-waifu.js
 // Logika inti gacha waifu. Pure-ish, tanpa dependensi WA/Baileys.
 import { getPool } from "../../data/waifu/index.js";
+import { DOWRY, TIER_ORDER, TIER_VALUE, TIER_EXPECTED, PITY_THRESHOLD, EVENT_CHANCE, MOOD_MULT, getDailyMood } from "./ourin-romance.js";
 
-const TIER_ORDER = ["Common", "Rare", "Epic", "Legendary", "Mythic"];
-export const PITY_THRESHOLD = 20;
-export const EVENT_CHANCE = 0.18;
-
-const MOOD_MULT = { ceria: 1.3, romantis: 1.2, biasa: 1.0, sedih: 0.7, marah: 0.5 };
-
-export const DOWRY = {
-  Common:     { limit: 1000,  koin: 20000,  exp: 500 },
-  Rare:       { limit: 3000,  koin: 60000,  exp: 1500 },
-  Epic:       { limit: 8000,  koin: 200000, exp: 5000 },
-  Legendary:  { limit: 15000, koin: 500000, exp: 12000 },
-  Mythic:     { limit: 30000, koin: 1000000, exp: 30000 },
-};
-
-const TIER_VALUE = { Common: 1, Rare: 2, Epic: 4, Legendary: 8, Mythic: 16 };
-const TIER_EXPECTED = 0.55 * 1 + 0.25 * 2 + 0.13 * 4 + 0.055 * 8 + 0.015 * 16;
+export { DOWRY, PITY_THRESHOLD, EVENT_CHANCE, getDailyMood };
 
 export const ACTIONS = {
   // ===== approach (<80) =====
@@ -63,6 +49,28 @@ export const ACTIONS = {
   hadiah:         { phase: "married", base: [10, 16], exp: 45, likes: ["himedere", "ojou-sama"], dislikes: [], text: (n) => `🎁 Hadiah kejutan membuat *${n}* melompat bahagia seperti anak kecil.` },
   bulanmadu_pantai: { phase: "married", base: [12, 20], exp: 50, likes: ["genki", "amayadori"], dislikes: [], text: (n) => `🌴 Bulan madu di pantai tropis. *${n}* menggandengmu menikmati sunset.` },
   bulanmadu_hotel:  { phase: "married", base: [14, 24], exp: 55, likes: ["onee-san", "yandere"], dislikes: [], text: (n) => `🏨 Suite hotel mewah. Malam penuh kehangatan berdua saja.` },
+
+  // ===== approach baru: kuliner =====
+  restoran_makan:  { phase: "approach", base: [8, 16], exp: 35, likes: ["deredere", "onee-san", "amayadori"], dislikes: ["kuudere"], text: (n) => `🍽️ Makan malam di restoran romantis. *${n}* tersenyum menatapmu dari seberang meja.` },
+  restoran_dimsum: { phase: "approach", base: [6, 12], exp: 30, likes: ["genki", "deredere"], dislikes: ["ojou-sama"], text: (n) => `🥟 Cicip dimsum bareng! *${n}* rebutan denganmu sampai tawa.` },
+  restoran_bbq:    { phase: "approach", base: [8, 14], exp: 35, likes: ["genki", "onee-san"], dislikes: ["himedere"], text: (n) => `🍖 Bakar-bakar di BBQ. *${n}* memangangkan daging untukmu.` },
+  // ===== approach baru: olahraga =====
+  olahraga_hiking: { phase: "approach", base: [6, 12], exp: 30, likes: ["genki", "kuudere"], dislikes: ["himedere", "ojou-sama"], text: (n) => `⛰️ Mendaki bukit. *${n}* terengah-engah tapi semangat!` },
+  olahraga_lari:   { phase: "approach", base: [8, 14], exp: 35, likes: ["genki", "tsundere"], dislikes: ["dandere"], text: (n) => `🏃 Lari pagi keliling taman. *${n}* menantangmu balapan.` },
+  olahraga_panjat: { phase: "approach", base: [5, 10], exp: 25, likes: ["genki"], dislikes: ["himedere", "ojou-sama"], text: (n) => `🧗 Panjat tebing indoor. *${n}* gemetaran tapi tak mau menyerah.` },
+  // ===== approach baru: alam =====
+  alam_camping:    { phase: "approach", base: [10, 18], exp: 40, likes: ["kuudere", "amayadori", "dandere"], dislikes: ["himedere"], text: (n) => `🏕️ Camping di bawah bintang. *${n}* bersandar santai menatap langit malam.` },
+  alam_mancing:    { phase: "approach", base: [6, 12], exp: 30, likes: ["kuudere", "onee-san"], dislikes: ["genki"], text: (n) => `🎣 Memancing di danau tenang. *${n}* senang saat akhirnya dapat ikan.` },
+  alam_perahu:     { phase: "approach", base: [8, 16], exp: 35, likes: ["genki", "amayadori"], dislikes: ["tsundere"], text: (n) => `⛵ Menyusuri sungai naik perahu. *${n}* menutup mata menikmati angin.` },
+  // ===== approach baru: seni =====
+  seni_museum:     { phase: "approach", base: [6, 12], exp: 30, likes: ["kuudere", "dandere"], dislikes: ["genki"], text: (n) => `🖼️ Menjelajahi museum. *${n}* takjub di depan lukisan tua.` },
+  seni_melukis:    { phase: "approach", base: [8, 15], exp: 35, likes: ["deredere", "dandere", "onee-san"], dislikes: [], text: (n) => `🎨 Melukis bareng di studio. Karya *${n}* kacau balau tapi lucu.` },
+  seni_konser:     { phase: "approach", base: [10, 18], exp: 40, likes: ["genki", "deredere", "amayadori"], dislikes: ["kuudere"], text: (n) => `🎸 Nonton konser. *${n}* bernyanyi keras tanpa malu.` },
+  // ===== intim baru =====
+  pijat_bahu:      { phase: "intim", base: [10, 18], exp: 45, likes: ["onee-san", "yandere", "deredere"], dislikes: [], text: (n) => `💆 Kamu memijat bahu *${n}* yang tegang. Ia mendesah rileks.` },
+  // ===== married baru =====
+  nontonrumah:     { phase: "married", base: [8, 14], exp: 40, likes: ["deredere", "dandere", "tsundere"], dislikes: [], text: (n) => `📺 Nonton maraton film di sofa. *${n}* nyender di bahumu sampai ketiduran.` },
+  jalanpagi:       { phase: "married", base: [10, 16], exp: 45, likes: ["genki", "onee-san", "amayadori"], dislikes: [], text: (n) => `🌅 Jalan santai pagi hari sambil beli sarapan. *${n}* menggandengmu.` },
 };
 
 // personality like/dislike tag mapping: deredere menyukai semua aksi mesra, dst.
@@ -92,6 +100,14 @@ const EVENTS = [
   { id: "rainbow", phase: "approach", text: () => `🌈 Pelangi muncul setelah hujan reda. Kalian berhenti untuk mengabadikannya.`, aff: 5 },
   { id: "confess", phase: "intim", text: (n) => `💞 *${n}* mengaku bahwa ia mulai benar-benar mencintaimu.`, aff: 8 },
   { id: "gift", phase: "married", marriedOnly: true, text: () => `🎁 Hadiah kejutan kecil untukmu sebagai pasangan.`, koin: () => 2000 + Math.floor(Math.random() * 9001) },
+  { id: "foto", phase: "any", text: (n) => `📸 Foto bareng! *${n}* melotot saat kejepret momen memalukan.`, aff: 4 },
+  { id: "lomba", phase: "any", text: () => `🏅 Kamu ikut lomba jalan santai dan menang hadiah receh!`, koin: () => 500 + Math.floor(Math.random() * 5001) },
+  { id: "salahpaham", phase: "any", text: (n) => `📵 *${n}* melihat notif dari akun lain di ponselmu dan salah paham!`, aff: -5, anger: 12 },
+  { id: "pujian", phase: "any", text: (n) => `🗣️ Seseorang memuji kalian: "cocok banget!" *${n}* tersipu.`, aff: 5 },
+  { id: "sunset", phase: "any", text: () => `🌇 Kalian berhenti menikmati matahari terbenam. Momen tak terlupakan.`, aff: 6, mood: "romantis" },
+  { id: "kenangan", phase: "any", marriedOnly: true, text: (n) => `📿 Kamu menemukan foto lama kalian. *${n}* terharu dan memelukmu erat.`, aff: 7 },
+  { id: "badai", phase: "any", text: (n) => `⛈️ Hujan badai datang! *${n}* kehujanan dan mood-nya rusak.`, mood: "marah", aff: -4 },
+  { id: "rezeki", phase: "any", text: () => `🍀 Rezeki nomplok! Kamu dapat uang tak terduga.`, koin: () => 3000 + Math.floor(Math.random() * 8001) },
 ];
 
 export function rollWaifu(pityCounter = 0, rng = Math.random) {
@@ -114,10 +130,12 @@ export function applyAction(key, waifu, moodType = "biasa", rng = Math.random, m
   let mult = MOOD_MULT[moodType] || 1;
   mult *= multOverride;
   const tag = PERSONALITY_TAG[waifu.personality] || { like: [], dislike: [] };
-  if (a.likes.includes(waifu.personality) || tag.like.includes(key)) mult *= 1.2;
-  else if (a.dislikes.includes(waifu.personality) || tag.dislike.includes(key)) mult *= 0.7;
+  const liked = a.likes.includes(waifu.personality) || tag.like.includes(key);
+  const disliked = a.dislikes.includes(waifu.personality) || tag.dislike.includes(key);
+  if (liked) mult *= 1.2;
+  else if (disliked) mult *= 0.7;
   const change = Math.max(1, Math.round(base * mult));
-  return { key, phase: a.phase, change, exp: a.exp, text: a.text(waifu.name) };
+  return { key, phase: a.phase, change, exp: a.exp, text: a.text(waifu.name), like: liked, dislike: disliked };
 }
 
 export function rollEvent({ married, phase, personality, name } = {}, rng = Math.random) {
@@ -131,19 +149,7 @@ export function rollEvent({ married, phase, personality, name } = {}, rng = Math
   const e = pool[Math.floor(rng() * pool.length)];
   let aff = typeof e.aff === "function" ? e.aff(personality) : (e.aff || 0);
   if (e.id === "rival" && personality === "yandere") aff = e.yandereAff;
-  return { id: e.id, text: typeof e.text === "function" ? e.text(name) : e.text, aff, koin: e.koin ? e.koin() : 0, mood: e.mood || null, nextMult: e.nextMult || 1 };
-}
-
-export function getDailyMood(senderJid, dateStr) {
-  const seed = `${dateStr}_${senderJid}`;
-  let h = 0;
-  for (const c of seed) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  const r = (h % 10000) / 10000;
-  if (r < 0.3) return "ceria";
-  if (r < 0.55) return "romantis";
-  if (r < 0.8) return "biasa";
-  if (r < 0.92) return "sedih";
-  return "marah";
+  return { id: e.id, text: typeof e.text === "function" ? e.text(name) : e.text, aff, koin: e.koin ? e.koin() : 0, mood: e.mood || null, nextMult: e.nextMult || 1, anger: e.anger || 0 };
 }
 
 const WAIFU_COMMANDS = new Set([

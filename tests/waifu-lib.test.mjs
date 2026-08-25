@@ -140,4 +140,36 @@ describe("Waifu lib", () => {
   it("DOWRY has all tiers", () => {
     for (const t of ["Common", "Rare", "Epic", "Legendary", "Mythic"]) assert.ok(DOWRY[t]);
   });
+
+  it("applyAction returns like/dislike flags", () => {
+    // jalan_taman likes tsundere → like=true
+    const liked = applyAction("jalan_taman", { personality: "tsundere", name: "M" }, "biasa", () => 0);
+    assert.equal(liked.like, true);
+    // jalan_mall dislikes dandere → dislike=true
+    const disliked = applyAction("jalan_mall", { personality: "dandere", name: "M" }, "biasa", () => 0);
+    assert.equal(disliked.dislike, true);
+    // kafe_matcha netral buat genki → keduanya false
+    const neutral = applyAction("kafe_matcha", { personality: "genki", name: "M" }, "biasa", () => 0);
+    assert.equal(neutral.like, false);
+    assert.equal(neutral.dislike, false);
+  });
+
+  it("new actions exist (kuliner/olahraga/alam/seni/intim/married)", () => {
+    for (const key of ["restoran_makan", "restoran_dimsum", "restoran_bbq",
+      "olahraga_hiking", "olahraga_lari", "olahraga_panjat",
+      "alam_camping", "alam_mancing", "alam_perahu",
+      "seni_museum", "seni_melukis", "seni_konser",
+      "pijat_bahu", "nontonrumah", "jalanpagi"]) {
+      const r = applyAction(key, { personality: "deredere", name: "M" }, "biasa", () => 0);
+      assert.ok(r, `missing action ${key}`);
+    }
+  });
+
+  it("rollEvent passes anger through", () => {
+    for (let i = 0; i < 200; i++) {
+      const e = rollEvent({ married: false, phase: "approach", personality: "genki", name: "M" }, mulberry32(i));
+      if (!e) continue;
+      assert.ok(typeof e.anger === "number");
+    }
+  });
 });
