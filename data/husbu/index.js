@@ -9,6 +9,16 @@ import { husbus as kimetsu } from "./kimetsu.js";
 import { husbus as mha } from "./my-hero-academia.js";
 import { husbus as aot } from "./attack-on-titan.js";
 import { husbus as dragonBall } from "./dragon-ball.js";
+import { husbus as hunterXHunter } from "./hunter-x-hunter.js";
+import { husbus as blackClover } from "./black-clover.js";
+import { husbus as haikyuu } from "./haikyuu.js";
+import { husbus as kuroko } from "./kuroko.js";
+import { husbus as blueLock } from "./blue-lock.js";
+import { husbus as fairyTail } from "./fairy-tail.js";
+import { husbus as sao } from "./sword-art-online.js";
+import { husbus as rezero } from "./rezero.js";
+import { husbus as fate } from "./fate.js";
+import { husbus as genshin } from "./genshin-impact.js";
 
 export const TIER_WEIGHTS = { Common: 55, Rare: 25, Epic: 13, Legendary: 5.5, Mythic: 1.5 };
 export const VALID_HUSB_PERSONALITIES = [
@@ -18,6 +28,7 @@ export const VALID_HUSB_PERSONALITIES = [
 
 const FRANCHISES = [
   naruto, onePiece, bleach, jujutsu, kimetsu, mha, aot, dragonBall,
+  hunterXHunter, blackClover, haikyuu, kuroko, blueLock, fairyTail, sao, rezero, fate, genshin,
 ];
 
 let cache = null;
