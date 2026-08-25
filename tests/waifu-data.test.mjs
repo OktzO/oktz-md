@@ -16,6 +16,12 @@ describe("Waifu data pool", () => {
       assert.ok(w.name && w.series && w.age && w.height && w.weight, `missing field: ${w.name}`);
     }
   });
+  it("display weight preserved, roll probability on rollWeight", () => {
+    for (const w of getPool()) {
+      assert.match(String(w.weight), /kg/, `weight clobbered: ${w.name} = ${w.weight}`);
+      assert.ok(w.rollWeight > 0, `rollWeight missing: ${w.name}`);
+    }
+  });
   it("all tiers valid", () => {
     for (const w of getPool()) assert.ok(TIER_WEIGHTS[w.tier], `bad tier: ${w.tier} ${w.name}`);
   });

@@ -74,7 +74,7 @@ function buildPool() {
   }
   const tierCount = {};
   for (const w of all) tierCount[w.tier] = (tierCount[w.tier] || 0) + 1;
-  for (const w of all) w.weight = TIER_WEIGHTS[w.tier] / tierCount[w.tier];
+  for (const w of all) w.rollWeight = TIER_WEIGHTS[w.tier] / tierCount[w.tier];
   return all;
 }
 

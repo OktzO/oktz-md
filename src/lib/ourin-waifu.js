@@ -100,9 +100,9 @@ export function rollWaifu(pityCounter = 0, rng = Math.random) {
   if (pityCounter >= PITY_THRESHOLD) {
     eligible = pool.filter(w => TIER_ORDER.indexOf(w.tier) >= 2);
   }
-  const total = eligible.reduce((s, w) => s + w.weight, 0);
+  const total = eligible.reduce((s, w) => s + w.rollWeight, 0);
   let r = rng() * total;
-  for (const w of eligible) { r -= w.weight; if (r <= 0) return w; }
+  for (const w of eligible) { r -= w.rollWeight; if (r <= 0) return w; }
   return eligible[eligible.length - 1];
 }
 
