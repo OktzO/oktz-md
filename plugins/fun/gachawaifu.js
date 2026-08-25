@@ -4,6 +4,7 @@ import te from "../../src/lib/ourin-error.js";
 import { prepareWAMessageMedia, generateWAMessageFromContent } from "ourin";
 import { addExpWithLevelCheck } from "../../src/lib/ourin-level.js";
 import { rollWaifu, applyAction, rollEvent, getDailyMood, DOWRY } from "../../src/lib/ourin-waifu.js";
+import { angerEffMood, angerUpdate, applyNeglect, finalGain } from "../../src/lib/ourin-romance.js";
 
 const pluginConfig = {
   name: ["gachawaifu", "waifuaction", "tinggalinwaifu", "waifuku", "istriku"],
@@ -59,6 +60,12 @@ function moodState(user, m) {
   const w = user.waifu;
   if (w.moodUntil && Date.now() < new Date(w.moodUntil).getTime() && w.mood?.type) return w.mood.type;
   return getDailyMood(m.sender, todayStr());
+}
+
+function angerMeter(w) {
+  const a = w.anger || 0;
+  const n = Math.round(a / 10);
+  return "█".repeat(n) + "░".repeat(10 - n) + ` (${a}/100)`;
 }
 
 async function sendWaifuMessage(m, sock, waifu, textContent, customButtons = null) {
@@ -165,19 +172,25 @@ async function handler(m, { sock }) {
     m.react("🕕");
     const w = user.waifu;
     const mood = moodState(user, m);
+    const { decay } = applyNeglect(w);
     let status = w.married ? "Telah Menikah 💍" : "Pendekatan 💖";
     const day = marrageDay(w);
     const moodLine = w.married
       ? `\n🗓️ *Hari ke-${day}*${day >= 7 ? ` ${day >= 100 ? "🏆" : day >= 30 ? "🎖️" : "🎉"}` : ""}`
       : "";
-    const textContent = `📸 *STATUS WAIFU KAMU* 📸\n\n` +
+    let textContent = `📸 *STATUS WAIFU KAMU* 📸\n\n` +
       `💖 *Nama:* ${w.name}\n` +
       `💎 *Tier:* ${w.tier}\n` +
       `🎭 *Personality:* ${w.personality}\n` +
       `🌤️ *Mood hari ini:* ${moodLabel(mood)}\n` +
+      `😡 *Anger:* ${angerMeter(w)}\n` +
       `💞 *Affection:* ${w.affection}/100\n` +
-      `💍 *Status:* ${status}${moodLine}\n\n` +
-      `Lanjutkan interaksi dengan memilih aksi di bawah!`;
+      `💍 *Status:* ${status}${moodLine}\n`;
+    if (decay > 0) textContent += `📉 *Neglect:* Affection turun -${decay} karena kamu jarang interaksi!\n`;
+    if ((w.anger || 0) >= 50) textContent += `⚠️ *Dia sedang MARAH!* Perbaiki hubungan sebelum affection habis!\n`;
+    textContent += `\nLanjutkan interaksi dengan memilih aksi di bawah!`;
+    user.waifu = w;
+    db.setUser(m.sender, user);
     m.react("✅");
     return await sendWaifuMessage(m, sock, w, textContent, null);
   }
@@ -266,7 +279,6 @@ async function handler(m, { sock }) {
       user.waifu = waifu;
       db.setUser(m.sender, user);
     }
-    const mood = moodState(user, m);
     const sendMenu = (title, options) => sendWaifuMessage(m, sock, waifu, title, options.map(([label, id]) => ({ name: "quick_reply", buttonParamsJson: JSON.stringify({ display_text: label, id: `${m.prefix}waifuaction ${id}` }) })));
 
     const MENUS = {
@@ -278,8 +290,12 @@ async function handler(m, { sock }) {
       menu_arcade: ["🕹️ Di arcade...", [["🎮 Adu Skor", "arcade_duo"], ["🎯 Main Boneka", "arcade_boneka"]]],
       menu_piknik: ["🧺 Piknik...", [["🌳 Di Taman", "piknik_taman"], ["🏝️ Di Pantai", "piknik_pantai"]]],
       menu_masak: ["🍳 Masak bareng...", [["🍳 Masakan Rumah", "masak_bareng"], ["🍰 Kue", "masak_kue"]]],
+      menu_kuliner: ["🍽️ Makan di...", [["🍽️ Restoran", "restoran_makan"], ["🥟 Dimsum", "restoran_dimsum"], ["🍖 BBQ", "restoran_bbq"]]],
+      menu_olahraga: ["⚽ Olahraga...", [["⛰️ Hiking", "olahraga_hiking"], ["🏃 Lari Pagi", "olahraga_lari"], ["🧗 Panjat", "olahraga_panjat"]]],
+      menu_alam: ["🏕️ Petualangan alam...", [["🏕️ Camping", "alam_camping"], ["🎣 Mancing", "alam_mancing"], ["⛵ Perahu", "alam_perahu"]]],
+      menu_seni: ["🎨 Seni & budaya...", [["🖼️ Museum", "seni_museum"], ["🎨 Melukis", "seni_melukis"], ["🎸 Konser", "seni_konser"]]],
       menu_lainnya: ["🎮 Aksi lainnya...", waifu.affection < 80
-        ? [["🎤 Karaoke", "menu_karaoke"], ["🕹️ Arcade", "menu_arcade"], ["🧺 Piknik", "menu_piknik"], ["🍳 Masak", "menu_masak"]]
+        ? [["🎤 Karaoke", "menu_karaoke"], ["🕹️ Arcade", "menu_arcade"], ["🧺 Piknik", "menu_piknik"], ["🍳 Masak", "menu_masak"], ["🍽️ Kuliner", "menu_kuliner"], ["⚽ Olahraga", "menu_olahraga"], ["🏕️ Alam", "menu_alam"], ["🎨 Seni", "menu_seni"]]
         : waifu.affection < 100
           ? [["🤗 Gendong", "menu_gendong"], ["🖐️ Tepuk Kepala", "tepuk_kepala"]]
           : [["🌴 Bulan Madu", "menu_bulanmadu"], ["💝 Hadiah", "hadiah"]]],
@@ -357,7 +373,9 @@ async function handler(m, { sock }) {
       return m.reply(`🎁 *${waifu.name}* memberi hadiah harian!\n💰 +${koin.toLocaleString()} Koin\n✨ +${exp} EXP${bonus}`);
     }
 
+    const { decay: negDecay } = applyNeglect(waifu);
     const mult = waifu.nextMultUntil && Date.now() < new Date(waifu.nextMultUntil).getTime() ? 0.8 : 1;
+    const mood = angerEffMood(moodState(user, m), waifu);
     const result = applyAction(action, waifu, mood, undefined, mult);
     if (!result) { m.react("❓"); return m.reply(`Aksi tidak dikenali. Gunakan tombol waifu.`); }
 
@@ -365,18 +383,28 @@ async function handler(m, { sock }) {
     if (result.phase === "intim" && !waifu.married && waifu.affection < 80) return;
 
     if (result.phase === "married" && action !== "nikah") {
-      waifu.affection = Math.min(100, waifu.affection + result.change);
+      const { change } = finalGain(result, waifu, { actionsToday: 0 });
+      waifu.affection = Math.min(100, waifu.affection + change);
       user.waifu = waifu;
       db.setUser(m.sender, user);
-      db.updateKoin(m.sender, Math.floor(result.change * 100));
+      db.updateKoin(m.sender, Math.floor(change * 100));
       await addExpWithLevelCheck(sock, m, db, user, result.exp);
       m.react("❤️");
-      return m.reply(`${result.text}\n\n💞 *Affection +${result.change}* (Total: ${waifu.affection}/100)\n💰 +${Math.floor(result.change * 100)} Koin\n✨ +${result.exp} EXP`);
+      return m.reply(`${result.text}\n\n💞 *Affection +${change}* (Total: ${waifu.affection}/100)\n💰 +${Math.floor(change * 100)} Koin\n✨ +${result.exp} EXP`);
     }
 
     // aksi approach/intim biasa
+    if (waifu.lastActionDate !== todayStr()) {
+      waifu.actionsToday = 0;
+      waifu.lastActionDate = todayStr();
+    }
+    waifu.actionsToday = (waifu.actionsToday || 0) + 1;
+
+    const eff = finalGain(result, waifu, { actionsToday: waifu.actionsToday });
+    waifu.anger = angerUpdate(waifu, result);
+
     const affBefore = waifu.affection;
-    let newAff = affBefore + result.change;
+    let newAff = affBefore + eff.change;
     let eventBlock = "";
     let eventExp = 0;
     let eventKoin = 0;
@@ -384,6 +412,7 @@ async function handler(m, { sock }) {
     if (ev) {
       newAff += ev.aff;
       eventKoin = ev.koin || 0;
+      if (ev.anger) waifu.anger = Math.min(100, (waifu.anger || 0) + ev.anger);
       if (ev.mood) { waifu.mood = { type: ev.mood, since: new Date().toISOString() }; waifu.moodUntil = new Date(Date.now() + 12 * 3600000).toISOString(); }
       if (ev.nextMult < 1) waifu.nextMultUntil = new Date(Date.now() + 24 * 3600000).toISOString();
       eventBlock = `\n\n✨ *EVENT:* ${ev.text}${ev.aff ? ` (${ev.aff > 0 ? "+" : ""}${ev.aff} aff)` : ""}${eventKoin ? ` (+${eventKoin.toLocaleString()} koin)` : ""}`;
@@ -397,8 +426,11 @@ async function handler(m, { sock }) {
     await addExpWithLevelCheck(sock, m, db, user, result.exp + (eventExp ? 15 : 0));
 
     let affText = `💞 *Affection:* ${waifu.affection}/100`;
-    if (result.change !== 0) affText = `💞 *Affection berubah:* ${result.change > 0 ? "+" : ""}${result.change} (Total: ${waifu.affection}/100)`;
+    if (eff.change !== 0) affText = `💞 *Affection berubah:* ${eff.change > 0 ? "+" : ""}${eff.change} (Total: ${waifu.affection}/100)`;
     if (waifu.affection === 100) affText = `💞 *Affection MAKSIMAL! (100/100)* 🎉\n💍 *Nikahi dia sekarang!*`;
+    if (negDecay > 0) affText += `\n📉 *Neglect: -${negDecay} aff* (jarang interaksi)`;
+    if (eff.angry) affText += `\n😡 *Dia MARAH!* Drain -${eff.drain} aff`;
+    if (eff.extra.length) affText += `\n${eff.extra.join("\n")}`;
 
     if (waifu.affection <= 0) {
       const waifuName = waifu.name;
