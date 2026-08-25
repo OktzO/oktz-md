@@ -1,0 +1,15 @@
+export const husbus = [
+  { name: "Naruto Uzumaki", series: "Naruto", age: 17, height: "166 cm", weight: "51 kg", tier: "Epic", personality: "genki" },
+  { name: "Sasuke Uchiha", series: "Naruto", age: 16, height: "168 cm", weight: "52 kg", tier: "Epic", personality: "tsundere" },
+  { name: "Kakashi Hatake", series: "Naruto", age: 30, height: "181 cm", weight: "67 kg", tier: "Legendary", personality: "kuudere" },
+  { name: "Itachi Uchiha", series: "Naruto", age: 21, height: "178 cm", weight: "58 kg", tier: "Legendary", personality: "oji-san" },
+  { name: "Shikamaru Nara", series: "Naruto", age: 16, height: "170 cm", weight: "54 kg", tier: "Common", personality: "kuudere" },
+  { name: "Rock Lee", series: "Naruto", age: 16, height: "163 cm", weight: "51 kg", tier: "Common", personality: "genki" },
+  { name: "Gaara", series: "Naruto", age: 15, height: "166 cm", weight: "49 kg", tier: "Rare", personality: "dandere" },
+  { name: "Minato Namikaze", series: "Naruto", age: 24, height: "179 cm", weight: "66 kg", tier: "Legendary", personality: "sunao" },
+  { name: "Jiraiya", series: "Naruto", age: 54, height: "191 cm", weight: "88 kg", tier: "Epic", personality: "playboy" },
+  { name: "Shino Aburame", series: "Naruto", age: 16, height: "175 cm", weight: "57 kg", tier: "Common", personality: "dandere" },
+  { name: "Sai", series: "Naruto", age: 17, height: "172 cm", weight: "53 kg", tier: "Rare", personality: "dandere" },
+  { name: "Obito Uchiha", series: "Naruto", age: 31, height: "175 cm", weight: "71 kg", tier: "Epic", personality: "badboy" },
+  { name: "Madara Uchiha", series: "Naruto", age: 73, height: "179 cm", weight: "71 kg", tier: "Mythic", personality: "badboy" },
+];
