@@ -384,13 +384,16 @@ async function handler(m, { sock }) {
 
     if (result.phase === "married" && action !== "nikah") {
       const { change } = finalGain(result, waifu, { actionsToday: 0 });
-      waifu.affection = Math.min(100, waifu.affection + change);
+      waifu.anger = angerUpdate(waifu, result);
+      waifu.affection = Math.max(0, Math.min(100, waifu.affection + change));
+      const koinGain = Math.floor(Math.max(0, change) * 100);
       user.waifu = waifu;
       db.setUser(m.sender, user);
-      db.updateKoin(m.sender, Math.floor(change * 100));
+      if (koinGain > 0) db.updateKoin(m.sender, koinGain);
       await addExpWithLevelCheck(sock, m, db, user, result.exp);
       m.react("❤️");
-      return m.reply(`${result.text}\n\n💞 *Affection +${change}* (Total: ${waifu.affection}/100)\n💰 +${Math.floor(change * 100)} Koin\n✨ +${result.exp} EXP`);
+      const affLine = change >= 0 ? `💞 *Affection +${change}*` : `💞 *Affection ${change}*`;
+      return m.reply(`${result.text}\n\n${affLine} (Total: ${waifu.affection}/100)\n💰 +${koinGain} Koin\n✨ +${result.exp} EXP`);
     }
 
     // aksi approach/intim biasa

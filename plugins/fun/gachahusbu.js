@@ -379,13 +379,16 @@ async function handler(m, { sock }) {
 
     if (result.phase === "married" && action !== "nikah") {
       const { change } = finalGain(result, husbu, { actionsToday: 0 });
-      husbu.affection = Math.min(100, husbu.affection + change);
+      husbu.anger = angerUpdate(husbu, result);
+      husbu.affection = Math.max(0, Math.min(100, husbu.affection + change));
+      const koinGain = Math.floor(Math.max(0, change) * 100);
       user.husbu = husbu;
       db.setUser(m.sender, user);
-      db.updateKoin(m.sender, Math.floor(change * 100));
+      if (koinGain > 0) db.updateKoin(m.sender, koinGain);
       await addExpWithLevelCheck(sock, m, db, user, result.exp);
       m.react("❤️");
-      return m.reply(`${result.text}\n\n💞 *Affection +${change}* (Total: ${husbu.affection}/100)\n💰 +${Math.floor(change * 100)} Koin\n✨ +${result.exp} EXP`);
+      const affLine = change >= 0 ? `💞 *Affection +${change}*` : `💞 *Affection ${change}*`;
+      return m.reply(`${result.text}\n\n${affLine} (Total: ${husbu.affection}/100)\n💰 +${koinGain} Koin\n✨ +${result.exp} EXP`);
     }
 
     if (husbu.lastActionDate !== todayStr()) {
