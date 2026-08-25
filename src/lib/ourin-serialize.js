@@ -836,6 +836,9 @@ async function serialize(sock, msg, store = {}) {
       if (pn && !isLidConverted(pn) && !isLid(pn)) {
         return pn;
       }
+      if (isLidConverted(jid)) {
+        return jid.replace("@s.whatsapp.net", "@lid");
+      }
     }
     return jid;
   };
