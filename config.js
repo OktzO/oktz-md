@@ -203,8 +203,9 @@ const config = {
   // Isi url + authToken punyamu di sini (atau pakai env TURSO_URL / TURSO_AUTH_TOKEN).
   // Ambil di https://console.turso.io → create database → generate token.
   turso: {
-    url: "", // contoh: "libsql://nama-db.aws-ap-northeast-1.turso.io"
-    authToken: "", // token (JWT) dari console Turso
+    url: "libsql://whatsapp-oktzo.aws-ap-northeast-1.turso.io",
+    authToken:
+      "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODc2NDc2MzUsImlkIjoiMDFhMDJjNTYtOWMwMS03YzBkLTgxMzctYjg3YmI3OGZjNDI4Iiwia2lkIjoiSXdvVDJfSkNDRU5lNWsyTzdhYkRaMmJJQzBoVFVOd215R0ZKSDdRUk5iMCIsInJpZCI6ImRjYmY0MGQ2LWQ2OTYtNDQ3Ni1iMGZhLWZkMGFlMmNjYTUzZCJ9.g2vP-uH9e2hTBD7EL86FL27vRjPhuQaKkaohpBw4pqXumSwkW8q-0dCALiaaCCfjlAobl9fZg1n_LstXpd5gAg",
     syncInterval: 5000, // write-behind DB (ms)
     enabled: true, // false = fallback ke file JSON + file session lokal
   },

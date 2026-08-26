@@ -40,8 +40,6 @@ await import("./src/lib/ourin-agent.js")
   .catch(() => { });
 
 const LOG_NOISE = new Set([
-  "Closing",
-  "Opening",
   "prekey",
   "_chains",
   "registrationId",

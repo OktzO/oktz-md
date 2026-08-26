@@ -18,8 +18,10 @@ const reconnectAttempts = new Map();
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_INTERVAL = 5000;
 
-if (!fs.existsSync(JADIBOT_AUTH_FOLDER)) {
-  fs.mkdirSync(JADIBOT_AUTH_FOLDER, { recursive: true });
+function ensureJadibotAuthFolder() {
+  if (!fs.existsSync(JADIBOT_AUTH_FOLDER)) {
+    fs.mkdirSync(JADIBOT_AUTH_FOLDER, { recursive: true });
+  }
 }
 
 function getJadibotAuthPath(jid) {
@@ -348,6 +350,7 @@ async function startJadibot(sock, m, userJid, usePairing = true) {
     throw new Error("Jadibot sudah aktif untuk nomor ini!");
   }
 
+  ensureJadibotAuthFolder();
   if (!fs.existsSync(authPath)) {
     fs.mkdirSync(authPath, { recursive: true });
   }

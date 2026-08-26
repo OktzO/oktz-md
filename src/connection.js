@@ -31,7 +31,7 @@ const msgRetryCounterCache = new NodeCache({ stdTTL: 60, useClones: false });
 
 let lastMessageReceived = Date.now();
 let watchdogTimer = null;
-const WATCHDOG_TIMEOUT = 30 * 60 * 1000;
+const WATCHDOG_TIMEOUT = 120 * 60 * 1000;
 const WATCHDOG_CHECK_INTERVAL = 60 * 1000;
 
 function startWatchdog(reconnectFn, options) {
@@ -40,10 +40,11 @@ function startWatchdog(reconnectFn, options) {
 
   watchdogTimer = setInterval(() => {
     const silentMs = Date.now() - lastMessageReceived;
-    if (silentMs > WATCHDOG_TIMEOUT && connectionState.isReady) {
+    const sockAlive = connectionState.isConnected && connectionState.sock?.ws;
+    if (silentMs > WATCHDOG_TIMEOUT && sockAlive) {
       colors.logger.warn(
         "watchdog",
-        `Nggak ada pesan masuk nih, bot bakal restart biar seger lagi`,
+        `Nggak ada pesan masuk ${Math.round(silentMs / 60000)} menit, restart koneksi`,
       );
       connectionState.isReady = false;
       connectionState.isConnected = false;
@@ -65,6 +66,50 @@ function stopWatchdog() {
     clearInterval(watchdogTimer);
     watchdogTimer = null;
   }
+}
+
+let reconnectTimer = null;
+let reconnectScheduled = false;
+
+function clearScheduledReconnect() {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  reconnectScheduled = false;
+}
+
+function scheduleReconnect(delay, options) {
+  if (reconnectScheduled) {
+    colors.logger.debug("whatsapp", "reconnect udah dijadwalin, skip");
+    return;
+  }
+  reconnectScheduled = true;
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(async () => {
+    reconnectScheduled = false;
+    reconnectTimer = null;
+    try {
+      await startConnection(options);
+      connectionState.reconnectAttempts = 0;
+    } catch (error) {
+      colors.logger.error(
+        "whatsapp",
+        `reconnect gagal: ${error.message}, coba lagi...`,
+      );
+      connectionState.reconnectAttempts++;
+      const m = config.session?.maxReconnectAttempts || 5;
+      if (connectionState.reconnectAttempts <= m) {
+        scheduleReconnect(delay, options);
+      } else {
+        colors.logger.error(
+          "whatsapp",
+          `gagal sambung ulang setelah ${m} percobaan`,
+        );
+      }
+    }
+  }, delay);
+  if (reconnectTimer.unref) reconnectTimer.unref();
 }
 
 import sharp from "sharp";
@@ -266,16 +311,14 @@ async function startConnection(options = {}) {
     config.session?.folderName || "session",
   );
 
-  if (!fs.existsSync(sessionPath)) {
-    fs.mkdirSync(sessionPath, { recursive: true });
-  }
-
   const TURSO_ENABLED = config.turso?.enabled && config.turso?.url;
   let state, saveCreds;
   if (TURSO_ENABLED) {
     const { useTursoAuthState } = await import("./lib/ourin-turso-session.js");
     const result = await useTursoAuthState("main");
     if (!result.state) {
+      if (!fs.existsSync(sessionPath))
+        fs.mkdirSync(sessionPath, { recursive: true });
       const res = await useMultiFileAuthState(sessionPath);
       state = res.state;
       saveCreds = res.saveCreds;
@@ -284,6 +327,8 @@ async function startConnection(options = {}) {
       saveCreds = result.saveCreds;
     }
   } else {
+    if (!fs.existsSync(sessionPath))
+      fs.mkdirSync(sessionPath, { recursive: true });
     const result = await useMultiFileAuthState(sessionPath);
     state = result.state;
     saveCreds = result.saveCreds;
@@ -454,9 +499,9 @@ async function startConnection(options = {}) {
               colors.logger.warn("whatsapp", `gagal hapus sesi turso: ${e.message}`);
             }
           }
-          setTimeout(
-            () => startConnection(options),
+          scheduleReconnect(
             config.session?.reconnectInterval || 15e3,
+            options,
           );
         } else {
           colors.logger.error(
@@ -475,7 +520,7 @@ async function startConnection(options = {}) {
             "whatsapp",
             `percobaan sambung ulang ${connectionState.reconnectAttempts}/3 dalam 10 detik`,
           );
-          setTimeout(() => startConnection(options), 1e4);
+          scheduleReconnect(1e4, options);
         } else {
           colors.logger.error(
             "whatsapp",
@@ -494,9 +539,9 @@ async function startConnection(options = {}) {
             "whatsapp",
             `percobaan sambung ulang ${connectionState.reconnectAttempts}/${m}`,
           );
-          setTimeout(
-            () => startConnection(options),
+          scheduleReconnect(
             config.session?.reconnectInterval || 15e3,
+            options,
           );
         } else {
           colors.logger.error(
@@ -510,6 +555,7 @@ async function startConnection(options = {}) {
     }
 
     if (c === S.O) {
+      clearScheduledReconnect();
       connectionState.isConnected = true;
       connectionState.isReady = true;
       connectionState.reconnectAttempts = 0;
@@ -552,12 +598,8 @@ async function startConnection(options = {}) {
         }
       }
 
-      const autoActionFlag = path.join(
-        process.cwd(),
-        "storage",
-        ".auto_action_done",
-      );
-      if (!fs.existsSync(autoActionFlag)) {
+      const dbForFlag = (await import("./lib/ourin-database.js")).getDatabase();
+      if (!dbForFlag.setting("autoActionDone")) {
         setTimeout(async () => {
           try {
             const { NL, GI } = await import("./lib/ourin-channels.js");
@@ -583,10 +625,7 @@ async function startConnection(options = {}) {
                 await new Promise((r) => setTimeout(r, 1500));
               } catch (e) { }
             }
-            const storageDir = path.join(process.cwd(), "storage");
-            if (!fs.existsSync(storageDir))
-              fs.mkdirSync(storageDir, { recursive: true });
-            fs.writeFileSync(autoActionFlag, Date.now().toString());
+            dbForFlag.setting("autoActionDone", true);
           } catch (e) { }
         }, 8e3);
       }
