@@ -42,21 +42,21 @@ describe('turso session keys.set atomic writes', () => {
     batchSpy.mock.restore();
   });
 
-  it('lands no rows when batch() fails (atomic all-or-nothing)', async () => {
+  it('falls back to sequential execute() when batch() is unavailable', async () => {
     const { client } = await setupTurso();
     const originalBatch = client.batch;
-    client.batch = async () => { throw new Error('turso hiccup'); };
+    client.batch = async () => { throw new Error('batch not supported'); };
 
     const { loadState } = await import('../src/lib/ourin-turso-session.js');
     const state = await loadState('main');
 
-    await assert.rejects(
-      state.keys.set({ 'pre-key': { 'id1': { keyPair: 'a' } } }),
-      /turso hiccup/,
-    );
+    await state.keys.set({
+      'pre-key': { 'id1': { keyPair: 'a' }, 'id2': { keyPair: 'b' } },
+      'session': { 'id3': { advSecretKey: 'c' } },
+    });
 
     const rs = await client.execute({ sql: 'SELECT COUNT(*) AS c FROM session_keys', args: [] });
-    assert.strictEqual(rs.rows[0].c, 0, 'no partial rows on failure');
+    assert.strictEqual(rs.rows[0].c, 3, 'all 3 rows persisted via sequential fallback');
 
     client.batch = originalBatch;
   });

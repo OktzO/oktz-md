@@ -68,7 +68,14 @@ async function loadState(scope) {
           }
         }
         if (statements.length > 0) {
-          await client.batch(statements, "write");
+          try {
+            await client.batch(statements, "write");
+          } catch (e) {
+            console.warn('[turso-session] batch failed, falling back to sequential:', e.message);
+            for (const stmt of statements) {
+              await client.execute(stmt);
+            }
+          }
         }
       },
       getMany: async (type) => {
