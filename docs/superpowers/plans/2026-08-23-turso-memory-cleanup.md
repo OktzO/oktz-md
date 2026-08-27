@@ -42,8 +42,8 @@ Edit `package.json` dependencies:
 After line 196 (`database: { path: "./database/main" }`), add:
 ```js
 turso: {
-  url: "libsql://whatsapp-oktzo.aws-ap-northeast-1.turso.io",
-  authToken: "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODc0NTAyNzYsImlkIjoiMDFhMDJjNTYtOWMwMS03YzBkLTgxMzctYjg3YmI3OGZjNDI4Iiwia2lkIjoiSXdvVDJfSkNDRU5lNWsyTzdhYkRaMmJJQzBoVFVOd215R0ZKSDdRUk5iMCIsInJpZCI6ImRjYmY0MGQ2LWQ2OTYtNDQ3Ni1iMGZhLWZkMGFlMmNjYTUzZCJ9.IWdMWAFEOV8ZaNGn9bJB2_30r4fICMsBPs3typwtjhNxR7gQ0yqIzEYpD2UVhL0a5WCFn5b39M-ez1nX1F5-Dw",
+  url: process.env.TURSO_URL || "libsql://your-database-name.turso.io",
+  authToken: process.env.TURSO_AUTH_TOKEN || "",
   syncInterval: 5000,
   enabled: true,
 },

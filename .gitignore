@@ -5,3 +5,4 @@ database/
 .worktrees/
 .superpowers/
 tests/OURIN/
+.env

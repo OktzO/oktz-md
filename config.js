@@ -1,6 +1,10 @@
 import { getDatabase } from "./src/lib/ourin-database.js";
 import * as ownerPremiumDb from "./src/lib/ourin-premium-db.js";
 
+// Load .env sekali di sini (Node native, tanpa dotenv).
+// Gagal diam jika file tidak ada — semua nilai fallback ke "".
+try { process.loadEnvFile(); } catch { }
+
 //  utamakan baca object config sampai bawah
 const config = {
   info: {
@@ -203,9 +207,8 @@ const config = {
   // Isi url + authToken punyamu di sini (atau pakai env TURSO_URL / TURSO_AUTH_TOKEN).
   // Ambil di https://console.turso.io → create database → generate token.
   turso: {
-    url: "libsql://whatsapp-oktzo.aws-ap-northeast-1.turso.io",
-    authToken:
-      "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODc2NDc2MzUsImlkIjoiMDFhMDJjNTYtOWMwMS03YzBkLTgxMzctYjg3YmI3OGZjNDI4Iiwia2lkIjoiSXdvVDJfSkNDRU5lNWsyTzdhYkRaMmJJQzBoVFVOd215R0ZKSDdRUk5iMCIsInJpZCI6ImRjYmY0MGQ2LWQ2OTYtNDQ3Ni1iMGZhLWZkMGFlMmNjYTUzZCJ9.g2vP-uH9e2hTBD7EL86FL27vRjPhuQaKkaohpBw4pqXumSwkW8q-0dCALiaaCCfjlAobl9fZg1n_LstXpd5gAg",
+    url: process.env.TURSO_URL || "",
+    authToken: process.env.TURSO_AUTH_TOKEN || "",
     syncInterval: 5000, // write-behind DB (ms)
     enabled: true, // false = fallback ke file JSON + file session lokal
   },
@@ -288,22 +291,15 @@ const config = {
 - Jangan mengaku sebagai AI atau bot.`,
   },
 
-  //  APIkey
+  //  APIkey — semua dari .env (lihat .env.example)
   APIkey: {
-    // kalian bisa daftar di https://api.lolhuman.xyz, lalu ambil apikeynya
-    lolhuman: "APIKey-Milik-Bot-OurinMD(Zann,HyuuSATANN,Keisya,Danzz)",
-    // kalian bisa daftar di https://api.neoxr.eu, lalu ambil apikeynya
-    neoxr: "Milik-Bot-OurinMD",
-    fgsi: "fgsiapi-20c1605c-6d",
-    google: "AIzaSyAS-KiW0SrwiYKwexeBcGPijBVHFg2R_vo",
-    groq: "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", // API Key Groq untuk fitur transkrip (gratis di console.groq.com)
-    betabotz: "Btz-67YfP",
-    // kalian bisa daftar di https://covenant.sbs, dan ambil apikeynya
-    covenant: "cov_live_bb660c9e5f735e46d808b7ae362914cfe35c2936739ee2b2",
-    onlym: "ONLym-783d29",
-    obscura: "obs-byOn9RVGMzvPXZQTsP9W",
-    firefly: "OurinNextGen",
-    cuki: "cuki-x"
+    neoxr: process.env.APIKEY_NEOXR || "",
+    fgsi: process.env.APIKEY_FGSI || "",
+    groq: process.env.GROQ_API_KEY || "",
+    covenant: process.env.APIKEY_COVENANT || "",
+    obscura: process.env.APIKEY_OBSCURA || "",
+    firefly: process.env.APIKEY_FIREFLY || "",
+    cuki: process.env.APIKEY_CUKI || ""
   },
 };
 

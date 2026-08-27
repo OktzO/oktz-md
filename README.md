@@ -153,12 +153,24 @@ npm install
 ```
 
 ### 2. Konfigurasi Environment (`.env`)
-Buat file `.env` jika menggunakan cloud database Turso:
+Copy `.env.example` jadi `.env`, lalu isi:
 ```env
+# Database Turso (remote DB + session)
 TURSO_URL=libsql://your-database-name.turso.io
 TURSO_AUTH_TOKEN=your-auth-token
+
+# API key untuk fitur yang pakai layanan eksternal
+APIKEY_NEOXR=
+APIKEY_FGSI=
+GROQ_API_KEY=
+APIKEY_COVENANT=
+APIKEY_OBSCURA=
+APIKEY_FIREFLY=
+APIKEY_CUKI=
+
 NODE_ENV=production
 ```
+File `.env` tidak di-commit (sudah ada di `.gitignore`).
 
 ### 3. Menjalankan Bot
 
