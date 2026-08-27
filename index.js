@@ -1,6 +1,12 @@
 import path from "path";
 import fs from "fs";
 import config from "./config.js";
+
+const _origInfo = console.info;
+console.info = (...args) => {
+  if (args[0] && typeof args[0] === "string" && args[0].startsWith("Closing session:")) return;
+  return _origInfo(...args);
+};
 import { startConnection } from "./src/connection.js";
 import {
   messageHandler,
