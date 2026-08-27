@@ -21,7 +21,7 @@ import {
   createErrorMessage,
 } from "./lib/ourin-formatter.js";
 import { getUptime } from "./connection.js";
-import { logger, logMessage, c } from "./lib/ourin-logger.js";
+import { logger, logCommand, c } from "./lib/ourin-logger.js";
 import {
   isLid,
   isLidConverted,
@@ -66,6 +66,7 @@ import {
 import { getActiveJadibots } from "./lib/ourin-jadibot-manager.js";
 import { handleCommand as handleCaseCommand } from "../case/ourin.js";
 import { RateLimiterMemory } from "rate-limiter-flexible";
+
 import { games as ourinGames } from "./lib/ourin-games.js";
 import fs from "fs";
 import path from "path";
@@ -286,6 +287,31 @@ setInterval(() => {
     if (now - v > 15000) spamDelayTracker.delete(k);
   }
 }, 30000);
+
+function logCommandExec({ m, sock, db, isJadibot }) {
+  if (!config.features?.logMessage || isJadibot || !m.command) return;
+  let groupName = null;
+  if (m.isGroup) {
+    const groupData = db.getGroup(m.chat);
+    groupName = groupData?.name || "Unknown Group";
+    if (groupName === "Unknown Group" || groupName === "Unknown") {
+      sock
+        .groupMetadata(m.chat)
+        .then((meta) => {
+          if (meta?.subject) db.setGroup(m.chat, { name: meta.subject });
+        })
+        .catch(() => { });
+    }
+  }
+  logCommand({
+    prefix: m.prefix || config.command?.prefix || ".",
+    command: m.command,
+    pushName: m.pushName,
+    sender: m.sender,
+    chatType: m.isNewsletter ? "newsletter" : m.isGroup ? "group" : "private",
+    groupName,
+  });
+}
 
 let _smartTriggerThumb = undefined;
 async function getSmartTriggerThumb() {
@@ -642,57 +668,8 @@ async function messageHandler(msg, sock, options = {}) {
       m.isPremium = isJadibotPremium(jadibotId, m.sender) || m.isOwner;
     }
 
-    if (config.features?.logMessage) {
-      let groupName = "PRIVATE";
-      if (m.isGroup) {
-        const groupData = db.getGroup(m.chat);
-        groupName = groupData?.name || "Unknown Group";
-        if (groupName === "Unknown Group" || groupName === "Unknown") {
-          sock
-            .groupMetadata(m.chat)
-            .then((meta) => {
-              if (meta?.subject) db.setGroup(m.chat, { name: meta.subject });
-            })
-            .catch(() => { });
-        }
-      }
-
-      if (!isJadibot) {
-        const deviceHint =
-          m.key?.id?.length > 22
-            ? "Android"
-            : m.key?.id?.startsWith("3EB0")
-              ? "iPhone"
-              : m.key?.id?.startsWith("BAE5")
-                ? "Web"
-                : null;
-        logMessage({
-          chatType: m.isNewsletter
-            ? "newsletter"
-            : m.isGroup
-              ? "group"
-              : "private",
-          groupName: m.isNewsletter ? "Channel" : groupName,
-          pushName: m.pushName,
-          sender: m.sender,
-          message: m.body,
-          messageType: m.type,
-          device: deviceHint || "Unknown",
-          isForwarded: m.message?.[m.type]?.contextInfo?.isForwarded || false,
-          isNewsletter:
-            m.isNewsletter ||
-            !!m.message?.[m.type]?.contextInfo?.forwardedNewsletterMessageInfo,
-          isOwner: m.isOwner,
-          isPremium: m.isPremium,
-          isPartner: m.isPartner,
-          isAdmin: m.isAdmin,
-          device: deviceHint,
-        });
-      }
-    }
-
     if (checkAfk) {
-      checkAfk(m, sock).catch(() => { });
+      checkAfk(m, sock, db).catch(() => { });
     }
 
     if (m.isGroup && !m.isNewsletter) {
@@ -1461,6 +1438,7 @@ async function messageHandler(msg, sock, options = {}) {
     try {
       const caseResult = await handleCaseCommand(m, sock);
       if (caseResult && caseResult.handled) {
+        logCommandExec({ m, sock, db, isJadibot });
         if (config.dev?.debugLog) {
           logger.success("Case", `Handled: ${m.command}`);
         }
@@ -1798,6 +1776,8 @@ async function messageHandler(msg, sock, options = {}) {
       jadibotId: jadibotId,
       isJadibot: isJadibot,
     };
+
+    logCommandExec({ m, sock, db, isJadibot });
 
     await plugin.handler(m, context);
 

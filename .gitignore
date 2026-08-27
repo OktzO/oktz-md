@@ -4,3 +4,4 @@ storage/
 database/
 .worktrees/
 .superpowers/
+tests/OURIN/

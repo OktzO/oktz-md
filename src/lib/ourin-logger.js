@@ -1,6 +1,5 @@
 import chalk from "chalk";
 import * as timeHelper from "./ourin-time.js";
-import { getCachedJid, isLidConverted } from "./ourin-lid.js";
 
 // Mock gradient-string if any other file imports it from here
 const gradientMock = (text) => text;
@@ -111,72 +110,18 @@ async function playBootSequence(info = {}) {
   console.log(`${makeTag("INFO")} ${cGray(`Mode: ${mode}`)}`);
 }
 
-function getTypeTag(msgType, isNewsletter) {
-  if (isNewsletter) return "Channel";
+function logCommand(info = {}) {
+  const { prefix = ".", command, pushName, chatType, groupName } = info;
+  if (!command) return;
 
-  const map = {
-    imageMessage: "Image",
-    videoMessage: "Video",
-    audioMessage: "Audio",
-    stickerMessage: "Sticker",
-    documentMessage: "Doc",
-    contactMessage: "Contact",
-    locationMessage: "Location",
-    viewOnceMessageV2: "1xView",
-    extendedTextMessage: "Text",
-    conversation: "Text",
-    interactiveResponseMessage: "Button",
-    pollCreationMessage: "Poll",
-    reactionMessage: "Reaction",
-  };
-  return map[msgType] || "Message";
-}
-
-function logMessage(info) {
-  if (typeof info === "string") {
-    const [chatType, sender, message] = arguments;
-    info = {
-      chatType,
-      sender,
-      message,
-      pushName: sender,
-      groupName: chatType === "group" ? "Unknown" : "Private",
-    };
-  }
-
-  const { chatType, groupName, pushName, sender, message, messageType, isNewsletter } = info;
-  if (!message || message.trim() === "" || !sender) return;
-
-  const num = sender.replace("@s.whatsapp.net", "");
-  let msg = message.replace(/\n/g, " ").substring(0, 100) + (message.length > 100 ? "..." : "");
-
-  msg = msg.replace(/@(\d{10,})/g, (match, num) => {
-    const lidJid = num + "@lid";
-    const resolved = getCachedJid(lidJid);
-    if (resolved && !isLidConverted(resolved)) return "@" + resolved.replace(/@.+/g, "");
-    const swJid = num + "@s.whatsapp.net";
-    const resolved2 = getCachedJid(swJid);
-    if (resolved2 && !isLidConverted(resolved2)) return "@" + resolved2.replace(/@.+/g, "");
-    return match;
-  });
-
+  const name = pushName || "Pengguna";
+  const location = chatType === "group"
+    ? (groupName || "Group")
+    : chatType === "newsletter" ? "Channel" : "Private";
   const time = timeHelper.formatTime("HH:mm:ss");
-  const date = timeHelper.formatTime("DD/MM/YYYY");
-  const typeTag = getTypeTag(messageType, isNewsletter || chatType === "newsletter");
 
-  const location = chatType === "group" || chatType === "newsletter" ? (groupName || "Group") : "Private";
-  const senderName = pushName || num;
-
-  console.log("");
-  console.log(`  ${cGray("╭─〔")} ${cWhite("Ini pesan dari")} ${chatType === "private" ? cWhite("Private Chat") : cWhite("grup")} ${cWhite(location)} ${cGray("〕───⬣")}`);
-  console.log(`  ${cGray("│")} ${cWhite("👤 Nama:")} ${cWhite(senderName)}`);
-  console.log(`  ${cGray("│")} ${cWhite("📞 Nomor:")} ${cWhite("+" + num)}`);
-  console.log(`  ${cGray("│")} ${cWhite("📅 Waktu:")} ${cGray(date)} ${cWhite(time)}`);
-  console.log(`  ${cGray("│")} ${cWhite("💬 Tipe:")} ${cGray(`[${typeTag}]`)}`);
-  console.log(`  ${cGray("│")} ${cWhite("💬 " + msg)}`);
-  console.log(`  ${cGray("╰───────⬣")}`);
+  console.log(`${makeTag("CMD")} ${cWhite(prefix + command)} ${cGray("—")} ${cWhite(name)} ${cGray("·")} ${cGray(location)} ${cGray("·")} ${cGray(time)}`);
 }
-
 function logPlugin(name, category) {
   // Simple tree view for plugin
   console.log(`  ${cGray("├─")} ${cWhite(name)} ${cGray(`[${category}]`)}`);
@@ -274,7 +219,7 @@ export {
   typeLine,
   runLoader,
   playBootSequence,
-  logMessage,
+  logCommand,
   logPlugin,
   logConnection,
   logErrorBox,
