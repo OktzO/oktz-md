@@ -101,7 +101,7 @@ async function savett(url) {
 }
 
 const pluginConfig = {
-    name: ['tiktok2', 'tt2', 'ttmp4'],
+    name: ['tiktok2', 'tt2'],
     alias: ['tiktokdl2', 'ttdown2'],
     category: 'download',
     description: 'Download video/slide TikTok tanpa watermark',

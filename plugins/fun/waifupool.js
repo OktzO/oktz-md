@@ -69,7 +69,10 @@ async function handler(m, { sock }) {
 
   pages.set(key, { page: cur, ts: Date.now() });
   trimPages();
-  return m.reply(text, null, buttons.length ? { buttons } : undefined);
+  if (buttons.length) {
+    return sock.sendButton(m.chat, null, text, m, { buttons });
+  }
+  return m.reply(text);
 }
 
 export { pluginConfig as config, handler, pages };

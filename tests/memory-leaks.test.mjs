@@ -111,7 +111,7 @@ describe("waifupool pages cap (plugins/fun/waifupool.js)", () => {
       args: ["rare"],
       reply: async () => ({ key: { id: "x" } }),
     };
-    await mod.handler(m, { sock: {} });
+    await mod.handler(m, { sock: { sendButton: async () => ({ key: { id: "x" } }) } });
 
     assert.ok(
       mod.pages.size < 600,

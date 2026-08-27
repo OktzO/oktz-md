@@ -160,8 +160,19 @@ async function handler(m, { sock }) {
         `- Shares: *${result.stats.share}*\n` +
         `- Downloads: *${result.stats.download}*`;
 
-      await sock.sendButton(m.chat, videoItem.url, caption, m, {
+      const videoRes = await axios.get(videoItem.url, {
+        responseType: "arraybuffer",
+        timeout: 60000,
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+          Referer: "https://www.tiktok.com/",
+        },
+      });
+
+      await sock.sendButton(m.chat, Buffer.from(videoRes.data), caption, m, {
         type: "video",
+        mimetype: "video/mp4",
         buttons: [musicButton],
       });
     } else {

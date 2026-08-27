@@ -40,6 +40,7 @@ import { waifus as toradora } from "./toradora.js";
 import { waifus as monogatari } from "./monogatari.js";
 import { waifus as nikke } from "./nikke.js";
 import { waifus as blueArchive } from "./blue-archive.js";
+import { waifus as matoSeihei } from "./mato-seihei.js";
 
 export const TIER_WEIGHTS = { Common: 55, Rare: 25, Epic: 13, Legendary: 5.5, Mythic: 1.5 };
 export const VALID_PERSONALITIES = [
@@ -52,7 +53,7 @@ const FRANCHISES = [
   fate, genshin, hsr, kaguya, konosuba, chainsaw, spyFamily, aot, violet,
   franxx, steins, kOn, oshi, dateAlive, dxd, nier, cote, frieren, loveLive,
   fairyTail, komi, dressUp, lycoris, bocchi, mushoku, dandadan, toradora,
-  monogatari, nikke, blueArchive,
+  monogatari, nikke, blueArchive, matoSeihei,
 ];
 
 let cache = null;
