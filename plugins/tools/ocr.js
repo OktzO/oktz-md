@@ -1,10 +1,7 @@
-import * as _tesseract from "tesseract.js";
+import { createWorker } from "tesseract.js";
 import te from "../../src/lib/ourin-error.js";
 import { sendToolsPreview } from "../../src/lib/ourin-context.js";
 
-function getTesseract() {
-  return _tesseract;
-}
 const pluginConfig = {
   name: "ocr",
   alias: ["totext", "imagetotext", "readtext"],
@@ -43,11 +40,19 @@ async function handler(m, { sock }) {
       await m.react("❌");
       return m.reply(`❌ *ɢᴀɢᴀʟ*\n\n> Tidak dapat download gambar`);
     }
-    const Tesseract = await getTesseract();
-    const {
-      data: { text },
-    } = await Tesseract.recognize(buffer, "eng", {});
-    const extractedText = text ? text.trim() : "";
+    const worker = await createWorker("eng");
+    let extractedText = "";
+    try {
+      const {
+        data: { text },
+      } = await worker.recognize(buffer);
+      extractedText = text ? text.trim() : "";
+    } finally {
+      // ponytail: terminate() frees the ~80MB WASM + traineddata RSS after each OCR.
+      // Ceiling: worker re-inits per call (extra latency). If OCR gets frequent, cache a
+      // module-level worker and terminate it on an idle timeout instead.
+      await worker.terminate();
+    }
     if (!extractedText || extractedText.length === 0) {
       await m.react("❌");
       return m.reply(

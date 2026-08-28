@@ -1,4 +1,4 @@
-import moment from 'moment-timezone'
+import * as timeHelper from '../../src/lib/ourin-time.js'
 import { getDatabase } from '../../src/lib/ourin-database.js'
 const pluginConfig = {
     name: 'botafk',
@@ -49,7 +49,7 @@ async function handler(m, { sock }) {
             `💤 *ʙᴏᴛ ᴀꜰᴋ ᴀᴋᴛɪꜰ*\n\n` +
             `╭┈┈⬡「 📋 *ɪɴꜰᴏ* 」\n` +
             `┃ 📝 ᴀʟᴀsᴀɴ: \`${reason}\`\n` +
-            `┃ ⏰ sᴇᴊᴀᴋ: \`${moment().tz('Asia/Jakarta').format('HH:mm:ss')}\`\n` +
+            `┃ ⏰ sᴇᴊᴀᴋ: \`${timeHelper.formatNow('HH:mm:ss')}\`\n` +
             `╰┈┈⬡\n\n` +
             `╭┈┈⬡「 🔒 *ᴀᴋsᴇs* 」\n` +
             `┃ ✅ Owner bot\n` +

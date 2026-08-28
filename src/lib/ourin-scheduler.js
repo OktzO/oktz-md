@@ -1,7 +1,7 @@
 import { getDatabase } from "./ourin-database.js";
 import { logger } from "./ourin-logger.js";
 import { CronJob } from "cron";
-import moment from "moment-timezone";
+import { getNumericParts, zonedTimeToEpoch, formatNow } from "./ourin-time.js";
 import { saluranCtx } from "./ourin-context.js";
 import config from "../../config.js";
 
@@ -10,15 +10,18 @@ const activeCronJobs = new Map();
 const TZ = "Asia/Jakarta";
 
 function getMsUntilTime(hour, minute = 0) {
-  const now = moment.tz(TZ);
-  const target = moment
-    .tz(TZ)
-    .hour(hour)
-    .minute(minute)
-    .second(0)
-    .millisecond(0);
-  if (target.isSameOrBefore(now)) target.add(1, "day");
-  return target.diff(now);
+  const nowMs = Date.now();
+  const p = getNumericParts(new Date(nowMs));
+  let target = zonedTimeToEpoch({
+    year: p.year,
+    month: p.month,
+    day: p.day,
+    hour,
+    minute,
+    second: 0,
+  });
+  if (target <= nowMs) target += 86400000;
+  return target - nowMs;
 }
 
 function formatTimeRemaining(ms) {
@@ -452,8 +455,7 @@ async function startGroupScheduleChecker(sock) {
 
       try {
         const db = getDatabase();
-        const now = moment.tz(TZ);
-        const currentTime = now.format("HH:mm");
+        const currentTime = formatNow("HH:mm");
         const groups = db.db?.data?.groups || {};
         if (!groups || typeof groups !== "object") return;
 
@@ -701,7 +703,7 @@ function startAutoBioChecker(sock) {
 
       const template = db.setting("autobio_text") || "Bot aktif | 🕒 {clock} | ⏳ {runtime}";
 
-      const clock = moment().tz(TZ).format("HH:mm");
+      const clock = formatNow("HH:mm");
       const runtime = formatUptime(process.uptime());
       const botname = config.bot?.name || "Bot";
       const version = config.bot?.version || "1.0.0";

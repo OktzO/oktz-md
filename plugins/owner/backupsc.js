@@ -1,4 +1,4 @@
-import moment from "moment-timezone";
+import * as timeHelper from "../../src/lib/ourin-time.js";
 import fs from "fs";
 import path from "path";
 import archiver from "archiver";
@@ -101,7 +101,7 @@ async function handler(m, { sock }) {
   );
   try {
     const projectRoot = process.cwd();
-    const timestamp = moment().tz("Asia/Jakarta").format("YYYY-MM-DD_HH-mm-ss");
+    const timestamp = timeHelper.formatNow("YYYY-MM-DD_HH-mm-ss");
     const botName =
       config.bot?.name?.replace(/[^a-zA-Z0-9]/g, "") || "OurinBot";
     const zipFileName = `${botName}_backup_${timestamp}.zip`;
@@ -198,7 +198,7 @@ async function handler(m, { sock }) {
           `┃ 📝 ɴᴀᴍᴀ: \`${zipFileName}\`\n` +
           `┃ 📊 sɪᴢᴇ: \`${fileSizeMB} MB\`\n` +
           `┃ 📁 ꜰɪʟᴇ: \`${fileCount}\`\n` +
-          `┃ 📅 ᴛᴀɴɢɢᴀʟ: \`${moment().tz("Asia/Jakarta").format("DD/MM/YYYY")}\`\n` +
+          `┃ 📅 ᴛᴀɴɢɢᴀʟ: \`${timeHelper.formatNow("DD/MM/YYYY")}\`\n` +
           `╰┈┈⬡`,
         contextInfo: {
           forwardingScore: 9999,

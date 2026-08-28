@@ -1,4 +1,4 @@
-import moment from 'moment-timezone'
+import * as timeHelper from '../../src/lib/ourin-time.js'
 import config from '../../config.js'
 const pluginConfig = {
     name: 'absen',
@@ -31,8 +31,7 @@ async function handler(m, { sock }) {
         return m.reply(`❌ Kamu sudah absen!`)
     }
     absen.peserta.push(m.sender)
-    const now = moment().tz('Asia/Jakarta')
-    const dateStr = now.format('D MMMM YYYY')
+    const dateStr = timeHelper.formatNow('D MMMM YYYY')
     const list = absen.peserta
         .map((jid, i) => `┃ ${i + 1}. @${jid.split('@')[0]}`)
         .join('\n')

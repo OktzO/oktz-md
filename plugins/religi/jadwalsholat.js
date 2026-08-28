@@ -1,5 +1,5 @@
 import axios from "axios";
-import moment from "moment-timezone";
+import * as timeHelper from "../../src/lib/ourin-time.js";
 import config from "../../config.js";
 import {
   searchKota,
@@ -38,7 +38,7 @@ async function handler(m, { sock }) {
     const times = extractPrayerTimes(jadwalData);
     const lokasi = jadwalData.lokasi || kota.lokasi;
     const daerah = jadwalData.daerah || "";
-    const today = moment.tz("Asia/Jakarta").format("dddd, DD MMMM YYYY");
+    const today = timeHelper.formatNow("dddd, DD MMMM YYYY");
     const saluranId = config.saluran?.id || "120363400911374213@newsletter";
     const saluranName = config.saluran?.name || config.bot?.name || "Ourin-AI";
 

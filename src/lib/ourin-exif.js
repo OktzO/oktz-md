@@ -21,19 +21,6 @@ import Crypto from 'crypto'
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
 import ffmpeg from 'fluent-ffmpeg'
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
-let webpmux;
-
-async function initWebpmux() {
-    if (!webpmux) {
-        try {
-            const mod = await import('node-webpmux');
-            webpmux = mod.default || mod;
-        } catch (e) {
-            console.error('[EXIF] Failed to load node-webpmux:', e.message);
-        }
-    }
-    return webpmux;
-}
 
 function getTempDir() {
     const tmpDir = path.join(process.cwd(), 'tmp');
@@ -166,25 +153,12 @@ function videoToWebpFFmpeg(buffer, options = {}) {
     });
 }
 
+// ponytail: node-webpmux dropped. Pure-Buffer RIFF/EXIF writer below is byte-identical
+// (verified static + animated WebP, same chunk layout & size). Ceiling: it appends/replaces
+// the EXIF chunk only; if a future need requires re-encoding pixels or rewriting other chunks,
+// reintroduce a real muxer (node-webpmux or a Rust/native one).
 async function addExifToWebp(webpBuffer, options = {}) {
-    await initWebpmux();
-    
-    if (!webpmux) {
-        return addExifToWebpFallback(webpBuffer, options);
-    }
-    
-    try {
-        const exif = createExif(options);
-        const img = new webpmux.Image();
-        
-        await img.load(webpBuffer);
-        img.exif = exif;
-        
-        return await img.save(null);
-    } catch (error) {
-        console.error('[EXIF] webpmux error:', error.message);
-        return addExifToWebpFallback(webpBuffer, options);
-    }
+    return addExifToWebpFallback(webpBuffer, options);
 }
 
 async function createStickerFromImage(imageBuffer, options = {}) {
@@ -393,7 +367,7 @@ const PRESETS = {
 };
 
 export {
-    createExif, addExifToWebp, addExifToWebpFallback, replaceExifInWebp, readExifFromWebp, initWebpmux,
+    createExif, addExifToWebp, addExifToWebpFallback, replaceExifInWebp, readExifFromWebp,
     imageToWebpFFmpeg, videoToWebpFFmpeg,
     createStickerFromImage, createStickerFromVideo,
     isValidWebp, isAnimatedWebp, getWebpDimensions,

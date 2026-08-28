@@ -1,6 +1,6 @@
 import { getDatabase } from '../../src/lib/ourin-database.js'
 import config from '../../config.js'
-import moment from 'moment-timezone'
+import * as timeHelper from '../../src/lib/ourin-time.js'
 const pluginConfig = {
     name: 'intro',
     alias: ['perkenalan', 'selamatdatang'],
@@ -31,9 +31,9 @@ Semoga betah yahh, di grup @group
 > Untuk Owner:
 ganti intro bawaan dengan .setintro <text>`
  function parsePlaceholders(text, m, groupMeta) {
-    const now = moment().tz('Asia/Jakarta')
-    const dateStr = now.format('D MMMM YYYY')
-    const timeStr = now.format('HH:mm')
+    const now = new Date()
+    const dateStr = timeHelper.formatPattern(now, 'D MMMM YYYY')
+    const timeStr = timeHelper.formatPattern(now, 'HH:mm')
     
     return text
         .replace(/@user/gi, `@${m.sender.split('@')[0]}`)

@@ -1,4 +1,4 @@
-import moment from "moment-timezone";
+import * as timeHelper from "../../src/lib/ourin-time.js";
 import config from "../../config.js";
 import { getDatabase } from "../../src/lib/ourin-database.js";
 import { createWideDiscordCard } from "../../src/lib/ourin-welcome-card.js";
@@ -19,17 +19,8 @@ function resolvePlaceholders(
   groupOwner,
   prefix,
 ) {
-  const now = moment().tz("Asia/Jakarta");
-  const dayNames = {
-    Sunday: "Minggu",
-    Monday: "Senin",
-    Tuesday: "Selasa",
-    Wednesday: "Rabu",
-    Thursday: "Kamis",
-    Friday: "Jumat",
-    Saturday: "Sabtu",
-  };
-  const dayId = dayNames[now.format("dddd")] || now.format("dddd");
+  const now = new Date();
+  const dayId = timeHelper.formatPattern(now, "dddd");
   return template
     .replace(/{user}/gi, `@${username}`)
     .replace(/{number}/gi, username)
@@ -37,8 +28,8 @@ function resolvePlaceholders(
     .replace(/{desc}/gi, groupDesc || "")
     .replace(/{count}/gi, memberCount?.toString() || "0")
     .replace(/{owner}/gi, groupOwner || "Admin")
-    .replace(/{date}/gi, now.format("DD/MM/YYYY"))
-    .replace(/{time}/gi, now.format("HH:mm"))
+    .replace(/{date}/gi, timeHelper.formatPattern(now, "DD/MM/YYYY"))
+    .replace(/{time}/gi, timeHelper.formatPattern(now, "HH:mm"))
     .replace(/{day}/gi, dayId)
     .replace(/{bot}/gi, config.bot?.name || "Ourin")
     .replace(/{prefix}/gi, prefix);
@@ -106,17 +97,8 @@ Tanoshii jikan o issho ni sugoso ne~`,
   const emoji = emojis[Math.floor(Math.random() * emojis.length)];
   const header = headers[Math.floor(Math.random() * headers.length)];
   const username = participant?.split("@")[0] || "User";
-  const now = moment().tz("Asia/Jakarta");
-  const dayNames = {
-    Sunday: "Minggu",
-    Monday: "Senin",
-    Tuesday: "Selasa",
-    Wednesday: "Rabu",
-    Thursday: "Kamis",
-    Friday: "Jumat",
-    Saturday: "Sabtu",
-  };
-  const dayId = dayNames[now.format("dddd")] || now.format("dddd");
+  const now = new Date();
+  const dayId = timeHelper.formatPattern(now, "dddd");
   if (customMsg) {
     return resolvePlaceholders(
       customMsg,
@@ -134,7 +116,7 @@ Tanoshii jikan o issho ni sugoso ne~`,
   msg += `📌 *INFO GROUP*\n`;
   msg += `> 🏠 *Nama* : ${groupName}\n`;
   msg += `> 👥 *Member* : ${memberCount}\n`;
-  msg += `> 📅 *Tanggal* : ${moment().tz("Asia/Jakarta").format("DD/MM/YYYY")}\n`;
+  msg += `> 📅 *Tanggal* : ${timeHelper.formatPattern(now, "DD/MM/YYYY")}\n`;
 
   if (groupDesc) {
     msg += `\n📝 *Deskripsi*\n> ❝ ${groupDesc.slice(0, 120)}${groupDesc.length > 120 ? "..." : ""} ❞\n`;

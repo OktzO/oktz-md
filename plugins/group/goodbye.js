@@ -5,7 +5,7 @@ import {
   isLidConverted,
   lidToJid,
 } from "../../src/lib/ourin-lid.js";
-import moment from "moment-timezone";
+import * as timeHelper from "../../src/lib/ourin-time.js";
 import config from "../../config.js";
 import { getDatabase } from "../../src/lib/ourin-database.js";
 import { saluranCtx } from "../../src/lib/ourin-context.js";
@@ -25,17 +25,8 @@ function resolvePlaceholders(
   groupOwner,
   prefix,
 ) {
-  const now = moment().tz("Asia/Jakarta");
-  const dayNames = {
-    Sunday: "Minggu",
-    Monday: "Senin",
-    Tuesday: "Selasa",
-    Wednesday: "Rabu",
-    Thursday: "Kamis",
-    Friday: "Jumat",
-    Saturday: "Sabtu",
-  };
-  const dayId = dayNames[now.format("dddd")] || now.format("dddd");
+  const now = new Date();
+  const dayId = timeHelper.formatPattern(now, "dddd");
   return template
     .replace(/{user}/gi, `@${username}`)
     .replace(/{number}/gi, username)
@@ -43,8 +34,8 @@ function resolvePlaceholders(
     .replace(/{desc}/gi, groupDesc || "")
     .replace(/{count}/gi, memberCount?.toString() || "0")
     .replace(/{owner}/gi, groupOwner || "Admin")
-    .replace(/{date}/gi, now.format("DD/MM/YYYY"))
-    .replace(/{time}/gi, now.format("HH:mm"))
+    .replace(/{date}/gi, timeHelper.formatPattern(now, "DD/MM/YYYY"))
+    .replace(/{time}/gi, timeHelper.formatPattern(now, "HH:mm"))
     .replace(/{day}/gi, dayId)
     .replace(/{bot}/gi, config.bot?.name || "Ourin")
     .replace(/{prefix}/gi, prefix);
@@ -112,17 +103,8 @@ Doakan yang terbaik untuknya ya.`,
   const emoji = emojis[Math.floor(Math.random() * emojis.length)];
   const header = headers[Math.floor(Math.random() * headers.length)];
   const username = participant?.split("@")[0] || "User";
-  const now = moment().tz("Asia/Jakarta");
-  const dayNames = {
-    Sunday: "Minggu",
-    Monday: "Senin",
-    Tuesday: "Selasa",
-    Wednesday: "Rabu",
-    Thursday: "Kamis",
-    Friday: "Jumat",
-    Saturday: "Sabtu",
-  };
-  const dayId = dayNames[now.format("dddd")] || now.format("dddd");
+  const now = new Date();
+  const dayId = timeHelper.formatPattern(now, "dddd");
   if (customMsg) {
     return resolvePlaceholders(
       customMsg,
@@ -140,7 +122,7 @@ Doakan yang terbaik untuknya ya.`,
   msg += `📌 *INFO GROUP*\n`;
   msg += `> 🏠 *Nama* : ${groupName}\n`;
   msg += `> 👥 *Sisa Member* : ${memberCount}\n`;
-  msg += `> 📅 *Tanggal* : ${now.format("DD/MM/YYYY")}\n\n`;
+  msg += `> 📅 *Tanggal* : ${timeHelper.formatPattern(now, "DD/MM/YYYY")}\n\n`;
   msg += `💌 *Pesan*\n> 「 ${quote} 」\n\n🌸 _Sampai jumpa lagi, tomodachi._ 🤍`;
 
   return msg;

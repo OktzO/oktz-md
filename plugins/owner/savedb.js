@@ -1,4 +1,4 @@
-import moment from 'moment-timezone'
+import * as timeHelper from '../../src/lib/ourin-time.js'
 import fs from 'fs'
 import path from 'path'
 import config from '../../config.js'
@@ -29,8 +29,8 @@ async function handler(m, { sock }) {
     try {
         const stats = fs.statSync(dbPath)
         const data = fs.readFileSync(dbPath)
-        const now = moment().tz('Asia/Jakarta')
-        const timestamp = now.format('YYYY-MM-DD_HH-mm-ss')
+        const now = new Date()
+        const timestamp = timeHelper.formatPattern(now, 'YYYY-MM-DD_HH-mm-ss')
         const fileName = `db_backup_${timestamp}.json`
         await sock.sendMessage(m.chat, {
             document: data,
@@ -40,8 +40,8 @@ async function handler(m, { sock }) {
                 `╭┈┈⬡「 📋 *ɪɴғᴏ* 」\n` +
                 `┃ 📁 File: \`db.json\`\n` +
                 `┃ 📊 Size: \`${(stats.size / 1024).toFixed(2)} KB\`\n` +
-                `┃ 📅 Date: \`${now.format('DD/MM/YYYY')}\`\n` +
-                `┃ ⏰ Time: \`${now.format('HH:mm:ss')}\`\n` +
+                `┃ 📅 Date: \`${timeHelper.formatPattern(now, 'DD/MM/YYYY')}\`\n` +
+                `┃ ⏰ Time: \`${timeHelper.formatPattern(now, 'HH:mm:ss')}\`\n` +
                 `╰┈┈┈┈┈┈┈┈⬡`
         }, { quoted: m })
     } catch (error) {

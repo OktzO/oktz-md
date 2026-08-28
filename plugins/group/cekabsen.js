@@ -1,4 +1,4 @@
-import moment from "moment-timezone";
+import * as timeHelper from "../../src/lib/ourin-time.js";
 import config from "../../config.js";
 const pluginConfig = {
   name: "cekabsen",
@@ -27,10 +27,8 @@ async function handler(m, { sock }) {
     );
   }
   const absen = global.absensi[chatId];
-  const now = moment().tz("Asia/Jakarta");
-  const dateStr = now.format("D MMMM YYYY");
-  const createdDate = moment(absen.createdAt).tz("Asia/Jakarta");
-  const timeStr = createdDate.format("HH:mm");
+  const dateStr = timeHelper.formatNow("D MMMM YYYY");
+  const timeStr = timeHelper.fromTimestamp(absen.createdAt, "HH:mm");
   let list = "┃ _Belum ada yang absen_";
   if (absen.peserta.length > 0) {
     list = absen.peserta

@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio'
-import CryptoJS from 'crypto-js'
+import { createHash } from 'crypto'
 import axios from 'axios'
 const HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -17,7 +17,7 @@ function generateTS() {
 }
 
 function generateTT(ts) {
-    return CryptoJS.MD5(ts + 'X-Fc-Pp-Ty-eZ').toString()
+    return createHash('md5').update(ts + 'X-Fc-Pp-Ty-eZ').digest('hex')
 }
 
 async function reelsvideo(url) {
