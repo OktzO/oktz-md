@@ -67,51 +67,113 @@ async function handleYoutube(url) {
 }
 
 async function handleTiktok(url) {
-  const domain = "https://www.tikwm.com/api/";
-  const res = (
-    await axios.post(
-      domain,
-      {},
-      {
-        headers: {
-          Accept: "application/json, text/javascript, */*; q=0.01",
-          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-          Origin: "https://www.tikwm.com",
-          Referer: "https://www.tikwm.com/",
-          "User-Agent":
-            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36",
-          "X-Requested-With": "XMLHttpRequest",
-        },
-        params: { url, count: 12, cursor: 0, web: 1, hd: 1 },
-      },
-    )
-  ).data.data;
-
-  const media = [];
-  if (res?.duration === 0) {
-    (res.images || []).forEach((v) => media.push({ type: "image", url: v }));
-  } else {
-    if (res?.hdplay)
-      media.push({
-        type: "video",
-        url: "https://www.tikwm.com" + res.hdplay,
-        quality: "HD",
-      });
-    if (res?.play)
-      media.push({
-        type: "video",
-        url: "https://www.tikwm.com" + res.play,
-        quality: "NoWM",
-      });
-  }
-
-  return {
-    platform: "tiktok",
-    title: res?.title || "TikTok",
-    thumbnail: res?.cover ? "https://www.tikwm.com" + res.cover : null,
-    author: res?.author?.nickname || null,
-    media,
+  const tryTikWM = async (u) => {
+    const domain = "https://www.tikwm.com/api/";
+    const raw = (
+      await axios.post(
+        domain,
+        {},
+        {
+          headers: {
+            Accept: "application/json, text/javascript, */*; q=0.01",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            Origin: "https://www.tikwm.com",
+            Referer: "https://www.tikwm.com/",
+            "User-Agent":
+              "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36",
+            "X-Requested-With": "XMLHttpRequest",
+          },
+          params: { url: u, count: 12, cursor: 0, web: 1, hd: 1 },
+          timeout: 15000,
+        }
+      )
+    ).data;
+    if (raw?.code !== undefined && raw.code !== 0) throw new Error(raw.msg || "TikWM error");
+    const res = raw?.data || raw;
+    if (!res) throw new Error("TikWM no data");
+    const media = [];
+    if (res?.duration === 0) {
+      (res.images || []).forEach((v) => media.push({ type: "image", url: String(v) }));
+    } else {
+      if (res?.hdplay)
+        media.push({
+          type: "video",
+          url: "https://www.tikwm.com" + res.hdplay,
+          quality: "HD",
+        });
+      if (res?.play)
+        media.push({
+          type: "video",
+          url: "https://www.tikwm.com" + res.play,
+          quality: "NoWM",
+        });
+    }
+    if (media.length === 0) throw new Error("TikWM no media");
+    return {
+      platform: "tiktok",
+      title: res?.title || "TikTok",
+      thumbnail: res?.cover ? "https://www.tikwm.com" + res.cover : null,
+      author: res?.author?.nickname || null,
+      media,
+    };
   };
+
+  const trySaveTT = async (u) => {
+    const headers = {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      Origin: "https://savett.cc",
+      Referer: "https://savett.cc/en1/download",
+      "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36",
+    };
+    const tokenRes = await axios.get("https://savett.cc/en1/download", { timeout: 15000, headers: { "User-Agent": headers["User-Agent"] } });
+    const csrf = tokenRes.data.match(/name="csrf_token" value="([^"]+)"/)?.[1];
+    const cookie = (tokenRes.headers["set-cookie"] || []).map((v) => v.split(";")[0]).join("; ");
+    if (!csrf || !cookie) throw new Error("SaveTT token failed");
+    const htmlRes = await axios.post(
+      "https://savett.cc/en1/download",
+      `csrf_token=${encodeURIComponent(csrf)}&url=${encodeURIComponent(u)}`,
+      { headers: { ...headers, Cookie: cookie }, timeout: 15000 }
+    );
+    const $ = cheerio.load(htmlRes.data);
+    const media = [];
+    const slides = $(".carousel-item[data-data]");
+    let title = $("#video-info h3").first().text().trim() || "TikTok";
+    if (slides.length) {
+      slides.each((_, el) => {
+        try {
+          const json = JSON.parse($(el).attr("data-data").replace(/&quot;/g, '"'));
+          if (Array.isArray(json.URL)) json.URL.forEach((v) => media.push({ type: "image", url: v }));
+        } catch {}
+      });
+    } else {
+      $("#formatselect option").each((_, el) => {
+        const raw = $(el).attr("value");
+        const label = $(el).text().toLowerCase();
+        if (!raw) return;
+        try {
+          const json = JSON.parse(raw.replace(/&quot;/g, '"'));
+          if (!json.URL) return;
+          if (label.includes("mp4") && !label.includes("watermark")) json.URL.forEach((v) => media.push({ type: "video", url: v, quality: "NoWM" }));
+          else if (label.includes("mp3")) json.URL.forEach((v) => media.push({ type: "audio", url: v, quality: "mp3" }));
+        } catch {}
+      });
+    }
+    if (media.length === 0) throw new Error("SaveTT no media");
+    return { platform: "tiktok", title, thumbnail: null, author: title, media };
+  };
+
+  try {
+    return await tryTikWM(url);
+  } catch (e) {
+    console.warn("[aio] tikwm failed:", e.message);
+    try {
+      return await trySaveTT(url);
+    } catch (e2) {
+      console.warn("[aio] savett failed:", e2.message);
+      throw e;
+    }
+  }
 }
 
 async function handleFacebook(url) {
