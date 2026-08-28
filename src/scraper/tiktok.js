@@ -100,7 +100,11 @@ async function ttdownFromSaveTT(url) {
     slides.each((_, el) => {
       try {
         const json = JSON.parse($(el).attr("data-data").replace(/&quot;/g, '"'));
-        if (Array.isArray(json.URL)) json.URL.forEach((u) => downloads.push({ type: "photo", label: "Photo", url: u }));
+        if (Array.isArray(json.URL) && json.URL.length) {
+          // URL array = beberapa resolusi, ambil yang terbaik (paling panjang)
+          const best = [...json.URL].sort((a, b) => String(b).length - String(a).length)[0];
+          downloads.push({ type: "photo", label: "Photo", url: String(best) });
+        }
       } catch {}
     });
     $("#formatselect option").each((_, el) => {
@@ -258,24 +262,42 @@ async function ttdownFromMusicalDown(url) {
 async function ttdown(url) {
   if (!url.includes("tiktok.com")) throw new Error("Invalid url.");
   const resolved = await resolveTikTokUrl(url);
+  const urlVariants = [url, resolved].filter((u, i, arr) => u && arr.indexOf(u) === i);
   const errors = [];
-  const providers = [
-    { name: "tikwm", fn: () => ttdownFromTikWM(resolved) },
-    { name: "savett", fn: () => ttdownFromSaveTT(resolved) },
+
+  try {
+    return await ttdownFromTikWM(resolved);
+  } catch (e) {
+    const msg = e?.response?.status ? `TikWM ${e.response.status}` : e.message;
+    errors.push(`tikwm: ${msg}`);
+    console.warn(`[ttdown] tikwm failed:`, msg);
+  }
+
+  for (const variant of urlVariants) {
+    try {
+      const res = await ttdownFromSaveTT(variant);
+      if (res?.downloads?.length) return res;
+    } catch (e) {
+      const msg = e?.response?.status ? `saveTT ${e.response.status}` : e.message;
+      errors.push(`savett(${variant === url ? "raw" : "resolved"}): ${msg}`);
+      console.warn(`[ttdown] savett failed:`, msg);
+    }
+  }
+
+  const fallbackProviders = [
     { name: "yuulabs", fn: () => ttdownFromYuuLabs(resolved) },
     { name: "musicaldown", fn: () => ttdownFromMusicalDown(resolved) },
   ];
-  for (const p of providers) {
+  for (const p of fallbackProviders) {
     try {
       const res = await p.fn();
       if (res?.downloads?.length) return res;
-      throw new Error("empty downloads");
     } catch (e) {
       const msg = e?.response?.status ? `${p.name} ${e.response.status}` : e.message;
       errors.push(`${p.name}: ${msg}`);
-      console.warn(`[ttdown] ${p.name} failed:`, msg);
     }
   }
+
   throw new Error(errors.join(" | ") || "Semua provider TikTok gagal");
 }
 

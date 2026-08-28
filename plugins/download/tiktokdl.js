@@ -174,6 +174,15 @@ async function fetchSaveTT(url, csrf, cookie) {
   return res.data;
 }
 
+function parseSaveTTJson(raw) {
+  const cleaned = String(raw || "").replace(/&quot;/g, '"');
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    return null;
+  }
+}
+
 function parseSaveTTResponse(html) {
   const $ = cheerio.load(html);
   const stats = [];
@@ -193,40 +202,63 @@ function parseSaveTTResponse(html) {
     mp3: [],
     slides: [],
   };
+
   const slides = $(".carousel-item[data-data]");
   if (slides.length) {
     data.type = "photo";
     slides.each((_, el) => {
-      try {
-        const json = JSON.parse($(el).attr("data-data").replace(/&quot;/g, '"'));
-        if (Array.isArray(json.URL)) {
-          json.URL.forEach((u) => {
-            data.slides.push({ index: data.slides.length + 1, url: u });
-          });
-        }
-      } catch {}
+      const json = parseSaveTTJson($(el).attr("data-data"));
+      if (json && Array.isArray(json.URL) && json.URL.length) {
+        // URL array = beberapa resolusi, ambil yang terbaik (paling panjang/hd)
+        const best = [...json.URL].sort((a, b) => String(b).length - String(a).length)[0];
+        data.slides.push({ index: data.slides.length + 1, url: String(best) });
+      }
     });
-    return data;
   }
-  data.type = "video";
+
+  // Format select (MP3/watermark/nowatermark/photo) — selalu parse agar mp3 ikut ketangkep
   $("#formatselect option").each((_, el) => {
     const label = $(el).text().toLowerCase();
     const raw = $(el).attr("value");
     if (!raw) return;
-    try {
-      const json = JSON.parse(raw.replace(/&quot;/g, '"'));
-      if (!json.URL) return;
-      if (label.includes("mp4") && !label.includes("watermark")) {
-        data.downloads.nowm.push(...json.URL);
-      }
-      if (label.includes("watermark")) {
-        data.downloads.wm.push(...json.URL);
-      }
-      if (label.includes("mp3")) {
-        data.mp3.push(...json.URL);
-      }
-    } catch {}
+    const json = parseSaveTTJson(raw);
+    if (!json || !json.URL) return;
+    const urls = Array.isArray(json.URL) ? json.URL : [json.URL];
+    if (data.type === "photo") {
+      if (label.includes("mp3")) data.mp3.push(...urls);
+      return;
+    }
+    if (label.includes("mp4") && !label.includes("watermark")) {
+      data.downloads.nowm.push(...urls);
+    } else if (label.includes("watermark")) {
+      data.downloads.wm.push(...urls);
+    } else if (label.includes("mp3")) {
+      data.mp3.push(...urls);
+    }
   });
+
+  // Deteksi photo walau carousel kosong (thumbnail/profile = photo post)
+  if (!data.type) {
+    const labels = $("#formatselect option").map((_, el) => $(el).text().toLowerCase()).get();
+    if (labels.some((l) => l.includes("thumbnail") || l.includes("profile"))) {
+      data.type = "photo";
+      // Ambil URL foto dari thumbnail option sebagai fallback
+      $("#formatselect option").each((_, el) => {
+        const json = parseSaveTTJson($(el).attr("value"));
+        if (json && Array.isArray(json.URL)) {
+          json.URL.forEach((u) => {
+            if (/\.(jpe?g|png|webp)/i.test(String(u)) && !data.slides.some((s) => s.url === u)) {
+              data.slides.push({ index: data.slides.length + 1, url: String(u) });
+            }
+          });
+        }
+      });
+    }
+  }
+  if (!data.type && (data.downloads.nowm.length || data.downloads.wm.length)) {
+    data.type = "video";
+  }
+
   return data;
 }
 
@@ -317,8 +349,12 @@ async function tiktokDlViaSaveTT(url) {
 
 async function tiktokDl(url) {
   const resolved = await resolveTikTokUrl(url);
+  // savett lebih toleran ke raw shortlink (sama seperti tt2 yang kerja),
+  // resolved jadi fallback kalau raw gagal.
+  const urlVariants = [url, resolved].filter((u, i, arr) => u && arr.indexOf(u) === i);
   const errors = [];
-  // try tikwm first
+
+  // tikwm: hanya terima full URL (shortlink harus di-resolve)
   try {
     return await tiktokDlViaTikWM(resolved);
   } catch (e) {
@@ -326,14 +362,19 @@ async function tiktokDl(url) {
     errors.push(`tikwm: ${msg}`);
     console.warn("[tiktokDl] tikwm failed:", msg);
   }
-  // fallback to savett
-  try {
-    return await tiktokDlViaSaveTT(resolved);
-  } catch (e) {
-    const msg = e?.response?.status ? `saveTT ${e.response.status}` : e.message;
-    errors.push(`savett: ${msg}`);
-    console.warn("[tiktokDl] savett failed:", msg);
+
+  // savett: coba raw dulu, lalu resolved
+  for (const variant of urlVariants) {
+    try {
+      const result = await tiktokDlViaSaveTT(variant);
+      if (result) return result;
+    } catch (e) {
+      const msg = e?.response?.status ? `saveTT ${e.response.status}` : e.message;
+      errors.push(`savett(${variant === url ? "raw" : "resolved"}): ${msg}`);
+      console.warn("[tiktokDl] savett failed:", msg);
+    }
   }
+
   throw new Error(errors.join(" | ") || "Semua provider TikTok gagal");
 }
 

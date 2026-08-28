@@ -143,8 +143,21 @@ async function handleTiktok(url) {
       slides.each((_, el) => {
         try {
           const json = JSON.parse($(el).attr("data-data").replace(/&quot;/g, '"'));
-          if (Array.isArray(json.URL)) json.URL.forEach((v) => media.push({ type: "image", url: v }));
+          if (Array.isArray(json.URL) && json.URL.length) {
+            // URL array = beberapa resolusi, ambil yang terbaik
+            const best = [...json.URL].sort((a, b) => String(b).length - String(a).length)[0];
+            media.push({ type: "image", url: String(best) });
+          }
         } catch {}
+      });
+      // MP3 dari formatselect untuk photo post
+      $("#formatselect option").each((_, el) => {
+        if ($(el).text().toLowerCase().includes("mp3")) {
+          try {
+            const json = JSON.parse($(el).attr("value").replace(/&quot;/g, '"'));
+            if (json.URL) media.push({ type: "audio", url: json.URL[0] || json.URL, quality: "mp3" });
+          } catch {}
+        }
       });
     } else {
       $("#formatselect option").each((_, el) => {
