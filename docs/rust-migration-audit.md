@@ -271,15 +271,14 @@ boot smoke bersih.
 ### PR-2 — OCR native via `ourin-native` — DONE (`779fbd0`)
 
 - Crate: `native/` — napi v3 + `tesseract-rs` 0.4.0 (feature `embed-tessdata`,
-  bahasa `eng` saja) + `image` 0.25. Prebuilt dikomit di **GitHub Release**
-  (bukan di-commit ke repo) untuk `x86_64-unknown-linux-gnu` (10.7MB; NEEDED cuma
-  libstdc++/libm/libgcc_s/libc — tesseract & leptonica static) dan
-  `x86_64-unknown-linux-musl` (10.9MB; NEEDED cuma `libc.so` musl).
-  `native/fetch-prebuilt.mjs` (dipakuin di `postinstall`) fetch dari Release
-  `v0.1.0` jika binary belum ada; non-fatal kalau gagal → fallback JS.
-- Ukuran turun dari 22MB→10.7MB per binary: tessdata_fast 4.1.0 di-seed ke
-  cache sebelum build (default build.rs `tesseract-rs` download `tessdata_best`
-  yang 15MB; panel kurang dari itu akurasinya sama dam pengujian).
+  bahasa `eng` saja) + `image` 0.25. Prebuilt **di-commit ke repo**
+  (`native/platforms/`, ukuran kecil) untuk `x86_64-unknown-linux-gnu` (10.7MB;
+  NEEDED cuma libstdc++/libm/libgcc_s/libc) dan `x86_64-unknown-linux-musl`
+  (10.9MB; NEEDED cuma `libc.so` musl). GitHub Release ditolak: repo private,
+  panel tanpa credential GitHub gagal download assets.
+- Ukuran turun dari 22MB→10.7MB per binary: `tessdata_fast` 4.1.0 (4.1MB,
+  versi yang sama dengan default tesseract.js) di-seed ke `~/.tesseract-rs/tessdata/`
+  sebelum build — bikin `build.rs` embed yang kecil daripada `tessdata_best` 15MB.
 - Loader: `src/lib/ourin-native-loader.js` — coba gnu → musl → fallback
   tesseract.js; log sekali; `ocrInit` gagal → fallback permanen.
 - Plugin: `plugins/tools/ocr.js` beralih ke loader; output user-facing identik.
@@ -315,3 +314,77 @@ punya alasan.
   Checker error: now is not defined` — sisa refactor moment-timezone di
   `src/lib/ourin-scheduler.js:544` (`now.second()`/`now.minute()`), diganti
   `formatNow("HH:mm:ss").split(":")`. Tests 99 pass.
+
+## Audit ukuran repo pasca-migrasi `ourin-native` (2026-08-29, pre-implementasi)
+
+### Status quo di HEAD (`49c3ffa`)
+
+Konteks prompt asumsikan state 26MB→69MB dengan 2 binary 21–22MB. State itu
+sudah berubah oleh commit `49c3ffa` (rebuilding dengan `tessdata_fast` 4.1MB
+mengganti `tessdata_best` 15MB). Angka riil sekarang:
+
+| Aspek | Ukuran |
+|---|---|
+| working tree (excl `.git`, excl `node_modules`) | 74MB |
+| `.git` total (loose + packed) | 101MB (loose ~46MB + `size-pack` ~52MB) |
+| `native/platforms/*` (2 binary, tracked) | **21.5MB** (gnu 10.7MB + musl 10.9MB) |
+| `assets/` (media) | 17MB |
+| sisanya (src, data, doc) | ~36MB |
+
+Fakta sejarah git yang relevan:
+
+- `.git/` 101MB walaupun working tree cuma 74MB karena **history masih punya
+  binary 22MB versi lama** (commit `779fbd0`, ter-revert di `dfd90f0`,
+  re-add versi lebih kecil di `49c3ffa`) — objek blob lama gak hilang sampai
+  gc/purge.
+- Coba GitHub Release sudah dilakukan (`v0.1.0` by token PAT): upload berhasil,
+  panel tanpa auth tetap gagal because repo private → `fetch-prebuilt.mjs`
+  dihapus, postinstall dibersihkan, binary re-commit. (Lihat commit log.)
+
+### Kandidat A — Drop target musl
+
+| Aspek | Nilai |
+|---|---|
+| Win total sekarang | 10.9MB saja (bukan 22MB) — tapi hanya dari working tree |
+| `.git` shrink | 0 — blob lama tetap ada, butuh purge untuk ngaruh |
+| Bukti panel | HEAD dan `1190212`: node load OK, no fallback, entry via gnu binary |
+| Risiko pindah ke Alpine/distro musl di masa depan | Hipotetis — kita belum pernah butuh; kalau perlu tinggal rebuild dari branch build |
+| Verdict | **No-go sekarang** — win 10.9MB terlalu kecil dibanding fragilitas kalau nginx/host ganti image ke Alpine random tanpa warning. Biarkan sebagai candidate khusus bersama purge history |
+
+### Kandidat B — GitHub Release + fetch-prebuilt
+
+**Sudah dicoba (dfd90f0) lalu dikembalikan (49c3ffa).** Ini bukan hipotesis
+lagi, ada angka:
+
+| Aspek | Nilai |
+|---|---|
+| Perlu | egress `github.com` dari panel + asset publik |
+| Tes nyata | Release publik `v0.1.0` dibuat, assets upload sukses — fetch dari anonim return **HTTP 404** |
+| Sebab | repo private; GitHub Release asset download tetap butuh auth buat repo private (bukan hanya API endpoint) |
+| Workaround | taruh binary di npm registry/private CDN → panel butuh credential yang kita gak sediakan; taruh di repo public terpisah → tidak wanted |
+| Verdict | **Nope** — gak fixable dalam constraint "panel tanpa credential". Di-tried-dan-direct dihapus. |
+
+### Kandidat C — Purge history (`git filter-repo` terhadap blob binary)
+
+- `.git` baseline: 101MB. Kalau kedua binary (lama + baru) dipurge sepenuhnya,
+  `size-pack` teoritis turun ~53MB→~31MB (pengurangan ~21MB), total `.git` ke
+  ~75–80MB. Win **paling besar dari tiga kandidat**, but capitalization:
+  - rewrite history → semua clone existing harus re-clone (panel production
+    tetap bisa ditangani via fresh clone path, risiko user sendiri).
+  - tidak boleh dilakukan sampai working tree dari branch yang di-deploy saat
+    ini sama, snapshot off-file ada, dan approval manual khusus diberikan.
+
+- **Verdict: audit-only**. Dicatat opsi + win estimasi; **ditolak diimplementasi
+  tanpa aproval manual terpisah** (sama permintaan user).
+
+### Rekomendasi
+
+| Urutan | Aksi | Verdict | Alasan satu baris |
+|---|---|---|---|
+| PR-4 | Nothing (dokumentasi ini aja) | **Go** | Binary sudah 22MB→10.7MB per target (bingung drop 50% vs konteks 69MB yang dicatat); skema commit-in-repo berfungsi di panel |
+| PR-5 | Purge history blob binary lama | **Manual-only** | Perlu approval eksplisit + backup clone; aku *akan* membawanya ke review saat kamu sudah purging trail kau sendiri |
+| PR-6 | Drop musl | **No-go** | Terlalu kecil win, fragile kalau image berganti |
+| PR-7 | GitHub Release | **No-go** | Sudah ditest, repo private → 404 |
+
+**Keputusan final yang dikirimkan ke kamu sebelum eksekusi:** kerjakan nothing di
+phase ini kecuali add audit doc ini. Kandidat C siapapun jalan, tunggu izin terpisah.
