@@ -353,16 +353,17 @@ Fakta sejarah git yang relevan:
 
 ### Kandidat B — GitHub Release + fetch-prebuilt
 
-**Sudah dicoba (dfd90f0) lalu dikembalikan (49c3ffa).** Ini bukan hipotesis
-lagi, ada angka:
+**Sudah dicoba (dfd90f0) lalu dikembalikan (49c3ffa). Lalu di-promote GO
+setelah user mengubah repo dari private ke publik.** Riwayat:
 
 | Aspek | Nilai |
 |---|---|
-| Perlu | egress `github.com` dari panel + asset publik |
-| Tes nyata | Release publik `v0.1.0` dibuat, assets upload sukses — fetch dari anonim return **HTTP 404** |
-| Sebab | repo private; GitHub Release asset download tetap butuh auth buat repo private (bukan hanya API endpoint) |
-| Workaround | taruh binary di npm registry/private CDN → panel butuh credential yang kita gak sediakan; taruh di repo public terpisah → tidak wanted |
-| Verdict | **Nope** — gak fixable dalam constraint "panel tanpa credential". Di-tried-dan-direct dihapus. |
+| Tes pertama | `dfd90f0` mencoba release `v0.1.0` saat repo private → fetch anonim return HTTP 404 |
+| Setelah repo public (2026-08-29 ~13:20) | Upload ulang berhasil + fetch dari container anonymous bekerja (HTTP 302→200) |
+| Implementasi final | `native/fetch-prebuilt.mjs` (postinstall dicek): ambil hanya platform yang berlaku (gnu normal, musl cuma kalau `/etc/alpine-release` ada), sha256-verified, 3 retry, non-fatal, no-credentials |
+| State repo (git working tree) | Binary dihapus dari tracking — `.gitignore native/platforms/`; working tree saving **21.5MB**; binary release tetap ada di GitHub Release `v0.1.0` |
+
+**Verdict: Go — applied. Bukan rollback.**
 
 ### Kandidat C — Purge history (`git filter-repo` terhadap blob binary)
 
@@ -384,7 +385,7 @@ lagi, ada angka:
 | PR-4 | Nothing (dokumentasi ini aja) | **Go** | Binary sudah 22MB→10.7MB per target (bingung drop 50% vs konteks 69MB yang dicatat); skema commit-in-repo berfungsi di panel |
 | PR-5 | Purge history blob binary lama | **Manual-only** | Perlu approval eksplisit + backup clone; aku *akan* membawanya ke review saat kamu sudah purging trail kau sendiri |
 | PR-6 | Drop musl | **No-go** | Terlalu kecil win, fragile kalau image berganti |
-| PR-7 | GitHub Release | **No-go** | Sudah ditest, repo private → 404 |
+| PR-7 | GitHub Release | **Go — applied** (update setelah audit direvisi) | Repo diubah ke public → fixable; sha256 + retry + non-fatal; binari offloaded ke `v0.1.0` |
 
 **Keputusan final yang dikirimkan ke kamu sebelum eksekusi:** kerjakan nothing di
 phase ini kecuali add audit doc ini. Kandidat C siapapun jalan, tunggu izin terpisah.

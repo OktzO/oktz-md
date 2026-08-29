@@ -10,3 +10,4 @@ tests/OURIN/
 eng.traineddata
 result
 .native/
+native/platforms/
