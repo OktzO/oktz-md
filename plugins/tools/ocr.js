@@ -1,4 +1,4 @@
-import { createWorker } from "tesseract.js";
+import { ocr } from "../../src/lib/ourin-native-loader.js";
 import te from "../../src/lib/ourin-error.js";
 import { sendToolsPreview } from "../../src/lib/ourin-context.js";
 
@@ -40,19 +40,9 @@ async function handler(m, { sock }) {
       await m.react("❌");
       return m.reply(`❌ *ɢᴀɢᴀʟ*\n\n> Tidak dapat download gambar`);
     }
-    const worker = await createWorker("eng");
     let extractedText = "";
-    try {
-      const {
-        data: { text },
-      } = await worker.recognize(buffer);
-      extractedText = text ? text.trim() : "";
-    } finally {
-      // ponytail: terminate() frees the ~80MB WASM + traineddata RSS after each OCR.
-      // Ceiling: worker re-inits per call (extra latency). If OCR gets frequent, cache a
-      // module-level worker and terminate it on an idle timeout instead.
-      await worker.terminate();
-    }
+    // Native ourin-native if the prebuilt .node loads; tesseract.js fallback otherwise.
+    extractedText = (await ocr(buffer)).trim() || "";
     if (!extractedText || extractedText.length === 0) {
       await m.react("❌");
       return m.reply(

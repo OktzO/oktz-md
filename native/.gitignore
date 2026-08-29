@@ -1,0 +1,4 @@
+# rust
+target/
+# cargo build cache from tesseract-rs (leptonica/tesseract sources)
+.cache/
