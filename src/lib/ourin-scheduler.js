@@ -541,7 +541,9 @@ async function startGroupScheduleChecker(sock) {
           }
         }
 
-        if (now.second() === 0 && now.minute() === 0) notifiedGroups.clear();
+        // Reset dedup set at the top of each hour (minute + second both 0).
+        const parts = formatNow("HH:mm:ss").split(":");
+        if (parts[2] === "00" && parts[1] === "00") notifiedGroups.clear();
       } catch (error) {
         logger.error("GroupSchedule", `Checker error: ${error.message}`);
       }
