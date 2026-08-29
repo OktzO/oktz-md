@@ -271,10 +271,15 @@ boot smoke bersih.
 ### PR-2 — OCR native via `ourin-native` — DONE (`779fbd0`)
 
 - Crate: `native/` — napi v3 + `tesseract-rs` 0.4.0 (feature `embed-tessdata`,
-  bahasa `eng` saja) + `image` 0.25. Prebuilt dikomit di
-  `native/platforms/` untuk `x86_64-unknown-linux-gnu` (22MB; NEEDED cuma
+  bahasa `eng` saja) + `image` 0.25. Prebuilt dikomit di **GitHub Release**
+  (bukan di-commit ke repo) untuk `x86_64-unknown-linux-gnu` (10.7MB; NEEDED cuma
   libstdc++/libm/libgcc_s/libc — tesseract & leptonica static) dan
-  `x86_64-unknown-linux-musl` (22MB; NEEDED cuma `libc.so` musl).
+  `x86_64-unknown-linux-musl` (10.9MB; NEEDED cuma `libc.so` musl).
+  `native/fetch-prebuilt.mjs` (dipakuin di `postinstall`) fetch dari Release
+  `v0.1.0` jika binary belum ada; non-fatal kalau gagal → fallback JS.
+- Ukuran turun dari 22MB→10.7MB per binary: tessdata_fast 4.1.0 di-seed ke
+  cache sebelum build (default build.rs `tesseract-rs` download `tessdata_best`
+  yang 15MB; panel kurang dari itu akurasinya sama dam pengujian).
 - Loader: `src/lib/ourin-native-loader.js` — coba gnu → musl → fallback
   tesseract.js; log sekali; `ocrInit` gagal → fallback permanen.
 - Plugin: `plugins/tools/ocr.js` beralih ke loader; output user-facing identik.
