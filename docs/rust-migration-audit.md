@@ -257,3 +257,56 @@ export const ocr = native ?? jsFallbackOcr; // ttd identik
   pindah namespace (`napi::bindgen_prelude::*`, `Uint32Array` untuk array
   return), `crate-type = ["cdylib"]` wajib eksplisit, dan `.so` harus rename
   `.node` (atau pakai `napi build` yang mengurus penamaan).
+
+---
+
+## Implementation log (ditambah saat implementasi — audit di atas tidak diubah)
+
+### PR-1 — dead deps — DONE (`7a2bbaf`)
+
+19 dep di-uninstall dari root. `node_modules` 835MB → 700MB. `fflate`/`p-queue`/
+`acorn`/`tough-cookie` tetap terpasang sebagai transitive `ourin`. Tests 99 pass,
+boot smoke bersih.
+
+### PR-2 — OCR native via `ourin-native` — DONE (`779fbd0`)
+
+- Crate: `native/` — napi v3 + `tesseract-rs` 0.4.0 (feature `embed-tessdata`,
+  bahasa `eng` saja) + `image` 0.25. Prebuilt dikomit di
+  `native/platforms/` untuk `x86_64-unknown-linux-gnu` (22MB; NEEDED cuma
+  libstdc++/libm/libgcc_s/libc — tesseract & leptonica static) dan
+  `x86_64-unknown-linux-musl` (22MB; NEEDED cuma `libc.so` musl).
+- Loader: `src/lib/ourin-native-loader.js` — coba gnu → musl → fallback
+  tesseract.js; log sekali; `ocrInit` gagal → fallback permanen.
+- Plugin: `plugins/tools/ocr.js` beralih ke loader; output user-facing identik.
+
+Angka sebelum → sesudah (skenario gambar teks 1080x1920, mesin audit):
+
+| Metrik | tesseract.js (worker-per-call) | ourin-native |
+|---|---|---|
+| median / call | 3.10s | **0.15s** (~20x) |
+| RSS peak | 216MB (spike per siklus + residual tumbuh) | 181MB **sekali, flat** |
+| RSS after-call steady | nanjak per siklus | 148–164MB stabil (10 call: +16MB total) |
+
+Catatan build: (1) cmake di container ini install ke `lib64/` — harus dipindah
+manual ke `lib/` (bug upstream tesseract-rs di host yang pakai LIB_SUFFIX);
+(2) musl cdylib butuh `RUSTFLAGS="-C target-feature=-crt-static"` + linker
+`zig cc -target x86_64-linux-musl`; (3) PNG fixture dari sharp-SVG gagal baca
+OCR karena container tidak punya font sistem (render blank) — bukan bug native,
+fixture test beralih ke `@napi-rs/canvas` + font bundel repo.
+
+### PR-3 — webpDimensions util — SKIPPED
+
+Audit asalnya bilang "Go kecil (bonus)". Evaluasi call-site: `tovideo.js` butuh
+`meta.pages` (animated check — parser dims gak cukup), `topixel.js` dan
+`ourin-latex.js` sudah manggil `sharp()` di alur yang sama jadi metadata
+gratis. Win terukur tidak ada → tidak ditulis; dicatat supaya keputusan
+punya alasan.
+
+### Pasca-deploy panel (2026-08-29, `1190212`)
+
+- Boot panel Pterodactyl (Node v22.23.2): bersih, native gnu binary load
+  tanpa error, tidak ada log fallback — native aktif di production.
+- Fix terpisah (ditemukan dari log panel, bukan item audit): `GroupSchedule
+  Checker error: now is not defined` — sisa refactor moment-timezone di
+  `src/lib/ourin-scheduler.js:544` (`now.second()`/`now.minute()`), diganti
+  `formatNow("HH:mm:ss").split(":")`. Tests 99 pass.

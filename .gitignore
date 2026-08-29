@@ -6,3 +6,6 @@ database/
 .superpowers/
 tests/OURIN/
 .env
+.traineddata
+eng.traineddata
+result
