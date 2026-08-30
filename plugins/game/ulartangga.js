@@ -4,8 +4,8 @@ import {
   getRandomMap,
   DICE_STICKERS,
 } from "../../src/lib/ourin-game-ulartangga.js";
+import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import config from "../../config.js";
-import fs from "fs";
 import te from "../../src/lib/ourin-error.js";
 const pluginConfig = {
   name: "ulartangga",
@@ -34,13 +34,7 @@ function uniqueMentions(mentions = []) {
   return [...new Set((mentions || []).filter(Boolean))];
 }
 
-let thumbUT = null;
-try {
-  const p = config.assets?.["ourin-games"];
-  if (p && !p.startsWith("http") && fs.existsSync(p)) {
-    thumbUT = fs.readFileSync(p);
-  }
-} catch (e) { }
+let thumbUT = getAssetBuffer("ourin-games") || null;
 
 function utCtx(mentions) {
   const saluranId = config.saluran?.id || "120363400911374213@newsletter";

@@ -25,8 +25,8 @@ import {
   GACHA_COST_COINS,
   GACHA_PITY_LIMIT,
 } from "../../src/lib/ourin-fisch-data.js";
+import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import config from "../../config.js";
-import fs from "fs";
 
 const FC = 15;
 const rc = (r) => RARITY_EMOJI[r] || "W";
@@ -41,11 +41,7 @@ const encCost = (r) =>
     secret: 5e10,
   })[r] || 50000;
 
-let thumbFish = null;
-try {
-  const p = config.assets?.["ourin-fishit"];
-  if (p && !p.startsWith("http") && fs.existsSync(p)) thumbFish = fs.readFileSync(p);
-} catch (e) {}
+let thumbFish = getAssetBuffer("ourin-fishit") || null;
 
 function ctx(title, body) {
   const sId = config.saluran?.id || "120363400911374213@newsletter";

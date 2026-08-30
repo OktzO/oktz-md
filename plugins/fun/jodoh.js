@@ -1,6 +1,6 @@
 import { getDatabase } from "../../src/lib/ourin-database.js";
+import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import config from "../../config.js";
-import fs from "fs";
 const pluginConfig = {
   name: "jodoh",
   alias: ["match", "shipcouple", "ship"],
@@ -17,11 +17,7 @@ const pluginConfig = {
   isEnabled: true,
 };
 
-let thumbFun = null;
-try {
-  const p = config.assets?.["ourin-games"];
-  if (p && !p.startsWith("http") && fs.existsSync(p)) thumbFun = fs.readFileSync(p);
-} catch (e) {}
+let thumbFun = getAssetBuffer("ourin-games") || null;
 
 const loveQuotes = [
   "Cinta sejati tidak pernah mengenal jarak 💕",

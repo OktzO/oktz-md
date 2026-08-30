@@ -32,8 +32,8 @@ import {
   SMELT_RECIPES,
   CRAFT_RECIPES,
 } from "../../src/lib/ourin-minecraft-data.js";
+import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import config from "../../config.js";
-import fs from "fs";
 
 const MC = 15;
 const rc = (r) => RARITY_EMOJI[r] || "⬜";
@@ -48,11 +48,7 @@ const encCost = (r) =>
     secret: 6e10,
   })[r] || 60000;
 
-let thumbMC = null;
-try {
-  const p = config.assets?.["ourin-minecraft"];
-  if (p && !p.startsWith("http") && fs.existsSync(p)) thumbMC = fs.readFileSync(p);
-} catch (e) {}
+let thumbMC = getAssetBuffer("ourin-minecraft") || null;
 
 function ctx() {
   const sId = config.saluran?.id || "120363400911374213@newsletter";

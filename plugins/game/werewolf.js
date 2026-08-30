@@ -7,7 +7,7 @@ import { getDatabase } from "../../src/lib/ourin-database.js";
  * Enhanced for OurinAI
  */
 import config from "../../config.js";
-import fs from "fs";
+import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import te from "../../src/lib/ourin-error.js";
 const pluginConfig = {
   name: "werewolf",
@@ -27,28 +27,10 @@ const pluginConfig = {
 
 if (!global.werewolfGames) global.werewolfGames = {};
 
-let thumbWW = null;
-let thumbNight = null;
-let thumbDay = null;
-let thumbWin = null;
-
-try {
-  const gamesP = config.assets?.["ourin-games"];
-  const ourinP = config.assets?.["ourin"];
-  const winnerP = config.assets?.["ourin-winner"];
-  if (gamesP && !gamesP.startsWith("http") && fs.existsSync(gamesP)) {
-    thumbWW = fs.readFileSync(gamesP);
-  }
-  if (ourinP && !ourinP.startsWith("http") && fs.existsSync(ourinP)) {
-    thumbNight = fs.readFileSync(ourinP);
-    thumbDay = fs.readFileSync(ourinP);
-  }
-  if (winnerP && !winnerP.startsWith("http") && fs.existsSync(winnerP)) {
-    thumbWin = fs.readFileSync(winnerP);
-  }
-} catch (e) {
-  console.log("[WW] Failed to load thumbnails:", e.message);
-}
+let thumbWW = getAssetBuffer("ourin-games") || null;
+let thumbNight = getAssetBuffer("ourin") || null;
+let thumbDay = thumbNight;
+let thumbWin = getAssetBuffer("ourin-winner") || null;
 
 const ROLES = {
   werewolf: {
