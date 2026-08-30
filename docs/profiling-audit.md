@@ -152,21 +152,82 @@ M1-M18 tidak bisa dikonfirmasi dari data profiling.
 
 ---
 
-## 5. Butuh data lagi (untuk verdict final)
+## 5. Data tambahan: simulasi beban lokal (window sepi vs ramai)
 
-Data sekarang tidak cukup untuk verdict final yang solid:
+Karena panel berisiko (dipakai beberapa grup, sering restart), profiling beban
+dijalankan di **simulasi lokal** yang memanggil path bot NYATA — `serialize`
+(`ourin-serialize.js`), `curve25519-js` sign/verify (Signal crypto),
+`luxon` datetime, `WABinary` encode/decode. Dua window: sepi (intensity 1,
+31s) dan ramai (intensity 5, 60s). File:
+`storage/profiling/cpu-20260830-073747-sim-sepi.cpuprofile`,
+`cpu-20260830-073850-sim-ramai.cpuprofile`.
 
-1. **Window CPU ramai** — perlu `.cpuprofile start 10` saat traffic chat
-   padat (jam ramai), biar kandidat yang cuma muncul di idle bisa beda.
-   Kandidat yang muncul konsisten di idle + ramai baru layak dipertimbangkan.
-2. **Heap snapshot produksi** — perlu fix ceiling dulu (section 4.1), lalu
-   minimal 2 snapshot jeda ≥2 jam buat diff & konfirmasi M1-M18.
-3. **Multi-window konsistensi** — syarat "muncul konsisten di multiple
-   window" belum terpenuhi (baru 1 window).
+| Kandidat | self-time sepi (31s) | self-time ramai (60s) | Konsisten? | Verdict |
+|---|---|---|---|---|
+| `curve25519-js` (Signal crypto) | 26,256ms (84.9%) | 52,286ms (86.8%) | Ya, proporsional dengan load | **No-go (out of scope)** |
+| `luxon` (datetime) | 376ms (1.2%) | 580ms (1.0%) | Ya, flat | **No-go** |
+| `WABinary` encode/decode | 158ms (0.5%) | 281ms (0.5%) | Ya, flat | **No-go (out of scope)** |
+| `src/*` repo (serialize) | 90ms (0.3%) | 190ms (0.3%) | Ya, flat | **No-go** |
+| GC (`(garbage collector)`) | 2,908ms | 6,514ms | Naik proporsional | n/a (akibat beban) |
 
-**Kalau mau lanjut cari kandidat:** tambah window spesifik operasi berat —
-`.cpuprofile start 5` lalu `.ocr` / sticker / broadcast berulang-ulang. Itu
-skenario di mana hotspot per-call (kalau ada) bakal terlihat agregat.
+Pembacaan:
+
+- **Sim membuktikan metodologi kerja:** `curve25519-js` muncul konsisten di
+  DUA window dan self-time-nya naik proporsional dengan intensitas (26s → 52s
+  saat load 5x). Ini persis pola yang dicari audit — kandidat muncul
+  konsisten, bukan noise satu window.
+- **TAPI `curve25519-js` tetap No-go buat repo ini:** panggilannya semua dari
+  dalam `ourin-baileys` / `libsignal` (`node_modules/`), bukan dari `src/` atau
+  `plugins/`. Mengoptimasi = patch/fork baileys — keputusan terpisah yang
+  audit lama sudah tandai out of scope (section 2.6). FFI overhead juga tetap
+  berlaku: per-call sign/verify di µs, boundary napi-rs per panggilan > hemat.
+- **Catatan penting untuk masa depan:** kalau suatu saat fork baileys
+  dipertimbangkan, `curve25519-js` adalah kandidat native terkuat dari semua
+  data profiling (satu-satunya yang dominan di bawah beban crypto). Native
+  curve25519 (mis. libsodium/noble) bisa hemat 84-87% CPU di path itu. Tapi
+  itu di luar scope repo ini.
+
+### Heap diff (simulasi, 3 snapshot)
+
+`heap-...-sepi-before` → `after-sepi` → `ramai-after`:
+
+- Satu-satunya growth > 256KB: `(script line ends)` +2.4MB (count 0→244) —
+  ini objek **retensi buatan di harness sim** (2000 objek test yang sengaja
+  ditahan), BUKAN pola leak dari path bot.
+- Tidak ada object type lain yang growth konsisten antar snapshot → **tidak
+  ada pola retainer growth dari kode yang di-simulasi** (serialize, lid,
+  WABinary semuanya flat).
+
+---
+
+## 6. Kesimpulan final (berdasarkan data yang ada)
+
+**Berdasarkan data profiling yang tersedia — window produksi idle 600s
+(06:57-07:15 UTC) + dua window simulasi lokal sepi/ramai — TIDAK ADA kandidat
+yang lolos syarat Go buat repo ini.** Alasan per kandidat (bukan generic):
+
+1. Semua kandidat di repo (`src/*`) self-time < 0.3% bahkan di sim ramai —
+   serialize 190ms/60s. Operasi per-call µs, FFI boundary napi-rs lebih mahal
+   dari yang dihemat (syarat #4 Go gagal).
+2. Kandidat yang DOMINAN di sim (`curve25519-js`, 85-87%) = out of scope
+   (baileys). Kalau fork baileys pernah dipertimbangkan, ini yang paling layak
+   — tapi bukan untuk repo ini.
+3. `luxon`, `WABinary`, cron semuanya flat di bawah beban — bukan hotspot.
+
+**Keterbatasan data yang jujur:** window produksi "ramai" nyata + heap
+snapshot produksi (jeda ≥2 jam) BELUM ada. Verdict final untuk skenario beban
+produksi asli tetap menggantung data itu. Tapi dari simulasi (yang menekan
+load lebih tinggi dari kebanyakan window produksi idle), bahkan di beban 5x,
+tidak ada kandidat repo yang muncul sebagai hotspot.
+
+**Rekomendasi kalau mau lanjut cari:**
+- Window produksi jam ramai nyata (`.cpuprofile start 10` pas chat rame) —
+  ini satu-satunya data yang bisa menambah kepastian.
+- Window operasi berat spesifik (`.cpuprofile start 5` + `.ocr` berulang /
+  broadcast / sticker massal) — skenario per-call besar yang jarang, kalau
+  ada.
+- Kalau dua-duanya tetap gak munculin hotspot repo → tutup audit: tidak ada
+  kandidat Rust di repo, kandidat terkuat ada di baileys (di luar scope).
 
 ---
 
@@ -190,3 +251,20 @@ skenario di mana hotspot per-call (kalau ada) bakal terlihat agregat.
   Full suite: 104 pass, 0 fail.
 - Belum di-deploy — user perlu `git pull` + restart, lalu coba `.heapsnap`
   pas RSS terendah buat ambil snapshot pertama.
+
+### 2026-08-30 — Simulasi beban lokal (sepi/ramai) + heap diff
+
+- Karena panel berisiko (banyak grup, sering restart), user memutuskan pakai
+  simulasi lokal. Dibuat `sim-load.mjs` (manggil path nyata: serialize,
+  curve25519, luxon, WABinary) + `run-sim.mjs` (harness: 2 CPU window + 3 heap
+  snapshot dengan growth buatan).
+- Hasil: `curve25519-js` dominan di sim (85-87% self-time, konsisten 2 window,
+  naik proporsional dengan load) — membuktikan metodologi; TAPI out of scope
+  (baileys). Tidak ada kandidat di repo yang muncul sebagai hotspot (semua
+  <0.3% bahkan di beban 5x).
+- Heap diff: flat; satu-satunya growth adalah retensi buatan harness, bukan
+  pola leak dari path bot.
+- Verdict final: **tidak ada kandidat Go** untuk data yang ada. Keterbatasan
+  jujur: window produksi ramai nyata + heap produksi belum ada.
+- File sementara `sim-load.mjs`/`run-sim.mjs` ada di root repo — throwaway,
+  tidak di-commit (lihat gitignore di bawah kalau perlu).
