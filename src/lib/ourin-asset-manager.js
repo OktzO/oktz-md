@@ -5,6 +5,11 @@ import config from "../../config.js";
 
 const assetCache = {};
 const LARGE_MEDIA_EXTENSIONS = [".mp4", ".mp3", ".m4a", ".wav", ".avi", ".mkv", ".ogg"];
+let _sharp = null;
+async function _getSharp() {
+  if (!_sharp) _sharp = (await import("sharp")).default;
+  return _sharp;
+}
 
 function isLargeMedia(filepath) {
   if (!filepath || typeof filepath !== "string") return false;
@@ -12,7 +17,17 @@ function isLargeMedia(filepath) {
   return LARGE_MEDIA_EXTENSIONS.some((ext) => lower.endsWith(ext));
 }
 
-export function preloadAssets(configAssets) {
+async function _toJpegIfWebp(buf, filepath) {
+  if (!filepath.toLowerCase().endsWith(".webp")) return buf;
+  try {
+    const sharp = await _getSharp();
+    return await sharp(buf).jpeg({ quality: 80 }).toBuffer();
+  } catch {
+    return buf;
+  }
+}
+
+export async function preloadAssets(configAssets) {
   if (!configAssets) return;
   for (const [key, filepath] of Object.entries(configAssets)) {
     try {
@@ -20,7 +35,8 @@ export function preloadAssets(configAssets) {
         if (isLargeMedia(filepath)) continue;
         const fullPath = path.resolve(process.cwd(), filepath);
         if (fs.existsSync(fullPath)) {
-          assetCache[key] = fs.readFileSync(fullPath);
+          const raw = fs.readFileSync(fullPath);
+          assetCache[key] = await _toJpegIfWebp(raw, filepath);
           logger.system("CACHE", `Loaded: ${key}`);
         } else {
           logger.warn("CACHE", `File not found: ${fullPath}`);
@@ -56,9 +72,13 @@ export function getAssetBuffer(key, configAssets = null) {
   return null;
 }
 
-export function updateAssetAndSave(key, buffer, filepath) {
+export async function updateAssetAndSave(key, buffer, filepath) {
+  let cacheBuf = buffer;
+  if (filepath && filepath.toLowerCase().endsWith(".webp")) {
+    cacheBuf = await _toJpegIfWebp(buffer, filepath);
+  }
   if (!isLargeMedia(filepath)) {
-    assetCache[key] = buffer;
+    assetCache[key] = cacheBuf;
   }
   if (filepath && !filepath.startsWith("http")) {
     try {

@@ -81,7 +81,7 @@ export async function updateAssetUrl(assetKey, buffer, filename = 'image.jpg') {
     }
   }
 
-  updateAssetAndSave(assetKey, saveBuffer, localPath);
+  await updateAssetAndSave(assetKey, saveBuffer, localPath);
 
   return localPath;
 }
