@@ -62,7 +62,7 @@ async function handler(m, { sock }) {
 
         keys.forEach(k => {
             const pathUrl = assets[k].toLowerCase();
-            if (pathUrl.endsWith('.jpg') || pathUrl.endsWith('.png') || pathUrl.endsWith('.jpeg') || pathUrl.endsWith('.webp')) {
+            if (pathUrl.endsWith('.jpg') || pathUrl.endsWith('.png') || pathUrl.endsWith('.jpeg')) {
                 imageKeys.push(k);
             } else if (pathUrl.endsWith('.mp4')) {
                 videoKeys.push(k);
@@ -178,7 +178,7 @@ async function gantiAssetAnswerHandler(m, sock) {
         return true;
     }
 
-    let ext = '.webp';
+    let ext = '.jpeg';
     if (isVideoUpload) ext = '.mp4';
     else if (isAudioUpload) ext = '.mp3';
     else if (isFontUpload) ext = '.ttf';

@@ -28,7 +28,7 @@ async function loadAvatarSafe(avatarUrl) {
     process.cwd(),
     "assets",
     "image",
-    "pp-kosong.webp",
+    "pp-kosong.jpeg",
   );
 
   try {

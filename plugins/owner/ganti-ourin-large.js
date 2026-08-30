@@ -5,7 +5,7 @@ const pluginConfig = {
     name: 'ourin-large',
     alias: ['setourinlarge', 'gantiourinlarge'],
     category: 'owner',
-    description: 'Preset: Ganti gambar ourin.webp, serta ourin-v7 hingga ourin-v11.webp sekaligus',
+    description: 'Preset: Ganti gambar ourin.jpeg, serta ourin-v7 hingga ourin-v11.jpeg sekaligus',
     usage: '.ourin-large (reply/kirim gambar)',
     example: '.ourin-large',
     isOwner: true,
@@ -21,7 +21,7 @@ async function handler(m, { sock }) {
     const isImage = m.isImage || (m.quoted && m.quoted.type === 'imageMessage')
     
     if (!isImage) {
-        return m.reply(`🖼️ *ᴏᴜʀɪɴ ʟᴀʀɢᴇ ᴘʀᴇsᴇᴛ*\n\n> Kirim/reply gambar untuk mengganti kumpulan foto besar (ourin.webp, ourin-v8.webp, ourin-v10.webp) sekaligus.\n> Pastikan rasio gambar sesuai dengan yang diinginkan.`)
+        return m.reply(`🖼️ *ᴏᴜʀɪɴ ʟᴀʀɢᴇ ᴘʀᴇsᴇᴛ*\n\n> Kirim/reply gambar untuk mengganti kumpulan foto besar (ourin.jpeg, ourin-v8.jpeg, ourin-v10.jpeg) sekaligus.\n> Pastikan rasio gambar sesuai dengan yang diinginkan.`)
     }
     
     await m.react('🕕')
@@ -40,9 +40,9 @@ async function handler(m, { sock }) {
         }
         
         const targetImages = [
-            'ourin.webp',
-            'ourin-v8.webp',
-            'ourin-v10.webp'
+            'ourin.jpeg',
+            'ourin-v8.jpeg',
+            'ourin-v10.jpeg'
         ]
         
         const assetsDir = path.join(process.cwd(), 'assets', 'images')
