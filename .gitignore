@@ -11,3 +11,5 @@ eng.traineddata
 result
 .native/
 native/platforms/
+sim-load.mjs
+run-sim.mjs
