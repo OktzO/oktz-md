@@ -6,7 +6,6 @@ import {
 } from "../../src/lib/ourin-game-ulartangga.js";
 import config from "../../config.js";
 import fs from "fs";
-import path from "path";
 import te from "../../src/lib/ourin-error.js";
 const pluginConfig = {
   name: "ulartangga",
@@ -37,14 +36,9 @@ function uniqueMentions(mentions = []) {
 
 let thumbUT = null;
 try {
-  const thumbPath = path.join(
-    process.cwd(),
-    "assets",
-    "image",
-    "ourin-games.webp",
-  );
-  if (fs.existsSync(thumbPath)) {
-    thumbUT = fs.readFileSync(thumbPath);
+  const p = config.assets?.["ourin-games"];
+  if (p && !p.startsWith("http") && fs.existsSync(p)) {
+    thumbUT = fs.readFileSync(p);
   }
 } catch (e) { }
 

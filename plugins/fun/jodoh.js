@@ -1,6 +1,5 @@
 import { getDatabase } from "../../src/lib/ourin-database.js";
 import config from "../../config.js";
-import path from "path";
 import fs from "fs";
 const pluginConfig = {
   name: "jodoh",
@@ -20,13 +19,8 @@ const pluginConfig = {
 
 let thumbFun = null;
 try {
-  const thumbPath = path.join(
-    process.cwd(),
-    "assets",
-    "image",
-    "ourin-games.webp",
-  );
-  if (fs.existsSync(thumbPath)) thumbFun = fs.readFileSync(thumbPath);
+  const p = config.assets?.["ourin-games"];
+  if (p && !p.startsWith("http") && fs.existsSync(p)) thumbFun = fs.readFileSync(p);
 } catch (e) {}
 
 const loveQuotes = [

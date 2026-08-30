@@ -1,7 +1,6 @@
 import { getDatabase } from '../../src/lib/ourin-database.js'
 import config from '../../config.js'
 import fs from 'fs'
-import path from 'path'
 const pluginConfig = {
     name: 'leaderboard',
     alias: [
@@ -91,7 +90,9 @@ async function handler(m, { sock }) {
         const overviewText = `🏆 *LEADERBOARD OVERVIEW* 🏆\n\n` +
             `_Pilih tombol di bawah untuk melihat ranking!_`
         try {
-            await sock.sendButton(m.chat, fs.readFileSync(path.join(process.cwd(), 'assets', 'image', 'ourin.webp')), overviewText, m, {
+            const assetP = config.assets?.['ourin'];
+            const imgBuf = assetP && !assetP.startsWith('http') && fs.existsSync(assetP) ? fs.readFileSync(assetP) : null;
+            await sock.sendButton(m.chat, imgBuf, overviewText, m, {
                 buttons: [
                     {
                         name: 'quick_reply',

@@ -33,7 +33,6 @@ import {
   CRAFT_RECIPES,
 } from "../../src/lib/ourin-minecraft-data.js";
 import config from "../../config.js";
-import path from "path";
 import fs from "fs";
 
 const MC = 15;
@@ -51,8 +50,8 @@ const encCost = (r) =>
 
 let thumbMC = null;
 try {
-  const p = path.join(process.cwd(), "assets", "image", "ourin-minecraft.webp");
-  if (fs.existsSync(p)) thumbMC = fs.readFileSync(p);
+  const p = config.assets?.["ourin-minecraft"];
+  if (p && !p.startsWith("http") && fs.existsSync(p)) thumbMC = fs.readFileSync(p);
 } catch (e) {}
 
 function ctx() {

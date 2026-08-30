@@ -26,7 +26,6 @@ import {
   GACHA_PITY_LIMIT,
 } from "../../src/lib/ourin-fisch-data.js";
 import config from "../../config.js";
-import path from "path";
 import fs from "fs";
 
 const FC = 15;
@@ -44,8 +43,8 @@ const encCost = (r) =>
 
 let thumbFish = null;
 try {
-  const p = path.join(process.cwd(), "assets", "image", "ourin-fishit.webp");
-  if (fs.existsSync(p)) thumbFish = fs.readFileSync(p);
+  const p = config.assets?.["ourin-fishit"];
+  if (p && !p.startsWith("http") && fs.existsSync(p)) thumbFish = fs.readFileSync(p);
 } catch (e) {}
 
 function ctx(title, body) {

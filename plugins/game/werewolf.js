@@ -8,7 +8,6 @@ import { getDatabase } from "../../src/lib/ourin-database.js";
  */
 import config from "../../config.js";
 import fs from "fs";
-import path from "path";
 import te from "../../src/lib/ourin-error.js";
 const pluginConfig = {
   name: "werewolf",
@@ -34,16 +33,18 @@ let thumbDay = null;
 let thumbWin = null;
 
 try {
-  const assetsPath = path.join(process.cwd(), "assets", "image");
-  if (fs.existsSync(path.join(assetsPath, "ourin-games.webp"))) {
-    thumbWW = fs.readFileSync(path.join(assetsPath, "ourin-games.webp"));
+  const gamesP = config.assets?.["ourin-games"];
+  const ourinP = config.assets?.["ourin"];
+  const winnerP = config.assets?.["ourin-winner"];
+  if (gamesP && !gamesP.startsWith("http") && fs.existsSync(gamesP)) {
+    thumbWW = fs.readFileSync(gamesP);
   }
-  if (fs.existsSync(path.join(assetsPath, "ourin.webp"))) {
-    thumbNight = fs.readFileSync(path.join(assetsPath, "ourin.webp"));
-    thumbDay = fs.readFileSync(path.join(assetsPath, "ourin.webp"));
+  if (ourinP && !ourinP.startsWith("http") && fs.existsSync(ourinP)) {
+    thumbNight = fs.readFileSync(ourinP);
+    thumbDay = fs.readFileSync(ourinP);
   }
-  if (fs.existsSync(path.join(assetsPath, "ourin-winner.webp"))) {
-    thumbWin = fs.readFileSync(path.join(assetsPath, "ourin-winner.webp"));
+  if (winnerP && !winnerP.startsWith("http") && fs.existsSync(winnerP)) {
+    thumbWin = fs.readFileSync(winnerP);
   }
 } catch (e) {
   console.log("[WW] Failed to load thumbnails:", e.message);
