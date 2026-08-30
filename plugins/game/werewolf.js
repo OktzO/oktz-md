@@ -34,16 +34,16 @@ let thumbDay = null;
 let thumbWin = null;
 
 try {
-  const assetsPath = path.join(process.cwd(), "assets", "images");
-  if (fs.existsSync(path.join(assetsPath, "ourin-games.jpg"))) {
-    thumbWW = fs.readFileSync(path.join(assetsPath, "ourin-games.jpg"));
+  const assetsPath = path.join(process.cwd(), "assets", "image");
+  if (fs.existsSync(path.join(assetsPath, "ourin-games.webp"))) {
+    thumbWW = fs.readFileSync(path.join(assetsPath, "ourin-games.webp"));
   }
-  if (fs.existsSync(path.join(assetsPath, "ourin.jpg"))) {
-    thumbNight = fs.readFileSync(path.join(assetsPath, "ourin.jpg"));
-    thumbDay = fs.readFileSync(path.join(assetsPath, "ourin.jpg"));
+  if (fs.existsSync(path.join(assetsPath, "ourin.webp"))) {
+    thumbNight = fs.readFileSync(path.join(assetsPath, "ourin.webp"));
+    thumbDay = fs.readFileSync(path.join(assetsPath, "ourin.webp"));
   }
-  if (fs.existsSync(path.join(assetsPath, "ourin-winner.jpg"))) {
-    thumbWin = fs.readFileSync(path.join(assetsPath, "ourin-winner.jpg"));
+  if (fs.existsSync(path.join(assetsPath, "ourin-winner.webp"))) {
+    thumbWin = fs.readFileSync(path.join(assetsPath, "ourin-winner.webp"));
   }
 } catch (e) {
   console.log("[WW] Failed to load thumbnails:", e.message);

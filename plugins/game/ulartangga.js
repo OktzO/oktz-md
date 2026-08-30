@@ -41,7 +41,7 @@ try {
     process.cwd(),
     "assets",
     "image",
-    "ourin-games.jpg",
+    "ourin-games.webp",
   );
   if (fs.existsSync(thumbPath)) {
     thumbUT = fs.readFileSync(thumbPath);

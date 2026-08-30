@@ -31,7 +31,7 @@ const SHUFFLE_DIR = path.join(process.cwd(), 'assets', 'image', 'shuffle');
 function countShuffleImages() {
     if (!fs.existsSync(SHUFFLE_DIR)) return 0;
     const files = fs.readdirSync(SHUFFLE_DIR);
-    return files.filter(f => f.endsWith('.jpg') || f.endsWith('.png') || f.endsWith('.jpeg')).length;
+    return files.filter(f => f.endsWith('.webp') || f.endsWith('.jpg') || f.endsWith('.png') || f.endsWith('.jpeg')).length;
 }
 
 async function handler(m, { sock, args }) {
@@ -67,7 +67,7 @@ async function handler(m, { sock, args }) {
         } 
         else if (action === 'list') {
             if (!fs.existsSync(SHUFFLE_DIR)) return m.reply('❌ Belum ada satu pun gambar yang tersimpan di dalam direktori *shuffle*. Silakan lakukan penangkapan gambar terlebih dahulu.');
-            const files = fs.readdirSync(SHUFFLE_DIR).filter(f => f.endsWith('.jpg') || f.endsWith('.png') || f.endsWith('.jpeg'));
+            const files = fs.readdirSync(SHUFFLE_DIR).filter(f => f.endsWith('.webp') || f.endsWith('.jpg') || f.endsWith('.png') || f.endsWith('.jpeg'));
             if (files.length === 0) return m.reply('❌ Direktori *shuffle* masih kosong. Silakan gunakan perintah tangkapan gambar untuk mulai menambahkan.');
             
             await m.reply(`📂 *DAFTAR GAMBAR SHUFFLE*\n\nSistem menemukan *${files.length}* gambar yang tersimpan. Sedang memproses dan merangkai album untuk ditampilkan, harap tunggu sebentar.`);
@@ -139,7 +139,8 @@ async function handler(m, { sock, args }) {
             if (buffer) {
                 const hash = crypto.createHash('md5').update(buffer).digest('hex').substring(0, 10);
                 const filename = `srt_${hash}.jpg`;
-                const filepath = path.join(SHUFFLE_DIR, filename);
+                const webpname = `srt_${hash}.webp`;
+                const filepath = path.join(SHUFFLE_DIR, fs.existsSync(path.join(SHUFFLE_DIR, webpname)) ? webpname : filename);
 
                 if (fs.existsSync(filepath)) {
                     fs.unlinkSync(filepath);
@@ -185,12 +186,16 @@ async function srtAnswerHandler(m, sock) {
             const hash = crypto.createHash('md5').update(buffer).digest('hex').substring(0, 10);
             const ext = '.jpg';
             const filename = `srt_${hash}${ext}`;
-            const filepath = path.join(SHUFFLE_DIR, filename);
+            const webpname = `srt_${hash}.webp`;
+            const filepath = path.join(SHUFFLE_DIR, fs.existsSync(path.join(SHUFFLE_DIR, webpname)) ? webpname : filename);
 
             if (fs.existsSync(filepath)) {
                 await m.reply('⚠️ Gambar yang sama terdeteksi telah tersimpan di dalam database.');
             } else {
-                fs.writeFileSync(filepath, buffer);
+                const sharp = (await import("sharp")).default;
+                const saved = await sharp(buffer).webp({ quality: 80 }).toBuffer();
+                const savePath = path.join(SHUFFLE_DIR, `srt_${hash}.webp`);
+                fs.writeFileSync(savePath, saved);
                 session.count++;
                 await m.reply(`✅ *GAMBAR BERHASIL DISIMPAN*\n\nGambar telah diamankan ke dalam penyimpanan lokal bot.\n- Total gambar ditambahkan pada sesi ini: *${session.count}*`);
             }

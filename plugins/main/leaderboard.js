@@ -91,7 +91,7 @@ async function handler(m, { sock }) {
         const overviewText = `🏆 *LEADERBOARD OVERVIEW* 🏆\n\n` +
             `_Pilih tombol di bawah untuk melihat ranking!_`
         try {
-            await sock.sendButton(m.chat, fs.readFileSync(path.join(process.cwd(), 'assets', 'image', 'ourin.png')), overviewText, m, {
+            await sock.sendButton(m.chat, fs.readFileSync(path.join(process.cwd(), 'assets', 'image', 'ourin.webp')), overviewText, m, {
                 buttons: [
                     {
                         name: 'quick_reply',

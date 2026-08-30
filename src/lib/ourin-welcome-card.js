@@ -27,8 +27,8 @@ async function loadAvatarSafe(avatarUrl) {
   const localFallback = path.join(
     process.cwd(),
     "assets",
-    "images",
-    "pp-kosong.jpg",
+    "image",
+    "pp-kosong.webp",
   );
 
   try {

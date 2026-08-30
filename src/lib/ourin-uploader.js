@@ -71,7 +71,17 @@ export async function updateAssetUrl(assetKey, buffer, filename = 'image.jpg') {
   const dir = path.dirname(fullPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-  updateAssetAndSave(assetKey, buffer, localPath);
+  let saveBuffer = buffer;
+  if (localPath.toLowerCase().endsWith(".webp")) {
+    try {
+      const sharp = (await import("sharp")).default;
+      saveBuffer = await sharp(buffer).webp({ quality: 80 }).toBuffer();
+    } catch (e) {
+      console.error(`Failed to convert ${assetKey} to webp:`, e.message);
+    }
+  }
+
+  updateAssetAndSave(assetKey, saveBuffer, localPath);
 
   return localPath;
 }

@@ -44,7 +44,7 @@ const encCost = (r) =>
 
 let thumbFish = null;
 try {
-  const p = path.join(process.cwd(), "assets", "images", "ourin-fishit.jpg");
+  const p = path.join(process.cwd(), "assets", "image", "ourin-fishit.webp");
   if (fs.existsSync(p)) thumbFish = fs.readFileSync(p);
 } catch (e) {}
 

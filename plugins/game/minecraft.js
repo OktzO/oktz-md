@@ -51,7 +51,7 @@ const encCost = (r) =>
 
 let thumbMC = null;
 try {
-  const p = path.join(process.cwd(), "assets", "images", "ourin-minecraft.jpg");
+  const p = path.join(process.cwd(), "assets", "image", "ourin-minecraft.webp");
   if (fs.existsSync(p)) thumbMC = fs.readFileSync(p);
 } catch (e) {}
 

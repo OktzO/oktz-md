@@ -70,7 +70,7 @@ function getCachedSrtImage() {
   if (!_srtFiles) {
     _srtFiles = fsc
       .readdirSync(shuffleDir)
-      .filter((f) => f.match(/\.(jpg|jpeg|png)$/i));
+      .filter((f) => f.match(/\.(webp|jpg|jpeg|png)$/i));
   }
   if (_srtFiles.length === 0) return null;
   const randFile = _srtFiles[Math.floor(Math.random() * _srtFiles.length)];

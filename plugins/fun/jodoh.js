@@ -23,8 +23,8 @@ try {
   const thumbPath = path.join(
     process.cwd(),
     "assets",
-    "images",
-    "ourin-games.jpg",
+    "image",
+    "ourin-games.webp",
   );
   if (fs.existsSync(thumbPath)) thumbFun = fs.readFileSync(thumbPath);
 } catch (e) {}

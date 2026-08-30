@@ -178,7 +178,7 @@ async function gantiAssetAnswerHandler(m, sock) {
         return true;
     }
 
-    let ext = '.jpg';
+    let ext = '.webp';
     if (isVideoUpload) ext = '.mp4';
     else if (isAudioUpload) ext = '.mp3';
     else if (isFontUpload) ext = '.ttf';
