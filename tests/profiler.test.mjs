@@ -93,7 +93,7 @@ describe("Heap snapshot (v8.writeHeapSnapshot + guard RSS)", () => {
   it("ambil snapshot saat RSS rendah → sukses, file valid", () => {
     const elig = heapSnapshotEligibility();
     assert.ok(elig.allowed, `harus allowed, reason: ${elig.reason}`);
-    assert.ok(elig.rssMb < 300, `rss harus < 300MB (${elig.rssMb}MB)`);
+    assert.ok(elig.rssMb < 400, `rss harus < 400MB (${elig.rssMb}MB)`);
 
     const res = takeHeapSnapshot({ label: "test-low", trigger: "test" });
     assert.ok(res.ok, res.error);

@@ -12,17 +12,18 @@ import { logger } from "./ourin-logger.js";
 
 const OUT_DIR = path.join(process.cwd(), "storage", "profiling");
 
-// Safety thresholds (host Pterodactyl 512MB heap / 1GB total RAM):
-// - HEAP_SNAP_RSS_CEILING: 300MB. Snapshot serialization butuh
-//   ~1.5-2x heap resident SEBAGAI RSS tambahan sementara. Baseline
-//   RSS bot normal 150-230MB (lihat memory-leak-audit); 300MB
-//   memberi headroom ~100-150MB buat serialisasi tanpa mendekati
-//   batas kontainer.
-// - HEAP_SNAP_PROJECTED_CEILING: 480MB. Proyeksi puncak
-//   rss + 2*heapTotal harus di bawah batas aman (512MB max-old-space
-//   + kontainer 1GB). Dua kondisi, abort kalau salah satu dilanggar.
-const HEAP_SNAP_RSS_CEILING = 300 * 1024 * 1024;
-const HEAP_SNAP_PROJECTED_CEILING = 480 * 1024 * 1024;
+// Safety thresholds (host Pterodactyl 512MB heap / 1GB total RAM).
+// Nilai disesuaikan dengan pengukuran NYATA di panel (2026-08-30):
+// baseline RSS idle 290-375MB (bukan 150-230MB seperti mesin audit),
+// heapTotal ~185-195MB. Proyeksi puncak idle = rss + 2*heapTotal
+// ≈ 330 + 380 = ~710MB.
+// - HEAP_SNAP_RSS_CEILING: 400MB. Baseline idle 330MB → margin 70MB
+//   untuk kerja normal; abort kalau RSS mendekati zona bahaya.
+// - HEAP_SNAP_PROJECTED_CEILING: 800MB. Proyeksi puncak
+//   rss + 2*heapTotal saat serialisasi. 800MB < 1GB total RAM kontainer
+//   (margin 200MB). Dua kondisi, abort kalau salah satu dilanggar.
+const HEAP_SNAP_RSS_CEILING = 400 * 1024 * 1024;
+const HEAP_SNAP_PROJECTED_CEILING = 800 * 1024 * 1024;
 
 // Auto-stop safety net: CPU profiler gak boleh nyala lebih dari
 // durasi maksimum — kalau lupa dimatiin, berhenti sendiri.

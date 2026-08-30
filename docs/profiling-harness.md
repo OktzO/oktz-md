@@ -71,8 +71,8 @@ menit, `RSS_LIMIT = 550MB`).
 
 | Threshold | Nilai | Alasan |
 |---|---|---|
-| `HEAP_SNAP_RSS_CEILING` | **300MB** | `v8.writeHeapSnapshot()` butuh RSS tambahan ~1.5-2x heap resident SAAT serialisasi. Baseline 150-230MB; ceiling 300MB memberi headroom ~100-150MB tanpa mendekati batas kontainer. Di atas ini = terlalu dekat ke OOM. |
-| `HEAP_SNAP_PROJECTED_CEILING` | **480MB** | Proyeksi puncak `rss + 2×heapTotal` (estimasi konservatif overhead serialisasi). Wajib di bawah 512MB max-old-space + margin. Dua kondisi, abort kalau salah satu dilanggar. |
+| `HEAP_SNAP_RSS_CEILING` | **400MB** | Baseline RSS panel produksi 290-375MB (terukur dari memory monitor, 2026-08-30). Ceiling 400MB memberi margin ~70MB di atas idle; abort kalau RSS mendekati zona bahaya OOM. |
+| `HEAP_SNAP_PROJECTED_CEILING` | **800MB** | Proyeksi puncak `rss + 2×heapTotal` (estimasi konservatif overhead serialisasi). Di panel idle: 330 + 2×190 = 710MB. Ceiling 800MB < 1GB total RAM kontainer (margin 200MB). Dua kondisi, abort kalau salah satu dilanggar. |
 | `CPU_MAX_DURATION_MS` | **10 menit** | Auto-stop safety net — kalau CPU profiler lupa dimatiin, berhenti sendiri. Mencegah sampling overhead numpuk berjam-jam & file `.cpuprofile` membengkak. |
 | Default durasi CPU | **5 menit** | Window pendek cukup buat flamegraph; gak numpuk overhead. |
 
