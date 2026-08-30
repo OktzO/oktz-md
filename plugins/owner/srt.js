@@ -138,9 +138,8 @@ async function handler(m, { sock, args }) {
 
             if (buffer) {
                 const hash = crypto.createHash('md5').update(buffer).digest('hex').substring(0, 10);
-                const filename = `srt_${hash}.jpg`;
-                const webpname = `srt_${hash}.webp`;
-                const filepath = path.join(SHUFFLE_DIR, fs.existsSync(path.join(SHUFFLE_DIR, webpname)) ? webpname : filename);
+                const candidates = [`srt_${hash}.jpeg`, `srt_${hash}.webp`, `srt_${hash}.jpg`];
+                const filepath = path.join(SHUFFLE_DIR, candidates.find(n => fs.existsSync(path.join(SHUFFLE_DIR, n))) || candidates[0]);
 
                 if (fs.existsSync(filepath)) {
                     fs.unlinkSync(filepath);
@@ -184,17 +183,14 @@ async function srtAnswerHandler(m, sock) {
             if (!fs.existsSync(SHUFFLE_DIR)) fs.mkdirSync(SHUFFLE_DIR, { recursive: true });
             
             const hash = crypto.createHash('md5').update(buffer).digest('hex').substring(0, 10);
-            const ext = '.jpg';
-            const filename = `srt_${hash}${ext}`;
-            const webpname = `srt_${hash}.webp`;
-            const filepath = path.join(SHUFFLE_DIR, fs.existsSync(path.join(SHUFFLE_DIR, webpname)) ? webpname : filename);
+            const filepath = path.join(SHUFFLE_DIR, `srt_${hash}.jpeg`);
 
             if (fs.existsSync(filepath)) {
                 await m.reply('⚠️ Gambar yang sama terdeteksi telah tersimpan di dalam database.');
             } else {
                 const sharp = (await import("sharp")).default;
-                const saved = await sharp(buffer).webp({ quality: 80 }).toBuffer();
-                const savePath = path.join(SHUFFLE_DIR, `srt_${hash}.webp`);
+                const saved = await sharp(buffer).resize(1280, 720, { fit: 'inside', withoutEnlargement: false }).jpeg({ quality: 85 }).toBuffer();
+                const savePath = path.join(SHUFFLE_DIR, `srt_${hash}.jpeg`);
                 fs.writeFileSync(savePath, saved);
                 session.count++;
                 await m.reply(`✅ *GAMBAR BERHASIL DISIMPAN*\n\nGambar telah diamankan ke dalam penyimpanan lokal bot.\n- Total gambar ditambahkan pada sesi ini: *${session.count}*`);
