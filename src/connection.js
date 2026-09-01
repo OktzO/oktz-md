@@ -378,50 +378,11 @@ async function startConnection(options = {}) {
   connectionState.sock = sock;
   extendSocket(sock);
 
-  if (usePairingCode && !sock.authState.creds.registered) {
-    let phoneNumber = pairingNumber;
-
-    if (!phoneNumber || phoneNumber === "") {
-      console.log("");
-      colors.logger.warn("pairing", "nomor pairing belum diatur di config");
-      console.log("");
-      phoneNumber = await askQuestion(
-        colors.chalk.cyan(
-          "📱 Masukkan nomor WhatsApp (contoh: 6281234567890): ",
-        ),
-      );
-    }
-
-    phoneNumber = phoneNumber.replace(/[^0-9]/g, "");
-
-    colors.logger.info("pairing", `meminta kode untuk ${phoneNumber}`);
-
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      const code = await sock.requestPairingCode(phoneNumber, "OURINNAI");
-      console.log("");
-      console.log(
-        colors.createBanner(
-          [
-            "",
-            "   PAIRING CODE   ",
-            "",
-            `   ${colors.chalk.bold(colors.chalk.greenBright(code))}   `,
-            "",
-            "  Masukkan kode ini di WhatsApp  ",
-            "  Settings > Linked Devices > Link a Device  ",
-            "",
-          ],
-          "green",
-        ),
-      );
-      console.log("");
-    } catch (error) {
-      colors.logger.error("pairing", `gagal: ${error.message}`);
-    }
-  }
-
+  // Move pairing code logic to connection.update handler
+  // so WebSocket is connected before requestPairingCode sends IQ
   sock.ev.on("creds.update", saveCreds);
+
+  let pairingRequested = false;
 
   sock.ev.on("connection.update", async (u) => {
     const { connection: c, lastDisconnect: d, qr: q } = u;
@@ -561,6 +522,50 @@ async function startConnection(options = {}) {
       connectionState.reconnectAttempts = 0;
       connectionState.connectedAt = new Date();
 
+      if (usePairingCode && !sock.authState.creds.registered && !pairingRequested) {
+        pairingRequested = true;
+        let phoneNumber = pairingNumber;
+
+        if (!phoneNumber || phoneNumber === "") {
+          console.log("");
+          colors.logger.warn("pairing", "nomor pairing belum diatur di config");
+          console.log("");
+          phoneNumber = await askQuestion(
+            colors.chalk.cyan(
+              "📱 Masukkan nomor WhatsApp (contoh: 6281234567890): ",
+            ),
+          );
+        }
+
+        phoneNumber = phoneNumber.replace(/[^0-9]/g, "");
+
+        colors.logger.info("pairing", `meminta kode untuk ${phoneNumber}`);
+
+        try {
+          const code = await sock.requestPairingCode(phoneNumber, "OKTZLAHH");
+          console.log("");
+          console.log(
+            colors.createBanner(
+              [
+                "",
+                "   PAIRING CODE   ",
+                "",
+                `   ${colors.chalk.bold(colors.chalk.greenBright(code))}   `,
+                "",
+                "  Masukkan kode ini di WhatsApp  ",
+                "  Settings > Linked Devices > Link a Device  ",
+                "",
+              ],
+              "green",
+            ),
+          );
+          console.log("");
+        } catch (error) {
+          colors.logger.error("pairing", `gagal: ${error.message}`);
+          pairingRequested = false;
+        }
+      }
+
       try {
         await sock.uploadPreKeys();
         colors.logger.success("session", "Sip, pre-keys udah dikirim ke server nih");
@@ -685,6 +690,13 @@ async function startConnection(options = {}) {
 
   sock.ev.on("groups.update", async ([event]) => {
     if (options.onGroupUpdate) {
+      if (_groupEventQueue.length >= 100) {
+        colors.logger.warn(
+          "queue",
+          `group event queue full (${_groupEventQueue.length}), dropping event`,
+        );
+        return;
+      }
       _groupEventQueue.push({
         handler: async (ev, s) => {
           try {
