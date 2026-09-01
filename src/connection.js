@@ -883,6 +883,7 @@ async function startConnection(options = {}) {
 
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
     lastMessageReceived = Date.now();
+    colors.logger.debug("upsert", `+${messages.length} pesan, tipe=${type}, isReady=${connectionState.isReady}`);
     if (config.dev?.debugLog) {
       colors.logger.debug("pesan", `${messages.length} pesan, tipe=${type}`);
     }
