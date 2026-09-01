@@ -582,6 +582,7 @@ async function messageHandler(msg, sock, options = {}) {
     try {
       m = await serialize(sock, msg);
     } catch (serializeErr) {
+      logger.error("SERIALIZE", serializeErr.message);
       return;
     }
 
@@ -2137,6 +2138,10 @@ async function groupSettingsHandler(update, sock) {
 
     const cached = groupSettingsCache.get(groupId) || {};
     const now = Date.now();
+
+    if (cached.lastUpdate && now - cached.lastUpdate > 60 * 60 * 1000) {
+      groupSettingsCache.delete(groupId);
+    }
 
     if (
       cached.lastUpdate &&
