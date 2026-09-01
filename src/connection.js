@@ -395,6 +395,53 @@ async function startConnection(options = {}) {
       });
     }
 
+    // QR event juga fire di pairing mode — itu sinyal socket siap auth.
+    // Device unregistered → connection 'open' TIDAK akan pernah fire.
+    // Jadi pairing code WAJIB dipicu oleh qr, bukan connection open.
+    if (q && usePairingCode && !sock.authState.creds.registered && !pairingRequested) {
+      pairingRequested = true;
+      let phoneNumber = pairingNumber;
+
+      if (!phoneNumber || phoneNumber === "") {
+        console.log("");
+        colors.logger.warn("pairing", "nomor pairing belum diatur di config");
+        console.log("");
+        phoneNumber = await askQuestion(
+          colors.chalk.cyan(
+            "📱 Masukkan nomor WhatsApp (contoh: 6281234567890): ",
+          ),
+        );
+      }
+
+      phoneNumber = phoneNumber.replace(/[^0-9]/g, "");
+
+      colors.logger.info("pairing", `meminta kode untuk ${phoneNumber}`);
+
+      try {
+        const code = await sock.requestPairingCode(phoneNumber, "OKTZLAHH");
+        console.log("");
+        console.log(
+          colors.createBanner(
+            [
+              "",
+              "   PAIRING CODE   ",
+              "",
+              `   ${colors.chalk.bold(colors.chalk.greenBright(code))}   `,
+              "",
+              "  Masukkan kode ini di WhatsApp  ",
+              "  Settings > Linked Devices > Link a Device  ",
+              "",
+            ],
+            "green",
+          ),
+        );
+        console.log("");
+      } catch (error) {
+        colors.logger.error("pairing", `gagal: ${error.message}`);
+        pairingRequested = false;
+      }
+    }
+
     const S = {
       C: "close",
       O: "open",
@@ -521,50 +568,6 @@ async function startConnection(options = {}) {
       connectionState.isReady = true;
       connectionState.reconnectAttempts = 0;
       connectionState.connectedAt = new Date();
-
-      if (usePairingCode && !sock.authState.creds.registered && !pairingRequested) {
-        pairingRequested = true;
-        let phoneNumber = pairingNumber;
-
-        if (!phoneNumber || phoneNumber === "") {
-          console.log("");
-          colors.logger.warn("pairing", "nomor pairing belum diatur di config");
-          console.log("");
-          phoneNumber = await askQuestion(
-            colors.chalk.cyan(
-              "📱 Masukkan nomor WhatsApp (contoh: 6281234567890): ",
-            ),
-          );
-        }
-
-        phoneNumber = phoneNumber.replace(/[^0-9]/g, "");
-
-        colors.logger.info("pairing", `meminta kode untuk ${phoneNumber}`);
-
-        try {
-          const code = await sock.requestPairingCode(phoneNumber, "OKTZLAHH");
-          console.log("");
-          console.log(
-            colors.createBanner(
-              [
-                "",
-                "   PAIRING CODE   ",
-                "",
-                `   ${colors.chalk.bold(colors.chalk.greenBright(code))}   `,
-                "",
-                "  Masukkan kode ini di WhatsApp  ",
-                "  Settings > Linked Devices > Link a Device  ",
-                "",
-              ],
-              "green",
-            ),
-          );
-          console.log("");
-        } catch (error) {
-          colors.logger.error("pairing", `gagal: ${error.message}`);
-          pairingRequested = false;
-        }
-      }
 
       try {
         await sock.uploadPreKeys();
