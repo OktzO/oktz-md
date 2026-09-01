@@ -908,7 +908,10 @@ async function startConnection(options = {}) {
         continue;
       }
 
-      if (!msg.message) continue;
+      if (!msg.message) {
+        colors.logger.debug("drop", `msg tanpa .message — stubType=${msg.messageStubType}, stubParams=${JSON.stringify(msg.messageStubParameters)}`);
+        continue;
+      }
 
       const msgId = msg.key?.id;
       if (msgId && processedMessages.has(msgId)) continue;
