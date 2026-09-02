@@ -28,7 +28,7 @@ const pluginConfig = {
 };
 
 const BRAT_FONT_URL = "https://raw.githubusercontent.com/Ditzzx-vibecoder/Assets/main/Brat/Poppins.ttf";
-let isFontLoaded = false;
+let isFontLoaded = global.bratFontLoaded || false;
 
 const TEMPLATES = {
   vermeil: {
@@ -274,6 +274,7 @@ async function createBratImage(text, template) {
     const fontBuffer = await downloadBuffer(BRAT_FONT_URL);
     GlobalFonts.register(fontBuffer, TEXT_STYLE.fontFamily);
     isFontLoaded = true;
+    global.bratFontLoaded = true;
   }
 
   const imageBuffer = await downloadBuffer(template.url);
@@ -347,6 +348,7 @@ async function createBratVideo(text, template) {
       const fontBuffer = await downloadBuffer(BRAT_FONT_URL);
       GlobalFonts.register(fontBuffer, TEXT_STYLE.fontFamily);
       isFontLoaded = true;
+    global.bratFontLoaded = true;
     }
 
     const imageBuffer = await downloadBuffer(template.url);

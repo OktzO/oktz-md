@@ -19,13 +19,14 @@ const pluginConfig = {
   isEnabled: true,
 };
 
-let isFontLoaded = false;
+let isFontLoaded = global.sroastFontLoaded || false;
 async function loadFont() {
     if (isFontLoaded) return;
     try {
         const fontBuffer = await axios.get("https://files.catbox.moe/8wqg77.ttf", { responseType: "arraybuffer" }).then(r => r.data);
         GlobalFonts.register(Buffer.from(fontBuffer), "ArialBoldSroast");
         isFontLoaded = true;
+        global.sroastFontLoaded = true;
     } catch (e) {
     }
 }

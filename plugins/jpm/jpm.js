@@ -66,7 +66,8 @@ const pluginConfig = {
   isEnabled: true,
 };
 
-const jpmSessions = {};
+if (!global.jpmSessions) global.jpmSessions = {};
+const jpmSessions = global.jpmSessions;
 
 let cachedThumb = null;
 try {

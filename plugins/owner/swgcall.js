@@ -184,7 +184,11 @@ async function handler(m, { sock, db }) {
     const pendTs = global._swgcallPending.get(m.sender).timestamp;
     setTimeout(() => {
       if (global._swgcallPending.get(m.sender)?.timestamp === pendTs) {
+        const stale = global._swgcallPending.get(m.sender)?.tempFile;
         global._swgcallPending.delete(m.sender);
+        if (stale) {
+          try { fs.unlinkSync(stale); } catch {}
+        }
       }
     }, 10 * 60 * 1000);
 

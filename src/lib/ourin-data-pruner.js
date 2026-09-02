@@ -20,6 +20,7 @@ function startDailyPruner() {
             let prunedGroups = 0
             let prunedPremium = 0
             let prunedPartner = 0
+            let prunedContacts = 0
 
             const users = db.db.data.users
             if (users && typeof users === 'object') {
@@ -66,9 +67,29 @@ function startDailyPruner() {
                 }
             }
 
-            if (prunedUsers > 0 || prunedGroups > 0 || prunedPremium > 0 || prunedPartner > 0) {
+            const contacts = db.setting?.('contacts')
+            if (contacts && typeof contacts === 'object') {
+                for (const jid of Object.keys(contacts)) {
+                    if (!users?.[jid]) {
+                        delete contacts[jid]
+                        prunedContacts++
+                    }
+                }
+                if (prunedContacts > 0) db.setting('contacts', contacts)
+            }
+
+            if (users && typeof users === 'object') {
+                for (const user of Object.values(users)) {
+                    if (!user.cooldowns) continue
+                    for (const [cmd, until] of Object.entries(user.cooldowns)) {
+                        if (until <= now) delete user.cooldowns[cmd]
+                    }
+                }
+            }
+
+            if (prunedUsers > 0 || prunedGroups > 0 || prunedPremium > 0 || prunedPartner > 0 || prunedContacts > 0) {
                 db.save()
-                logger.system('pruner', `removed ${prunedUsers} users, ${prunedGroups} groups, ${prunedPremium} premium, ${prunedPartner} partner (>${INACTIVE_THRESHOLD / 86400000}d inactive)`)
+                logger.system('pruner', `removed ${prunedUsers} users, ${prunedGroups} groups, ${prunedPremium} premium, ${prunedPartner} partner, ${prunedContacts} contacts (>${INACTIVE_THRESHOLD / 86400000}d inactive)`)
             }
         } catch (error) {
             logger.error('pruner', error.message)

@@ -552,6 +552,7 @@ async function startJadibot(sock, m, userJid, usePairing = true) {
       if (session?.heartbeatInterval) {
         clearInterval(session.heartbeatInterval);
       }
+      jadibotSessions.delete(id);
 
       const attempts = reconnectAttempts.get(id) || 0;
 
@@ -669,7 +670,8 @@ async function startJadibot(sock, m, userJid, usePairing = true) {
       const session = jadibotSessions.get(id);
       if (session && !session.connectionReady) {
         session.pendingMessages = session.pendingMessages || [];
-        session.pendingMessages.push(msg);
+        if (session.pendingMessages.length < 100)
+          session.pendingMessages.push(msg);
         continue;
       }
 

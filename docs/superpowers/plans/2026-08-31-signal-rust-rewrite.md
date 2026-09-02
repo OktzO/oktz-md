@@ -378,124 +378,130 @@ git add -A && git commit -m "feat(proto): hand-written protobuf codec WhisperMes
 
 **WARNING — format produksi, bukan tebakan:** SessionRecord JSON yang dipakai produksi harus kompatibel round-trip dengan session lama. JANGAN definisikan format sendiri. Prosedur: (1) generate session record asli dengan libsignal (devDep oracle) → serialize → simpan sebagai fixture JSON; (2) tulis struct serde yang match fixture; (3) round-trip test fixture melalui deserialize→serialize harus IDENTIK (byte-for-byte, key order sama). Field yang tidak dikenal (forward compat) dipertahankan.
 
-- [ ] **Step 1: Generate fixture dari libsignal**
+**RULING dari implementasi (format v6 sudah diverifikasi dari fixture nyata di `oktz-signal/fixtures/libsignal-session.json`):** Format v6 BERBEDA dari struktur yang diajukan spec asli. Struktur benar:
 
-```js
-// scripts/gen-session-fixture.mjs — jalankan SEKALI, simpan output sebagai fixture
-import * as libsignal from 'libsignal';
-import { randomBytes } from 'crypto';
-
-// Build session asli via libsignal (storage in-memory)
-const storage = {
-  async loadSession() { return null; },
-  async storeSession() {},
-  async loadIdentityKey() { return Buffer.concat([Buffer.from([5]), randomBytes(32)]); },
-  async saveIdentity() { return false; },
-  async loadPreKey() { return null; },
-  async removePreKey() {},
-  async loadSignedPreKey() {
-    const pair = libsignal.curve.generateKeyPair(randomBytes(32));
-    return { privKey: pair.privKey, pubKey: pair.pubKey };
+```json
+{
+  "_sessions": {
+    "<baseKey>": {
+      "registrationId": 42,
+      "currentRatchet": {
+        "ephemeralKeyPair": { "pubKey": "b64", "privKey": "b64" },
+        "lastRemoteEphemeralKey": "b64",
+        "previousCounter": 0,
+        "rootKey": "b64"
+      },
+      "indexInfo": {
+        "baseKey": "b64",
+        "baseKeyType": 1,
+        "closed": -1,
+        "used": 1788180594198,
+        "created": 1788180594198,
+        "remoteIdentityKey": "b64"
+      },
+      "_chains": {
+        "<ephemeralPubKey>": {
+          "chainKey": { "counter": -1, "key": "b64" },
+          "chainType": 1,
+          "messageKeys": {}
+        }
+      },
+      "pendingPreKey": { "baseKey": "b64" }
+    }
   },
-  async loadSenderKey() { return null; },
-  async storeSenderKey() {},
-  getOurRegistrationId() { return 12345; },
-  getOurIdentity() {
-    const pair = libsignal.curve.generateKeyPair(randomBytes(32));
-    return { privKey: pair.privKey, pubKey: pair.pubKey };
-  }
-};
-
-const address = new libsignal.ProtocolAddress('test-user', 1);
-const builder = new libsignal.SessionBuilder(storage, address);
-// processPreKey with a full prekey bundle
-const preKeyBundle = {
-  preKey: { keyId: 1, pubKey: libsignal.curve.generateKeyPair(randomBytes(32)).pubKey },
-  signedPreKey: { keyId: 2, pubKey: libsignal.curve.generateKeyPair(randomBytes(32)).pubKey, signature: randomBytes(64) },
-  identityKey: Buffer.concat([Buffer.from([5]), randomBytes(32)])
-};
-await builder.processPreKey(preKeyBundle);
-// Serialize session
-const session = await storage.loadSession();
-// Store as fixture — this is the FORMAT we must match
+  "version": "v1"
+}
 ```
 
-Catatan: fixture di-generate oleh libsignal (devDep), disimpan sebagai file JSON statis. Bukan copy kode — hanya data (interop fact).
+Poin penting untuk struct Rust:
+- `_sessions` = OBJECT keyed by baseKey, bukan array. Gunakan `BTreeMap<String, SessionEntry>` agar serialisasi deterministik (key terurut).
+- `closed` dan `chainKey.counter` = INTEGER BISA NEGATIF (-1) → `i64`, bukan `u32`.
+- `used`/`created` = timestamp ms → `u64` (atau `i64`).
+- `messageKeys` = map kosong awalnya, keyed by counter → `BTreeMap<i64, String>`.
+- Semua kunci base64 string.
+- `_chains` keyed by ephemeral pubKey base64.
+- `pendingPreKey` ada.
 
-- [ ] **Step 2: Tulis struct serde berdasarkan fixture**
-
-Lihat struktur fixture JSON dari Step 1. Definisikan struct yang cocok persis. Contoh (sesusaikan dengan fixture nyata):
+### Daftar field lengkap Rust struct (match fixture):
 
 ```rust
-// session.rs
+use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SessionRecord {
-    pub registrationId: u32,
-    pub currentRatchet: Ratchet,
-    pub indexInfo: IndexInfo,
     #[serde(default)]
-    pub sessions: Vec<ArchivedSession>,
+    pub _sessions: BTreeMap<String, SessionEntry>,
     #[serde(default = "default_version")]
     pub version: String,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SessionEntry {
+    pub registrationId: u32,
+    pub currentRatchet: Ratchet,
+    pub indexInfo: IndexInfo,
+    #[serde(default)]
+    pub _chains: BTreeMap<String, Chain>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pendingPreKey: Option<PendingPreKey>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Ratchet {
     pub ephemeralKeyPair: KeyPair,
-    pub lastRemoteEphemeralKey: String, // base64
-    pub previousCounter: u32,
-    pub rootKey: String, // base64
+    pub lastRemoteEphemeralKey: String,
+    pub previousCounter: i64,
+    pub rootKey: String,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct KeyPair {
-    pub privKey: String, // base64
-    pub pubKey: String,  // base64
+    pub privKey: String,
+    pub pubKey: String,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct IndexInfo {
     pub baseKey: String,
-    pub baseKeyType: u32,
-    pub closed: bool,
-    pub used: bool,
-    pub created: u64,
+    pub baseKeyType: i64,
+    pub closed: i64,
+    pub used: i64,
+    pub created: i64,
     pub remoteIdentityKey: String,
-    pub ratchetDirection: u32,
-    pub ratchetCounter: u32,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct ArchivedSession {
-    pub session: SessionRecord,
-    // Sesusaikan dengan fixture — chain, indexInfo, timestamp dari libsignal format
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Chain {
+    pub chainKey: ChainKey,
+    pub chainType: i64,
+    #[serde(default)]
+    pub messageKeys: BTreeMap<i64, String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ChainKey {
+    pub counter: i64,
+    pub key: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct PendingPreKey {
+    pub baseKey: String,
 }
 
 fn default_version() -> String { "v1".to_string() }
+```
 
-pub fn deserialize(json: &str) -> Result<SessionRecord, String> {
-    serde_json::from_str(json).map_err(|e| e.to_string())
-}
+**Catatan serialisasi:** Serde `BTreeMap` menghasilkan object JSON dengan key terurut. Jika fixture asli libsignal punya key dalam urutan insert (bukan sorted), round-trip byte-identical mungkin beda urutan key. Verifikasi test: jika `serialize(deserialize(fixture)) != fixture` hanya karena key order, maka: (a) pertimbangkan `preserve_order` feature serde_json, atau (b) test roundtrip via deserialize→serialize→deserialize (semantik identical, bukan byte-identical). KEPUTUSAN: test utama harus verifikasi SEMANTIK identical (nilai sama, bukan key order), karena produksi membaca JSON tidak peduli key order. Byte-identical hanya nice-to-have.
 
-pub fn serialize(record: &SessionRecord) -> Result<String, String> {
-    serde_json::to_string(record).map_err(|e| e.to_string())
-}
+- [ ] **Step 1: Generate fixture dari libsignal**
 
-pub fn have_open_session(record: &SessionRecord) -> bool {
-    !record.indexInfo.closed && record.indexInfo.used
-}
-
-/// Pindahkan current session ke archived list, buat session baru
-pub fn archive_current(record: &mut SessionRecord) {
-    let archived = ArchivedSession {
-        session: record.clone(),
-        // Sesusaikan dengan fixture
-    };
-    record.sessions.push(archived);
-    record.indexInfo.closed = true;
-}
+```js
+// scripts/gen-session-fixture.mjs — sudah ada di oktz-signal/scripts/, hasil di fixtures/libsignal-session.json
+// Sudah di-generate pada sesi implementasi. Jika perlu regenerate:
+import * as libsignal from 'libsignal';
+// ... (lihat oktz-signal/scripts/gen-session-fixture.mjs yang sudah ada)
 ```
 
 - [ ] **Step 3: Test roundtrip + operations**
@@ -552,11 +558,220 @@ git add -A && git commit -m "feat(session): SessionRecord state machine — form
 
 **Files:**
 - Create: `oktz-signal/native/signal/src/x3dh.rs`
-- Create: `oktz-signal/tests/x3dh.test.mjs`
+- Create: `oktz-signal/tests/x3dh.test.mjs` (napi test — deferred ke Task 7, gunakan Rust unit test)
 
 **Interfaces:**
 - Consumes: curve.rs (scalar_multiply, sign, verify, generate_keypair), sha2, hkdf, rand
 - Produces: `x3dh::build_initial_session(params) -> SessionRecord` (sisi initiator), `x3dh::build_recipient_session(...) -> SessionRecord` (sisi recipient)
+
+**RULING dari implementasi (detail X3DH v6 diverifikasi dari libsignal oracle — MUST follow, ini wire compat):**
+
+X3DH flow v6 (verify dari oracle, bukan tebakan spec):
+- Info string: `"WhisperText"` (BUKAN "TextSecure Initiator")
+- Sending ratchet info: `"WhisperRatchet"`
+- deriveSecrets = 3-chunk HKDF (sama seperti crypto.js pattern): `masterKey[0]` = rootKey, `masterKey[1]` = chainKey
+
+**Initiator (build_initial_session):**
+1. Verify signed prekey sig: `curve::verify(recipient_pub_32, signed_prekey_pub, signed_prekey_sig)` (recipient_pub[1..33] strip 0x05)
+2. Generate ephemeral base key pair
+3. `theirSignedPubKey` = signed_prekey_pub, `theirIdentityPubKey` = recipient_pub, `theirEphemeralPubKey` = prekey_pub (optional OPK)
+4. a1 = scalar_multiply(identity_priv, theirSignedPubKey)
+5. a2 = scalar_multiply(ephemeral_priv, theirIdentityPubKey[1..33])
+6. a3 = scalar_multiply(ephemeral_priv, theirSignedPubKey)
+7. sharedSecret[0..32] = 0xff; [32..64] = a1; [64..96] = a2; [96..128] = a3; [128..160] = a4 (if prekey present)
+8. masterKey = deriveSecrets(sharedSecret, zeros(32), "WhisperText") → 3 chunks
+9. rootKey = masterKey[0]
+10. currentRatchet = { ephemeralKeyPair: generate_keypair(), lastRemoteEphemeralKey: theirSignedPubKey, previousCounter: 0, rootKey }
+11. indexInfo = { created: now_ms, used: now_ms, remoteIdentityKey: theirIdentityPubKey, baseKey: ephemeral_pub, baseKeyType: (opk used ? 1 : 0) /* OURS */, closed: -1 }
+12. calculateSendingRatchet: shared = scalar_multiply(ratchet.ephemeralKeyPair.privKey, theirSignedPubKey); mk = deriveSecrets(shared, rootKey, "WhisperRatchet"); addChain(ephemeralKeyPair.pubKey, { messageKeys: {}, chainKey: { counter: -1, key: mk[1] }, chainType: 1 /* SENDING */ }); rootKey = mk[0]
+
+**Recipient (build_recipient_session) — decryptPreKeyWhisperMessage saat session kosong:**
+- Diterapkan di ratchet task (decrypt_pkmsg), tapi helper X3DH dipakai. Untuk Task 5 implement `build_initial_session` penuh (initiator). Recipient di Task 6.
+
+**PENTING untuk test oracle:** libsignal v6 `SessionBuilder.initOutgoing(device)` — device = { identityKey, signedPreKey: { publicKey, signature }, preKey: { publicKey }, registrationId }. Output session record v6 (lihat Task 4 fixture).
+
+- [ ] **Step 1: Implement build_initial_session**
+
+```rust
+// x3dh.rs — sisi initiator (build_initial_session)
+use crate::curve;
+use crate::session::{self, SessionRecord, SessionEntry, Ratchet, IndexInfo, KeyPair, Chain, ChainKey, PendingPreKey};
+use sha2::{Sha256};
+use hmac::{Hmac, Mac};
+use hkdf::Hkdf;
+use std::collections::BTreeMap;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+type HmacSha256 = Hmac<Sha256>;
+
+pub struct X3dhParams<'a> {
+    pub identity_priv: &'a [u8],       // 32 bytes
+    pub identity_pub: &'a [u8],        // 33 bytes (Edwards compressed, 0x05 prefix)
+    pub signed_prekey_pub: &'a [u8],   // 32 bytes (X25519)
+    pub signed_prekey_sig: &'a [u8],   // 64 bytes XEdDSA
+    pub prekey_pub: Option<&'a [u8]>,  // 32 bytes one-time prekey (optional)
+    pub prekey_id: Option<u32>,
+    pub recipient_pub: &'a [u8],       // 33 bytes (recipient identity)
+    pub recipient_prekey: &'a [u8],    // 32 bytes (recipient signed prekey)
+    pub registration_id: u32,
+}
+
+/// deriveSecrets pattern (RFC 5869, 3 chunks) — sama dengan libsignal crypto.js
+fn derive_secrets(input: &[u8], salt: &[u8], info: &[u8]) -> Result<[Vec<u8>; 3], String> {
+    let prk = {
+        let mut mac = HmacSha256::new_from_slice(salt).map_err(|e| e.to_string())?;
+        mac.update(input);
+        mac.finalize().into_bytes()
+    };
+    let mut out = [Vec::new(), Vec::new(), Vec::new()];
+    let mut prev = Vec::new();
+    for (i, slot) in out.iter_mut().enumerate() {
+        let mut mac = HmacSha256::new_from_slice(prk.as_ref()).map_err(|e| e.to_string())?;
+        mac.update(&prev);
+        mac.update(info);
+        mac.update(&[(i + 1) as u8]);
+        let chunk = mac.finalize().into_bytes().to_vec();
+        *slot = chunk.clone();
+        prev = chunk;
+    }
+    Ok(out)
+}
+
+fn now_ms() -> i64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as i64
+}
+
+pub fn build_initial_session(params: &X3dhParams) -> Result<String, String> {
+    // 1. Verify signed prekey signature
+    let recipient_pub_32 = params.recipient_pub.get(1..33).ok_or("recipient_pub must be 33 bytes")?;
+    let verified = curve::verify(recipient_pub_32, params.signed_prekey_pub, params.signed_prekey_sig)?;
+    if !verified { return Err("signed prekey signature verification failed".to_string()); }
+
+    // 2. Ephemeral base key
+    let (ephemeral_priv, ephemeral_pub) = curve::generate_keypair(&[0u8; 32].as_ref())?;
+    // NOTE: generate_keypair pakai seed — gunakan random seed:
+    let mut seed = [0u8; 32];
+    use rand::RngCore;
+    rand::rngs::OsRng.fill_bytes(&mut seed);
+    let (ephemeral_priv, ephemeral_pub) = curve::generate_keypair(&seed)?;
+
+    // 3. DH agreements
+    let a1 = curve::scalar_multiply(params.identity_priv, params.signed_prekey_pub)?;
+    let a2 = curve::scalar_multiply(&ephemeral_priv, recipient_pub_32)?;
+    let a3 = curve::scalar_multiply(&ephemeral_priv, params.signed_prekey_pub)?;
+
+    // 4. Shared secret: 0xff*32 || a1 || a2 || a3 [|| a4]
+    let has_opk = params.prekey_pub.is_some();
+    let len = if has_opk { 160 } else { 128 };
+    let mut shared = vec![0u8; len];
+    for i in 0..32 { shared[i] = 0xff; }
+    shared[32..64].copy_from_slice(&a1);
+    shared[64..96].copy_from_slice(&a2);
+    shared[96..128].copy_from_slice(&a3);
+    if let Some(opk) = params.prekey_pub {
+        let a4 = curve::scalar_multiply(&ephemeral_priv, opk)?;
+        shared[128..160].copy_from_slice(&a4);
+    }
+
+    // 5. masterKey = deriveSecrets(shared, zeros(32), "WhisperText")
+    let salt = [0u8; 32];
+    let mk = derive_secrets(&shared, &salt, b"WhisperText")?;
+    let mut root_key = mk[0].clone();
+
+    // 6. currentRatchet
+    let ephemeral_keypair = KeyPair { privKey: crate::util::b64(&ephemeral_priv), pubKey: crate::util::b64(&ephemeral_pub) };
+    let mut record = SessionRecord { _sessions: BTreeMap::new(), version: "v1".to_string() };
+
+    let now = now_ms();
+    let entry = SessionEntry {
+        registrationId: params.registration_id,
+        currentRatchet: Ratchet {
+            ephemeralKeyPair: ephemeral_keypair.clone(),
+            lastRemoteEphemeralKey: crate::util::b64(params.signed_prekey_pub),
+            previousCounter: 0,
+            rootKey: crate::util::b64(&root_key),
+        },
+        indexInfo: IndexInfo {
+            baseKey: crate::util::b64(&ephemeral_pub),
+            baseKeyType: if has_opk { 1 } else { 0 },
+            closed: -1,
+            used: now,
+            created: now,
+            remoteIdentityKey: crate::util::b64(params.recipient_pub),
+        },
+        _chains: BTreeMap::new(),
+        pendingPreKey: Some(PendingPreKey { baseKey: crate::util::b64(&ephemeral_pub) }),
+    };
+
+    // 7. calculateSendingRatchet: shared = DH(ratchet.ephemeralKeyPair.privKey, theirSignedPubKey)
+    let shared_ratchet = curve::scalar_multiply(&ephemeral_priv, params.signed_prekey_pub)?;
+    let mk_ratchet = derive_secrets(&shared_ratchet, &root_key, b"WhisperRatchet")?;
+    root_key = mk_ratchet[0].clone();
+    let chain = Chain {
+        chainKey: ChainKey { counter: -1, key: crate::util::b64(&mk_ratchet[1]) },
+        chainType: 1,
+        messageKeys: BTreeMap::new(),
+    };
+    let mut entry = entry;
+    entry.currentRatchet.rootKey = crate::util::b64(&root_key);
+    entry._chains.insert(crate::util::b64(&ephemeral_pub), chain);
+    record._sessions.insert(crate::util::b64(&ephemeral_pub), entry);
+
+    session::serialize(&record)
+}
+```
+
+Note: `crate::util::b64` — buat module util.rs di Task 5 (base64 encode/decode helper) yang dipakai x3dh + ratchet. Add to lib.rs: `pub mod util;`
+
+- [ ] **Step 2: Add util.rs (base64 helpers)**
+
+```rust
+// util.rs
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+
+pub fn b64(data: &[u8]) -> String { STANDARD.encode(data) }
+pub fn unb64(data: &str) -> Result<Vec<u8>, String> {
+    STANDARD.decode(data).map_err(|e| e.to_string())
+}
+```
+
+- [ ] **Step 3: Rust unit tests**
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_build_initial_session_structure() {
+        // identity_priv 32B, identity_pub 33B (0x05 + 32), signed_prekey_pub 32B
+        // signed_prekey_sig 64B (harus VALID — sign pakai curve::sign),
+        // prekey_pub None, recipient_pub 33B, recipient_prekey 32B, regId 42
+        // Build, assert: session JSON parses, _sessions has 1 entry,
+        // indexInfo.closed == -1, currentRatchet present, _chains has 1 sending chain
+    }
+    #[test]
+    fn test_invalid_signature_rejected() {
+        // signature random 64B → build_initial_session harus Err
+    }
+}
+```
+
+Untuk test valid signature, buat signature asli: `let sk = [..]; let sig = curve::sign(&sk, signed_prekey_pub, None)?;` dengan identity keypair yang dibuat dari sk.
+
+- [ ] **Step 4: Build and test**
+
+```bash
+cd oktz-signal
+nix-shell -p gcc --run "cargo test --manifest-path=native/signal/Cargo.toml"
+```
+
+Expected: all pass (existing 23 + new x3dh).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -A && git commit -m "feat(x3dh): X3DH session build initiator — DH agreements, WhisperText HKDF, sending ratchet"
+```
 
 - [ ] **Step 1: Implement X3DH key agreement**
 

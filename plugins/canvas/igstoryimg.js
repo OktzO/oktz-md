@@ -8,8 +8,9 @@ const IGIMG_BG_URL = 'https://raw.githubusercontent.com/Ditzzx-vibecoder/Assets/
 const FONT_SEMIBOLD_URL = 'https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuGKYAZ9hiJ-Ek-_EeA.woff2'
 const FONT_REGULAR_URL = 'https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfAZ9hiJ-Ek-_EeA.woff2'
 
-let fontsLoaded = false;
-let bgImgBuffer = null;
+if (!global.igstoryImgState) global.igstoryImgState = { fontsLoaded: false, bgImgBuffer: null };
+let fontsLoaded = global.igstoryImgState.fontsLoaded;
+let bgImgBuffer = global.igstoryImgState.bgImgBuffer;
 
 const BG_W = 898
 const BG_H = 1600
@@ -273,6 +274,7 @@ async function handler(m, { sock }) {
     } catch (e) {
         bgImgBuffer = null;
         fontsLoaded = false;
+        global.igstoryImgState = { fontsLoaded: false, bgImgBuffer: null };
         await m.react('❌');
         m.reply(`❌ *GAGAL MEMPROSES GAMBAR*\n\nMaaf, terjadi kesalahan saat mencoba membuat gambar IG Story. Pastikan gambar yang dikirim valid dan coba lagi beberapa saat.`);
     }

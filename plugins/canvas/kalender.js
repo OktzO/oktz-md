@@ -140,6 +140,7 @@ async function pastikanFontTersedia() {
 }
 
 function daftarkanFont() {
+  if (global.kalenderFontsLoaded) return;
   const dir = path.join(process.cwd(), "assets", "fonts", "kalender");
   if (!fs.existsSync(dir)) return;
 
@@ -162,6 +163,8 @@ function daftarkanFont() {
       GlobalFonts.registerFromPath(tujuan);
     }
   });
+
+  global.kalenderFontsLoaded = true;
 }
 
 function roundRect(ctx, x, y, w, h, r) {

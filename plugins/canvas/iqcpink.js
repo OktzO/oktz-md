@@ -22,9 +22,10 @@ const pluginConfig = {
     isEnabled: true,
 };
 
-let fontsLoaded = false;
+if (!global.iqcPinkState) global.iqcPinkState = { fontsLoaded: false, bgImgBuffer: null };
+let fontsLoaded = global.iqcPinkState.fontsLoaded;
 const BG_URL   = "https://files.catbox.moe/2fsv03.png";
-let bgImgBuffer = null;
+let bgImgBuffer = global.iqcPinkState.bgImgBuffer;
 
 const INTER_FONTS = [
     { url: 'https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfAZ9hiJ-Ek-_EeA.woff2', file: 'Inter-Regular.ttf' },
@@ -488,6 +489,7 @@ async function handler(m, { sock, text }) {
     } catch (error) {
         bgImgBuffer = null;
         fontsLoaded = false;
+        global.iqcPinkState = { fontsLoaded: false, bgImgBuffer: null };
         appleEmojiMap = null;
         console.error("[iqcpink error]:", error);
         await m.react('❌');

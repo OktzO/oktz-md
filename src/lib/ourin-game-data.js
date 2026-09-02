@@ -273,6 +273,18 @@ setInterval(() => {
             gameSessions.delete(chatId);
         }
     }
+
+    // ponytail: sweeper game state plugin (tictactoe/ulartangga/absensi), upgrade: TTL per game type
+    const PLUGIN_STATE_MAX_AGE = 6 * 60 * 60 * 1000;
+    for (const store of [global.tictactoeGames, global.ulartanggaGames, global.absensi]) {
+        if (!store || typeof store !== 'object') continue;
+        for (const key of Object.keys(store)) {
+            const entry = store[key];
+            let created = entry?.createdAt || entry?.startedAt || entry?.date || 0;
+            if (typeof created === 'string') created = new Date(created).getTime() || 0;
+            if (created && now - created > PLUGIN_STATE_MAX_AGE) delete store[key];
+        }
+    }
 }, 5 * 60 * 1000);
 
 export { loadData, getRandomItem, getItemByIndex, searchItem, getAllData, normalizeAnswer, checkAnswer, checkAnswerAdvanced, getSimilarity, getHint, isSurrender, createSession, setSessionTimer, getSession, endSession, hasActiveSession, getRemainingTime, formatRemainingTime, isReplyToGame, GAME_REWARD, getRandomReward, getProgressiveHint }

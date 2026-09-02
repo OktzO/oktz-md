@@ -309,17 +309,23 @@ async function main() {
     },
 
     onMessage: async (msg, sock) => {
+      let timeoutId;
       try {
         const handlerPromise = messageHandler(msg, sock);
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Handler timeout")), 60000),
-        );
+        const timeoutPromise = new Promise((_, reject) => {
+          timeoutId = setTimeout(
+            () => reject(new Error("Handler timeout")),
+            60000,
+          );
+        });
         await Promise.race([handlerPromise, timeoutPromise]);
       } catch (error) {
         if (error.message !== "Handler timeout") {
           logger.error("HANDLER", error.message);
           if (config.dev?.debugLog) console.error(c.gray(error.stack));
         }
+      } finally {
+        clearTimeout(timeoutId);
       }
     },
 

@@ -109,8 +109,10 @@ const USERNAME_STYLE = {
 
 const CANVAS_SIZE = { width: 1254, height: 1254 };
 
-let fontsLoaded = false;
-const bgCache = new Map();
+if (!global.quoteFontsLoaded) global.quoteFontsLoaded = false;
+if (!global.quoteBgCache) global.quoteBgCache = new Map();
+let fontsLoaded = global.quoteFontsLoaded;
+const bgCache = global.quoteBgCache;
 
 async function download(url) {
   const res = await fetch(url, {
@@ -332,6 +334,7 @@ async function handler(m, { sock, text }) {
     } catch (e) {
         bgCache.clear();
         fontsLoaded = false;
+        global.quoteFontsLoaded = false;
         console.error(e);
         await m.react('❌');
         m.reply(`❌ *GAGAL MEMBUAT QUOTE*\n\nMaaf, sistem mengalami gangguan saat mencoba membuat gambar quote. Silakan coba lagi nanti.`);

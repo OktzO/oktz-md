@@ -33,9 +33,10 @@ const ICON_URLS = {
 const ICON_COLOR   = '#f9fdfe'
 const VERIFY_COLOR = '#0095F6'
 
-let fontsLoaded = false;
-let bgImgBuffer = null;
-let cachedIcons = null;
+if (!global.igstoryState) global.igstoryState = { fontsLoaded: false, bgImgBuffer: null, cachedIcons: null };
+let fontsLoaded = global.igstoryState.fontsLoaded;
+let bgImgBuffer = global.igstoryState.bgImgBuffer;
+let cachedIcons = global.igstoryState.cachedIcons;
 
 const CANVAS_W = 1080
 const CANVAS_H = 1564         
@@ -311,6 +312,7 @@ async function handler(m, { sock }) {
         bgImgBuffer = null;
         cachedIcons = null;
         fontsLoaded = false;
+        global.igstoryState = { fontsLoaded: false, bgImgBuffer: null, cachedIcons: null };
         console.error(e);
         await m.react('❌');
         m.reply(`❌ *GAGAL MEMPROSES GAMBAR*\n\nMaaf, terjadi kesalahan saat mencoba membuat gambar IG Story. Pastikan gambar yang dikirim valid dan coba lagi beberapa saat.`);
