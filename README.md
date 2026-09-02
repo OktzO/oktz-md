@@ -4,7 +4,8 @@
 ### Next-Generation Modular WhatsApp Multi-Device Bot
 
 [![Node Version](https://img.shields.io/badge/Node.js-%3E%3D22.0.0-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
-[![Engine](https://img.shields.io/badge/Baileys-ourin--baileys%20v9-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](https://github.com/whiskeysockets/Baileys)
+[![Engine](https://img.shields.io/badge/Engine-oktz--baileys%20v9.1.5-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](https://github.com/whiskeysockets/Baileys)
+[![Signal](https://img.shields.io/badge/Signal-oktz--signal%200.1.7%20%28MIT%29-red?style=for-the-badge&logo=signal&logoColor=white)](https://www.npmjs.com/package/oktz-signal)
 [![Database](https://img.shields.io/badge/Database-Turso%20%26%20LowDB-4ff8d2?style=for-the-badge&logo=sqlite&logoColor=black)](https://turso.tech)
 [![Plugins](https://img.shields.io/badge/Plugins-827%20Loaded-blueviolet?style=for-the-badge&logo=speedtest&logoColor=white)](#-kategori-plugin-34-kategori)
 [![License](https://img.shields.io/badge/License-ISC-orange?style=for-the-badge)](LICENSE)
@@ -23,6 +24,20 @@
 [Panduan Plugin](#-panduan-membuat-plugin) •
 [Testing](#-testing--keamanan) •
 [Infrastruktur](#-infrastruktur--arsitektur)
+
+---
+
+> ## ⚠️ STATUS: UNSTABLE / EXPERIMENTAL
+>
+> **Versi ini mengganti engine E2EE Signal dari `libsignal` (GPL) ke `oktz-signal` (MIT, Rust native)**
+> melalui `oktz-baileys` v9.1.5.
+>
+> - Kriptografi & wire format diuji terhadap oracle `libsignal` v6, **tapi belum 100% terjamin
+>   kompatibel di semua kondisi WhatsApp** (perangkat/iOS lama, re-sync session, backlog message).
+> - Bug interop diperbaiki secara iteratif — **selalu update ke versi `oktz-signal` & `oktz-baileys` terbaru**.
+> - Jika ada pesan tampil **"Menunggu pesan ini..."** / MAC verification failed: pastikan
+>   `git pull && npm install` di panel, lalu restart. Kalau masih, unlink devices & re-scan QR.
+> - Belum ada audit keamanan pihak ketiga. Gunakan untuk produksi dengan kesadaran risiko.
 
 ---
 
@@ -168,7 +183,11 @@ git clone https://github.com/OktzO/ourin-md.git
 cd ourin-md
 npm install
 ```
-> `npm install` otomatis menjalankan `postinstall` yang me-rebuild `sharp` bila diperlukan.
+> `npm install` otomatis menginstall `oktz-signal` (Rust native) + `oktz-baileys` v9.1.5.
+> Native binary disertakan untuk `linux-x64-gnu`. Di platform lain, build dari source:
+> ```bash
+> cd node_modules/oktz-signal && npm run build:native  # butuh Rust + gcc
+> ```
 
 ### 2. Konfigurasi Environment (`.env`)
 Copy `.env.example` jadi `.env`, lalu isi:
@@ -351,8 +370,10 @@ Ringkasan cepat:
 ## 📄 Lisensi & Kredit
 
 - **Author:** [Zann](https://github.com)
-- **Base Engine:** [`ourin-baileys`](https://www.npmjs.com/package/ourin-baileys) (Fork of `@whiskeysockets/baileys`)
+- **Base Engine:** [`oktz-baileys`](https://www.npmjs.com/package/oktz-baileys) v9.1.5 (fork of `ourin-baileys` → `@whiskeysockets/baileys`)
+- **E2EE Signal Engine:** [`oktz-signal`](https://www.npmjs.com/package/oktz-signal) v0.1.7 — MIT replacement untuk `libsignal` (GPL), Rust native
 - **License:** Distributed under the **ISC License**.
+- **Stack E2EE:** `oktz-signal` (X3DH + Double Ratchet, Rust) + `oktz-curve25519` (native curve helpers) → `oktz-baileys` → `ourin-md`.
 
 <div align="center">
   <sub>Dibuat dengan ❤️ untuk ekosistem bot WhatsApp yang lebih andal dan efisien.</sub>
