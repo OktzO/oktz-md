@@ -418,7 +418,7 @@ async function startConnection(options = {}) {
       colors.logger.info("pairing", `meminta kode untuk ${phoneNumber}`);
 
       try {
-        const code = await sock.requestPairingCode(phoneNumber, "OKTZLAHH");
+        const code = await sock.requestPairingCode(phoneNumber, "OKTZZLAH");
         console.log("");
         console.log(
           colors.createBanner(

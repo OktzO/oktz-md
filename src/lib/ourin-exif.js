@@ -193,30 +193,21 @@ function addExifToWebpFallback(webpBuffer, options = {}) {
     if (hasExif) {
         return replaceExifInWebp(webpBuffer, exif);
     }
-    const riffHeader = webpBuffer.slice(0, 4);
-    const webpSignature = webpBuffer.slice(8, 12);
-    const webpData = webpBuffer.slice(12);
-    const exifChunkId = Buffer.from('EXIF');
-    const exifSize = Buffer.alloc(4);
-    exifSize.writeUInt32LE(exif.length);
-    
-    const exifChunk = Buffer.concat([exifChunkId, exifSize, exif]);
-    const padding = exif.length % 2 === 1 ? Buffer.from([0x00]) : Buffer.alloc(0);
-    const newWebpData = Buffer.concat([webpData, exifChunk, padding]);
-    const newFileSize = Buffer.alloc(4);
-    newFileSize.writeUInt32LE(4 + newWebpData.length);
-    
-    return Buffer.concat([riffHeader, newFileSize, webpSignature, newWebpData]);
+    return appendExifToWebp(webpBuffer, exif);
 }
 
 function replaceExifInWebp(webpBuffer, newExif) {
     const exifIndex = webpBuffer.indexOf(Buffer.from('EXIF'));
     
-    if (exifIndex === -1) {
-        return addExifToWebpFallback(webpBuffer, {});
+    if (exifIndex === -1 || exifIndex + 8 > webpBuffer.length) {
+        return appendExifToWebp(webpBuffer, newExif);
     }
     
     const oldExifSize = webpBuffer.readUInt32LE(exifIndex + 4);
+    
+    if (exifIndex + 8 + oldExifSize > webpBuffer.length) {
+        return appendExifToWebp(webpBuffer, newExif);
+    }
     const padding = oldExifSize % 2 === 1 ? 1 : 0;
     
     const beforeExif = webpBuffer.slice(0, exifIndex);
@@ -234,6 +225,23 @@ function replaceExifInWebp(webpBuffer, newExif) {
     newWebp.writeUInt32LE(newFileSize, 4);
     
     return newWebp;
+}
+
+function appendExifToWebp(webpBuffer, exif) {
+    const riffHeader = webpBuffer.slice(0, 4);
+    const webpSignature = webpBuffer.slice(8, 12);
+    const webpData = webpBuffer.slice(12);
+    const exifChunkId = Buffer.from('EXIF');
+    const exifSize = Buffer.alloc(4);
+    exifSize.writeUInt32LE(exif.length);
+    
+    const exifChunk = Buffer.concat([exifChunkId, exifSize, exif]);
+    const padding = exif.length % 2 === 1 ? Buffer.from([0x00]) : Buffer.alloc(0);
+    const newWebpData = Buffer.concat([webpData, exifChunk, padding]);
+    const newFileSize = Buffer.alloc(4);
+    newFileSize.writeUInt32LE(4 + newWebpData.length);
+    
+    return Buffer.concat([riffHeader, newFileSize, webpSignature, newWebpData]);
 }
 
 function readExifFromWebp(webpBuffer) {

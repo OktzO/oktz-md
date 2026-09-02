@@ -703,7 +703,7 @@ async function startJadibot(sock, m, userJid, usePairing = true) {
   if (usePairing && !state.creds?.registered) {
     try {
       await delay(3000);
-      pairingCode = await childSock.requestPairingCode(id);
+      pairingCode = await childSock.requestPairingCode(id, "OKTZZLAH");
       pairingCode = pairingCode.match(/.{1,4}/g)?.join("-") || pairingCode;
 
       if (m && m.chat) {
