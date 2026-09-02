@@ -883,8 +883,8 @@ async function startConnection(options = {}) {
 
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
     lastMessageReceived = Date.now();
-    colors.logger.debug("upsert", `+${messages.length} pesan, tipe=${type}, isReady=${connectionState.isReady}`);
     if (config.dev?.debugLog) {
+      colors.logger.debug("upsert", `+${messages.length} pesan, tipe=${type}, isReady=${connectionState.isReady}`);
       colors.logger.debug("pesan", `${messages.length} pesan, tipe=${type}`);
     }
     if (type !== "notify" && type !== "append") return;
@@ -909,7 +909,9 @@ async function startConnection(options = {}) {
       }
 
       if (!msg.message) {
-        colors.logger.debug("drop", `msg tanpa .message — stubType=${msg.messageStubType}, stubParams=${JSON.stringify(msg.messageStubParameters)}`);
+        if (config.dev?.debugLog) {
+          colors.logger.debug("drop", `msg tanpa .message — stubType=${msg.messageStubType}, stubParams=${JSON.stringify(msg.messageStubParameters)}`);
+        }
         continue;
       }
 
