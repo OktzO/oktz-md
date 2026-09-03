@@ -32,10 +32,10 @@ async function handler(m, { sock }) {
     
     try {
         const tempFile = path.join(os.tmpdir(), `brat-${Date.now()}.webp`)
-        const url = await bratVid(text, {
+        const buffer = await bratVid(text, {
             outputFormat: 'mp4',
         })
-        await fs.promises.writeFile(tempFile, url)
+        await fs.promises.writeFile(tempFile, buffer)
         await sock.sendVideoAsSticker(m.chat, tempFile, m, {
             packname: config.sticker.packname,
             author: config.sticker.author

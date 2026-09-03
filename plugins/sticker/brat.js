@@ -110,7 +110,7 @@ async function handler(m, { sock }) {
   const text = m.text;
   const command = String(m.command || "").toLowerCase();
 
-  if (command === "brat") {
+  if (command === "brat" || command === "bratmenu") {
     await sendBratMenu(m, sock, text);
     return;
   }

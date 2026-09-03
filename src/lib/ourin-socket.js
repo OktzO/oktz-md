@@ -248,8 +248,6 @@ async function extendSocket(sock) {
       jid,
       {
         sticker: webpBuffer,
-        isAiSticker: true,
-        isAvatar: true,
         contextInfo: { isForwarded: true, forwardingScore: 1, premium: 1 },
       },
       { quoted: m },

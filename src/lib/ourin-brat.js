@@ -69,8 +69,8 @@ export function tokenize(text) {
   const tokens = [];
   for (const seg of raw) {
     if (seg.type === "emoji") {
-
-
+      if (tokens.length > 0) tokens.push({ type: "space" });
+      tokens.push({ type: "emoji", value: seg.value });
     } else {
       const words = seg.value.split(/\s+/).filter(w => w.length > 0);
       words.forEach(w => {
@@ -155,6 +155,9 @@ export async function drawBrat({
         ctx.fillText(token.value, currentX, y);
         currentX += token.w;
       } else if (token.type === "space") {
+        currentX += token.w;
+      } else if (token.type === "emoji") {
+        ctx.fillText(token.value, currentX, y);
         currentX += token.w;
       }
     }
