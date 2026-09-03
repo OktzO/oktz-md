@@ -5,6 +5,7 @@ import config from "../../config.js";
 import * as timeHelper from "./ourin-time.js";
 import { saluranCtx } from "./ourin-context.js";
 import { getTodaySchedule, extractPrayerTimes } from "./ourin-sholat-api.js";
+import { getGroupCache, invalidateGroupCache, AsyncPool, yieldToEventLoop } from "./ourin-async-pool.js";
 
 const TZ = "Asia/Jakarta";
 
@@ -143,7 +144,7 @@ async function sendSholatNotifications(sholat, waktu) {
 
     let groupList = [];
     try {
-      const groupsObj = await sock.groupFetchAllParticipating();
+      const groupsObj = await getGroupCache(sock);
       groupList = Object.keys(groupsObj);
     } catch (e) {
       logger.error("SholatScheduler", `Failed to fetch groups: ${e.message}`);
@@ -168,64 +169,72 @@ async function sendSholatNotifications(sholat, waktu) {
       message += `\n\n> 🔒 _Grup ditutup ${duration} menit untuk sholat_`;
     }
 
+    const pool = new AsyncPool(5);
+
     for (const groupId of groupList) {
-      const groupData = db.data?.groups?.[groupId] || {};
-      if (groupData.notifSholat === false) continue;
+      pool.add(async () => {
+        const groupData = db.data?.groups?.[groupId] || {};
+        if (groupData.notifSholat === false) return;
 
-      try {
-        if (sendAudio && isSholatTime) {
-          try {
-            await sock.sendMessage(groupId, {
-              audio: { url: AUDIO_ADZAN },
-              mimetype: "audio/mpeg",
-              ptt: false,
-              contextInfo: {
-                ...saluranCtx(),
-                forwardedNewsletterMessageInfo: {
-                  newsletterJid: saluranId,
-                  newsletterName: saluranName,
-                  serverMessageId: 127,
+        try {
+          if (sendAudio && isSholatTime) {
+            try {
+              await sock.sendMessage(groupId, {
+                audio: { url: AUDIO_ADZAN },
+                mimetype: "audio/mpeg",
+                ptt: false,
+                contextInfo: {
+                  ...saluranCtx(),
+                  forwardedNewsletterMessageInfo: {
+                    newsletterJid: saluranId,
+                    newsletterName: saluranName,
+                    serverMessageId: 127,
+                  },
                 },
+              });
+            } catch (audioErr) {
+              logger.error("SholatScheduler", `Failed to send audio to ${groupId}: ${audioErr.message}`);
+            }
+          }
+
+          await sock.sendMessage(groupId, {
+            text: message,
+            contextInfo: {
+              ...saluranCtx(),
+              forwardedNewsletterMessageInfo: {
+                newsletterJid: saluranId,
+                newsletterName: saluranName,
+                serverMessageId: 127,
               },
-            });
-          } catch (audioErr) {
-            logger.error("SholatScheduler", `Failed to send audio to ${groupId}: ${audioErr.message}`);
-          }
-        }
-
-        await sock.sendMessage(groupId, {
-          text: message,
-          contextInfo: {
-            ...saluranCtx(),
-            forwardedNewsletterMessageInfo: {
-              newsletterJid: saluranId,
-              newsletterName: saluranName,
-              serverMessageId: 127,
             },
-          },
-        });
+          });
 
-        if (closeGroup && isSholatTime) {
-          try {
-            await sock.groupSettingUpdate(groupId, "announcement");
-            closedGroups.push(groupId);
-          } catch (e) {
-            logger.error(
-              "SholatScheduler",
-              `Failed to close ${groupId}: ${e.message}`,
-            );
+          if (closeGroup && isSholatTime) {
+            try {
+              await sock.groupSettingUpdate(groupId, "announcement");
+              closedGroups.push(groupId);
+            } catch (e) {
+              logger.error(
+                "SholatScheduler",
+                `Failed to close ${groupId}: ${e.message}`,
+              );
+            }
           }
-        }
 
-        sentCount++;
-        await new Promise((r) => setTimeout(r, 500));
-      } catch (err) {
-        logger.error(
-          "SholatScheduler",
-          `Failed to send to ${groupId}: ${err.message}`,
-        );
-      }
+          sentCount++;
+        } catch (err) {
+          logger.error(
+            "SholatScheduler",
+            `Failed to send to ${groupId}: ${err.message}`,
+          );
+        }
+      });
+
+      // yield every 20 groups so event loop breathes
+      if (sentCount > 0 && sentCount % 20 === 0) await yieldToEventLoop();
     }
+
+    await pool.onIdle();
 
     if (closeGroup && closedGroups.length > 0) {
       setTimeout(

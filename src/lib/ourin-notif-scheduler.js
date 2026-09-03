@@ -220,6 +220,15 @@ function parseJadwal(input) {
 function initNotifScheduler(socketInstance) {
     sock = socketInstance
 
+    const db = getDatabase()
+    const makanData = db.setting('notifMakan') || {}
+    const tidurData = db.setting('notifTidur') || {}
+    const hasEntries = Object.values(makanData).some(e => e.enabled) || Object.values(tidurData).some(e => e.enabled)
+    if (!hasEntries) {
+        logger.info('NotifScheduler', 'No active notifications, scheduler idle')
+        return
+    }
+
     if (refreshJob) refreshJob.stop()
     refreshJob = new CronJob('1 0 * * *', () => {
         buildCronJobs()

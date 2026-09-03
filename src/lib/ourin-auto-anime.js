@@ -1,7 +1,9 @@
 import axios from 'axios'
 import * as cheerio from 'cheerio'
 import fs from 'fs'
+import fsp from 'fs/promises'
 import path from 'path'
+import { yieldToEventLoop } from './ourin-async-pool.js'
 const BASE_URL = 'https://winbu.net'
 const DATA_DIR = path.join(process.cwd(), 'src', 'data')
 const SENT_FILE = path.join(DATA_DIR, 'autoanime_winbu_sent.json')
@@ -23,10 +25,10 @@ function loadSent() {
     }
 }
 
-function saveSent(set) {
+async function saveSent(set) {
     try {
-        if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
-        fs.writeFileSync(SENT_FILE, JSON.stringify([...set]))
+        await fsp.mkdir(DATA_DIR, { recursive: true })
+        await fsp.writeFile(SENT_FILE, JSON.stringify([...set]))
     } catch {}
 }
 
@@ -39,10 +41,10 @@ function loadState() {
     }
 }
 
-function saveState(state) {
+async function saveState(state) {
     try {
-        if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
-        fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2))
+        await fsp.mkdir(DATA_DIR, { recursive: true })
+        await fsp.writeFile(STATE_FILE, JSON.stringify(state, null, 2))
     } catch {}
 }
 
@@ -317,7 +319,7 @@ async function runCheck() {
                 const hours = parseRelativeTimeToHours(timeStr)
                 if (hours !== null && hours >= 24) {
                     sent.add(episodeKey)
-                    saveSent(sent)
+                    await saveSent(sent)
                     continue
                 }
             }
@@ -332,11 +334,12 @@ async function runCheck() {
             })
 
             sent.add(episodeKey)
-            saveSent(sent)
+            await saveSent(sent)
             await new Promise(r => setTimeout(r, 5000))
         } catch (e) {
             console.error(`[AutoAnime-Winbu] ❌ Error ${anime.title}:`, e.message)
         }
+        await yieldToEventLoop()
     }
 
     console.log('[AutoAnime-Winbu] ✅ Check complete')

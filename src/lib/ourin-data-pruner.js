@@ -1,5 +1,6 @@
 import { logger } from './ourin-logger.js'
 import { getDatabase } from './ourin-database.js'
+import { yieldToEventLoop } from './ourin-async-pool.js'
 const INACTIVE_THRESHOLD = 14 * 24 * 60 * 60 * 1000
 const PRUNE_INTERVAL = 6 * 60 * 60 * 1000
 
@@ -8,7 +9,7 @@ let prunerTimer = null
 function startDailyPruner() {
     if (prunerTimer) return
 
-    prunerTimer = setInterval(() => {
+    prunerTimer = setInterval(async () => {
         try {
             
             const db = getDatabase()
@@ -24,6 +25,7 @@ function startDailyPruner() {
 
             const users = db.db.data.users
             if (users && typeof users === 'object') {
+                let i = 0
                 for (const [jid, user] of Object.entries(users)) {
                     const isProtected =
                         user.premium ||
@@ -35,16 +37,19 @@ function startDailyPruner() {
                         delete users[jid]
                         prunedUsers++
                     }
+                    if (++i % 100 === 0) await yieldToEventLoop()
                 }
             }
 
             const groups = db.db.data.groups
             if (groups && typeof groups === 'object') {
+                let i = 0
                 for (const [jid, group] of Object.entries(groups)) {
                     if (group.lastActivity && group.lastActivity < threshold) {
                         delete groups[jid]
                         prunedGroups++
                     }
+                    if (++i % 100 === 0) await yieldToEventLoop()
                 }
             }
 

@@ -654,7 +654,8 @@ async function startConnection(options = {}) {
       }
       try {
         const { startAutoBioChecker } = await import("./lib/ourin-scheduler.js");
-        startAutoBioChecker(sock);
+        const dbBio = (await import("./lib/ourin-database.js")).getDatabase();
+        if (dbBio.setting("autobio_status")) startAutoBioChecker(sock);
       } catch (e) {
         colors.logger.debug("autobio", "skipped: " + e.message);
       }

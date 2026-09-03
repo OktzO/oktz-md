@@ -3,6 +3,7 @@ import { logger } from "./ourin-logger.js";
 import { CronJob } from "cron";
 import { getNumericParts, zonedTimeToEpoch, formatNow } from "./ourin-time.js";
 import { saluranCtx } from "./ourin-context.js";
+import { yieldToEventLoop } from "./ourin-async-pool.js";
 import config from "../../config.js";
 
 const scheduledTasks = new Map();
@@ -459,8 +460,12 @@ async function startGroupScheduleChecker(sock) {
         const groups = db.db?.data?.groups || {};
         if (!groups || typeof groups !== "object") return;
 
-        for (const [groupId, group] of Object.entries(groups)) {
-          if (!group || typeof group !== "object") continue;
+        const scheduledGroups = Object.entries(groups).filter(
+          ([, g]) => g && typeof g === "object" && (g.scheduleOpen || g.scheduleClose)
+        );
+        if (scheduledGroups.length === 0) return;
+
+        for (const [index, [groupId, group]] of scheduledGroups.entries()) {
           const notifyKey = `${groupId}_${currentTime}`;
           if (notifiedGroups.has(notifyKey)) continue;
 
@@ -538,7 +543,10 @@ async function startGroupScheduleChecker(sock) {
               }
               notifiedGroups.add(notifyKey);
             }
-          }
+}
+
+          // yield every 10 groups so event loop can breathe
+          if (index % 10 === 9) await yieldToEventLoop();
         }
 
         // Reset dedup set at the top of each hour (minute + second both 0).
@@ -658,6 +666,9 @@ async function startSewaChecker(sock) {
             await new Promise((r) => setTimeout(r, 2000));
           } catch { }
         }
+
+        // yield every 10 groups so event loop can breathe
+        if (index % 10 === 9) await yieldToEventLoop();
       }
 
       if (expiredCount > 0 || warnedCount > 0) {
