@@ -594,7 +594,7 @@ Welcome to ${config.bot?.name}, Our bot will help you
 > 🤖 *Name*: ${config.bot?.name}
 > ⚙️ *Version*: ${config.bot?.version}
 > 👨‍💻 *Developer*: ${config.bot?.developer}
-> 🧩 *Library*: \`ourin-baileys\`
+> 🧩 *Library*: \`oktz-baileys\`
 
 🍅 *USER INFORMATION*
 > 🧑 *Name*: ${m.pushName}
