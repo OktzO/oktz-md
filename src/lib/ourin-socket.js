@@ -22,6 +22,14 @@ import fs from "fs";
 import path from "path";
 import { downloadMediaMessage, getContentType } from "ourin";
 import { addExifToWebp, DEFAULT_METADATA } from "./ourin-exif.js";
+import {
+  generateTableContent,
+  generateTableContentV2,
+  generateListContent,
+  generateCodeBlockContent,
+  generateCodeBlockContentV2,
+  generateLinkContentV2,
+} from "./ourin-rich-messages.js";
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import ffmpeg from "fluent-ffmpeg";
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
@@ -935,6 +943,59 @@ async function extendSocket(sock) {
       messageId: message.key.id,
     });
     return message.key.id;
+  };
+
+  sock.sendCodeBlock = async (jid, code, quoted, options = {}) => {
+    const { message, messageId } = generateCodeBlockContent(code, quoted, options);
+    await sock.relayMessage(jid, message, { messageId });
+    return { message, messageId };
+  };
+
+  sock.sendCodeBlockV2 = async (jid, code, quoted, options = {}) => {
+    const { message, messageId } = generateCodeBlockContentV2(code, quoted, options);
+    await sock.relayMessage(jid, message, { messageId });
+    return { message, messageId };
+  };
+
+  sock.sendLinkV2 = async (jid, text, links, quoted, options = {}) => {
+    const { message, messageId } = generateLinkContentV2(text, links, quoted, options);
+    await sock.relayMessage(jid, message, { messageId });
+    return { message, messageId };
+  };
+
+  sock.sendList = async (jid, title, items, quoted, options = {}) => {
+    const { message, messageId } = generateListContent(title, items, quoted, options);
+    await sock.relayMessage(jid, message, { messageId });
+    return { message, messageId };
+  };
+
+  sock.sendTable = async (jid, title, headers, rows, quoted, options = {}) => {
+    const { message, messageId } = generateTableContent(title, headers, rows, quoted, options);
+    await sock.relayMessage(jid, message, { messageId });
+    return { message, messageId };
+  };
+
+  sock.sendTableV2 = async (jid, table, quoted, options = {}) => {
+    const { message, messageId } = generateTableContentV2(table, quoted, options);
+    await sock.relayMessage(jid, message, { messageId });
+    return { message, messageId };
+  };
+
+  sock.cekIDSaluran = async (url) => {
+    let channelId;
+    if (url.includes("whatsapp.com/channel/")) {
+      channelId = url.split("whatsapp.com/channel/")[1].split("/")[0];
+    } else if (url.includes("wa.me/channel/")) {
+      channelId = url.split("wa.me/channel/")[1].split("/")[0];
+    } else {
+      channelId = url;
+    }
+    try {
+      const metadata = await sock.newsletterMetadata("INVITE", channelId);
+      return metadata;
+    } catch {
+      return { id: channelId };
+    }
   };
 
   return sock;
