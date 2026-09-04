@@ -49,18 +49,26 @@ async function handler(m, { sock }) {
     
     const apiUrl = `https://api.neoxr.eu/api/memegenvid?image=${encodeURIComponent(imageUrl)}&top=${encodeURIComponent(top)}&bottom=${encodeURIComponent(bottom)}&apikey=${config.APIkey.neoxr}`;
     
-    const response = await axios.get(apiUrl);
-    if (!response.data.status || !response.data.data?.url) {
-      return m.reply('❌ Gagal membuat meme, kemungkinan API sedang gangguan.');
+    let sent = false
+    try {
+        const response = await axios.get(apiUrl);
+        if (response.data.status && response.data.data?.url) {
+            const stickerUrl = response.data.data.url;
+            const stickerBuffer = await axios.get(stickerUrl, { responseType: 'arraybuffer' }).then(res => res.data);
+            await sock.sendImageAsSticker(m.chat, stickerBuffer, m, {
+                packname: config.sticker.packname,
+                author: config.sticker.author
+            });
+            sent = true
+        }
+    } catch (e) { }
+
+    if (!sent) {
+        await sock.sendImageAsSticker(m.chat, buffer, m, {
+            packname: config.sticker.packname,
+            author: config.sticker.author
+        });
     }
-
-    const stickerUrl = response.data.data.url;
-    const stickerBuffer = await axios.get(stickerUrl, { responseType: 'arraybuffer' }).then(res => res.data);
-
-    await sock.sendImageAsSticker(m.chat, stickerBuffer, m, {
-        packname: config.sticker.packname,
-        author: config.sticker.author
-    });
 
     await m.react('✅');
   } catch (error) {

@@ -1,6 +1,8 @@
 import config from '../../config.js'
 import { f } from './../../src/lib/ourin-http.js'
 import te from '../../src/lib/ourin-error.js'
+import { createCanvas } from '@napi-rs/canvas'
+
 const pluginConfig = {
     name: 'emojimix',
     alias: ['mixemoji', 'emix'],
@@ -45,13 +47,31 @@ async function handler(m, { sock }) {
 
         const data = await f(apiUrl)
 
-        if (!data.status || !data.data?.url) {
-            return m.reply(`❌ Kombinasi emoji tidak ditemukan!\n\nCoba emoji lain.`)
+        if (data?.status && data?.data?.url) {
+            const imageUrl = data.data.url
+            await sock.sendImageAsSticker(m.chat, imageUrl, m, {
+                packname: config.sticker.packname,
+                author: config.sticker.author
+            })
+            m.react('✅')
+            return
         }
 
-        const imageUrl = data.data.url
+        const canvas = createCanvas(256, 256)
+        const ctx = canvas.getContext('2d')
 
-        await sock.sendImageAsSticker(m.chat, imageUrl, m, {
+        ctx.fillStyle = '#FFFFFF'
+        ctx.fillRect(0, 0, 256, 256)
+
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.font = '80px sans-serif'
+        ctx.fillText(emoji1, 90, 128)
+        ctx.fillText(emoji2, 166, 128)
+
+        const buffer = await canvas.encode('png')
+
+        await sock.sendImageAsSticker(m.chat, buffer, m, {
             packname: config.sticker.packname,
             author: config.sticker.author
         })

@@ -1,6 +1,7 @@
-import axios from 'axios'
+import { drawBrat } from '../../src/lib/ourin-brat.js'
 import config from '../../config.js'
 import te from '../../src/lib/ourin-error.js'
+
 const pluginConfig = {
     name: 'bratcewek',
     alias: ['cewekbrat', 'bratperempuan', 'bratgirl'],
@@ -26,8 +27,21 @@ async function handler(m, { sock }) {
     m.react('🕕')
     
     try {
-        const url = `https://api.deline.web.id/maker/cewekbrat?text=${encodeURIComponent(text)}`
-        await sock.sendImageAsSticker(m.chat, url, m, {
+        const buffer = await drawBrat({
+            text,
+            bgColor: "#FFC0CB",
+            width: 512,
+            height: 512,
+            maxWidth: 450,
+            maxHeight: 450,
+            centerX: 256,
+            centerY: 256,
+            maxFontSize: 130,
+            fontDecrement: 5,
+            lineHeightMult: 1.1,
+            textColor: "#000000"
+        })
+        await sock.sendImageAsSticker(m.chat, buffer, m, {
             packname: config.sticker.packname,
             author: config.sticker.author
         })

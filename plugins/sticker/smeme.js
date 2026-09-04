@@ -75,41 +75,19 @@ async function handler(m, { sock }) {
     });
     let imageUrl;
     try {
-      const uploadRes = await axios.post(
-        "https://c.termai.cc/api/upload?key=AIzaBj7z2z3xBjsk",
+      const telegraphRes = await axios.post(
+        "https://telegra.ph/upload",
         form,
         {
           headers: form.getHeaders(),
           timeout: 30000,
         },
       );
-      if (uploadRes.data?.status && uploadRes.data?.path) {
-        imageUrl = uploadRes.data.path;
+      if (telegraphRes.data?.[0]?.src) {
+        imageUrl = "https://telegra.ph" + telegraphRes.data[0].src;
       }
     } catch (e) {
-      console.log("[SMEME] Termai failed:", e.response?.data || e.message, "Trying telegraph...");
-    }
-    if (!imageUrl) {
-      try {
-        const form2 = new FormData();
-        form2.append('file', imageBuffer, {
-          filename: "meme.png",
-          contentType: "image/png",
-        });
-        const telegraphRes = await axios.post(
-          "https://telegra.ph/upload",
-          form2,
-          {
-            headers: form2.getHeaders(),
-            timeout: 30000,
-          },
-        );
-        if (telegraphRes.data?.[0]?.src) {
-          imageUrl = "https://telegra.ph" + telegraphRes.data[0].src;
-        }
-      } catch (e) {
-        console.log("[SMEME] Telegraph failed:", e.message);
-      }
+      console.log("[SMEME] Telegraph failed:", e.message);
     }
     if (!imageUrl) {
       m.react("❌");

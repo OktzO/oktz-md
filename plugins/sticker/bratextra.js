@@ -76,13 +76,6 @@ const TEMPLATES = {
   }
 };
 
-function toUnified(str) {
-  return Array.from(str)
-    .map(e => e.codePointAt(0).toString(16))
-    .join("-")
-    .toLowerCase();
-}
-
 function tokenize(text) {
   const emojiRegex = /\p{Emoji_Presentation}|\p{Extended_Pictographic}/gu;
   const raw = [];
@@ -115,21 +108,6 @@ function tokenize(text) {
   }
 
   return tokens;
-}
-
-async function getEmojiImage(emoji) {
-  const unified = toUnified(emoji);
-  const filePath = path.join(
-    process.cwd(),
-    "node_modules",
-    "emoji-datasource-apple",
-    "img",
-    "apple",
-    "64",
-    `${unified}.png`
-  );
-  if (!fs.existsSync(filePath)) return null;
-  return await loadImage(fs.readFileSync(filePath));
 }
 
 function getTokenWidth(ctx, token, fontSize) {
@@ -201,7 +179,7 @@ async function handler(m, { sock }) {
       const response = await axios.get(url, {
           responseType: 'arraybuffer',
           headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
               'Accept': 'image/png,image/*,*/*;q=0.8',
               'Referer': 'https://aqul-brat.hf.space/',
               'Connection': 'keep-alive'
@@ -273,9 +251,7 @@ async function handler(m, { sock }) {
             } else if (token.type === "space") {
               x += token.w;
             } else if (token.type === "emoji") {
-              const img = await getEmojiImage(token.value);
-              const size = fontSize * 1.15;
-              if (img) ctx.drawImage(img, x, y - size * 0.85, size, size);
+              ctx.fillText(token.value, x, y);
               x += token.w;
             }
           }
@@ -305,9 +281,7 @@ async function handler(m, { sock }) {
                 } else if (token.type === "space") {
                   currentX += token.w;
                 } else if (token.type === "emoji") {
-                  const img = await getEmojiImage(token.value);
-                  const size = fontSize * 1.15;
-                  if (img) ctx.drawImage(img, currentX, y - size / 2, size, size);
+                  ctx.fillText(token.value, currentX, y);
                   currentX += token.w;
                 }
               }
@@ -330,9 +304,7 @@ async function handler(m, { sock }) {
                   } else if (token.type === "space") {
                     currentX += token.w;
                   } else if (token.type === "emoji") {
-                    const img = await getEmojiImage(token.value);
-                    const size = fontSize * 1.15;
-                    if (img) ctx.drawImage(img, currentX, y - size / 2, size, size);
+                    ctx.fillText(token.value, currentX, y);
                     currentX += token.w;
                   }
                 }

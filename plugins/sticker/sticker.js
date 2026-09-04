@@ -2,9 +2,12 @@ import fs from 'fs'
 import path from 'path'
 import { exec } from 'child_process'
 import { promisify } from 'util'
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
 import config from '../../config.js'
 import te from '../../src/lib/ourin-error.js'
 const execAsync = promisify(exec)
+const ffmpegPath = ffmpegInstaller.path
+const ffprobePath = ffmpegPath.replace('ffmpeg', 'ffprobe')
 
 const pluginConfig = {
     name: 'sticker',
@@ -86,7 +89,7 @@ async function processImage(inputPath, outputPath, options) {
     }
     
     const filterStr = filters.join(',')
-    await execAsync(`ffmpeg -i "${inputPath}" -vf "${filterStr}" -y "${outputPath}"`)
+    await execAsync(`"${ffmpegPath}" -i "${inputPath}" -vf "${filterStr}" -y "${outputPath}"`)
 }
 
 async function processVideo(inputPath, outputPath, options) {
@@ -109,7 +112,7 @@ async function processVideo(inputPath, outputPath, options) {
     }
     
     const filterStr = filters.join(',')
-    await execAsync(`ffmpeg -i "${inputPath}" -vf "${filterStr}" -c:a copy -y "${outputPath}"`)
+    await execAsync(`"${ffmpegPath}" -i "${inputPath}" -vf "${filterStr}" -c:a copy -y "${outputPath}"`)
 }
 
 async function handler(m, { sock, config: botConfig }) {
@@ -163,7 +166,7 @@ async function handler(m, { sock, config: botConfig }) {
             fs.writeFileSync(tempVideo, buffer)
             
             try {
-                const { stdout } = await execAsync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${tempVideo}"`)
+                const { stdout } = await execAsync(`"${ffprobePath}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${tempVideo}"`)
                 const duration = parseFloat(stdout.trim())
                 
                 if (duration > 10) {
@@ -201,7 +204,9 @@ async function handler(m, { sock, config: botConfig }) {
                     await processVideo(inputPath, outputPath, options)
                 }
                 buffer = fs.readFileSync(outputPath)
-            } catch (e) {}
+            } catch (e) {
+                console.error('[Sticker] FFmpeg processing failed:', e.message)
+            }
             
             if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath)
             if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath)

@@ -1,6 +1,7 @@
-import axios from 'axios'
-import config from '../../config.js'
-import te from '../../src/lib/ourin-error.js'
+import { createCanvas, loadImage } from "@napi-rs/canvas";
+import config from "../../config.js";
+import te from "../../src/lib/ourin-error.js";
+
 const pluginConfig = {
     name: 'qc',
     alias: ['qcstc', 'stcqc', 'qcstic', 'qcstick', 'quotesticker'],
@@ -66,16 +67,6 @@ const COLORS = {
     silver: '#C0C0C0'
 }
 
-const DEFAULT_PP = 'https://files.catbox.moe/nwvkbt.png'
-
-async function getProfilePicture(sock, jid) {
-    try {
-        return await sock.profilePictureUrl(jid, 'image')
-    } catch {
-        return DEFAULT_PP
-    }
-}
-
 async function handler(m, { sock }) {
     const args = m.args || []
     
@@ -119,50 +110,50 @@ async function handler(m, { sock }) {
     
     try {
         const username = m.pushName || 'User'
-        const avatar = await getProfilePicture(sock, m.sender)
         
-        const json = {
-        "messages": [
-            {
-            "from": {
-                "id": Math.floor(Math.random() * 10),
-                "first_name": username,
-                "last_name": "",
-                "name": "",
-                "photo": {
-                "url": avatar
-                }
-            },
-            "text": message,
-            "entities": [],
-            "avatar": true,
-            "media": {
-                "url": ""
-            },
-            "mediaType": "",
-            "replyMessage": {
-                "name": "",
-                "text": "",
-                "entities": [],
-                "chatId": Math.floor(Math.random() * 10)
+        const canvas = createCanvas(512, 512)
+        const ctx = canvas.getContext('2d')
+
+        ctx.fillStyle = backgroundColor
+        ctx.fillRect(0, 0, 512, 512)
+
+        let fontSize = 36
+        ctx.font = `bold ${fontSize}px sans-serif`
+        let words = message.split(' ')
+        let lines = []
+        let currentLine = ''
+
+        for (const word of words) {
+            const test = currentLine ? currentLine + ' ' + word : word
+            if (ctx.measureText(test).width > 460) {
+                if (currentLine) lines.push(currentLine)
+                currentLine = word
+            } else {
+                currentLine = test
             }
-            }
-        ],
-        "backgroundColor": backgroundColor,
-        "width": 512,
-        "height": 512,
-        "scale": 2,
-        "type": "quote",
-        "format": "png",
-        "emojiStyle": "apple"
         }
-        
-        const response = await axios.post('https://brat.siputzx.my.id/quoted', json, {
-            timeout: 60000,
-            responseType: 'arraybuffer'
-        })
-        
-        const buffer = Buffer.from(response.data, 'base64')
+        if (currentLine) lines.push(currentLine)
+
+        const lineHeight = fontSize * 1.4
+        const totalH = lines.length * lineHeight
+        let startY = (512 - totalH) / 2 + fontSize
+
+        ctx.fillStyle = '#FFFFFF'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'alphabetic'
+        ctx.font = `bold ${fontSize}px sans-serif`
+
+        for (const line of lines) {
+            ctx.fillText(line, 256, startY)
+            startY += lineHeight
+        }
+
+        ctx.font = '14px sans-serif'
+        ctx.fillStyle = 'rgba(255,255,255,0.6)'
+        ctx.textAlign = 'right'
+        ctx.fillText(`~ ${username}`, 480, 490)
+
+        const buffer = await canvas.encode('png')
         
         await sock.sendImageAsSticker(m.chat, buffer, m, {
             packname: config.sticker?.packname || 'Ourin-AI',

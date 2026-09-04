@@ -1,4 +1,4 @@
-import axios from "axios";
+import { createCanvas } from "@napi-rs/canvas";
 import te from "../../src/lib/ourin-error.js";
 import config from "../../config.js";
 
@@ -28,16 +28,49 @@ async function handler(m, { sock }) {
   await m.react("🕕");
 
   try {
-    const apiUrl = `https://api.nexray.eu.cc/maker/ttp?text=${encodeURIComponent(text)}`;
+    const canvas = createCanvas(512, 512);
+    const ctx = canvas.getContext("2d");
 
-    const res = await axios.get(apiUrl, {
-      responseType: "arraybuffer",
-      timeout: 30000
-    });
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, 0, 512, 512);
 
-    const imageBuffer = Buffer.from(res.data);
+    let fontSize = 60;
+    ctx.font = `bold ${fontSize}px sans-serif`;
+    let lines = [];
+    let words = text.split(" ");
+    let currentLine = "";
 
-    await sock.sendImageAsSticker(m.chat, imageBuffer, m, {
+    for (const word of words) {
+      const test = currentLine ? currentLine + " " + word : word;
+      if (ctx.measureText(test).width > 480) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = test;
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+
+    const totalH = lines.length * fontSize * 1.3;
+    let startY = (512 - totalH) / 2 + fontSize;
+
+    ctx.fillStyle = "#000000";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+
+    for (const line of lines) {
+      ctx.font = `bold ${fontSize}px sans-serif`;
+      if (ctx.measureText(line).width > 480) {
+        fontSize = Math.max(20, fontSize - 4);
+        ctx.font = `bold ${fontSize}px sans-serif`;
+      }
+      ctx.fillText(line, 256, startY);
+      startY += fontSize * 1.3;
+    }
+
+    const buffer = await canvas.encode("png");
+
+    await sock.sendImageAsSticker(m.chat, buffer, m, {
       packname: config.sticker.packname,
       author: config.sticker.author,
     });

@@ -1,6 +1,10 @@
-import axios from 'axios'
+import { bratVid } from 'brat-canvas/video'
 import config from '../../config.js'
 import te from '../../src/lib/ourin-error.js'
+import fs from 'fs'
+import path from 'path'
+import os from 'os'
+
 const pluginConfig = {
     name: 'bratvid2',
     alias: ['bratv2'],
@@ -27,11 +31,16 @@ async function handler(m, { sock }) {
     m.react('🕕')
     
     try {
-        const url = `https://api-faa.my.id/faa/bratvid?text=${encodeURIComponent(text)}`
-        await sock.sendVideoAsSticker(m.chat, url, m, {
+        const tempFile = path.join(os.tmpdir(), `brat2-${Date.now()}.webp`)
+        const buffer = await bratVid(text, {
+            outputFormat: 'mp4',
+        })
+        await fs.promises.writeFile(tempFile, buffer)
+        await sock.sendVideoAsSticker(m.chat, tempFile, m, {
             packname: config.sticker.packname,
             author: config.sticker.author
         })
+        await fs.promises.unlink(tempFile)
         m.react('✅')
     } catch (error) {
         m.react('☢')
