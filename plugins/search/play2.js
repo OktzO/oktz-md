@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import { generateMessageID } from "ourin";
 import { f } from "../../src/lib/ourin-http.js";
 import te from "../../src/lib/ourin-error.js";
@@ -94,8 +94,15 @@ async function sendInlineWebUI(sock, jid, htmlPayload, submessageText) {
   const base64Data = Buffer.from(JSON.stringify(unifiedResponse), "utf-8").toString("base64");
   const msg = {
     messageContextInfo: {
-      deviceListMetadata: {},
+      threadId: [],
+      deviceListMetadata: {
+        senderKeyIndexes: [],
+        recipientKeyIndexes: [],
+        recipientKeyHash: "",
+        recipientTimestamp: Math.floor(Date.now() / 1000),
+      },
       deviceListMetadataVersion: 2,
+      messageSecret: randomBytes(32),
       botMetadata: {
         botResponseId: uuid,
       },
@@ -677,12 +684,15 @@ async function handler(m, { sock }) {
 
     const { coverBuf, audioBuf } = await downloadBuffers(track);
 
+    // ponytail: embed base64 hanya jika buffer kecil — node WA drop payload >±1MB
+    // audio embed >600KB → pakai URL preview langsung agar pesan pasti sampai
     const base64Cover = coverBuf
       ? `data:image/jpeg;base64,${coverBuf.toString("base64")}`
       : track.coverUrl || "";
-    const base64Audio = audioBuf
-      ? `data:audio/mp3;base64,${audioBuf.toString("base64")}`
-      : track.audioUrl || "";
+    const base64Audio =
+      audioBuf && audioBuf.length <= 600_000
+        ? `data:audio/mp3;base64,${audioBuf.toString("base64")}`
+        : track.audioUrl || "";
 
     const playerHtml = getPlayerHtml({
       title: track.title,
