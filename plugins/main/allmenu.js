@@ -262,53 +262,49 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
         await sock.relayMessage(
           m.chat,
           {
-            viewOnceMessage: {
-              message: {
-                messageContextInfo: {},
-                interactiveMessage: {
-                  header: {
-                    title: "",
-                    subtitle: "",
-                    hasMediaAttachment: true,
-                    imageMessage: media.imageMessage
+            messageContextInfo: {},
+            interactiveMessage: {
+              header: {
+                title: "",
+                subtitle: "",
+                hasMediaAttachment: true,
+                imageMessage: media.imageMessage
+              },
+              body: {
+                text: `> Halo *${pushName}* 👋 Perkenalkan aku *${botName}*, buatan *${devName}* Saya siap membantu kebutuhanmu, mulai dari download video, main game, tanya jawab, nyari info/sesuatu, bikin sticker, dan lain-lain.\n\n`,
+              },
+              footer: {
+                text: txt
+              },
+              contextInfo: {
+                isForwarded: true,
+                fprwardingScore: 9,
+                participant: "0@s.whatsapp.net",
+                quotedMessage: {
+                  conversation: `${config.bot?.name}`
+                },
+                mentionedJid: [
+                  `${m.sender}`
+                ]
+              },
+              nativeFlowMessage: {
+                messageParamsJson: JSON.stringify({
+                  limited_time_offer: {
+                    text: `${greeting}`,
+                    url: "Hai",
+                    copy_code: "Dibuat oleh " + config.bot?.developer,
+                    expiration_time: Date.now() + 1000000,
                   },
-                  body: {
-                    text: `> Halo *${pushName}* 👋 Perkenalkan aku *${botName}*, buatan *${devName}* Saya siap membantu kebutuhanmu, mulai dari download video, main game, tanya jawab, nyari info/sesuatu, bikin sticker, dan lain-lain.\n\n`,
-                  },
-                  footer: {
-                    text: txt
-                  },
-                  contextInfo: {
-                    isForwarded: true,
-                    fprwardingScore: 9,
-                    participant: "0@s.whatsapp.net",
-                    quotedMessage: {
-                      conversation: `${config.bot?.name}`
-                    },
-                    mentionedJid: [
-                      `${m.sender}`
-                    ]
-                  },
-                  nativeFlowMessage: {
-                    messageParamsJson: JSON.stringify({
-                      limited_time_offer: {
-                        text: `${greeting}`,
-                        url: "Hai",
-                        copy_code: "Dibuat oleh " + config.bot?.developer,
-                        expiration_time: Date.now() + 1000000,
-                      },
-                    }),
-                    buttons: [
-                      {
-                        name: "quick_reply",
-                        buttonParamsJson: JSON.stringify({
-                          display_text: "🍅 Kembali Ke Menu Utama",
-                          id: m.prefix + "menu"
-                        })
-                      }
-                    ]
+                }),
+                buttons: [
+                  {
+                    name: "quick_reply",
+                    buttonParamsJson: JSON.stringify({
+                      display_text: "🍅 Kembali Ke Menu Utama",
+                      id: m.prefix + "menu"
+                    })
                   }
-                }
+                ]
               }
             }
           },
@@ -350,42 +346,38 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
         }
         const media4 = await prepareWAMessageMedia({ video: fs.readFileSync(config.assets["ourin-mp4"]), gifPlayback: true }, { upload: sock.waUploadToServer });
         const msg4 = generateWAMessageFromContent(m.chat, {
-          viewOnceMessage: {
-            message: {
-              messageContextInfo: {},
-              interactiveMessage: {
-                header: { title: "", subtitle: "", hasMediaAttachment: true, videoMessage: media4.videoMessage },
-                footer: { text: `Please select the button in below` },
-                body: { text: txt },
-                contextInfo: {
-                  mentionedJid: [m.sender],
-                  isForwarded: true,
-                  forwardingScore: 9,
-                  forwardedNewsletterMessageInfo: {
-                    newsletterJid: config.saluran?.id || "120363400911374213@newsletter",
-                    newsletterName: config.saluran?.name || config.bot?.name || "Ourin-AI",
-                    serverMessageId: 127,
-                  },
+          messageContextInfo: {},
+          interactiveMessage: {
+            header: { title: "", subtitle: "", hasMediaAttachment: true, videoMessage: media4.videoMessage },
+            footer: { text: `Please select the button in below` },
+            body: { text: txt },
+            contextInfo: {
+              mentionedJid: [m.sender],
+              isForwarded: true,
+              forwardingScore: 9,
+              forwardedNewsletterMessageInfo: {
+                newsletterJid: config.saluran?.id || "120363400911374213@newsletter",
+                newsletterName: config.saluran?.name || config.bot?.name || "Ourin-AI",
+                serverMessageId: 127,
+              },
+            },
+            nativeFlowMessage: {
+              messageParamsJson: JSON.stringify({
+                limited_time_offer: { text: `${greeting}`, url: "Hai", expiration_time: Date.now() + 10000 },
+                bottom_sheet: { in_thread_buttons_limit: 2, divider_indices: [1, 2, 3, 4, 5, 999], list_title: "Please select the menu", button_title: "🍙 See Category" },
+                tap_target_configuration: { title: " X ", description: "bomboclard", canonical_url: "https://ourin.site", domain: "shop.example.com", button_index: 0 },
+              }),
+              buttons: [
+                { name: "", buttonParamsJson: "" },
+                {
+                  name: "quick_reply",
+                  buttonParamsJson: JSON.stringify({ display_text: "📂 Kembali Ke Daftar Kategori", id: m.prefix + "menucat" })
                 },
-                nativeFlowMessage: {
-                  messageParamsJson: JSON.stringify({
-                    limited_time_offer: { text: `${greeting}`, url: "Hai", expiration_time: Date.now() + 10000 },
-                    bottom_sheet: { in_thread_buttons_limit: 2, divider_indices: [1, 2, 3, 4, 5, 999], list_title: "Please select the menu", button_title: "🍙 See Category" },
-                    tap_target_configuration: { title: " X ", description: "bomboclard", canonical_url: "https://ourin.site", domain: "shop.example.com", button_index: 0 },
-                  }),
-                  buttons: [
-                    { name: "", buttonParamsJson: "" },
-                    {
-                      name: "quick_reply",
-                      buttonParamsJson: JSON.stringify({ display_text: "📂 Kembali Ke Daftar Kategori", id: m.prefix + "menucat" })
-                    },
-                    {
-                      name: "quick_reply",
-                      buttonParamsJson: JSON.stringify({ display_text: "🍅 Kembali Ke Menu Utama", id: m.prefix + "menu" })
-                    },
-                  ]
-                }
-              }
+                {
+                  name: "quick_reply",
+                  buttonParamsJson: JSON.stringify({ display_text: "🍅 Kembali Ke Menu Utama", id: m.prefix + "menu" })
+                },
+              ]
             }
           }
         }, { quoted: qOrder, userJid: sock.user.jid });
@@ -415,37 +407,33 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
         const thumbnail = await (await getSharp())(getAssetBuffer("ourin")).resize(300, 300).toBuffer()
 
         const msg6 = generateWAMessageFromContent(m.chat, {
-          viewOnceMessage: {
-            message: {
-              messageContextInfo: {},
-              interactiveMessage: {
-                header: {
-                  hasMediaAttachment: true,
-                  locationMessage: {
-                    degreesLatitude: 0,
-                    degreesLongitude: 0,
-                    name: config.bot?.name || "Ourin-AI",
-                    address: await weatherMenu(),
-                    jpegThumbnail: thumbnail
-                  }
-                },
-                body: {
-                  text: txt,
-                },
-                contextInfo: {
-                  mentionedJid: [m.sender],
-                  isForwarded: true,
-                  forwardingScore: 9,
-                  forwardedNewsletterMessageInfo: {
-                    newsletterJid: config.saluran?.id || "120363400911374213@newsletter",
-                    newsletterName: config.saluran?.name || config.bot?.name || "Ourin-AI",
-                    serverMessageId: 127,
-                  },
-                },
-                nativeFlowMessage: {
-                  buttons: []
-                }
+          messageContextInfo: {},
+          interactiveMessage: {
+            header: {
+              hasMediaAttachment: true,
+              locationMessage: {
+                degreesLatitude: 0,
+                degreesLongitude: 0,
+                name: config.bot?.name || "Ourin-AI",
+                address: await weatherMenu(),
+                jpegThumbnail: thumbnail
               }
+            },
+            body: {
+              text: txt,
+            },
+            contextInfo: {
+              mentionedJid: [m.sender],
+              isForwarded: true,
+              forwardingScore: 9,
+              forwardedNewsletterMessageInfo: {
+                newsletterJid: config.saluran?.id || "120363400911374213@newsletter",
+                newsletterName: config.saluran?.name || config.bot?.name || "Ourin-AI",
+                serverMessageId: 127,
+              },
+            },
+            nativeFlowMessage: {
+              buttons: []
             }
           }
         }, { quoted: m, userJid: sock.user.jid });

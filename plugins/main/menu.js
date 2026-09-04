@@ -575,9 +575,7 @@ Tekan tombol dibawah untuk info lebih lanjut dan untuk memilih kategori
         await sock.relayMessage(
           m.chat,
           {
-            viewOnceMessage: {
-              message: {
-                messageContextInfo: {},
+            messageContextInfo: {},
                 interactiveMessage: {
                   header: {
                     title: "",
@@ -668,9 +666,7 @@ ${readmore}${s}`
                     ]
                   }
                 }
-              }
-            }
-          },
+              },
           {}
         )
 
@@ -699,9 +695,7 @@ Welcome to ${config.bot?.name}, Our bot will help you
         const footerText = '🍔 Silahkan pilih dari salah satu tombol di bawah';
 
         const msg = generateWAMessageFromContent(m.chat, {
-          viewOnceMessage: {
-            message: {
-              messageContextInfo: {},
+          messageContextInfo: {},
               interactiveMessage: {
                 header: {
                   hasMediaAttachment: true,
@@ -747,8 +741,6 @@ Welcome to ${config.bot?.name}, Our bot will help you
                   ],
                 },
               },
-            },
-          },
         }, { userJid: sock.user.jid });
 
         await sock.relayMessage(m.chat, msg.message, {
@@ -801,9 +793,7 @@ Welcome to ${config.bot?.name}, Our bot will help you
           }
         })
         const msg4 = generateWAMessageFromContent(m.chat, {
-          viewOnceMessage: {
-            message: {
-              messageContextInfo: {},
+          messageContextInfo: {},
               interactiveMessage: {
                 header: {
                   title: "",
@@ -867,8 +857,6 @@ Enjoy your use brother.`
                   ]
                 }
               }
-            }
-          }
         }, { quoted: qvideo, userJid: sock.user.jid });
 
         await sock.relayMessage(m.chat, msg4.message, {
@@ -946,9 +934,7 @@ Enjoy your use brother.`
           gifPlayback: true
         }, { upload: sock.waUploadToServer });
         const msg4 = generateWAMessageFromContent(m.chat, {
-          viewOnceMessage: {
-            message: {
-              messageContextInfo: {},
+          messageContextInfo: {},
               interactiveMessage: {
                 header: {
                   title: "",
@@ -1033,8 +1019,6 @@ _i am an automated system (WhatsApp bot) that can help to do something search an
                   ]
                 }
               }
-            }
-          }
         }, { quoted: qOrder, userJid: sock.user.jid });
 
         await sock.relayMessage(m.chat, msg4.message, {
@@ -1111,9 +1095,7 @@ _i am an automated system (WhatsApp bot) that can help to do something search an
 
         const thumbnail = await sharp(getAssetBuffer("ourin")).resize(300, 300).toBuffer()
         const msg6 = generateWAMessageFromContent(m.chat, {
-          viewOnceMessage: {
-            message: {
-              messageContextInfo: {},
+          messageContextInfo: {},
               interactiveMessage: {
                 header: {
                   hasMediaAttachment: true,
@@ -1176,8 +1158,6 @@ _i am an automated system (WhatsApp bot) that can help to do something search an
                   ]
                 }
               }
-            }
-          }
         }, { quoted: m, userJid: sock.user.jid });
 
         await sock.relayMessage(m.chat, msg6.message, {
@@ -1279,9 +1259,7 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
         }, { upload: sock.waUploadToServer });
 
         const msg = generateWAMessageFromContent(m.chat, {
-          viewOnceMessage: {
-            message: {
-              messageContextInfo: {},
+          messageContextInfo: {},
               interactiveMessage: {
                 header: {
                   title: "",
@@ -1315,8 +1293,6 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
                   ]
                 }
               }
-            }
-          }
         }, { quoted: fakeQuotedSticker, userJid: sock.user.jid });
 
         await sock.relayMessage(m.chat, msg.message, {
