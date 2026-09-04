@@ -749,12 +749,12 @@ async function handler(m, { sock }) {
       console.error("[Play2] Full song gagal:", fullErr?.message);
     }
 
-    // Fallback audio: preview 30 dtk Deezer/iTunes jika full song gagal
+    // Fallback audio: preview Deezer/iTunes (30 dtk) — kompres ke Opus sama kyk full song
     if (!audioDataUri && track.audioUrl) {
       try {
         const previewBuf = await f(track.audioUrl, "buffer");
-        if (previewBuf && previewBuf.length <= 600_000) {
-          audioDataUri = `data:audio/mp3;base64,${previewBuf.toString("base64")}`;
+        if (previewBuf && previewBuf.length > 1000) {
+          audioDataUri = await compressToOpusDataUri(previewBuf);
         }
       } catch {
         // kartu tanpa audio — synth fallback tetap jalan
