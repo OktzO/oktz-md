@@ -1,5 +1,4 @@
-import { randomBytes, randomUUID } from "crypto";
-import { generateMessageID } from "ourin";
+import { randomUUID } from "crypto";
 import { f } from "../../src/lib/ourin-http.js";
 import te from "../../src/lib/ourin-error.js";
 
@@ -73,7 +72,9 @@ async function downloadBuffers(track) {
   return { coverBuf, audioBuf };
 }
 
-// Port dari AzusaMD webui.service.js — GenAIaeacdsnwHtmlPrimitive lewat richResponseMessage
+// Port AzusaMD webui.service.js — diselaraskan dengan pola AIRich production (ourin-builder.js)
+// yang terbukti terkirim: deviceListMetadata kosong, botMetadata.messageDisclaimerText,
+// botJid '0@bot', forwardOrigin 4 (numerik)
 async function sendInlineWebUI(sock, jid, htmlPayload, submessageText) {
   const uuid = randomUUID();
   const unifiedResponse = {
@@ -91,29 +92,26 @@ async function sendInlineWebUI(sock, jid, htmlPayload, submessageText) {
       },
     ],
   };
-  const base64Data = Buffer.from(JSON.stringify(unifiedResponse), "utf-8").toString("base64");
+  const base64Data = Buffer.from(
+    JSON.stringify(unifiedResponse),
+    "utf-8",
+  ).toString("base64");
   const msg = {
     messageContextInfo: {
-      threadId: [],
-      deviceListMetadata: {
-        senderKeyIndexes: [],
-        recipientKeyIndexes: [],
-        recipientKeyHash: "",
-        recipientTimestamp: Math.floor(Date.now() / 1000),
-      },
+      deviceListMetadata: {},
       deviceListMetadataVersion: 2,
-      messageSecret: randomBytes(32),
       botMetadata: {
-        botResponseId: uuid,
+        messageDisclaimerText: submessageText,
+        richResponseSourcesMetadata: { sources: [] },
       },
     },
     botForwardedMessage: {
       message: {
         richResponseMessage: {
-          messageType: "AI_RICH_RESPONSE_TYPE_STANDARD",
+          messageType: 1,
           submessages: [
             {
-              messageType: "AI_RICH_RESPONSE_TEXT",
+              messageType: 2,
               messageText: submessageText,
             },
           ],
@@ -123,17 +121,14 @@ async function sendInlineWebUI(sock, jid, htmlPayload, submessageText) {
           contextInfo: {
             forwardingScore: 1,
             isForwarded: true,
-            forwardedAiBotMessageInfo: {
-              botJid: "867051314767696@bot",
-            },
-            forwardOrigin: "META_AI",
+            forwardedAiBotMessageInfo: { botJid: "0@bot" },
+            forwardOrigin: 4,
           },
         },
       },
     },
   };
-  const messageId = generateMessageID();
-  await sock.relayMessage(jid, msg, { messageId });
+  await sock.relayMessage(jid, msg, {});
   return msg;
 }
 
