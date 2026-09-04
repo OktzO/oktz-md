@@ -1,6 +1,57 @@
 import { randomUUID } from "crypto";
+import fs from "fs";
+import path from "path";
+import { execFile } from "child_process";
+import { promisify } from "util";
+import axios from "axios";
+import yts from "yt-search";
 import { f } from "../../src/lib/ourin-http.js";
 import te from "../../src/lib/ourin-error.js";
+
+const execFileP = promisify(execFile);
+
+// Resolve ffmpeg: PATH produksi → fallback @ffmpeg-installer (dev)
+async function getFfmpegPath() {
+  try {
+    await execFileP("ffmpeg", ["-version"], { timeout: 5000 });
+    return "ffmpeg";
+  } catch {
+    const mod = await import("@ffmpeg-installer/ffmpeg");
+    return mod.default.path;
+  }
+}
+
+// Resep gist Ru06-1st: kompres ke Opus/OGG 16kbps mono — lagu 5 menit ≈ 600KB,
+// data URI base64 aman jauh di bawah limit 8MB. Full song embedded di kartu.
+async function compressToOpusDataUri(inputBuffer) {
+  const tempDir = path.join(process.cwd(), "temp");
+  fs.mkdirSync(tempDir, { recursive: true });
+  const ts = Date.now();
+  const inputPath = path.join(tempDir, `play2_in_${ts}.mp3`);
+  const outputPath = path.join(tempDir, `play2_out_${ts}.ogg`);
+  try {
+    fs.writeFileSync(inputPath, inputBuffer);
+    const ffmpegPath = await getFfmpegPath();
+    const { execFileSync } = await import("child_process");
+    execFileSync(ffmpegPath, [
+      "-y",
+      "-i", inputPath,
+      "-vn",
+      "-c:a", "libopus",
+      "-b:a", "16k",
+      "-ar", "24000",
+      "-ac", "1",
+      "-application", "audio",
+      "-f", "ogg",
+      outputPath,
+    ], { timeout: 120000, stdio: "ignore" });
+    const out = fs.readFileSync(outputPath);
+    return `data:audio/ogg;base64,${out.toString("base64")}`;
+  } finally {
+    fs.rmSync(inputPath, { force: true });
+    fs.rmSync(outputPath, { force: true });
+  }
+}
 
 const pluginConfig = {
   name: "play2",
@@ -64,17 +115,9 @@ async function searchTrack(query) {
   return null;
 }
 
-async function downloadBuffers(track) {
-  const [coverBuf, audioBuf] = await Promise.all([
-    track.coverUrl ? f(track.coverUrl, "buffer") : null,
-    track.audioUrl ? f(track.audioUrl, "buffer") : null,
-  ]);
-  return { coverBuf, audioBuf };
-}
-
-// Port AzusaMD webui.service.js — diselaraskan dengan pola AIRich production (ourin-builder.js)
-// yang terbukti terkirim: deviceListMetadata kosong, botMetadata.messageDisclaimerText,
-// botJid '0@bot', forwardOrigin 4 (numerik)
+// Port AzusaMD webui.service.js + resep gist Ru06-1st (downloader-play) yang terverifikasi:
+// audio embed = data:audio/ogg base64 (Opus 16kbps mono) — URL eksternal diblokir sandbox WA.
+// messageId = responseId, botResponseId = responseId, forwardingScore 999.
 async function sendInlineWebUI(sock, jid, htmlPayload, submessageText) {
   const uuid = randomUUID();
   const unifiedResponse = {
@@ -101,8 +144,8 @@ async function sendInlineWebUI(sock, jid, htmlPayload, submessageText) {
       deviceListMetadata: {},
       deviceListMetadataVersion: 2,
       botMetadata: {
-        messageDisclaimerText: submessageText,
-        richResponseSourcesMetadata: { sources: [] },
+        messageDisclaimerText: "",
+        botResponseId: uuid,
       },
     },
     botForwardedMessage: {
@@ -119,16 +162,16 @@ async function sendInlineWebUI(sock, jid, htmlPayload, submessageText) {
             data: base64Data,
           },
           contextInfo: {
-            forwardingScore: 1,
+            forwardingScore: 999,
             isForwarded: true,
-            forwardedAiBotMessageInfo: { botJid: "0@bot" },
+            forwardedAiBotMessageInfo: { botJid: "867051314767696@bot" },
             forwardOrigin: 4,
           },
         },
       },
     },
   };
-  await sock.relayMessage(jid, msg, {});
+  await sock.relayMessage(jid, msg, { messageId: uuid });
   return msg;
 }
 
@@ -666,7 +709,7 @@ html, body {
 async function handler(m, { sock }) {
   const query = m.text?.trim();
   if (!query)
-    return m.reply(`⚠️ *ᴄᴀʀᴀ ᴘᴀᴋᴀɪ*\n\n> \`${m.prefix}play2 <judul lagu>\`\n\nKartu Spotify WebUI interaktif dengan preview audio 30 detik.\n\nContoh: \`${m.prefix}play2 the shade\``);
+    return m.reply(`⚠️ *ᴄᴀʀᴀ ᴘᴀᴋᴀɪ*\n\n> \`${m.prefix}play2 <judul lagu>\`\n\nKartu Spotify WebUI interaktif dengan lagu full di dalamnya.\n\nContoh: \`${m.prefix}play2 the shade\``);
 
   await m.react("🕕");
 
@@ -677,24 +720,58 @@ async function handler(m, { sock }) {
       return m.reply(`❌ Lagu "${query}" tidak ditemukan. Coba judul atau nama artis yang lebih spesifik.`);
     }
 
-    const { coverBuf, audioBuf } = await downloadBuffers(track);
+    // Paralel: metadata (cover) + full song (yts → azbry → compress Opus)
+    const coverPromise = track.coverUrl
+      ? f(track.coverUrl, "buffer").catch(() => null)
+      : null;
 
-    // ponytail: embed base64 hanya jika buffer kecil — node WA drop payload >±1MB
-    // audio embed >600KB → pakai URL preview langsung agar pesan pasti sampai
+    let audioDataUri = "";
+    try {
+      const search = await yts(query);
+      const video = search.videos[0];
+      if (video) {
+        const res = await f(
+          `https://api.azbry.com/api/download/ytmp3?url=${encodeURIComponent(video.url)}`,
+        );
+        const dl = res?.result?.download || res?.result?.download_url;
+        if (dl) {
+          const audioRes = await axios.get(dl, {
+            responseType: "arraybuffer",
+            timeout: 120000,
+          });
+          const fullBuffer = Buffer.from(audioRes.data);
+          if (fullBuffer.length > 10_000 && fullBuffer.length <= 25 * 1024 * 1024) {
+            audioDataUri = await compressToOpusDataUri(fullBuffer);
+          }
+        }
+      }
+    } catch (fullErr) {
+      console.error("[Play2] Full song gagal:", fullErr?.message);
+    }
+
+    // Fallback audio: preview 30 dtk Deezer/iTunes jika full song gagal
+    if (!audioDataUri && track.audioUrl) {
+      try {
+        const previewBuf = await f(track.audioUrl, "buffer");
+        if (previewBuf && previewBuf.length <= 600_000) {
+          audioDataUri = `data:audio/mp3;base64,${previewBuf.toString("base64")}`;
+        }
+      } catch {
+        // kartu tanpa audio — synth fallback tetap jalan
+      }
+    }
+
+    const coverBuf = await coverPromise;
     const base64Cover = coverBuf
       ? `data:image/jpeg;base64,${coverBuf.toString("base64")}`
       : track.coverUrl || "";
-    const base64Audio =
-      audioBuf && audioBuf.length <= 600_000
-        ? `data:audio/mp3;base64,${audioBuf.toString("base64")}`
-        : track.audioUrl || "";
 
     const playerHtml = getPlayerHtml({
       title: track.title,
       artist: track.artist,
       album: track.album,
       coverUrl: base64Cover,
-      audioUrl: base64Audio,
+      audioUrl: audioDataUri,
       durationSec: track.durationSec || 30,
     });
 
