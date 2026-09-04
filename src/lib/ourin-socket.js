@@ -6,6 +6,7 @@ import {
   generateWAMessageFromContent,
   generateWAMessage,
   generateMessageID,
+  generateMessageIDV2,
   proto,
   areJidsSameUser,
   generateForwardMessageContent,
@@ -864,6 +865,76 @@ async function extendSocket(sock) {
       message: { conversation: fakeText },
       ...options,
     });
+  };
+
+  sock.sendPreview = async (jid, preview, options = {}) => {
+    const extContent = {
+      text: preview.caption || preview.text || "",
+      matchedText: preview.matchedText || preview.url || "",
+      previewType: preview.previewType ?? 0,
+    };
+    if (preview.title) extContent.title = preview.title;
+    if (preview.description) extContent.description = preview.description;
+    if (preview.inviteLinkGroupTypeV2)
+      extContent.inviteLinkGroupTypeV2 = preview.inviteLinkGroupTypeV2;
+    if (preview.image) {
+      let imgBuf = preview.image;
+      if (typeof imgBuf === "string" && imgBuf.startsWith("http")) {
+        try {
+          const resp = await fetch(imgBuf);
+          imgBuf = Buffer.from(await resp.arrayBuffer());
+        } catch {}
+      }
+      if (Buffer.isBuffer(imgBuf)) {
+        try {
+          const { imageMessage } = await prepareWAMessageMedia(
+            { image: imgBuf },
+            { upload: sock.waUploadToServer, mediaTypeOverride: "thumbnail-link" },
+          );
+          if (imageMessage) {
+            extContent.jpegThumbnail = imageMessage.jpegThumbnail;
+            if (imageMessage.directPath) extContent.thumbnailDirectPath = imageMessage.directPath;
+            if (imageMessage.mediaKey) extContent.mediaKey = imageMessage.mediaKey;
+            if (imageMessage.mediaKeyTimestamp) extContent.mediaKeyTimestamp = imageMessage.mediaKeyTimestamp;
+            if (imageMessage.fileSha256) extContent.thumbnailSha256 = imageMessage.fileSha256;
+            if (imageMessage.fileEncSha256) extContent.thumbnailEncSha256 = imageMessage.fileEncSha256;
+            if (imageMessage.width) extContent.thumbnailWidth = imageMessage.width;
+            if (imageMessage.height) extContent.thumbnailHeight = imageMessage.height;
+          }
+        } catch {
+          extContent.jpegThumbnail = imgBuf;
+        }
+      } else {
+        extContent.jpegThumbnail = imgBuf;
+      }
+    } else if (preview.jpegThumbnail) {
+      extContent.jpegThumbnail = preview.jpegThumbnail;
+    }
+    if (preview.thumbnailHeight) extContent.thumbnailHeight = preview.thumbnailHeight;
+    if (preview.thumbnailWidth) extContent.thumbnailWidth = preview.thumbnailWidth;
+    if (options.quoted) {
+      const participant = options.quoted.key.fromMe
+        ? sock.user?.id
+        : options.quoted.participant || options.quoted.key.participant || options.quoted.key.remoteJid;
+      extContent.contextInfo = {
+        stanzaId: options.quoted.key.id,
+        participant,
+        quotedMessage: options.quoted.message,
+      };
+    }
+    if (options.contextInfo) {
+      extContent.contextInfo = {
+        ...extContent.contextInfo,
+        ...options.contextInfo,
+      };
+    }
+    const message = generateWAMessageFromContent(jid, { extendedTextMessage: extContent }, {
+      userJid: sock.user?.id,
+    });
+    await sock.relayMessage(jid, message.message, {
+      messageId: message.key.id,
+    });
+    return message.key.id;
   };
 
   return sock;
