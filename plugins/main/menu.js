@@ -26,6 +26,7 @@ function getSharp() {
 }
 import axios from "axios";
 import sharp from "sharp";
+import { wrapInteractive } from "../../src/lib/ourin-rich-messages.js";
 
 const pluginConfig = {
   name: "menu",
@@ -696,7 +697,7 @@ Welcome to ${config.bot?.name}, Our bot will help you
 > 🍬 *Register*: ${user.isRegistered ? "Sudah" : "Belum"}`;
         const footerText = '🍔 Silahkan pilih dari salah satu tombol di bawah';
 
-        const msg = generateWAMessageFromContent(m.chat, {
+        const msg = generateWAMessageFromContent(m.chat, wrapInteractive({
           messageContextInfo: {},
               interactiveMessage: {
                 header: {
@@ -743,7 +744,7 @@ Welcome to ${config.bot?.name}, Our bot will help you
                   ],
                 },
               },
-        }, { userJid: sock.user?.id });
+        }), { userJid: sock.user?.id });
 
         await sock.relayMessage(m.chat, msg.message, {
           messageId: msg.key.id,
@@ -794,7 +795,7 @@ Welcome to ${config.bot?.name}, Our bot will help you
             })
           }
         })
-        const msg4 = generateWAMessageFromContent(m.chat, {
+        const msg4 = generateWAMessageFromContent(m.chat, wrapInteractive({
           messageContextInfo: {},
               interactiveMessage: {
                 header: {
@@ -859,7 +860,7 @@ Enjoy your use brother.`
                   ]
                 }
               }
-        }, { quoted: qvideo, userJid: sock.user?.id });
+        }), { quoted: qvideo, userJid: sock.user?.id });
 
         await sock.relayMessage(m.chat, msg4.message, {
           messageId: msg4.key.id,
@@ -935,7 +936,7 @@ Enjoy your use brother.`
           video: fs.readFileSync(config.assets["ourin-mp4"]),
           gifPlayback: true
         }, { upload: sock.waUploadToServer });
-        const msg4 = generateWAMessageFromContent(m.chat, {
+        const msg4 = generateWAMessageFromContent(m.chat, wrapInteractive({
           messageContextInfo: {},
               interactiveMessage: {
                 header: {
@@ -1021,7 +1022,7 @@ _i am an automated system (WhatsApp bot) that can help to do something search an
                   ]
                 }
               }
-        }, { quoted: qOrder, userJid: sock.user?.id });
+        }), { quoted: qOrder, userJid: sock.user?.id });
 
         await sock.relayMessage(m.chat, msg4.message, {
           messageId: msg4.key.id,
@@ -1096,7 +1097,7 @@ _i am an automated system (WhatsApp bot) that can help to do something search an
         }
 
         const thumbnail = await sharp(getAssetBuffer("ourin")).resize(300, 300).toBuffer()
-        const msg6 = generateWAMessageFromContent(m.chat, {
+        const msg6 = generateWAMessageFromContent(m.chat, wrapInteractive({
           messageContextInfo: {},
               interactiveMessage: {
                 header: {
@@ -1160,7 +1161,7 @@ _i am an automated system (WhatsApp bot) that can help to do something search an
                   ]
                 }
               }
-        }, { quoted: m, userJid: sock.user?.id });
+        }), { quoted: m, userJid: sock.user?.id });
 
         await sock.relayMessage(m.chat, msg6.message, {
           messageId: msg6.key.id,
@@ -1260,7 +1261,7 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
           video: await getAssetBuffer("ourin-mp4")
         }, { upload: sock.waUploadToServer });
 
-        const msg = generateWAMessageFromContent(m.chat, {
+        const msg = generateWAMessageFromContent(m.chat, wrapInteractive({
           messageContextInfo: {},
               interactiveMessage: {
                 header: {
@@ -1295,7 +1296,7 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
                   ]
                 }
               }
-        }, { quoted: fakeQuotedSticker, userJid: sock.user?.id });
+        }), { quoted: fakeQuotedSticker, userJid: sock.user?.id });
 
         await sock.relayMessage(m.chat, msg.message, {
           messageId: msg.key.id,
@@ -1435,7 +1436,7 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
         const displayWeather = `${cuacaStr} | ${suhuStr}`;
         const senderNum = m.sender.split('@')[0];
 
-        const msg = generateWAMessageFromContent(m.chat, {
+        const msg = generateWAMessageFromContent(m.chat, wrapInteractive({
           extendedTextMessage: {
             text: config.info.website + " " + case7Text,
             matchedText: config.info.website,
@@ -1469,7 +1470,7 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
               }
             }
           }
-        }, {
+        }), {
           quoted: {
             key: {
               fromMe: false,

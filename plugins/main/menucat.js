@@ -13,6 +13,7 @@ import { getDatabase } from "../../src/lib/ourin-database.js";
 import { getTimeGreeting } from "../../src/lib/ourin-formatter.js";
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import fs from "fs"
+import { wrapInteractive } from "../../src/lib/ourin-rich-messages.js";
 
 const pluginConfig = {
   name: "menucat",
@@ -326,7 +327,7 @@ async function handler(m, { sock, db }) {
             message: { locationMessage: { degreesLatitude: 0, degreesLongitude: 0, name: await weatherMenu(), jpegThumbnail: thumbnail } }
           }
           const media4 = await prepareWAMessageMedia({ video: fs.readFileSync(config.assets["ourin-mp4"]), gifPlayback: true }, { upload: sock.waUploadToServer });
-          const msg4 = generateWAMessageFromContent(m.chat, {
+          const msg4 = generateWAMessageFromContent(m.chat, wrapInteractive({
             viewOnceMessage: {
               message: {
                 messageContextInfo: {},
@@ -361,7 +362,7 @@ async function handler(m, { sock, db }) {
                 }
               }
             }
-          }, { quoted: qOrder, userJid: sock.user?.id });
+          }), { quoted: qOrder, userJid: sock.user?.id });
 
           await sock.relayMessage(m.chat, msg4.message, { messageId: msg4.key.id });
           break;
@@ -523,7 +524,7 @@ async function handler(m, { sock, db }) {
           message: { locationMessage: { degreesLatitude: 0, degreesLongitude: 0, name: await weatherMenu(), jpegThumbnail: thumbnail } }
         }
         const media4 = await prepareWAMessageMedia({ video: fs.readFileSync(config.assets["ourin-mp4"]), gifPlayback: true }, { upload: sock.waUploadToServer });
-        const msg4 = generateWAMessageFromContent(m.chat, {
+        const msg4 = generateWAMessageFromContent(m.chat, wrapInteractive({
           viewOnceMessage: {
             message: {
               messageContextInfo: {},
@@ -562,7 +563,7 @@ async function handler(m, { sock, db }) {
               }
             }
           }
-        }, { quoted: qOrder, userJid: sock.user?.id });
+        }), { quoted: qOrder, userJid: sock.user?.id });
 
         await sock.relayMessage(m.chat, msg4.message, { messageId: msg4.key.id });
         break;
@@ -588,7 +589,7 @@ async function handler(m, { sock, db }) {
 
         const thumbnail = await sharp(getAssetBuffer("ourin")).resize(300, 300).toBuffer()
 
-        const msg6 = generateWAMessageFromContent(m.chat, {
+        const msg6 = generateWAMessageFromContent(m.chat, wrapInteractive({
           viewOnceMessage: {
             message: {
               messageContextInfo: {},
@@ -622,7 +623,7 @@ async function handler(m, { sock, db }) {
               }
             }
           }
-        }, { quoted: m, userJid: sock.user?.id });
+        }), { quoted: m, userJid: sock.user?.id });
 
         await sock.relayMessage(m.chat, msg6.message, { messageId: msg6.key.id });
         break;

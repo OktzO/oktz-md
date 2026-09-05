@@ -16,6 +16,7 @@ import {
 import { getCasesByCategory, getCaseCount } from "../../case/ourin.js";
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import { getFfmpegPath } from "../../src/lib/ourin-ffmpeg.js";
+import { wrapInteractive } from "../../src/lib/ourin-rich-messages.js";
 
 let _sharp;
 async function getSharp() {
@@ -346,7 +347,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
           message: { locationMessage: { degreesLatitude: 0, degreesLongitude: 0, name: await weatherMenu(), jpegThumbnail: thumbnail } }
         }
         const media4 = await prepareWAMessageMedia({ video: fs.readFileSync(config.assets["ourin-mp4"]), gifPlayback: true }, { upload: sock.waUploadToServer });
-        const msg4 = generateWAMessageFromContent(m.chat, {
+        const msg4 = generateWAMessageFromContent(m.chat, wrapInteractive({
           messageContextInfo: {},
           interactiveMessage: {
             header: { title: "", subtitle: "", hasMediaAttachment: true, videoMessage: media4.videoMessage },
@@ -381,7 +382,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
               ]
             }
           }
-        }, { quoted: qOrder, userJid: sock.user?.id });
+        }), { quoted: qOrder, userJid: sock.user?.id });
 
         await sock.relayMessage(m.chat, msg4.message, { messageId: msg4.key.id });
         break;
@@ -407,7 +408,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
 
         const thumbnail = await (await getSharp())(getAssetBuffer("ourin")).resize(300, 300).toBuffer()
 
-        const msg6 = generateWAMessageFromContent(m.chat, {
+        const msg6 = generateWAMessageFromContent(m.chat, wrapInteractive({
           messageContextInfo: {},
           interactiveMessage: {
             header: {
@@ -437,7 +438,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
               buttons: []
             }
           }
-        }, { quoted: m, userJid: sock.user?.id });
+        }), { quoted: m, userJid: sock.user?.id });
 
         await sock.relayMessage(m.chat, msg6.message, { messageId: msg6.key.id });
         break;

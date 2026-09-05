@@ -450,6 +450,58 @@ export const buildBotForwardedMessage = (
     },
   };
 };
+
+/**
+ * Bungkus content interactiveMessage dengan wrapper viewOnceMessage.
+ *
+ * WhatsApp hanya me-render interactiveMessage (kartu nativeFlow) bila
+ * dikirim di dalam wrapper viewOnceMessage beserta deviceListMetadata —
+ * tanpa itu, relayMessage sukses tapi pesan TIDAK muncul di chat.
+ * Pola ini dipakai plugin yang terbukti jalan (cekidgc.js) dan merupakan
+ * pola kanonik Baileys (issue WhiskeySockets/Baileys#56).
+ *
+ * - Bila content sudah berupa viewOnceMessage / botForwardedMessage /
+ *   extendedTextMessage / tipe non-interactive: dikembalikan apa adanya.
+ * - messageContextInfo yang sudah berisi messageAssociation (preview
+ *   asosiasi pesan) dipertahankan; field deviceListMetadata ditambahkan.
+ */
+export const wrapInteractive = (content) => {
+  if (!content || typeof content !== "object") return content;
+
+  // Sudah dibungkus viewOnceMessage: cukup pastikan messageContextInfo
+  // di dalamnya berisi deviceListMetadata lalu kembalikan apa adanya.
+  const wrappedInner = content.viewOnceMessage?.message;
+  if (wrappedInner?.interactiveMessage) {
+    const oldCtx = wrappedInner.messageContextInfo;
+    if (!oldCtx?.deviceListMetadata) {
+      content.viewOnceMessage.message = {
+        ...wrappedInner,
+        messageContextInfo:
+          oldCtx && Object.keys(oldCtx).length > 0
+            ? { deviceListMetadata: {}, deviceListMetadataVersion: 2, ...oldCtx }
+            : { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
+      };
+    }
+    return content;
+  }
+
+  if (!content.interactiveMessage) return content;
+
+  const inner = { ...content };
+  const oldCtx = inner.messageContextInfo;
+  const innerCtx =
+    oldCtx && typeof oldCtx === "object" && Object.keys(oldCtx).length > 0
+      ? { deviceListMetadata: {}, deviceListMetadataVersion: 2, ...oldCtx }
+      : { deviceListMetadata: {}, deviceListMetadataVersion: 2 };
+  inner.messageContextInfo = innerCtx;
+
+  return {
+    viewOnceMessage: {
+      message: inner,
+    },
+  };
+};
+
 export const generateTableContent = (
   title,
   headers,
