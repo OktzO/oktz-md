@@ -8,6 +8,7 @@ import { promisify } from "util";
 import fetch from "node-fetch";
 import te from "../../src/lib/ourin-error.js";
 import config from "../../config.js";
+import { ensureFfmpegOnPath, getFfmpegPath } from "../../src/lib/ourin-ffmpeg.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -331,7 +332,14 @@ async function encodeVideo(concatPath, outputPath, configObj) {
     outputPath
   ];
 
-  await execFileAsync("ffmpeg", args, { maxBuffer: 1024 * 1024 * 10 });
+  // Pastikan ffmpeg bisa dieksekusi: pakai path absolut bila ada,
+  // jika tidak, daftarkan direktori binary ke PATH lalu panggil seperti biasa.
+  const ffmpegBin = getFfmpegPath();
+  if (!ffmpegBin) ensureFfmpegOnPath();
+
+  await execFileAsync(ffmpegBin ?? "ffmpeg", args, {
+    maxBuffer: 1024 * 1024 * 10,
+  });
 }
 
 async function createBratVideo(text, template) {

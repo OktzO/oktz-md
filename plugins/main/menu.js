@@ -19,12 +19,14 @@ import { getDatabase } from "../../src/lib/ourin-database.js";
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import fs from "fs";
 import path from "path";
+import { getFfmpegPath } from "../../src/lib/ourin-ffmpeg.js";
 
 function getSharp() {
   return _sharp;
 }
 import axios from "axios";
 import sharp from "sharp";
+
 const pluginConfig = {
   name: "menu",
   alias: ["help", "bantuan", "commands", "m"],
@@ -741,7 +743,7 @@ Welcome to ${config.bot?.name}, Our bot will help you
                   ],
                 },
               },
-        }, { userJid: sock.user.jid });
+        }, { userJid: sock.user?.id });
 
         await sock.relayMessage(m.chat, msg.message, {
           messageId: msg.key.id,
@@ -857,7 +859,7 @@ Enjoy your use brother.`
                   ]
                 }
               }
-        }, { quoted: qvideo, userJid: sock.user.jid });
+        }, { quoted: qvideo, userJid: sock.user?.id });
 
         await sock.relayMessage(m.chat, msg4.message, {
           messageId: msg4.key.id,
@@ -1019,7 +1021,7 @@ _i am an automated system (WhatsApp bot) that can help to do something search an
                   ]
                 }
               }
-        }, { quoted: qOrder, userJid: sock.user.jid });
+        }, { quoted: qOrder, userJid: sock.user?.id });
 
         await sock.relayMessage(m.chat, msg4.message, {
           messageId: msg4.key.id,
@@ -1158,7 +1160,7 @@ _i am an automated system (WhatsApp bot) that can help to do something search an
                   ]
                 }
               }
-        }, { quoted: m, userJid: sock.user.jid });
+        }, { quoted: m, userJid: sock.user?.id });
 
         await sock.relayMessage(m.chat, msg6.message, {
           messageId: msg6.key.id,
@@ -1293,7 +1295,7 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
                   ]
                 }
               }
-        }, { quoted: fakeQuotedSticker, userJid: sock.user.jid });
+        }, { quoted: fakeQuotedSticker, userJid: sock.user?.id });
 
         await sock.relayMessage(m.chat, msg.message, {
           messageId: msg.key.id,
@@ -1506,7 +1508,7 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
                 fs.writeFileSync(mp3Path, Buffer.from(res.data));
                 const { spawn } = await import("child_process");
                 return new Promise((resolve, reject) => {
-                  const ffmpeg = spawn("ffmpeg", ["-y", "-i", mp3Path, "-c:a", "libopus", "-b:a", "256k", "-vbr", "on", "-compression_level", "10", "-ac", "2", "-ar", "48000", destPath]);
+                  const ffmpeg = spawn(getFfmpegPath() ?? "ffmpeg", ["-y", "-i", mp3Path, "-c:a", "libopus", "-b:a", "256k", "-vbr", "on", "-compression_level", "10", "-ac", "2", "-ar", "48000", destPath]);
                   ffmpeg.on("close", (code) => {
                     if (fs.existsSync(mp3Path)) fs.unlinkSync(mp3Path);
                     if (code === 0) resolve(destPath);
@@ -1551,7 +1553,7 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
                 fs.writeFileSync(mp3Path, Buffer.from(res.data));
                 const { spawn } = await import("child_process");
                 return new Promise((resolve, reject) => {
-                  const ffmpeg = spawn("ffmpeg", ["-y", "-i", mp3Path, "-c:a", "libopus", "-b:a", "256k", "-vbr", "on", "-compression_level", "10", "-ac", "2", "-ar", "48000", destPath]);
+                  const ffmpeg = spawn(getFfmpegPath() ?? "ffmpeg", ["-y", "-i", mp3Path, "-c:a", "libopus", "-b:a", "256k", "-vbr", "on", "-compression_level", "10", "-ac", "2", "-ar", "48000", destPath]);
                   ffmpeg.on("close", (code) => {
                     if (fs.existsSync(mp3Path)) fs.unlinkSync(mp3Path);
                     if (code === 0) resolve(destPath);
@@ -1613,7 +1615,7 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
                 if (fs.existsSync(destPath)) return destPath;
                 const { spawn } = await import("child_process");
                 return new Promise((resolve, reject) => {
-                  const ffmpeg = spawn("ffmpeg", ["-y", "-i", audioUrl, "-c:a", "libopus", "-b:a", "256k", "-vbr", "on", "-compression_level", "10", "-ac", "2", "-ar", "48000", destPath]);
+                  const ffmpeg = spawn(getFfmpegPath() ?? "ffmpeg", ["-y", "-i", audioUrl, "-c:a", "libopus", "-b:a", "256k", "-vbr", "on", "-compression_level", "10", "-ac", "2", "-ar", "48000", destPath]);
                   ffmpeg.on("close", (code) => {
                     if (code === 0) resolve(destPath);
                     else reject(new Error("FFmpeg error"));
@@ -1704,6 +1706,31 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
     }
   } catch (error) {
     console.error("[Menu] Error on command execution:", error.message);
+    console.error(error.stack);
+
+    // JANGAN biarkan command gagal tanpa kabar: varian rich-message bisa gagal
+    // karena asset hilang atau batas pesan WhatsApp, dan tanpa fallback ini
+    // user tidak melihat apa-apa sama sekali.
+    try {
+      if (imageBuffer) {
+        await sock.sendMessage(
+          m.chat,
+          { image: imageBuffer, caption: text },
+          { quoted: m },
+        );
+      } else {
+        await m.reply(text);
+      }
+    } catch (fallbackError) {
+      console.error("[Menu] Fallback juga gagal:", fallbackError.message);
+      try {
+        await m.reply(
+          `⚠️ Menu gagal ditampilkan.\n> ${error.message || "Unknown error"}`,
+        );
+      } catch {
+        /* benar-benar tidak bisa mengirim apa-apa */
+      }
+    }
   }
 }
 export default {

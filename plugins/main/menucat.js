@@ -361,7 +361,7 @@ async function handler(m, { sock, db }) {
                 }
               }
             }
-          }, { quoted: qOrder, userJid: sock.user.jid });
+          }, { quoted: qOrder, userJid: sock.user?.id });
 
           await sock.relayMessage(m.chat, msg4.message, { messageId: msg4.key.id });
           break;
@@ -562,7 +562,7 @@ async function handler(m, { sock, db }) {
               }
             }
           }
-        }, { quoted: qOrder, userJid: sock.user.jid });
+        }, { quoted: qOrder, userJid: sock.user?.id });
 
         await sock.relayMessage(m.chat, msg4.message, { messageId: msg4.key.id });
         break;
@@ -622,7 +622,7 @@ async function handler(m, { sock, db }) {
               }
             }
           }
-        }, { quoted: m, userJid: sock.user.jid });
+        }, { quoted: m, userJid: sock.user?.id });
 
         await sock.relayMessage(m.chat, msg6.message, { messageId: msg6.key.id });
         break;

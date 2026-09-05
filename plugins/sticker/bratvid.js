@@ -5,6 +5,7 @@ import { bratVid } from 'brat-canvas/video'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
+import { ensureFfmpegOnPath } from '../../src/lib/ourin-ffmpeg.js'
 
 const pluginConfig = {
     name: 'bratvid',
@@ -29,8 +30,12 @@ async function handler(m, { sock }) {
     }
     
     m.react('🕕')
-    
+
     try {
+        // brat-canvas menjalankan `spawn("ffmpeg")` dari PATH.
+        // Tanpa ini, ffmpeg tidak ketemu => ENOENT => command gagal diam-diam.
+        ensureFfmpegOnPath()
+
         const tempFile = path.join(os.tmpdir(), `brat-${Date.now()}.webp`)
         const buffer = await bratVid(text, {
             outputFormat: 'mp4',

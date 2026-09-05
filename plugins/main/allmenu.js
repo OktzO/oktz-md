@@ -15,6 +15,7 @@ import {
 } from "../../src/lib/ourin-plugins.js";
 import { getCasesByCategory, getCaseCount } from "../../case/ourin.js";
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
+import { getFfmpegPath } from "../../src/lib/ourin-ffmpeg.js";
 
 let _sharp;
 async function getSharp() {
@@ -380,7 +381,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
               ]
             }
           }
-        }, { quoted: qOrder, userJid: sock.user.jid });
+        }, { quoted: qOrder, userJid: sock.user?.id });
 
         await sock.relayMessage(m.chat, msg4.message, { messageId: msg4.key.id });
         break;
@@ -436,7 +437,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
               buttons: []
             }
           }
-        }, { quoted: m, userJid: sock.user.jid });
+        }, { quoted: m, userJid: sock.user?.id });
 
         await sock.relayMessage(m.chat, msg6.message, { messageId: msg6.key.id });
         break;
@@ -466,7 +467,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
                 fs.writeFileSync(mp3Path, Buffer.from(res.data));
                 const { spawn } = await import("child_process");
                 return new Promise((resolve, reject) => {
-                  const ffmpeg = spawn("ffmpeg", ["-y", "-i", mp3Path, "-c:a", "libopus", "-b:a", "48k", "-vbr", "on", destPath]);
+                  const ffmpeg = spawn(getFfmpegPath() ?? "ffmpeg", ["-y", "-i", mp3Path, "-c:a", "libopus", "-b:a", "48k", "-vbr", "on", destPath]);
                   ffmpeg.on("close", (code) => {
                     if (fs.existsSync(mp3Path)) fs.unlinkSync(mp3Path);
                     if (code === 0) resolve(destPath);
@@ -511,7 +512,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
                 fs.writeFileSync(mp3Path, Buffer.from(res.data));
                 const { spawn } = await import("child_process");
                 return new Promise((resolve, reject) => {
-                  const ffmpeg = spawn("ffmpeg", ["-y", "-i", mp3Path, "-c:a", "libopus", "-b:a", "48k", "-vbr", "on", destPath]);
+                  const ffmpeg = spawn(getFfmpegPath() ?? "ffmpeg", ["-y", "-i", mp3Path, "-c:a", "libopus", "-b:a", "48k", "-vbr", "on", destPath]);
                   ffmpeg.on("close", (code) => {
                     if (fs.existsSync(mp3Path)) fs.unlinkSync(mp3Path);
                     if (code === 0) resolve(destPath);

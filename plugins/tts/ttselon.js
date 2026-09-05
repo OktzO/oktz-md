@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import te from "../../src/lib/ourin-error.js";
 import { saluranCtx } from "../../src/lib/ourin-context.js";
+import { getFfmpegPath } from "../../src/lib/ourin-ffmpeg.js";
 const pluginConfig = {
   name: "ttselon",
   alias: ["elontts", "ttselonmusk"],
@@ -22,7 +23,7 @@ const pluginConfig = {
 
 function convertToOpus(inputPath, outputPath) {
   return new Promise((resolve, reject) => {
-    const ffmpeg = spawn("ffmpeg", [
+    const ffmpeg = spawn(getFfmpegPath() ?? "ffmpeg", [
       "-i",
       inputPath,
       "-c:a",
