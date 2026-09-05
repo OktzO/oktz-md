@@ -26,7 +26,7 @@ function getSharp() {
 }
 import axios from "axios";
 import sharp from "sharp";
-import { wrapInteractive } from "../../src/lib/ourin-rich-messages.js";
+import { wrapInteractive, generateMenuCard } from "../../src/lib/ourin-rich-messages.js";
 
 const pluginConfig = {
   name: "menu",
@@ -676,7 +676,6 @@ ${readmore}${s}`
         break;
 
       case 3: {
-        const jpegThumbnail = await sharp(getAssetBuffer("ourin")).resize(300, 170).toBuffer();
         const bodyText = `🥞 *Hello Brother*
 
 Welcome to ${config.bot?.name}, Our bot will help you
@@ -697,58 +696,20 @@ Welcome to ${config.bot?.name}, Our bot will help you
 > 🍬 *Register*: ${user.isRegistered ? "Sudah" : "Belum"}`;
         const footerText = '🍔 Silahkan pilih dari salah satu tombol di bawah';
 
-        const msg = generateWAMessageFromContent(m.chat, wrapInteractive({
-          messageContextInfo: {},
-              interactiveMessage: {
-                header: {
-                  hasMediaAttachment: true,
-                  locationMessage: {
-                    degreesLatitude: 0,
-                    degreesLongitude: 0,
-                    name: config.bot.name,
-                    address: `Versi saat ini: ${config.bot.version}`,
-                    jpegThumbnail,
-                  },
-                },
-                body: { text: bodyText },
-                footer: { text: footerText },
-                nativeFlowMessage: {
-                  buttons: [
-                    {
-                      name: "single_select",
-                      buttonParamsJson: JSON.stringify({
-                        title: "🍃 Menu Utama",
-                        sections: [
-                          {
-                            title: "Berikut adalah pilihan nya",
-                            rows: zann_pengin_rehat,
-                          },
-                        ],
-                        icon: "DEFAULT",
-                      }),
-                    },
-                    {
-                      name: "quick_reply",
-                      buttonParamsJson: JSON.stringify({
-                        display_text: "🧀 Owner",
-                        id: `${m.prefix}owner`,
-                      }),
-                    },
-                    {
-                      name: "quick_reply",
-                      buttonParamsJson: JSON.stringify({
-                        display_text: "💐 Allmenu",
-                        id: `${m.prefix}allmenu`,
-                      }),
-                    },
-                  ],
-                },
-              },
-        }), { userJid: sock.user?.id });
+        // Format interactiveMessage lama sudah tidak dirender WhatsApp (relay
+        // sukses tapi kartu tidak muncul). Pakai format AIRich yang terbukti
+        // jalan (pola sendTableV2 / play2). Tombol kategori digantikan teks;
+        // akses penuh tetap via .menucat <kategori> dan .allmenu.
+        const { message: menuCardMsg, messageId: menuCardId } = generateMenuCard(
+          bodyText,
+          m,
+          {
+            headerText: `🍃 ${config.bot?.name || "Ourin"}`,
+            footer: `${footerText}\n\n> Ketik ${m.prefix}menucat <kategori> untuk isi kategori\n> Ketik ${m.prefix}allmenu untuk semua command (${totalCmds})`,
+          },
+        );
 
-        await sock.relayMessage(m.chat, msg.message, {
-          messageId: msg.key.id,
-        });
+        await sock.relayMessage(m.chat, menuCardMsg, {});
         break
       }
 

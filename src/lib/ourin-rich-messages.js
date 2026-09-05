@@ -502,6 +502,110 @@ export const wrapInteractive = (content) => {
   };
 };
 
+/**
+ * Kartu menu format AIRich (pola generateTableContentV2 / play2 yang
+ * terbukti dirender di produksi).
+ *
+ * Format interactiveMessage lama sudah tidak dirender WhatsApp — relay
+ * sukses tanpa error tapi kartu tidak muncul. Format yang masih hidup
+ * adalah botForwardedMessage > richResponseMessage > unifiedResponse
+ * dengan section GenAIMarkdownTextUXPrimitive.
+ *
+ * Struktur mengikuti generateTableContentV2 (messageSecret, threadId,
+ * deviceListMetadata terisi, botMetadata) dan play2 (relayMessage TANPA
+ * messageId eksplisit — messageId di-generate internal).
+ */
+export const generateMenuCard = (text, quoted, options = {}) => {
+  const { headerText, footer, responseId: rid } = options;
+  const sections = [];
+  if (headerText) {
+    sections.push({
+      view_model: {
+        primitive: {
+          text: headerText,
+          __typename: "GenAIMarkdownTextUXPrimitive",
+        },
+        __typename: "GenAISingleLayoutViewModel",
+      },
+    });
+  }
+  sections.push({
+    view_model: {
+      primitive: {
+        text,
+        __typename: "GenAIMarkdownTextUXPrimitive",
+      },
+      __typename: "GenAISingleLayoutViewModel",
+    },
+  });
+  if (footer) {
+    sections.push({
+      view_model: {
+        primitive: {
+          text: footer,
+          __typename: "GenAIMarkdownTextUXPrimitive",
+        },
+        __typename: "GenAISingleLayoutViewModel",
+      },
+    });
+  }
+  const responseId = rid || randomUUID();
+  const unifiedData = {
+    response_id: responseId,
+    sections,
+  };
+  const base64Data = Buffer.from(JSON.stringify(unifiedData)).toString(
+    "base64",
+  );
+  const ctxInfo = {
+    forwardingScore: 2,
+    isForwarded: true,
+    forwardedAiBotMessageInfo: { botJid: "259786046210223@bot" },
+    forwardOrigin: 4,
+    botMessageSharingInfo: {
+      botEntryPointOrigin: 1,
+      forwardScore: 2,
+    },
+  };
+  if (quoted?.key) {
+    ctxInfo.stanzaId = quoted.key.id;
+    ctxInfo.participant =
+      quoted.key.participant || quoted.sender || quoted.key.remoteJid;
+    ctxInfo.quotedMessage = quoted.message;
+  }
+  const content = {
+    messageContextInfo: {
+      threadId: [],
+      deviceListMetadata: {
+        senderKeyIndexes: [],
+        recipientKeyIndexes: [],
+        recipientKeyHash: "",
+        recipientTimestamp: Math.floor(Date.now() / 1000),
+      },
+      deviceListMetadataVersion: 2,
+      messageSecret: randomBytes(32),
+      botMetadata: {
+        messageDisclaimerText: "",
+        botResponseId: responseId,
+      },
+    },
+    botForwardedMessage: {
+      message: {
+        richResponseMessage: {
+          submessages: [],
+          messageType: 1,
+          unifiedResponse: { data: base64Data },
+          contextInfo: ctxInfo,
+        },
+      },
+    },
+  };
+  return {
+    message: content,
+    messageId: generateMessageIDV2(),
+  };
+};
+
 export const generateTableContent = (
   title,
   headers,
