@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import * as timeHelper from "./ourin-time.js";
+import { getCachedJid, isLidConverted } from "./ourin-lid.js";
 
 // Mock gradient-string if any other file imports it from here
 const gradientMock = (text) => text;
@@ -10,12 +11,42 @@ const cGreen = chalk.greenBright;
 const cWhite = chalk.whiteBright;
 const cGray = chalk.gray;
 
-// Helper to create linux-style brackets
 function makeTag(label, isSuccess = false, isError = false) {
-  const text = label.toUpperCase().substring(0, 4).padStart(4, " ");
-  if (isSuccess) return `${cGray("[")} ${cGreen(text)} ${cGray("]")}`;
-  if (isError) return `${cGray("[")} ${cWhite(text)} ${cGray("]")}`; // Error uses white inside brackets for visibility, or green? User said green for check/highlights, white for important text. Let's use White for error labels or Gray.
-  return `${cGray("[")} ${cWhite(text)} ${cGray("]")}`;
+  const l = label.toUpperCase().trim();
+  let icon = "•";
+  let colorFn = chalk.white;
+
+  if (isSuccess || l === "OK" || l === "DONE") {
+    icon = "✔";
+    colorFn = chalk.green;
+  } else if (isError || l === "FAIL" || l === "ERR" || l === "NO") {
+    icon = "✖";
+    colorFn = chalk.red;
+  } else if (l === "WARN" || l === "WN") {
+    icon = "⚠";
+    colorFn = chalk.yellow;
+  } else if (l === "INFO") {
+    icon = "ℹ";
+    colorFn = chalk.blue;
+  } else if (l === "BOOT") {
+    icon = "❖";
+    colorFn = chalk.magenta;
+  } else if (l === "SYS") {
+    icon = "⚙";
+    colorFn = chalk.cyan;
+  } else if (l === "WAIT") {
+    icon = "⟳";
+    colorFn = chalk.yellow;
+  } else if (l === "CMD") {
+    icon = "❯";
+    colorFn = chalk.magenta;
+  } else if (l === "DBG") {
+    icon = "🐛";
+    colorFn = chalk.white;
+  }
+
+  const text = l.substring(0, 4).padEnd(4, " ");
+  return `  ${colorFn(icon)}  ${colorFn(text)}`;
 }
 
 const SYM = {
@@ -38,8 +69,8 @@ function writeLog(kind, label, detail = "") {
   };
   const tag = tags[kind] || SYM.info;
 
-  // Format: [  OK  ] Started OURIN AI
-  const msg = `${tag} ${cWhite(label)}${detail ? " " + cGray(detail) : ""}`;
+  // Format: [  OK  ] Started OKTZ AI
+  const msg = `${tag} ${chalk.cyanBright(label)}${detail ? " " + cWhite(detail) : ""}`;
   console.log(msg);
 }
 
@@ -103,24 +134,43 @@ async function runLoader(text = "memuat", options = {}) {
 }
 
 async function playBootSequence(info = {}) {
-  const { name = "OURIN AI", version = "1.0.0", mode = "public" } = info;
+  const { name = "OKTZ", version = "3.3", mode = "public" } = info;
   console.log("");
-  console.log(`${cGray("---")}`);
-  console.log(`${makeTag("BOOT", true)} ${cWhite(`Starting ${name} v${version}`)}`);
-  console.log(`${makeTag("INFO")} ${cGray(`Mode: ${mode}`)}`);
+  console.log(chalk.cyan(`
+           ██████╗ ██╗   ██╗██████╗ ██╗███╗   ██╗
+          ██╔═══██╗██║   ██║██╔══██╗██║████╗  ██║
+          ██║   ██║██║   ██║██████╔╝██║██╔██╗ ██║
+          ██║   ██║██║   ██║██╔══██╗██║██║╚██╗██║
+          ╚██████╔╝╚██████╔╝██║  ██╗██║██║ ╚████║
+           ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝
+`));
+  console.log(`         ${chalk.magenta.bold("►")} ${chalk.white("OKTZ MULTI-DEVICE BOT")} ${chalk.gray(`v${version}`)}`);
+  console.log(`         ${chalk.magenta("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")}`);
+  console.log("");
+  console.log(`${makeTag("BOOT", true)} ${cWhite(`Memulai Sistem Utama...`)}`);
+  console.log(`${makeTag("INFO")} ${cWhite(`Mode: ${chalk.cyan(mode)}`)}`);
 }
 
 function logCommand(info = {}) {
-  const { prefix = ".", command, pushName, chatType, groupName } = info;
+  const {
+    prefix = ".", command, pushName, sender, chatType, groupName, messageType, device,
+  } = info;
   if (!command) return;
 
-  const name = pushName || "Pengguna";
-  const location = chatType === "group"
-    ? (groupName || "Group")
-    : chatType === "newsletter" ? "Channel" : "Private";
   const time = timeHelper.formatTime("HH:mm:ss");
+  const location = chatType === "group" || chatType === "newsletter"
+    ? (groupName || "Group")
+    : "Private";
+  const senderName = pushName || "Pengguna";
+  const typeTag = messageType || "Command";
+  const msg = `${prefix}${command}`;
 
-  console.log(`${makeTag("CMD")} ${cWhite(prefix + command)} ${cGray("—")} ${cWhite(name)} ${cGray("·")} ${cGray(location)} ${cGray("·")} ${cGray(time)}`);
+  console.log("");
+  console.log(`  ${cWhite("╭─")} ${chalk.bgWhiteBright(" Command dieksekusi ")} ${cGray("•")} ${chatType === "private" ? chalk.yellow("Private") : chalk.whiteBright("Dari Grup") + " " + chalk.bgCyanBright(location)}`);
+  console.log(`  ${cWhite("│")}  👤 ${chalk.greenBright(senderName)}`);
+  console.log(`  ${cWhite("│")}  📱 ${chalk.yellowBright(device || "Unknown")} ${chalk.red(`• ${time} • ${typeTag}`)}`);
+  console.log(`  ${cWhite("│")}  💬 ${chalk.whiteBright(msg)}`);
+  console.log(`  ${cWhite("╰─")}`);
 }
 function logPlugin(name, category) {
   // Simple tree view for plugin

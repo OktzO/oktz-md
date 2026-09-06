@@ -1,80 +1,90 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, before } from "node:test";
+import assert from "node:assert";
 
-const SENDER = '6281234567890@s.whatsapp.net';
+// Regression test: command log box tampil untuk command, TANPA nomor sender
+// (anti-doxx), dan chat non-command tidak log sama sekali (dijamin handler).
+// Run: node --test tests/logger-command.test.mjs
 
-async function loadLogger() {
-  return await import('../src/lib/ourin-logger.js');
-}
+const SENDER = "6281234567890@s.whatsapp.net";
 
-function captureLog(fn) {
-  const lines = [];
-  const orig = console.log;
-  console.log = (...args) => lines.push(args.map((a) => String(a)).join(' '));
-  try {
-    fn();
-  } finally {
-    console.log = orig;
-  }
-  return lines.map((l) => l.replace(/\x1B\[\d+m/g, ''));
-}
+describe("ourin-logger logCommand", () => {
+  let mod;
+  let logs;
 
-describe('ourin-logger logCommand', () => {
-  it('logs single CMD line with command and name, never the sender number', async () => {
-    const mod = await loadLogger();
-    const lines = captureLog(() =>
-      mod.logCommand({
-        prefix: '.',
-        command: 'ping',
-        pushName: 'Zann',
-        sender: SENDER,
-        chatType: 'private',
-      })
-    );
-    assert.strictEqual(lines.length, 1);
-    assert.ok(lines[0].includes('CMD ]'), `missing [ CMD ] tag: ${lines[0]}`);
-    assert.ok(lines[0].includes('.ping'), `missing command: ${lines[0]}`);
-    assert.ok(lines[0].includes('Zann'), `missing name: ${lines[0]}`);
-    assert.ok(!lines[0].includes('6281234567890'), `number leaked: ${lines[0]}`);
+  before(async () => {
+    const origLog = console.log;
+    const captured = [];
+    console.log = (...a) => captured.push(a.map(String).join(" "));
+    try {
+      mod = await import("../src/lib/ourin-logger.js");
+    } finally {
+      console.log = origLog;
+    }
+    logs = (fn) => {
+      const buf = [];
+      const orig = console.log;
+      console.log = (...a) => buf.push(a.map(String).join(" "));
+      try {
+        fn();
+      } finally {
+        console.log = orig;
+      }
+      return buf;
+    };
   });
 
-  it('falls back to generic name when pushName missing, still no number', async () => {
-    const mod = await loadLogger();
-    const lines = captureLog(() =>
+  it("menampilkan box command dengan nama user, tanpa nomor sender", () => {
+    const lines = logs(() =>
       mod.logCommand({
-        prefix: '.',
-        command: 'menu',
-        pushName: '',
+        prefix: ".",
+        command: "ping",
+        pushName: "Zann",
         sender: SENDER,
-        chatType: 'private',
-      })
+        chatType: "private",
+      }),
     );
-    assert.strictEqual(lines.length, 1);
-    assert.ok(!lines[0].includes('6281234567890'), `number leaked: ${lines[0]}`);
-    assert.ok(lines[0].includes('.menu'));
+    assert.ok(lines.length > 1, "box multi-baris");
+    const joined = lines.join("\n");
+    assert.ok(joined.includes(".ping"), `missing command: ${joined}`);
+    assert.ok(joined.includes("Zann"), `missing name: ${joined}`);
+    assert.ok(!joined.includes("6281234567890"), `number leaked: ${joined}`);
   });
 
-  it('shows group name for group chats', async () => {
-    const mod = await loadLogger();
-    const lines = captureLog(() =>
+  it("fallback nama generik saat pushName kosong, tetap tanpa nomor", () => {
+    const lines = logs(() =>
       mod.logCommand({
-        prefix: '.',
-        command: 'sticker',
-        pushName: 'Zann',
+        prefix: ".",
+        command: "menu",
+        pushName: "",
         sender: SENDER,
-        chatType: 'group',
-        groupName: 'Test Group',
-      })
+        chatType: "private",
+      }),
     );
-    assert.strictEqual(lines.length, 1);
-    assert.ok(lines[0].includes('Test Group'), `missing group: ${lines[0]}`);
-    assert.ok(!lines[0].includes('6281234567890'));
+    const joined = lines.join("\n");
+    assert.ok(!joined.includes("6281234567890"), `number leaked: ${joined}`);
+    assert.ok(joined.includes(".menu"));
+    assert.ok(joined.includes("Pengguna"));
   });
 
-  it('skips empty command', async () => {
-    const mod = await loadLogger();
-    const lines = captureLog(() =>
-      mod.logCommand({ prefix: '.', command: '', sender: SENDER })
+  it("menampilkan nama grup untuk chat grup", () => {
+    const lines = logs(() =>
+      mod.logCommand({
+        prefix: ".",
+        command: "sticker",
+        pushName: "Zann",
+        sender: SENDER,
+        chatType: "group",
+        groupName: "Test Group",
+      }),
+    );
+    const joined = lines.join("\n");
+    assert.ok(joined.includes("Test Group"), `missing group: ${joined}`);
+    assert.ok(!joined.includes("6281234567890"));
+  });
+
+  it("skip command kosong", () => {
+    const lines = logs(() =>
+      mod.logCommand({ prefix: ".", command: "", sender: SENDER }),
     );
     assert.strictEqual(lines.length, 0);
   });
