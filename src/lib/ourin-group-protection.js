@@ -877,7 +877,7 @@ async function handleAntiRemove(messageUpdate, sock, db) {
           const { downloadMediaMessage } = await import("ourin");
           const fakeMsg = {
             key: cached.key,
-            message: { [msgType]: msgContent[msgType] },
+            message: { [msgType]: structuredClone(msgContent[msgType]) },
           };
           const buffer = await downloadMediaMessage(
             fakeMsg,
@@ -1039,7 +1039,7 @@ async function handleAntiRemoveFromUpsert(msg, sock, db) {
           const { downloadMediaMessage } = await import("ourin");
           const fakeMsg = {
             key: cached.key,
-            message: { [msgType]: msgContent[msgType] },
+            message: { [msgType]: structuredClone(msgContent[msgType]) },
           };
           const buffer = await downloadMediaMessage(
             fakeMsg,
@@ -1124,7 +1124,7 @@ async function cacheMessageForAntiRemove(m, sock, db) {
 
     const rawMsg = {
       key: { ...m.key },
-      message: JSON.parse(JSON.stringify(m.message || {})),
+      message: m.message || {},
       messageTimestamp: m.messageTimestamp,
       pushName: m.pushName,
     };

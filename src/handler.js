@@ -1870,13 +1870,16 @@ async function groupHandler(update, sock) {
     let groupMeta;
     try {
       const cached = global.groupMetadataCache?.get(groupJid);
-      if (cached && Date.now() - (cached._ts || 0) < 30000) {
-        groupMeta = cached;
+      const cachedData = cached ? cached.data || cached : null;
+      if (cachedData && Date.now() - (cached._ts || cached.timestamp || 0) < 30000) {
+        groupMeta = cachedData;
       } else {
         groupMeta = await sock.groupMetadata(groupJid);
         if (global.groupMetadataCache) {
-          groupMeta._ts = Date.now();
-          global.groupMetadataCache.set(groupJid, groupMeta);
+          global.groupMetadataCache.set(groupJid, {
+            data: groupMeta,
+            timestamp: Date.now(),
+          });
         }
       }
 

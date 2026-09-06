@@ -19,6 +19,15 @@ const pluginConfig = {
 
 if (!global.confessData) global.confessData = new Map();
 
+const CONFESS_TTL_MS = 24 * 60 * 60 * 1000;
+
+function sweepConfessData() {
+  const cutoff = Date.now() - CONFESS_TTL_MS;
+  for (const [id, entry] of global.confessData) {
+    if (entry?.createdAt && entry.createdAt < cutoff) global.confessData.delete(id);
+  }
+}
+
 async function handler(m, { sock }) {
   const input = m.fullArgs?.trim() || m.text?.trim();
 
@@ -95,9 +104,7 @@ async function handler(m, { sock }) {
       createdAt: Date.now(),
     });
 
-    setTimeout(() => {
-      global.confessData.delete(sentMsg.key.id);
-    }, 24 * 60 * 60 * 1000);
+    sweepConfessData();
 
     let successTxt = `✅ *MENFESS BERHASIL TERKIRIM!* ✅\n\n`;
     successTxt += `> 📱 Terkirim ke: \`${targetNumber}\`\n`;

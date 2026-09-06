@@ -1,12 +1,26 @@
 const gameQueue = new Map()
 const QUEUE_DELAY = 500
 const BATCH_WINDOW = 1000
+const IDLE_TTL = 2 * 60 * 60 * 1000
+let lastSweep = 0
+
+function sweepIdleQueues() {
+    const now = Date.now()
+    for (const [key, queue] of gameQueue) {
+        const lastActivity = Math.max(queue.lastProcess, ...queue.requests.map(r => r.timestamp), 0)
+        if (lastActivity > 0 && now - lastActivity > IDLE_TTL) {
+            gameQueue.delete(key)
+        }
+    }
+    lastSweep = now
+}
 
 function getQueueKey(chatId, command) {
     return `${chatId}_${command}`
 }
 
 function addToQueue(chatId, command, sender, timestamp) {
+    if (Date.now() - lastSweep > 10 * 60 * 1000) sweepIdleQueues()
     const key = getQueueKey(chatId, command)
     if (!gameQueue.has(key)) {
         gameQueue.set(key, {

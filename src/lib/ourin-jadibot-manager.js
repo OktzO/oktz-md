@@ -9,7 +9,7 @@ import {
   useMultiFileAuthState,
 } from "ourin";
 import { logger } from "./ourin-logger.js";
-import { addJadibotOwner } from "./ourin-jadibot-database.js";
+import { addJadibotOwner, unloadJadibotDb } from "./ourin-jadibot-database.js";
 import { extendSocket } from "./ourin-socket.js";
 import { getAssetBuffer } from "./ourin-asset-manager.js";
 const JADIBOT_AUTH_FOLDER = path.join(process.cwd(), "session", "jadibot");
@@ -450,6 +450,7 @@ async function startJadibot(sock, m, userJid, usePairing = true) {
         try {
           childSock.ws.close();
         } catch { }
+        unloadJadibotDb(id);
         return;
       }
 
@@ -503,8 +504,13 @@ async function startJadibot(sock, m, userJid, usePairing = true) {
           if (!isSocketAlive(childSock)) {
             clearInterval(heartbeatInterval);
           }
+          const fiveMinAgo = Date.now() - 300000;
+          for (const [key, time] of processedMessages) {
+            if (time < fiveMinAgo) processedMessages.delete(key);
+          }
         } catch { }
       }, 30000);
+      if (heartbeatInterval.unref) heartbeatInterval.unref();
 
       const session = jadibotSessions.get(id);
       if (session) {
@@ -559,6 +565,7 @@ async function startJadibot(sock, m, userJid, usePairing = true) {
       if (errorInfo.fatal || attempts >= MAX_RECONNECT_ATTEMPTS) {
         jadibotSessions.delete(id);
         reconnectAttempts.delete(id);
+        unloadJadibotDb(id);
 
         if (errorInfo.fatal) {
           try {
@@ -603,13 +610,24 @@ async function startJadibot(sock, m, userJid, usePairing = true) {
           mentions: [userJid],
         });
 
-        setTimeout(() => {
+        const currentSession = jadibotSessions.get(id);
+        const reconnectTimer = setTimeout(() => {
+          if (currentSession?.stopping) {
+            jadibotSessions.delete(id);
+            return;
+          }
+          jadibotSessions.delete(id);
           startJadibot(sock, m, userJid, false).catch((e) => {
             logger.error("Jadibot", `Reconnect failed for ${id}: ${e.message}`);
             jadibotSessions.delete(id);
             reconnectAttempts.delete(id);
           });
         }, RECONNECT_INTERVAL);
+        if (reconnectTimer.unref) reconnectTimer.unref();
+        jadibotSessions.set(id, {
+          stopping: currentSession?.stopping || false,
+          reconnectTimer,
+        });
       }
     }
   });
@@ -773,6 +791,7 @@ async function startJadibot(sock, m, userJid, usePairing = true) {
       } catch { }
       jadibotSessions.delete(id);
       reconnectAttempts.delete(id);
+      unloadJadibotDb(id);
       throw new Error(errorMsg);
     }
   }
@@ -785,9 +804,13 @@ async function stopJadibot(jid, deleteSession = false) {
   const session = jadibotSessions.get(id);
 
   if (session) {
+    session.stopping = true;
     try {
       if (session.heartbeatInterval) {
         clearInterval(session.heartbeatInterval);
+      }
+      if (session.reconnectTimer) {
+        clearTimeout(session.reconnectTimer);
       }
       session.sock.ev.removeAllListeners();
       session.sock.ws.close();
@@ -796,6 +819,7 @@ async function stopJadibot(jid, deleteSession = false) {
   }
 
   reconnectAttempts.delete(id);
+  unloadJadibotDb(id);
 
   if (deleteSession) {
     const authPath = getJadibotAuthPath(jid);
@@ -814,14 +838,19 @@ async function stopJadibot(jid, deleteSession = false) {
 async function stopAllJadibots() {
   const stopped = [];
   for (const [id, session] of jadibotSessions) {
+    session.stopping = true;
     try {
       if (session.heartbeatInterval) {
         clearInterval(session.heartbeatInterval);
+      }
+      if (session.reconnectTimer) {
+        clearTimeout(session.reconnectTimer);
       }
       session.sock.ev.removeAllListeners();
       session.sock.ws.close();
     } catch { }
     stopped.push(id);
+    unloadJadibotDb(id);
   }
   jadibotSessions.clear();
   reconnectAttempts.clear();

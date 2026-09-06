@@ -11,6 +11,38 @@ const defaultSettings = { selfMode: false };
 const defaultStats = {};
 const defaultSewa = { enabled: false, groups: {} };
 
+const USER_SET_OVERRIDDEN = new Set([
+  "jid", "name", "number", "energi", "isPremium", "isBanned", "exp", "level",
+  "koin", "saldo", "unlockedFeatures", "registeredAt", "lastRegisteredAt",
+  "registrationCount", "hasClaimedRegisterReward", "unregisteredAt",
+  "lastSeen", "cooldowns", "clanId", "isRegistered", "regName", "regAge",
+  "regGender", "rpg", "inventory", "access",
+]);
+
+class CompactJSONFileSync {
+  constructor(filename) {
+    this.filename = filename;
+    this.tempFilename = path.join(
+      path.dirname(filename.toString()),
+      `.${path.basename(filename.toString())}.tmp`,
+    );
+  }
+  read() {
+    let content;
+    try {
+      content = fs.readFileSync(this.filename, "utf-8");
+    } catch (e) {
+      if (e.code === "ENOENT") return null;
+      throw e;
+    }
+    return JSON.parse(content);
+  }
+  write(obj) {
+    fs.writeFileSync(this.tempFilename, JSON.stringify(obj), "utf-8");
+    fs.renameSync(this.tempFilename, this.filename);
+  }
+}
+
 class Database {
   constructor(dbPath) {
     this.dbPath = dbPath;
@@ -79,7 +111,6 @@ class Database {
   async init() {
     try {
       const { LowSync } = await import("lowdb");
-      const { JSONFileSync } = await import("lowdb/node");
 
       this.migrateFromOldPath();
       await this.migrateFromSingleFile();
@@ -98,7 +129,7 @@ class Database {
       for (const [key, { file, defaults }] of Object.entries(fileMap)) {
         const filePath = path.join(this.dbPath, file);
         this.validateJsonFile(filePath, defaults, file);
-        const adapter = new JSONFileSync(filePath);
+        const adapter = new CompactJSONFileSync(filePath);
         const store = new LowSync(adapter, defaults);
         store.read();
         if (!store.data) store.data = defaults;
@@ -254,7 +285,7 @@ class Database {
         this.stores[key].adapter?.filename ||
         path.join(this.dbPath, `${key}.json`);
       const data = this.stores[key].data;
-      const json = JSON.stringify(data, null, 2);
+      const json = JSON.stringify(data);
       const temp = filePath + ".tmp";
       await fs.promises.writeFile(temp, json, "utf-8");
       await fs.promises.rename(temp, filePath);
@@ -357,7 +388,7 @@ class Database {
           store.adapter?.filename ||
           path.join(this.dbPath, `${key}.json`);
         const temp = filePath + ".tmp";
-        fs.writeFileSync(temp, JSON.stringify(store.data, null, 2), "utf-8");
+        fs.writeFileSync(temp, JSON.stringify(store.data), "utf-8");
         fs.renameSync(temp, filePath);
         this.dirty[key] = false;
       } catch { }
@@ -459,7 +490,11 @@ class Database {
     if (!jid) return null;
     const cleanJid = jid.replace(/@.+/g, "");
     if (cleanJid.length > 15 || cleanJid.startsWith("120")) return null;
-    const existing = this.db.data.users[cleanJid] || {};
+    let existing = this.db.data.users[cleanJid];
+    if (!existing) {
+      existing = {};
+      this.db.data.users[cleanJid] = existing;
+    }
 
     const existingBalance =
       existing.balance !== undefined ? existing.balance : 0;
@@ -470,45 +505,50 @@ class Database {
         : config.energi?.default || 25;
     if (existing.limit !== undefined) delete existing.limit;
 
-    this.db.data.users[cleanJid] = {
-      ...existing,
-      ...data,
-      jid: cleanJid,
-      name: data.name || existing.name || "Unknown",
-      number: cleanJid,
-      energi: data.energi ?? existing.energi ?? existingLimit,
-      isPremium: data.isPremium ?? existing.isPremium ?? false,
-      isBanned: data.isBanned ?? existing.isBanned ?? false,
-      exp: data.exp ?? existing.exp ?? 0,
-      level: data.level ?? existing.level ?? 1,
-      koin: data.koin ?? existing.koin ?? existingBalance,
-      saldo: data.saldo ?? existing.saldo ?? 0,
-      unlockedFeatures:
-        data.unlockedFeatures ?? existing.unlockedFeatures ?? [],
-      registeredAt: data.registeredAt ?? existing.registeredAt ?? null,
-      lastRegisteredAt:
-        data.lastRegisteredAt ?? existing.lastRegisteredAt ?? null,
-      registrationCount:
-        data.registrationCount ?? existing.registrationCount ?? 0,
-      hasClaimedRegisterReward:
-        data.hasClaimedRegisterReward ??
-        existing.hasClaimedRegisterReward ??
-        false,
-      unregisteredAt: data.unregisteredAt ?? existing.unregisteredAt ?? null,
-      lastSeen: new Date().toISOString(),
-      cooldowns: data.cooldowns ?? existing.cooldowns ?? {},
-      clanId: data.clanId ?? existing.clanId ?? null,
-      isRegistered: data.isRegistered ?? existing.isRegistered ?? false,
-      regName: data.regName ?? existing.regName ?? null,
-      regAge: data.regAge ?? existing.regAge ?? null,
-      regGender: data.regGender ?? existing.regGender ?? null,
-      rpg: { ...(existing.rpg || {}), ...(data.rpg || {}) },
-      inventory: { ...(existing.inventory || {}), ...(data.inventory || {}) },
-      access: data.access || existing.access || [],
-    };
+    for (const k of Object.keys(data)) {
+      if (!USER_SET_OVERRIDDEN.has(k)) existing[k] = data[k];
+    }
+    existing.jid = cleanJid;
+    existing.name = data.name || existing.name || "Unknown";
+    existing.number = cleanJid;
+    existing.energi = data.energi ?? existing.energi ?? existingLimit;
+    existing.isPremium = data.isPremium ?? existing.isPremium ?? false;
+    existing.isBanned = data.isBanned ?? existing.isBanned ?? false;
+    existing.exp = data.exp ?? existing.exp ?? 0;
+    existing.level = data.level ?? existing.level ?? 1;
+    existing.koin = data.koin ?? existing.koin ?? existingBalance;
+    existing.saldo = data.saldo ?? existing.saldo ?? 0;
+    existing.unlockedFeatures =
+      data.unlockedFeatures ?? existing.unlockedFeatures ?? [];
+    existing.registeredAt = data.registeredAt ?? existing.registeredAt ?? null;
+    existing.lastRegisteredAt =
+      data.lastRegisteredAt ?? existing.lastRegisteredAt ?? null;
+    existing.registrationCount =
+      data.registrationCount ?? existing.registrationCount ?? 0;
+    existing.hasClaimedRegisterReward =
+      data.hasClaimedRegisterReward ??
+      existing.hasClaimedRegisterReward ??
+      false;
+    existing.unregisteredAt = data.unregisteredAt ?? existing.unregisteredAt ?? null;
+    existing.lastSeen = new Date().toISOString();
+    existing.cooldowns = data.cooldowns ?? existing.cooldowns ?? {};
+    existing.clanId = data.clanId ?? existing.clanId ?? null;
+    existing.isRegistered = data.isRegistered ?? existing.isRegistered ?? false;
+    existing.regName = data.regName ?? existing.regName ?? null;
+    existing.regAge = data.regAge ?? existing.regAge ?? null;
+    existing.regGender = data.regGender ?? existing.regGender ?? null;
+    existing.rpg =
+      data.rpg !== undefined && data.rpg !== existing.rpg
+        ? { ...(existing.rpg || {}), ...(data.rpg || {}) }
+        : existing.rpg || {};
+    existing.inventory =
+      data.inventory !== undefined && data.inventory !== existing.inventory
+        ? { ...(existing.inventory || {}), ...(data.inventory || {}) }
+        : existing.inventory || {};
+    existing.access = data.access || existing.access || [];
 
     this.markDirty("users");
-    return this.db.data.users[cleanJid];
+    return existing;
   }
 
   deleteUser(jid) {

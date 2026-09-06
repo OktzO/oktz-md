@@ -1,8 +1,8 @@
 import { formatAfkDuration } from '../../src/lib/ourin-middleware.js'
 
 const afkStorage = global.afkStorage || (global.afkStorage = new Map())
-// ponytail: throttle pair bisa tumbuh selama sesi panjang; dibersihkan saat user balik/restart. Upgrade: TTL sweeper berkala kalau jumlah user besar.
 const notifyThrottle = global.afkNotifyThrottle || (global.afkNotifyThrottle = new Map())
+const NOTIFY_TTL_MS = 60 * 60 * 1000
 
 const pluginConfig = {
     name: 'afk',
@@ -82,6 +82,12 @@ async function checkAfk(m, sock, db) {
         await m.reply(`👋 *ᴀꜰᴋ ʙᴇʀᴀᴋʜɪʀ*\n\n` +
                 `\`\`\`@${m.sender.split('@')[0]} sudah kembali!\`\`\`\n` +
                 `🍀 \`Durasi AFK:\` *${duration}*`, { mentions: [m.sender] })
+    }
+    if (notifyThrottle.size > 500) {
+        const cutoff = Date.now() - NOTIFY_TTL_MS
+        for (const [key, ts] of notifyThrottle) {
+            if (typeof ts === 'number' && ts < cutoff) notifyThrottle.delete(key)
+        }
     }
     if (m.isGroup && m.mentionedJid && m.mentionedJid.length > 0) {
         const replies = []

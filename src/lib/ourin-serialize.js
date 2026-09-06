@@ -62,7 +62,7 @@ function getCachedPrefixes() {
 }
 
 let _srtFiles = null;
-const _srtImgCache = new Map();
+const _srtImgCache = new LRUCache({ max: 50, ttl: 30 * 60 * 1000 });
 
 function getCachedSrtImage() {
   const shuffleDir = join(process.cwd(), "assets", "image", "shuffle");
@@ -83,6 +83,65 @@ function getCachedSrtImage() {
 function invalidatePrefixCache() {
   _prefixCache = null;
   _prefixCacheTime = 0;
+}
+
+const _adminCache = new Map();
+const ADMIN_CACHE_TTL = 5 * 60 * 1000;
+const ADMIN_CACHE_MAX = 500;
+
+function _buildAdminCache(cacheKey, participants, botNum) {
+  const exactNums = new Set();
+  const suffixNums = [];
+  let botAdmin = false;
+  for (const p of participants) {
+    if (!p.admin) continue;
+    const pJid = p.jid || p.id || "";
+    const pLid = p.lid || "";
+    let pNum = pJid.replace(/[^0-9]/g, "");
+    const pLidNum = pLid.replace(/[^0-9]/g, "");
+    if (isLid(pJid) || isLidConverted(pJid)) {
+      const resolved = getCachedJid(pJid) || getCachedJid(pLid);
+      if (resolved) pNum = resolved.replace(/[^0-9]/g, "");
+    }
+    exactNums.add(pNum);
+    exactNums.add(pLidNum);
+    suffixNums.push(pNum);
+    if (
+      pNum === botNum ||
+      (pNum.length >= 8 &&
+        botNum.length >= 8 &&
+        (pNum.endsWith(botNum) || botNum.endsWith(pNum)))
+    ) {
+      botAdmin = true;
+    }
+  }
+  const entry = { exactNums, suffixNums, botAdmin, ts: Date.now() };
+  if (_adminCache.size >= ADMIN_CACHE_MAX) {
+    _adminCache.delete(_adminCache.keys().next().value);
+  }
+  _adminCache.set(cacheKey, entry);
+  return entry;
+}
+
+function _getAdminCache(chatId, participants, botNum) {
+  const cacheKey = chatId + "|" + botNum;
+  const cached = _adminCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < ADMIN_CACHE_TTL) return cached;
+  return _buildAdminCache(cacheKey, participants, botNum);
+}
+
+function _matchAdminNum(entry, num) {
+  if (entry.exactNums.has(num)) return true;
+  if (num.length < 8) return false;
+  for (const pNum of entry.suffixNums) {
+    if (
+      pNum.length >= 8 &&
+      (pNum.endsWith(num) || num.endsWith(pNum))
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 const _thumbCache = new LRUCache({ max: 50, ttl: 10 * 60 * 1000 });
@@ -460,10 +519,11 @@ async function serializeQuotedMessage(
       quotedType.replace("Message", ""),
     );
 
-    let buffer = Buffer.from([]);
+    const chunks = [];
     for await (const chunk of stream) {
-      buffer = Buffer.concat([buffer, chunk]);
+      chunks.push(chunk);
     }
+    const buffer = Buffer.concat(chunks);
 
     if (filename) {
       const tempDir = join(process.cwd(), "storage", "temp");
@@ -598,7 +658,9 @@ async function serialize(sock, msg, store = {}) {
         senderJid = sockResolved;
       } else {
         try {
-          const metadata = await sock.groupMetadata(m.chat);
+          const cachedMeta = global.groupMetadataCache?.get(m.chat);
+          const metadata =
+            cachedMeta?.data || cachedMeta || (await sock.groupMetadata(m.chat));
           if (metadata?.participants) {
             cacheParticipantLids(metadata.participants);
           }
@@ -697,8 +759,23 @@ async function serialize(sock, msg, store = {}) {
 
   if (m.isGroup) {
     try {
-      m.groupMetadata =
-        store.groupMetadata?.[m.chat] || (await sock.groupMetadata(m.chat));
+      let groupMetadata = store.groupMetadata?.[m.chat] || null;
+      if (!groupMetadata) {
+        const cache = global.groupMetadataCache?.get(m.chat);
+        if (cache) {
+          groupMetadata = cache.data || cache;
+        }
+      }
+      if (!groupMetadata) {
+        groupMetadata = await sock.groupMetadata(m.chat);
+        if (groupMetadata && global.groupMetadataCache) {
+          global.groupMetadataCache.set(m.chat, {
+            data: groupMetadata,
+            timestamp: Date.now(),
+          });
+        }
+      }
+      m.groupMetadata = groupMetadata;
       m.groupName = m.groupMetadata?.subject || "";
       m.groupDesc = m.groupMetadata?.desc || "";
       m.groupMembers = m.groupMetadata?.participants || [];
@@ -709,40 +786,9 @@ async function serialize(sock, msg, store = {}) {
       const senderNum = m.sender?.replace(/[^0-9]/g, "") || "";
       const botNum = decodeJid(sock.user.id)?.replace(/[^0-9]/g, "") || "";
 
-      m.isAdmin = m.groupMembers.some((p) => {
-        if (!p.admin) return false;
-        const pJid = p.jid || p.id || "";
-        const pLid = p.lid || "";
-        let pNum = pJid.replace(/[^0-9]/g, "");
-        const pLidNum = pLid.replace(/[^0-9]/g, "");
-        if (isLid(pJid) || isLidConverted(pJid)) {
-          const resolved = getCachedJid(pJid) || getCachedJid(pLid);
-          if (resolved) pNum = resolved.replace(/[^0-9]/g, "");
-        }
-        return (
-          pNum === senderNum ||
-          pLidNum === senderNum ||
-          (pNum.length >= 8 &&
-            senderNum.length >= 8 &&
-            (pNum.endsWith(senderNum) || senderNum.endsWith(pNum)))
-        );
-      });
-
-      m.isBotAdmin = m.groupMembers.some((p) => {
-        if (!p.admin) return false;
-        const pJid = p.jid || p.id || "";
-        let pNum = pJid.replace(/[^0-9]/g, "");
-        if (isLid(pJid) || isLidConverted(pJid)) {
-          const resolved = getCachedJid(pJid) || getCachedJid(p.lid || "");
-          if (resolved) pNum = resolved.replace(/[^0-9]/g, "");
-        }
-        return (
-          pNum === botNum ||
-          (pNum.length >= 8 &&
-            botNum.length >= 8 &&
-            (pNum.endsWith(botNum) || botNum.endsWith(pNum)))
-        );
-      });
+      const adminCache = _getAdminCache(m.chat, m.groupMembers, botNum);
+      m.isAdmin = _matchAdminNum(adminCache, senderNum);
+      m.isBotAdmin = adminCache.botAdmin;
 
       cacheParticipantLids(m.groupMembers);
 
@@ -1557,10 +1603,11 @@ END:VCARD`;
       m.type.replace("Message", ""),
     );
 
-    let buffer = Buffer.from([]);
+    const chunks = [];
     for await (const chunk of stream) {
-      buffer = Buffer.concat([buffer, chunk]);
+      chunks.push(chunk);
     }
+    const buffer = Buffer.concat(chunks);
 
     if (filename) {
       const tempDir = join(process.cwd(), "storage", "temp");
