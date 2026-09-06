@@ -697,49 +697,9 @@ Welcome to ${config.bot?.name}, Our bot will help you
 > 🍬 *Register*: ${user.isRegistered ? "Sudah" : "Belum"}`;
         const footerText = '🍔 Silahkan pilih dari salah satu tombol di bawah';
 
-        // Format asli OURIN 3.3.1 (source tanpa modifikasi): buttonsMessage
-        // klasik — stabil dirender semua client WhatsApp. Varian interactive
-        // yang dipakai sebelumnya tidak dirender WhatsApp (relay sukses
-        // tapi kartu tidak muncul).
-        const content = {
-          buttonsMessage: {
-            buttons: [
-              {
-                buttonId: `${m.prefix}owner`,
-                buttonText: {
-                  displayText: '🧀 Owner',
-                },
-                type: 1,
-              },
-              {
-                buttonId: `${m.prefix}allmenu`,
-                buttonText: {
-                  displayText: '💐 Allmenu',
-                },
-                type: 1,
-              },
-            ],
-            locationMessage: {
-              jpegThumbnail,
-              name: config.bot.name,
-              address: `Versi saat ini: ${config.bot.version}`
-            },
-            contentText: bodyText,
-            footerText: footerText,
-            headerType: 6,
-          },
-        };
-
-        const msg = generateWAMessageFromContent(m.chat, content, {
-          userJid: sock.user?.id,
-        });
-
-        await sock.relayMessage(m.chat, msg.message, {
-          messageId: msg.key.id,
-        });
-
-        // List kategori dalam bentuk tombol (listMessage klasik, stabil
-        // dirender semua client) — pengganti dropdown interactive.
+        // ── Card 1 (ATAS): list kategori panjang ──────────────────────────
+        // listMessage klasik — stabil dirender semua client. Berisi semua
+        // kategori command, tiap pilihan langsung buka .menucat <kategori>.
         const listContent = {
           listMessage: {
             title: `🍃 ${config.bot?.name || "Ourin"} — ${totalCmds} Command`,
@@ -765,6 +725,53 @@ Welcome to ${config.bot?.name}, Our bot will help you
 
         await sock.relayMessage(m.chat, listMsg.message, {
           messageId: listMsg.key.id,
+        });
+
+        // ── Card 2 (BAWAH): tombol aksi cepat ────────────────────────────
+        // Format asli OURIN 3.3.1 (source tanpa modifikasi): buttonsMessage
+        // klasik dengan header lokasi+thumbnail, maksimal 3 tombol.
+        const content = {
+          buttonsMessage: {
+            buttons: [
+              {
+                buttonId: `${m.prefix}owner`,
+                buttonText: {
+                  displayText: '🧀 Owner',
+                },
+                type: 1,
+              },
+              {
+                buttonId: `${m.prefix}allmenu`,
+                buttonText: {
+                  displayText: '💐 Allmenu',
+                },
+                type: 1,
+              },
+              {
+                buttonId: `${m.prefix}rules`,
+                buttonText: {
+                  displayText: '📑 Rules',
+                },
+                type: 1,
+              },
+            ],
+            locationMessage: {
+              jpegThumbnail,
+              name: config.bot.name,
+              address: `Versi saat ini: ${config.bot.version}`
+            },
+            contentText: bodyText,
+            footerText: footerText,
+            headerType: 6,
+          },
+        };
+
+        const msg = generateWAMessageFromContent(m.chat, content, {
+          userJid: sock.user?.id,
+        });
+
+        await sock.relayMessage(m.chat, msg.message, {
+          messageId: msg.key.id,
         });
         break
       }
