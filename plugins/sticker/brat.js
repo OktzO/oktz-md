@@ -1,6 +1,7 @@
 import { drawBrat } from "../../src/lib/ourin-brat.js";
 import { wrapInteractive } from "../../src/lib/ourin-rich-messages.js";
-import { generateWAMessageFromContent } from "ourin";
+import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
+import { prepareWAMessageMedia, generateWAMessageFromContent } from "ourin";
 import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
 
@@ -64,9 +65,27 @@ function buildVariantRows(prefix, text) {
 async function sendBratMenu(m, sock, text) {
   const caption =
     "🌿 *kamu mau buat brat yak, silahkan pilih variant brat tombol dibawah*";
+
+  // header gambar: thumbnail asset brat diupload dulu (pola goodbye.js)
+  let media = null;
+  try {
+    media = await prepareWAMessageMedia(
+      { image: getAssetBuffer("ourin") },
+      { upload: sock.waUploadToServer },
+    );
+  } catch { }
+
   const content = {
     messageContextInfo: {},
     interactiveMessage: {
+      header: media?.imageMessage
+        ? {
+            title: "",
+            subtitle: config.bot?.name,
+            hasMediaAttachment: true,
+            imageMessage: media.imageMessage,
+          }
+        : undefined,
       body: { text: caption },
       footer: { text: "Pilih variant brat favorit kamu" },
       nativeFlowMessage: {

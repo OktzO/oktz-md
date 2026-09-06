@@ -698,13 +698,25 @@ Welcome to ${config.bot?.name}, Our bot will help you
 
         // ── SATU kartu: listmenu (single_select) + tombol Owner/Allmenu ──
         // User request: listmenu di ATAS, tombol Owner & Allmenu di bawahnya
-        // — dalam SATU kartu interactiveMessage (bukan 2 kartu terpisah).
-        // nativeFlowMessage menerima beberapa tombol berurutan: tombol 1
-        // single_select kategori, tombol 2-3 quick_reply aksi. Pola kartu
-        // interactive + node biz auto-inject relayMessage onigis >= 10.0.2.
+        // dalam SATU kartu interactiveMessage (bukan 2 kartu terpisah).
+        // Header gambar: upload buffer asset via waUploadToServer (pola
+        // goodbye.js yang terbukti render di interactiveMessage header).
+        const menuMedia = await prepareWAMessageMedia(
+          { image: imageBuffer },
+          { upload: sock.waUploadToServer },
+        ).catch(() => null);
+
         const menuCard = {
           messageContextInfo: {},
           interactiveMessage: {
+            header: menuMedia?.imageMessage
+              ? {
+                  title: "",
+                  subtitle: config.bot?.name,
+                  hasMediaAttachment: true,
+                  imageMessage: menuMedia.imageMessage,
+                }
+              : undefined,
             body: {
               text: `🥞 *Hello Brother*\n\nWelcome to ${config.bot?.name}, Our bot will help you\n\n${bodyText}`,
             },
