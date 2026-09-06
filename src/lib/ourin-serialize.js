@@ -514,16 +514,49 @@ async function serializeQuotedMessage(
   quoted.download = async (filename = null) => {
     if (!quoted.isMedia) return null;
 
-    const stream = await downloadContentFromMessage(
-      quotedMessage[quotedType],
-      quotedType.replace("Message", ""),
-    );
+    let buffer;
+    try {
+      const stream = await downloadContentFromMessage(
+        quotedMessage[quotedType],
+        quotedType.replace("Message", ""),
+      );
 
-    const chunks = [];
-    for await (const chunk of stream) {
-      chunks.push(chunk);
+      const chunks = [];
+      for await (const chunk of stream) {
+        chunks.push(chunk);
+      }
+      buffer = Buffer.concat(chunks);
+    } catch (error) {
+      if (
+        sock?.updateMediaMessage &&
+        typeof error?.status === "number" &&
+        [400, 404, 410, 428, 429, 500, 870].includes(error.status)
+      ) {
+        const reEnc = await sock.updateMediaMessage({
+          key: quoted.key,
+          message: { [quotedType]: quotedMessage[quotedType] },
+        });
+        if (reEnc?.message) {
+          const inner =
+            reEnc.message[quotedType] ||
+            reEnc.message?.viewOnceMessage?.message?.[quotedType] ||
+            Object.values(reEnc.message)[0];
+          const retryStream = await downloadContentFromMessage(
+            inner,
+            quotedType.replace("Message", ""),
+          );
+          const chunks = [];
+          for await (const chunk of retryStream) {
+            chunks.push(chunk);
+          }
+          buffer = Buffer.concat(chunks);
+        } else {
+          throw error;
+        }
+      } else {
+        throw error;
+      }
     }
-    const buffer = Buffer.concat(chunks);
 
     if (filename) {
       const tempDir = join(process.cwd(), "storage", "temp");
@@ -1598,16 +1631,42 @@ END:VCARD`;
   m.download = async (filename = null) => {
     if (!m.isMedia) return null;
 
-    const stream = await downloadContentFromMessage(
-      messageData[m.type],
-      m.type.replace("Message", ""),
-    );
+    let buffer;
+    try {
+      const stream = await downloadContentFromMessage(
+        messageData[m.type],
+        m.type.replace("Message", ""),
+      );
 
-    const chunks = [];
-    for await (const chunk of stream) {
-      chunks.push(chunk);
+      const chunks = [];
+      for await (const chunk of stream) {
+        chunks.push(chunk);
+      }
+      buffer = Buffer.concat(chunks);
+    } catch (error) {
+      if (
+        sock?.updateMediaMessage &&
+        typeof error?.status === "number" &&
+        [400, 404, 410, 428, 429, 500, 870].includes(error.status)
+      ) {
+        const reEnc = await sock.updateMediaMessage(msg);
+        if (reEnc?.message) {
+          const retryStream = await downloadContentFromMessage(
+            messageData[m.type],
+            m.type.replace("Message", ""),
+          );
+          const chunks = [];
+          for await (const chunk of retryStream) {
+            chunks.push(chunk);
+          }
+          buffer = Buffer.concat(chunks);
+        } else {
+          throw error;
+        }
+      } else {
+        throw error;
+      }
     }
-    const buffer = Buffer.concat(chunks);
 
     if (filename) {
       const tempDir = join(process.cwd(), "storage", "temp");

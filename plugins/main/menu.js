@@ -676,7 +676,6 @@ ${readmore}${s}`
         break;
 
       case 3: {
-        const jpegThumbnail = await sharp(getAssetBuffer("ourin")).resize(300, 170).toBuffer();
         const bodyText = `🥞 *Hello Brother*
 
 Welcome to ${config.bot?.name}, Our bot will help you
@@ -697,25 +696,25 @@ Welcome to ${config.bot?.name}, Our bot will help you
 > 🍬 *Register*: ${user.isRegistered ? "Sudah" : "Belum"}`;
         const footerText = '🍔 Silahkan pilih dari salah satu tombol di bawah';
 
-        // ── Card 1 (ATAS): dropdown kategori ──────────────────────────────
-        // interactiveMessage single_select (pola menu V3 asli) dibungkus
-        // viewOnceMessage + deviceListMetadata via wrapInteractive, dan
-        // relayMessage onigis >= 10.0.2 otomatis menyuntik node biz —
-        // syarat render kartu interactive. Tiap pilihan membuka
-        // .menucat <kategori>.
-        const categoryCard = {
+        // ── SATU kartu: listmenu (single_select) + tombol Owner/Allmenu ──
+        // User request: listmenu di ATAS, tombol Owner & Allmenu di bawahnya
+        // — dalam SATU kartu interactiveMessage (bukan 2 kartu terpisah).
+        // nativeFlowMessage menerima beberapa tombol berurutan: tombol 1
+        // single_select kategori, tombol 2-3 quick_reply aksi. Pola kartu
+        // interactive + node biz auto-inject relayMessage onigis >= 10.0.2.
+        const menuCard = {
           messageContextInfo: {},
           interactiveMessage: {
             body: {
-              text: `🍃 *${config.bot?.name || "Ourin"}* — ${totalCmds} Command\n\nHalo ${m.pushName} 👋\nPilih kategori untuk melihat isi command`,
+              text: `🥞 *Hello Brother*\n\nWelcome to ${config.bot?.name}, Our bot will help you\n\n${bodyText}`,
             },
-            footer: { text: `Ketik ${m.prefix}allmenu untuk semua command` },
+            footer: { text: footerText },
             nativeFlowMessage: {
               buttons: [
                 {
                   name: "single_select",
                   buttonParamsJson: JSON.stringify({
-                    title: "🍃 Menu Utama",
+                    title: "🍃 List Menu",
                     sections: [
                       {
                         title: `Berikut adalah pilihan nya (${categories.sorted.length} kategori)`,
@@ -729,57 +728,33 @@ Welcome to ${config.bot?.name}, Our bot will help you
                     icon: "DEFAULT",
                   }),
                 },
+                {
+                  name: "quick_reply",
+                  buttonParamsJson: JSON.stringify({
+                    display_text: "🧀 Owner",
+                    id: `${m.prefix}owner`,
+                  }),
+                },
+                {
+                  name: "quick_reply",
+                  buttonParamsJson: JSON.stringify({
+                    display_text: "💐 Allmenu",
+                    id: `${m.prefix}allmenu`,
+                  }),
+                },
               ],
             },
           },
         };
 
-        const listMsg = generateWAMessageFromContent(m.chat, wrapInteractive(categoryCard), {
-          userJid: sock.user?.id,
-        });
+        const listMsg = generateWAMessageFromContent(
+          m.chat,
+          wrapInteractive(menuCard),
+          { userJid: sock.user?.id },
+        );
 
         await sock.relayMessage(m.chat, listMsg.message, {
           messageId: listMsg.key.id,
-        });
-
-        // ── Card 2 (BAWAH): tombol aksi cepat ────────────────────────────
-        // Format asli OURIN 3.3.1 (source tanpa modifikasi): buttonsMessage
-        // klasik dengan header lokasi+thumbnail, maksimal 3 tombol.
-        const content = {
-          buttonsMessage: {
-            buttons: [
-              {
-                buttonId: `${m.prefix}owner`,
-                buttonText: {
-                  displayText: '🧀 Owner',
-                },
-                type: 1,
-              },
-              {
-                buttonId: `${m.prefix}allmenu`,
-                buttonText: {
-                  displayText: '💐 Allmenu',
-                },
-                type: 1,
-              },
-            ],
-            locationMessage: {
-              jpegThumbnail,
-              name: config.bot.name,
-              address: `Versi saat ini: ${config.bot.version}`
-            },
-            contentText: bodyText,
-            footerText: footerText,
-            headerType: 6,
-          },
-        };
-
-        const msg = generateWAMessageFromContent(m.chat, content, {
-          userJid: sock.user?.id,
-        });
-
-        await sock.relayMessage(m.chat, msg.message, {
-          messageId: msg.key.id,
         });
         break
       }

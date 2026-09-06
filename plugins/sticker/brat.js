@@ -1,5 +1,6 @@
-import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import { drawBrat } from "../../src/lib/ourin-brat.js";
+import { wrapInteractive } from "../../src/lib/ourin-rich-messages.js";
+import { generateWAMessageFromContent } from "ourin";
 import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
 
@@ -63,31 +64,39 @@ function buildVariantRows(prefix, text) {
 async function sendBratMenu(m, sock, text) {
   const caption =
     "🌿 *kamu mau buat brat yak, silahkan pilih variant brat tombol dibawah*";
-  const buttons = [
-    {
-      name: "single_select",
-      buttonParamsJson: JSON.stringify({
-        title: "🌾 Pilih Variant Brat",
-        sections: [
+  const content = {
+    messageContextInfo: {},
+    interactiveMessage: {
+      body: { text: caption },
+      footer: { text: "Pilih variant brat favorit kamu" },
+      nativeFlowMessage: {
+        buttons: [
           {
-            title: "Variant Brat",
-            rows: buildVariantRows(m.prefix, text),
+            name: "single_select",
+            buttonParamsJson: JSON.stringify({
+              title: "🌾 Pilih Variant Brat",
+              sections: [
+                {
+                  title: "Variant Brat",
+                  rows: buildVariantRows(m.prefix, text),
+                },
+              ],
+            }),
           },
         ],
-      }),
+      },
     },
-  ];
+  };
 
-  await sock.sendButton(
+  const listMsg = generateWAMessageFromContent(
     m.chat,
-    getAssetBuffer("ourin"),
-    caption,
-    m,
-    {
-      buttons,
-      footer: "Pilih variant brat favorit kamu",
-    },
+    wrapInteractive(content),
+    { userJid: sock.user?.id },
   );
+
+  await sock.relayMessage(m.chat, listMsg.message, {
+    messageId: listMsg.key.id,
+  });
 }
 
 async function handler(m, { sock }) {
