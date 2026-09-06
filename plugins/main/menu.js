@@ -747,13 +747,6 @@ Welcome to ${config.bot?.name}, Our bot will help you
                 },
                 type: 1,
               },
-              {
-                buttonId: `${m.prefix}rules`,
-                buttonText: {
-                  displayText: '📑 Rules',
-                },
-                type: 1,
-              },
             ],
             locationMessage: {
               jpegThumbnail,
