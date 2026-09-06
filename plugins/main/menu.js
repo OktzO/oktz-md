@@ -697,29 +697,44 @@ Welcome to ${config.bot?.name}, Our bot will help you
 > 🍬 *Register*: ${user.isRegistered ? "Sudah" : "Belum"}`;
         const footerText = '🍔 Silahkan pilih dari salah satu tombol di bawah';
 
-        // ── Card 1 (ATAS): list kategori panjang ──────────────────────────
-        // listMessage klasik — stabil dirender semua client. Berisi semua
-        // kategori command, tiap pilihan langsung buka .menucat <kategori>.
-        const listContent = {
-          listMessage: {
-            title: `🍃 ${config.bot?.name || "Ourin"} — ${totalCmds} Command`,
-            description: `Pilih kategori untuk melihat isi command\nHalo ${m.pushName} 👋`,
-            buttonText: "🍃 Pilih Kategori",
-            listType: 2,
-            sections: [
-              {
-                title: `Berikut adalah pilihan nya (${categories.sorted.length} kategori)`,
-                rows: categories.sorted.map(({ cat, cmds, emoji }) => ({
-                  title: `${emoji} ${cat}`,
-                  description: `${cmds.length} command`,
-                  rowId: `${m.prefix}menucat ${cat}`,
-                })),
-              },
-            ],
+        // ── Card 1 (ATAS): dropdown kategori ──────────────────────────────
+        // interactiveMessage single_select (pola menu V3 asli) dibungkus
+        // viewOnceMessage + deviceListMetadata via wrapInteractive, dan
+        // relayMessage onigis >= 10.0.2 otomatis menyuntik node biz —
+        // syarat render kartu interactive. Tiap pilihan membuka
+        // .menucat <kategori>.
+        const categoryCard = {
+          messageContextInfo: {},
+          interactiveMessage: {
+            body: {
+              text: `🍃 *${config.bot?.name || "Ourin"}* — ${totalCmds} Command\n\nHalo ${m.pushName} 👋\nPilih kategori untuk melihat isi command`,
+            },
+            footer: { text: `Ketik ${m.prefix}allmenu untuk semua command` },
+            nativeFlowMessage: {
+              buttons: [
+                {
+                  name: "single_select",
+                  buttonParamsJson: JSON.stringify({
+                    title: "🍃 Menu Utama",
+                    sections: [
+                      {
+                        title: `Berikut adalah pilihan nya (${categories.sorted.length} kategori)`,
+                        rows: categories.sorted.map(({ cat, cmds, emoji }) => ({
+                          title: `${emoji} ${cat}`,
+                          description: `${cmds.length} command`,
+                          id: `${m.prefix}menucat ${cat}`,
+                        })),
+                      },
+                    ],
+                    icon: "DEFAULT",
+                  }),
+                },
+              ],
+            },
           },
         };
 
-        const listMsg = generateWAMessageFromContent(m.chat, listContent, {
+        const listMsg = generateWAMessageFromContent(m.chat, wrapInteractive(categoryCard), {
           userJid: sock.user?.id,
         });
 
