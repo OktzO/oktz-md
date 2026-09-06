@@ -170,8 +170,15 @@ function setJadibotGroup(jadibotId, jid, data) {
     saveJadibotDb(jadibotId)
 }
 
+function unloadJadibotDb(jadibotId) {
+    const id = jadibotId.replace(/@.+/g, '')
+    if (!jadibotDatabases.has(id)) return
+    saveJadibotDb(jadibotId)
+    jadibotDatabases.delete(id)
+}
+
 function getAllJadibotData(jadibotId) {
     return loadJadibotDb(jadibotId)
 }
 
-export { loadJadibotDb, saveJadibotDb, isJadibotOwner, addJadibotOwner, removeJadibotOwner, getJadibotOwners, isJadibotPremium, addJadibotPremium, removeJadibotPremium, getJadibotPremiums, getJadibotSetting, setJadibotSetting, getJadibotUser, setJadibotUser, getJadibotGroup, setJadibotGroup, getAllJadibotData }
+export { loadJadibotDb, saveJadibotDb, unloadJadibotDb, isJadibotOwner, addJadibotOwner, removeJadibotOwner, getJadibotOwners, isJadibotPremium, addJadibotPremium, removeJadibotPremium, getJadibotPremiums, getJadibotSetting, setJadibotSetting, getJadibotUser, setJadibotUser, getJadibotGroup, setJadibotGroup, getAllJadibotData }

@@ -7,6 +7,7 @@ import { yieldToEventLoop } from './ourin-async-pool.js'
 const CLEAN_INTERVAL = 30 * 60 * 1000
 const MAX_AGE_MS = 60 * 60 * 1000
 const MIN_AGE_MS = 5 * 60 * 1000
+const PROFILING_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
 let cleanerTimer = null
 
@@ -59,6 +60,13 @@ function startTempCleaner() {
       grandTotal += result.total
       grandSize += result.size
     }
+    const profilingPath = path.join(process.cwd(), 'storage', 'profiling')
+    try {
+      await fsp.access(profilingPath)
+      const result = await scanDir(profilingPath, now - PROFILING_MAX_AGE_MS)
+      grandTotal += result.total
+      grandSize += result.size
+    } catch {}
     if (grandTotal > 0) {
       const sizeMB = (grandSize / 1024 / 1024).toFixed(2)
       logger.system('temp', `cleaned ${grandTotal} file(s) (${sizeMB}MB)`)

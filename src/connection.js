@@ -70,6 +70,7 @@ function stopWatchdog() {
 
 let reconnectTimer = null;
 let reconnectScheduled = false;
+let _flushTimer = null;
 
 function clearScheduledReconnect() {
   if (reconnectTimer) {
@@ -299,6 +300,12 @@ function askQuestion(question) {
 async function startConnection(options = {}) {
   if (connectionState.sock) {
     try {
+      connectionState.sock.ev?.flush?.();
+    } catch { }
+    try {
+      connectionState.sock.ev?.removeAllListeners?.();
+    } catch { }
+    try {
       connectionState.sock.end();
       colors.logger.debug("whatsapp", "koneksi sebelumnya ditutup");
     } catch (e) { }
@@ -517,6 +524,7 @@ async function startConnection(options = {}) {
             "sesi tetap ditolak setelah beberapa kali coba — butuh intervensi manual (nomor dibanned / register ulang)",
           );
           connectionState.reconnectAttempts = 0;
+          try { sock.ev?.removeAllListeners?.(); } catch { }
         }
         return;
       }
@@ -535,6 +543,7 @@ async function startConnection(options = {}) {
             "konflik sesi — perangkat lain terdeteksi, matikan bot yang lain",
           );
           connectionState.reconnectAttempts = 0;
+          try { sock.ev?.removeAllListeners?.(); } catch { }
         }
         return;
       }
@@ -603,6 +612,21 @@ async function startConnection(options = {}) {
           colors.logger.success("voip", "Mesin VoIP nyala nih bos (shared socket)");
         } catch (e) {
           colors.logger.warn("voip", `gagal init VoIP: ${e.message}`);
+        }
+      } else if (global.voipClient && global.voipClient.sock !== sock) {
+        try {
+          if (typeof global.voipClient.destroy === "function") {
+            global.voipClient.destroy();
+            global.voipClient = null;
+            const { VoipClient } = await import("ourin");
+            global.voipClient = new VoipClient();
+            await global.voipClient.connectWithSocket(sock);
+          } else if (typeof global.voipClient.connectWithSocket === "function") {
+            await global.voipClient.connectWithSocket(sock);
+          }
+          colors.logger.success("voip", "VoIP re-bind ke socket baru");
+        } catch (e) {
+          colors.logger.warn("voip", `gagal re-bind VoIP: ${e.message}`);
         }
       }
 
@@ -693,6 +717,7 @@ async function startConnection(options = {}) {
   }
 
   sock.ev.on("groups.update", async ([event]) => {
+    global.groupMetadataCache?.delete(event?.id);
     if (options.onGroupUpdate) {
       if (_groupEventQueue.length >= 100) {
         colors.logger.warn(
@@ -717,6 +742,7 @@ async function startConnection(options = {}) {
 
   sock.ev.on("group-participants.update", async (event) => {
     if (Date.now() - _connectedAt < 15000) return;
+    global.groupMetadataCache?.delete(event.id);
     let metadata = groupCache.get(event.id);
     if (!metadata) {
       try {
@@ -1247,6 +1273,13 @@ async function startConnection(options = {}) {
 
   sock.ev.on("group-participants.update", async (update) => {
     if (options.onGroupUpdate) {
+      if (_groupEventQueue.length >= 100) {
+        colors.logger.warn(
+          "queue",
+          `group event queue full (${_groupEventQueue.length}), dropping event`,
+        );
+        return;
+      }
       _groupEventQueue.push({
         handler: options.onGroupUpdate,
         args: [update, sock],
@@ -1362,16 +1395,21 @@ async function startConnection(options = {}) {
     } catch { }
   }, 2000);
 
-  const flushInterval = setInterval(() => {
+  if (_flushTimer) {
+    clearInterval(_flushTimer);
+    _flushTimer = null;
+  }
+  _flushTimer = setInterval(() => {
     if (!connectionState.isConnected) {
-      clearInterval(flushInterval);
+      clearInterval(_flushTimer);
+      _flushTimer = null;
       return;
     }
     try {
-      sock.ev?.flush?.();
+      connectionState.sock?.ev?.flush?.();
     } catch { }
   }, 30000);
-  if (flushInterval.unref) flushInterval.unref();
+  if (_flushTimer.unref) _flushTimer.unref();
 
   return sock;
 }
@@ -1422,6 +1460,12 @@ async function logout() {
     );
 
     if (connectionState.sock) {
+      try {
+        connectionState.sock.ev?.flush?.();
+      } catch { }
+      try {
+        connectionState.sock.ev?.removeAllListeners?.();
+      } catch { }
       await connectionState.sock.logout();
     }
 

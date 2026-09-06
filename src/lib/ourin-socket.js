@@ -1,6 +1,7 @@
 import axios from "axios";
 import crypto from "crypto";
 import archiver from "archiver";
+import { LRUCache } from "lru-cache";
 import {
   prepareWAMessageMedia,
   generateWAMessageFromContent,
@@ -365,7 +366,8 @@ async function extendSocket(sock) {
     );
   };
 
-  if (!global.stickerPackCache) global.stickerPackCache = new Map();
+  if (!global.stickerPackCache)
+    global.stickerPackCache = new LRUCache({ max: 200, ttl: 6 * 60 * 60 * 1000 });
 
   sock.saveStickerPack = (packId, messageContent, packName = "Unknown") => {
     global.stickerPackCache.set(packId, {

@@ -1,6 +1,8 @@
 import { logger } from "./ourin-logger.js";
 const RSS_LIMIT = 550 * 1024 * 1024;
-const CHECK_INTERVAL = 2 * 60 * 1000;
+const GC_RSS_THRESHOLD = 450 * 1024 * 1024;
+const GC_HEAP_THRESHOLD = 300 * 1024 * 1024;
+const CHECK_INTERVAL = 10 * 60 * 1000;
 
 let monitorTimer = null;
 
@@ -15,7 +17,11 @@ function startMemoryMonitor() {
     const mem = process.memoryUsage();
 
     if (global.gc) {
-      if (mem.rss > 400 * 1024 * 1024 || mem.heapUsed > 250 * 1024 * 1024) {
+      if (mem.rss > GC_RSS_THRESHOLD || mem.heapUsed > GC_HEAP_THRESHOLD) {
+        logger.warn(
+          "memory",
+          `heap tinggi · rss ${formatMB(mem.rss)} · heap ${formatMB(mem.heapUsed)} — menjalankan global.gc()`,
+        );
         global.gc();
       }
     }

@@ -1,4 +1,4 @@
-async function levenshteinDistance(str1, str2) {
+function levenshteinDistance(str1, str2) {
     const m = str1.length
     const n = str2.length
     
@@ -173,6 +173,15 @@ function getMatchType(inputLower, cmdLower) {
     return null
 }
 
+const commandsCache = new WeakMap()
+
+function getCommandList(commands) {
+    if (!commandsCache.has(commands)) {
+        commandsCache.set(commands, commands.map(cmd => (cmd && typeof cmd === 'string') ? cmd.toLowerCase() : ''))
+    }
+    return commandsCache.get(commands)
+}
+
 function findSimilarCommands(input, commands, options = {}) {
     const {
         maxResults = 5,
@@ -180,14 +189,25 @@ function findSimilarCommands(input, commands, options = {}) {
         maxDistance = 6,
         useAdvanced = true
     } = options
-    
+
     const inputLower = (input && typeof input === 'string') ? input.toLowerCase() : ''
+    const inputLen = inputLower.length
+    const shortInput = inputLen < 4
+    const halfInput = inputLower.slice(0, Math.ceil(inputLen / 2))
+    const consonantsInput = inputLower.replace(/[aeiou]/g, '')
     const results = []
-    
-    for (const cmd of commands) {
-        if (!cmd || typeof cmd !== 'string') continue
-        const cmdLower = cmd.toLowerCase()
-        
+    const cached = getCommandList(commands)
+
+    for (let i = 0; i < commands.length; i++) {
+        const cmd = commands[i]
+        const cmdLower = cached[i]
+        if (!cmdLower) continue
+
+        if (!shortInput) {
+            if (Math.abs(cmdLower.length - inputLen) > 3) continue
+            if (cmdLower[0] !== inputLower[0] && cmdLower[1] !== inputLower[0]) continue
+        }
+
         const directMatch = getMatchType(inputLower, cmdLower)
         if (directMatch) {
             results.push({
@@ -200,25 +220,23 @@ function findSimilarCommands(input, commands, options = {}) {
             })
             continue
         }
-        
+
         const distance = damerauLevenshteinDistance(inputLower, cmdLower)
-        const similarity = useAdvanced ? getAdvancedSimilarity(inputLower, cmdLower) : getSimilarity(inputLower, cmdLower)
-        
+        const maxLen = Math.max(inputLen, cmdLower.length)
+        const similarity = maxLen === 0 ? 1 : 1 - distance / maxLen
+
         let bonus = 0
-        if (cmdLower[0] === inputLower[0]) bonus += 0.12
         if (cmdLower.slice(0, 2) === inputLower.slice(0, 2)) bonus += 0.08
         if (cmdLower.slice(0, 3) === inputLower.slice(0, 3)) bonus += 0.05
-        
-        if (cmdLower.includes(inputLower.slice(0, Math.ceil(inputLower.length / 2)))) {
+
+        if (halfInput && cmdLower.includes(halfInput)) {
             bonus += 0.1
         }
-        
-        const consonants1 = cmdLower.replace(/[aeiou]/g, '')
-        const consonants2 = inputLower.replace(/[aeiou]/g, '')
-        if (consonants1 === consonants2) bonus += 0.15
-        
+
+        if (cmdLower.replace(/[aeiou]/g, '') === consonantsInput) bonus += 0.15
+
         const finalSimilarity = Math.min(1, similarity + bonus)
-        
+
         if (distance <= maxDistance || finalSimilarity >= minSimilarity) {
             let reason = 'Mirip'
             let emoji = '🔍'

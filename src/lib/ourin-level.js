@@ -220,12 +220,20 @@ async function addExpWithLevelCheck(sock, m, db, user, expAmount) {
   if (!user.rpg) user.rpg = {};
 
   const oldExp = user.exp || 0;
-  const newExp = db.updateExp(m.sender, expAmount);
+  let newExp = oldExp;
+
+  if (user.exp !== -1) {
+    const MAX_EXP = 9000000000;
+    newExp = Math.max(
+      0,
+      Math.min(MAX_EXP, (user.exp ?? 0) + (expAmount || 0)),
+    );
+  }
+
   user.exp = newExp;
+  db.setUser(m.sender, { exp: user.exp, rpg: user.rpg });
 
   const result = await checkAndNotifyLevelUp(sock, m, db, user, oldExp, newExp);
-
-  db.setUser(m.sender, { rpg: user.rpg });
 
   return result;
 }
