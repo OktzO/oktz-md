@@ -286,7 +286,7 @@ setInterval(() => {
   for (const [k, v] of spamDelayTracker) {
     if (now - v > 15000) spamDelayTracker.delete(k);
   }
-}, 30000);
+}, 30000).unref();
 
 function logCommandExec({ m, sock, db, isJadibot }) {
   if (!config.features?.logMessage || isJadibot || !m.command) return;
@@ -1825,9 +1825,14 @@ async function messageHandler(msg, sock, options = {}) {
     } catch { }
 
     try {
-      const m = await serialize(sock, msg);
-      if (m) {
-        await m.reply(`Sepertinya ada kendala, coba hubungi owner`);
+      // reuse m dari scope (serialize sudah sukses — error ada di plugin
+      // handler); dulu: serialize ulang penuh di path error = dobel kerja
+      let mReply = m;
+      if (!mReply) {
+        mReply = await serialize(sock, msg);
+      }
+      if (mReply) {
+        await mReply.reply(`Sepertinya ada kendala, coba hubungi owner`);
       }
     } catch {
       logger.error("Failed to send error message");

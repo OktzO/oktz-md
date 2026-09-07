@@ -1,5 +1,9 @@
 import { request } from 'undici'
+import axios from 'axios'
+
 const REQUEST_TIMEOUT = 60_000
+
+export const httpAxios = axios.create({ timeout: 30000 })
 
 async function f(url, responseType = "json", method = "GET", headers = {}, body = null) {
     const controller = new AbortController()

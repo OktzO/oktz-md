@@ -1,4 +1,5 @@
 import axios from "axios";
+import { httpAxios } from "../lib/ourin-http.js";
 import FormData from "form-data";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -41,6 +42,7 @@ async function getApi() {
     client: wrapper(
       axios.create({
         baseURL: BASE_URL,
+        timeout: 30000,
         jar,
         withCredentials: true,
         validateStatus: () => true,
@@ -148,7 +150,7 @@ async function getUploadPolicy(sign) {
     type: sign.type,
   });
 
-  const res = await axios.get(
+  const res = await httpAxios.get(
     `${STRATEGY_URL}/upload/policy?${params.toString()}`,
     {
       headers: {
@@ -184,7 +186,7 @@ async function uploadToQiniu(policy, filePath) {
   form.append("key", policy.key);
   form.append("fname", path.basename(filePath));
 
-  const res = await axios.post(policy.url, form, {
+  const res = await httpAxios.post(policy.url, form, {
     headers: form.getHeaders({
       origin: BASE_URL,
       referer: `${BASE_URL}/`,

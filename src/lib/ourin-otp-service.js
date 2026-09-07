@@ -1,12 +1,13 @@
 import axios from 'axios'
+import NodeCache from 'node-cache'
 import config from '../../config.js'
 const BASE_URL = 'https://api.jasaotp.id/v1'
 const CACHE_TTL = 300000
 
 let countryCache = null
 let countryCacheTime = 0
-let serviceCache = {}
-let serviceCacheTime = {}
+// NodeCache TTL 5 menit + cap 1000 — dulu plain object tumbuh tanpa batas
+const serviceCache = new NodeCache({ stdTTL: CACHE_TTL / 1000, maxKeys: 1000 })
 
 function getApiKey() {
     const key = config.jasaotp?.apiKey
@@ -52,11 +53,11 @@ async function getCountries() {
 }
 
 async function getServices(countryId) {
-    const now = Date.now()
     const cacheKey = String(countryId)
 
-    if (serviceCache[cacheKey] && (now - (serviceCacheTime[cacheKey] || 0)) < CACHE_TTL) {
-        return serviceCache[cacheKey]
+    const cached = serviceCache.get(cacheKey)
+    if (cached) {
+        return cached
     }
 
     const { data } = await axios.get(`${BASE_URL}/layanan.php`, {
@@ -70,8 +71,7 @@ async function getServices(countryId) {
         throw new Error('Tidak ada layanan tersedia untuk negara ini')
     }
 
-    serviceCache[cacheKey] = services
-    serviceCacheTime[cacheKey] = now
+    serviceCache.set(cacheKey, services)
     return services
 }
 
