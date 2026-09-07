@@ -10,7 +10,7 @@ function cleanExpired() {
     }
 }
 
-setInterval(cleanExpired, 300000)
+setInterval(cleanExpired, 300000).unref()
 
 async function getProfilePicture(sock, jid) {
     const cached = cache.get(jid)

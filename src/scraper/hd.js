@@ -1,4 +1,4 @@
-import axios from "axios"
+import { httpAxios as axios } from "../lib/ourin-http.js"
 import FormData from 'form-data'
 import fs from 'fs'
 async function upload(filePath) {

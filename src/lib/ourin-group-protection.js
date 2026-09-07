@@ -5,6 +5,17 @@ const messageCache = new Map();
 const CACHE_EXPIRY = 10 * 60 * 1000;
 const CACHE_MAX_SIZE = 500;
 
+// Precompiled placeholder regex per replacement key — dulu new RegExp per
+// placeholder per call di hot path proteksi pesan.
+const _gpReplaceCache = new Map();
+const _gpRegex = (k) => {
+  let r = _gpReplaceCache.get(k);
+  if (!r) {
+    r = new RegExp(`%${k}%`, "g");
+    _gpReplaceCache.set(k, r);
+  }
+  return r;
+};
 function gpMsg(key, replacements = {}) {
   const defaults = {
     antilink: "⚠ *Antilink* — @%user% mengirim link.\nPesan dihapus.",
@@ -34,7 +45,7 @@ function gpMsg(key, replacements = {}) {
   };
   let text = config.groupProtection?.[key] || defaults[key] || "";
   for (const [k, v] of Object.entries(replacements)) {
-    text = text.replace(new RegExp(`%${k}%`, "g"), v);
+    text = text.replace(_gpRegex(k), v);
   }
   return text;
 }

@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { httpAxios as axios } from "../lib/ourin-http.js";
 
 async function fbdown(url) {
   try {

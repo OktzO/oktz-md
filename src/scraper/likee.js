@@ -1,4 +1,4 @@
-import axios from 'axios'
+import { httpAxios as axios } from '../lib/ourin-http.js'
 async function likee(url){
     try{
         if(!/likee\.video|likee\.com|likee\.video/.test(url)) throw new Error('Invalid url')

@@ -891,7 +891,7 @@ async function startConnection(options = {}) {
         }
 
         const now = Date.now();
-        if (global.groupMetadataCache.size > 100) {
+        if (global.groupMetadataCache.size > 1000) {
           for (const [k, v] of global.groupMetadataCache) {
             if (now - v.timestamp > 10 * 60 * 1000)
               global.groupMetadataCache.delete(k);

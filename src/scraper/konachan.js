@@ -1,4 +1,4 @@
-import axios from "axios"
+import { httpAxios as axios } from "../lib/ourin-http.js";
 import * as cheerio from "cheerio"
 
 async function searchKonachan(tags) {
