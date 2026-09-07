@@ -1,6 +1,5 @@
 import yts from "yt-search";
-import ssyoutube from "../../src/scraper/youtube.js";
-import ytdl from "../../src/scraper/ytdl.js";
+import { getYoutubeDirectUrl } from "../../src/scraper/youtube.js";
 import { AIRich } from "../../src/lib/ourin-builder.js";
 import axios from "axios";
 
@@ -31,34 +30,6 @@ async function searchYoutube(query) {
     duration: video.seconds || 0,
     thumb: video.thumbnail,
   };
-}
-
-async function getYoutubeDirectUrl(videoUrl, quality = "360") {
-  const result = await ssyoutube.download(videoUrl);
-  if (!result.error) {
-    let chosen = result.downloads.find(
-      (d) => d.quality === quality && d.format === "mp4" && !d.audio
-    );
-    if (!chosen) {
-      chosen = result.downloads.find(
-        (d) => d.format === "mp4" && !d.audio
-      );
-    }
-    if (chosen) {
-      return {
-        url: chosen.url,
-        title: result.meta.title,
-        duration: result.meta.duration,
-        thumb: result.meta.thumbnail,
-      };
-    }
-  }
-
-  const fallback = await ytdl(videoUrl, "mp4");
-  if (!fallback?.status || !fallback?.dl) {
-    throw new Error(fallback?.mess || result.error || "Gagal mendapatkan direct link video.");
-  }
-  return { url: fallback.dl, title: fallback.title };
 }
 
 function escapeHtmlJs(value) {
