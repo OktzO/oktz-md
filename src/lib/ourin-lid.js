@@ -53,9 +53,10 @@ function markDirty() {
 
 loadPersistentCache();
 process.on("exit", savePersistentCache);
+// SIGINT dimiliki index.js: save LID cache di sini tanpa process.exit,
+// agar handler index.js (DB save) tetap jalan setelahnya sebelum exit.
 process.on("SIGINT", () => {
   savePersistentCache();
-  process.exit(0);
 });
 process.on("uncaughtException", (err) => {
   savePersistentCache();

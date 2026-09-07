@@ -234,9 +234,18 @@ function setupAntiCrash() {
     process.exit(0);
   });
 
-  process.on("SIGTERM", () => {
+  process.on("SIGTERM", async () => {
     console.log("");
     logger.system("system", "Received TERMINATE signal (SIGTERM)");
+    logger.info("database", "Saving data to local storage...");
+    try {
+      const db = getDatabase();
+      db.save();
+      logger.success("database", "All data successfully saved");
+    } catch (error) {
+      logger.warn("database", `save failed: ${error.message}`);
+    }
+    logger.info("system", "Engine stopped safely");
     process.exit(0);
   });
 

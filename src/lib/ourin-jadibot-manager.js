@@ -1,6 +1,7 @@
 import QRCode from "qrcode";
 import path from "path";
 import fs from "fs";
+import config from "../../config.js";
 import { saluranCtx } from "./ourin-context.js";
 import {
   delay,

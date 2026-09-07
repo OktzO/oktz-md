@@ -597,6 +597,7 @@ async function startSewaChecker(sock) {
       const now = Date.now();
       let expiredCount = 0;
       let warnedCount = 0;
+      let index = 0;
 
       for (const [groupId, data] of Object.entries(sewaGroups)) {
         if (data.isLifetime) continue;
@@ -669,6 +670,7 @@ async function startSewaChecker(sock) {
 
         // yield every 10 groups so event loop can breathe
         if (index % 10 === 9) await yieldToEventLoop();
+        index++;
       }
 
       if (expiredCount > 0 || warnedCount > 0) {

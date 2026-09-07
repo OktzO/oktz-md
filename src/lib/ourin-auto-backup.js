@@ -202,7 +202,15 @@ async function createBackup() {
         timestamp,
       });
     });
-    archive.on("error", reject);
+    archive.on("error", (err) => {
+      // destroy writeStream supaya fd tak bocor saat archive gagal
+      output.destroy();
+      reject(err);
+    });
+    output.on("error", (err) => {
+      archive.abort?.();
+      reject(err);
+    });
     archive.pipe(output);
 
     const rootDir = process.cwd();

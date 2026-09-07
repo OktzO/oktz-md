@@ -25,12 +25,14 @@ import {
   isLidConverted,
 } from "./lib/ourin-lid.js";
 import { initAutoBackup } from "./lib/ourin-auto-backup.js";
+import { AsyncPool } from "./lib/ourin-async-pool.js";
 const groupCache = new NodeCache({ stdTTL: 5 * 60, useClones: false });
 const processedMessages = new NodeCache({ stdTTL: 30, useClones: false });
 const msgRetryCounterCache = new NodeCache({ stdTTL: 60, useClones: false });
 
 let lastMessageReceived = Date.now();
 let watchdogTimer = null;
+const _messagePool = new AsyncPool(8);
 const WATCHDOG_TIMEOUT = 120 * 60 * 1000;
 const WATCHDOG_CHECK_INTERVAL = 60 * 1000;
 
@@ -718,6 +720,13 @@ async function startConnection(options = {}) {
 
   sock.ev.on("groups.update", async ([event]) => {
     global.groupMetadataCache?.delete(event?.id);
+    if (options.onGroupSettingsUpdate) {
+      try {
+        await options.onGroupSettingsUpdate(event, sock);
+      } catch (error) {
+        console.error("[GroupsUpdate] Error:", error.message);
+      }
+    }
     if (options.onGroupUpdate) {
       if (_groupEventQueue.length >= 100) {
         colors.logger.warn(
@@ -1264,9 +1273,13 @@ async function startConnection(options = {}) {
       }
 
       if (options.onMessage) {
-        options.onMessage(msg, currentSock).catch((error) => {
-          colors.logger.error("Message", error.message);
-        });
+        // concurrency cap: flood = ratusan serialize+handler paralel tanpa
+        // ini; pool 8 menjaga event loop tetap hidup dan mem-bound RAM
+        _messagePool
+          .add(() => options.onMessage(msg, currentSock))
+          .catch((error) => {
+            colors.logger.error("Message", error.message);
+          });
       }
     }
   });
@@ -1288,17 +1301,9 @@ async function startConnection(options = {}) {
     }
   });
 
-  sock.ev.on("groups.update", async (updates) => {
-    for (const update of updates) {
-      if (options.onGroupSettingsUpdate) {
-        try {
-          await options.onGroupSettingsUpdate(update, sock);
-        } catch (error) {
-          console.error("[GroupsUpdate] Error:", error.message);
-        }
-      }
-    }
-  });
+  // groups.update ditangani listener tunggal di atas (onGroupSettingsUpdate
+  // dipanggil inline + onGroupUpdate via queue) — dulu dua listener terpisah
+  // = dobel metadata fetch + dobel DB write per event.
 
   sock.ev.on("messages.update", async (updates) => {
     if (options.onMessageUpdate) {
