@@ -1,169 +1,377 @@
-import axios from 'axios'
-import crypto from 'crypto'
-import qs from 'qs'
-const CONFIG = {
-    BASE_URL: "https://ssyoutube.com",
-    API: {
-        CONVERT: "/api/convert"
-    },
-    SECRETS: {
-        SALT: "384d5028ee4a399f6cae0175025a1708aa924fc0ccb08be1aa359cd856dd1639",
-        FIXED_TS: "1765962059039"
-    },
-    HEADERS: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
-        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-        "Origin": "https://ssyoutube.com",
-        "Referer": "https://ssyoutube.com/"
-    }
-};
+import crypto from 'crypto';
+import axios from 'axios';
 
-const cryptoUtils = () => {
-    return {
-        generateSignature: (url, timestamp) => {
+class SaveTube {
+    constructor() {
+        this.ky = 'C5D58EF67A7584E4A29F6C35BBC4EB12';
+        this.fmt = ['144', '240', '360', '480', '720', '1080', 'mp3'];
+        this.re =
+            /^((?:https?:)?\/\/)?((?:www|m|music)\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(?:embed\/)?(?:v\/)?(?:shorts\/)?([a-zA-Z0-9_-]{11})/;
+        this.ua =
+            'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36';
+        this.maxTry = 4;
+    }
+
+    decode(enc) {
+        const data = Buffer.from(enc, 'base64');
+        const iv = data.slice(0, 16);
+        const ct = data.slice(16);
+        const key = Buffer.from(this.ky, 'hex');
+        const dc = crypto.createDecipheriv('aes-128-cbc', key, iv);
+        return JSON.parse(Buffer.concat([dc.update(ct), dc.final()]).toString());
+    }
+
+    async getCdn() {
+        const res = await axios.get('https://media.savetube.vip/api/random-cdn', { timeout: 10000 });
+        return res.data.cdn;
+    }
+
+    async sleep(ms) {
+        return new Promise(r => setTimeout(r, ms));
+    }
+
+    cleanTitle(raw = '') {
+        let t = String(raw);
+        const lp =
+            /lyrics?|official\s*(music\s*)?video|audio|visualizer|mv|m\/v|hd|4k|8k|full\s*song|original\s*mix|remaster(ed)?|live|cover|clean|explicit|extended|radio\s*edit|slowed|reverb|sped\s*up|color\s*coded|sub\s*indo|terjemahan|lyric\s*video/i;
+        t = t.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]/gu, '');
+        t = t.replace(/[\(\[\{][^\)\]\}]*[\)\]\}]/g, m => (lp.test(m) ? '' : m));
+        t = t
+            .replace(/\/\/+/g, ' - ')
+            .replace(/[|:]{1,2}/g, ' ')
+            .replace(/[#@]\S+/g, '');
+        t = t.replace(new RegExp(`\\b(${lp.source})\\b`, 'gi'), '');
+        t = t
+            .replace(/\s{2,}/g, ' ')
+            .replace(/\s+-\s*$/g, '')
+            .replace(/^\s*-\s+/g, '')
+            .trim();
+        return t || String(raw).trim();
+    }
+
+    async download(url, format = 'mp3') {
+        const id = url.match(this.re)?.[3];
+        if (!id) throw new Error('ID tidak bisa diambil dari URL');
+        if (!this.fmt.includes(format)) throw new Error(`Format tidak valid. Pilihan: ${this.fmt.join(', ')}`);
+        let lastErr = null;
+        for (let attempt = 1; attempt <= this.maxTry; attempt++) {
             try {
-                const rawString = url + timestamp + CONFIG.SECRETS.SALT;
-                return crypto.createHash('sha256').update(rawString).digest('hex');
+                const cdn = await this.getCdn();
+                const infoRes = await axios.post(
+                    `https://${cdn}/v2/info`,
+                    {
+                        url: `https://www.youtube.com/watch?v=${id}`
+                    },
+                    { timeout: 15000, headers: { 'User-Agent': this.ua, Referer: 'https://save-tube.com/' } }
+                );
+                const info = this.decode(infoRes.data.data);
+                const dlRes = await axios.post(
+                    `https://${cdn}/download`,
+                    {
+                        downloadType: format === 'mp3' ? 'audio' : 'video',
+                        quality: format === 'mp3' ? '128' : format,
+                        key: info.key
+                    },
+                    {
+                        timeout: 30000,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'User-Agent': this.ua,
+                            Referer: 'https://save-tube.com/'
+                        }
+                    }
+                );
+                const dlUrl = dlRes.data?.data?.downloadUrl;
+                if (!dlUrl) throw new Error('downloadUrl tidak ditemukan');
+                return {
+                    title: this.cleanTitle(info.title),
+                    rawTitle: info.title,
+                    thumb: info.thumbnail || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+                    duration: info.duration,
+                    format,
+                    url: dlUrl
+                };
             } catch (e) {
-                console.error("Error generating signature:", e);
-                return null;
+                lastErr = e;
+                if (attempt < this.maxTry) await this.sleep(800 * attempt);
             }
         }
-    };
-};
+        throw new Error(`SaveTube gagal: ${lastErr?.message}`);
+    }
+}
 
-const utils = cryptoUtils();
+class QByte {
+    constructor() {
+        this.api = 'https://be-video-downloader.qbyte.web.id';
+        this.web = 'https://video.downloader.qbyte.web.id/';
+        this.ua =
+            'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Mobile Safari/537.36';
+        this.http = axios.create({ timeout: 120000, maxRedirects: 5, validateStatus: () => true });
+    }
 
-const formatSize = (bytes) => {
-    if (!bytes) return 'Unknown';
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + ' ' + sizes[i];
-};
+    cleanName(t) {
+        return String(t || 'media')
+            .replace(/[\\/:*?"<>|]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
 
-const ssyoutube = {
-    download: async (videoUrl) => {
+    getId(f) {
+        return String(f.format_id || f.itag || f.id);
+    }
+
+    getHeight(f) {
+        if (f.height) return Number(f.height);
+        const r = String(f.resolution || '');
+        const wxh = r.match(/(\d+)\s*x\s*(\d+)/i);
+        if (wxh) return Number(wxh[2]);
+        const p = r.match(/(\d+)\s*p/i);
+        if (p) return Number(p[1]);
+        const a = r.match(/\d+/);
+        return a ? Number(a[0]) : 0;
+    }
+
+    async download(url, format = 'mp3') {
+        const headers = {
+            'user-agent': this.ua,
+            accept: 'application/json',
+            origin: this.web.slice(0, -1),
+            referer: this.web
+        };
+        const res = await this.http.get(`${this.api}/api/info`, { params: { url }, headers });
+        if (res.status < 200 || res.status >= 300) throw new Error(`QByte info gagal HTTP ${res.status}`);
+        const info = res.data;
+        const formats = Array.isArray(info.formats) ? info.formats : [];
+
+        const checkRes = await this.http.get(`${this.api}/api/check-download`, {
+            headers: { 'user-agent': this.ua, accept: '*/*', referer: this.web }
+        });
+        if (checkRes.status < 200 || checkRes.status >= 300)
+            throw new Error(`Server QByte penuh HTTP ${checkRes.status}`);
+
+        const title = this.cleanName(info.title || 'media');
+
+        if (format === 'mp3') {
+            const audioFormat = formats
+                .filter(f => f.vcodec === 'none' && f.acodec !== 'none')
+                .sort((a, b) => Number(b.abr || b.tbr || 0) - Number(a.abr || a.tbr || 0))[0];
+            if (!audioFormat) throw new Error('Format audio tidak ditemukan');
+            const audioId = this.getId(audioFormat);
+            const audioExt = audioFormat.ext || 'm4a';
+            const dRes = await this.http.get(`${this.api}/api/download`, {
+                params: { url, format: audioId, filename: `${title}.${audioExt}` },
+                responseType: 'stream',
+                headers: { 'user-agent': this.ua, accept: '*/*', referer: this.web }
+            });
+            if (dRes.status < 200 || dRes.status >= 300) throw new Error(`QByte audio gagal HTTP ${dRes.status}`);
+            const chunks = [];
+            await new Promise((resolve, reject) => {
+                dRes.data.on('data', c => chunks.push(c));
+                dRes.data.on('end', resolve);
+                dRes.data.on('error', reject);
+            });
+            return {
+                title,
+                thumb: `https://i.ytimg.com/vi/${url.match(/v=([^&]+)/)?.[1]}/hqdefault.jpg`,
+                buffer: Buffer.concat(chunks),
+                format: 'mp3'
+            };
+        }
+
+        const target = parseInt(format) || 720;
+        const videoFormat =
+            formats
+                .filter(f => f.vcodec !== 'none' && this.getHeight(f) === target)
+                .sort(
+                    (a, b) =>
+                        (String(b.ext).toLowerCase() === 'mp4' ? 1 : 0) -
+                        (String(a.ext).toLowerCase() === 'mp4' ? 1 : 0)
+                )[0] ??
+            formats
+                .filter(f => f.vcodec !== 'none')
+                .sort((a, b) => Math.abs(this.getHeight(a) - target) - Math.abs(this.getHeight(b) - target))[0];
+        if (!videoFormat) throw new Error('Format video tidak ditemukan');
+
+        const audioFormat2 = formats
+            .filter(f => f.vcodec === 'none' && f.acodec !== 'none')
+            .sort((a, b) => Number(b.abr || b.tbr || 0) - Number(a.abr || a.tbr || 0))[0];
+
+        const { spawn } = await import('child_process');
+        const fsp = await import('fs/promises');
+        const { default: path } = await import('path');
+        const os = await import('os');
+
+        const tmpDir = os.tmpdir();
+        const videoTmp = path.join(tmpDir, `qbyte-video-${Date.now()}.${videoFormat.ext || 'mp4'}`);
+        const audioTmp = path.join(tmpDir, `qbyte-audio-${Date.now()}.${audioFormat2?.ext || 'm4a'}`);
+        const outTmp = path.join(tmpDir, `qbyte-out-${Date.now()}.mp4`);
+
+        const dlFile = async (formatId, filename, ext, outPath) => {
+            const dRes = await this.http.get(`${this.api}/api/download`, {
+                params: { url, format: formatId, filename },
+                responseType: 'stream',
+                headers: { 'user-agent': this.ua, accept: '*/*', referer: this.web }
+            });
+            if (dRes.status < 200 || dRes.status >= 300) throw new Error(`download gagal HTTP ${dRes.status}`);
+            const { default: fs } = await import('fs');
+            await new Promise((resolve, reject) => {
+                const w = fs.createWriteStream(outPath);
+                dRes.data.pipe(w);
+                dRes.data.on('error', reject);
+                w.on('finish', resolve);
+                w.on('error', reject);
+            });
+        };
+
+        await dlFile(this.getId(videoFormat), `${title}.${videoFormat.ext || 'mp4'}`, videoFormat.ext, videoTmp);
+        if (audioFormat2)
+            await dlFile(this.getId(audioFormat2), `${title}.${audioFormat2.ext || 'm4a'}`, audioFormat2.ext, audioTmp);
+
+        const runFfmpeg = args =>
+            new Promise((resolve, reject) => {
+                const ff = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+                let err = '';
+                ff.stderr.on('data', c => (err += c.toString()));
+                ff.on('close', code =>
+                    code === 0 ? resolve() : reject(new Error(`FFmpeg gagal: ${err.slice(-500)}`))
+                );
+                ff.on('error', reject);
+            });
+
+        if (audioFormat2) {
+            await runFfmpeg(['-y', '-i', videoTmp, '-i', audioTmp, '-c:v', 'copy', '-c:a', 'aac', '-shortest', outTmp]);
+        } else {
+            await runFfmpeg(['-y', '-i', videoTmp, '-c:v', 'copy', outTmp]);
+        }
+
+        const buffer = await fsp.readFile(outTmp);
+        await fsp.unlink(videoTmp).catch(() => {});
+        await fsp.unlink(audioTmp).catch(() => {});
+        await fsp.unlink(outTmp).catch(() => {});
+
+        return {
+            title,
+            thumb: `https://i.ytimg.com/vi/${url.match(/v=([^&]+)/)?.[1]}/hqdefault.jpg`,
+            buffer,
+            format: 'mp4'
+        };
+    }
+}
+
+const st = new SaveTube();
+const qbyte = new QByte();
+
+const innertubeKey = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+const innertubeUa =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+function findVideoRenderer(node, out) {
+    if (!node || typeof node !== 'object') return;
+    if (node.videoRenderer?.videoId) {
+        out.push(node.videoRenderer);
+        return;
+    }
+    for (const key in node) findVideoRenderer(node[key], out);
+}
+
+export async function searchYoutube(q) {
+    if (/^((?:https?:)?\/\/)?((?:www|m|music)\.)?(?:youtube\.com|youtu\.be)\//.test(q)) return q;
+    const res = await fetch(`https://www.youtube.com/youtubei/v1/search?key=${innertubeKey}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': innertubeUa,
+            'X-Youtube-Client-Name': '1',
+            'X-Youtube-Client-Version': '2.20240101.00.00'
+        },
+        body: JSON.stringify({
+            context: { client: { clientName: 'WEB', clientVersion: '2.20240101.00.00', hl: 'en', gl: 'US' } },
+            query: q
+        }),
+        signal: AbortSignal.timeout(15000)
+    });
+    if (!res.ok) throw new Error(`Pencarian gagal HTTP ${res.status}`);
+    const json = await res.json();
+    const found = [];
+    findVideoRenderer(json.contents, found);
+    if (!found.length) throw new Error('video tidak ditemukan');
+    return `https://www.youtube.com/watch?v=${found[0].videoId}`;
+}
+
+export async function toBuffer(url, retries = 3) {
+    let lastErr = null;
+    for (let i = 0; i < retries; i++) {
         try {
-            if (!videoUrl || !videoUrl.includes('youtube.com') && !videoUrl.includes('youtu.be')) {
-                return { error: 'URL tidak valid. Harap gunakan URL YouTube.' };
-            }
-
-            const currentTs = Date.now().toString();
-            const signature = utils.generateSignature(videoUrl, currentTs);
-
-            if (!signature) return { error: 'Gagal membuat signature keamanan.' };
-
-            const payload = {
-                'sf_url': videoUrl,
-                'ts': currentTs,
-                '_ts': CONFIG.SECRETS.FIXED_TS,
-                '_tsc': '0',
-                '_s': signature
-            };
-
-            const response = await axios.post(
-                CONFIG.BASE_URL + CONFIG.API.CONVERT,
-                qs.stringify(payload), 
-                { headers: CONFIG.HEADERS }
-            );
-
-            const data = response.data;
-
-            if (!data || !data.url) {
-                return { error: 'Gagal mengambil data. Server mungkin memblokir request.' };
-            }
-
-            const result = {
-                meta: {
-                    id: data.id,
-                    title: data.meta?.title,
-                    duration: data.meta?.duration,
-                    thumbnail: data.thumb
-                },
-                downloads: []
-            };
-
-            if (Array.isArray(data.url)) {
-                result.downloads = data.url
-                    .filter(item => !item.no_audio)
-                    .map(item => ({
-                        quality: item.quality || item.subname,
-                        format: item.ext,
-                        size: formatSize(item.filesize),
-                        url: item.url,
-                        audio: item.audio
-                    }));
-            }
-
-            return result;
-
-        } catch (error) {
-            console.error(`error download: ${error.message}`);
-            if (error.response) console.error("Server Response:", error.response.data);
-            return { error: error.message };
+            const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 60000 });
+            return Buffer.from(res.data);
+        } catch (e) {
+            lastErr = e;
+            if (i < retries - 1) await new Promise(r => setTimeout(r, 800 * (i + 1)));
         }
     }
-};
+    throw lastErr;
+}
 
-export default ssyoutube
-// SAMPLE RESPONSE
-// {
-//   meta: {
-//     id: 'ZaHSqOzAvWs',
-//     title: 'Add-on BoBoiBug Galaxy V3 (Ultimate bug update) -- MCPE Add-on',
-//     duration: '4:50',
-//     thumbnail: 'https://media.ssyoutube.com/get?__sig=ZUMwgKkcuLQWIqKxUvWzHg&__expires=1768366025&uri=https%3A%2F%2Fi.ytimg.com%2Fvi%2FZaHSqOzAvWs%2Fhqdefault.jpg&referer=https%3A%2F%2Fwww.youtube.com%2F'
-//   },
-//   downloads: [
-//     {
-//       quality: '720',
-//       format: 'mp4',
-//       size: 'Unknown',
-//       url: 'https://du.sf-converter.com/convert?payload=9tEC%7EZCUjb11lu0XUj7YD0Fjh5TiVFoUxfOY9hWDy6LNJ9ZIHmFTuprGxuhYn-IHAvF8KJtjmHPiDWi3weCgEERzE3iS8iSyuPeovodalbp-aafMPLsaWATqZ9n011pjhMpfAEkbcIoOKFhhI-sRNTZ4NVbdINU%7E2ZFNE4sfAFwCUiLNJFXf0Uh7J8MTWmhxhoR1XodJsO3-hkY7YHwSzoX8aOik8ojqmwUufhl5sOQcChxSdM8Qamw29gAewVJ2okt-Y2d7gMdrhKUS54LDqr6iHzmPxzM7SzlssDE9A2osCgYP5pKbx%7E7RrSS4WgYY3z%7ESK760dThZuZs4%7EvgUOUSMmyXQ5yfskhZ5A2S8o9JKI3wI%7ESSShTpWRqD5gVegTMb1lp1ONOrNlmunV9fZokYt%7EfC99Yd-Vl76ZndmsAmqszb2GBx2HWLtxn5LAOrGU6Mho5svZgnELSM4qvs3QsbRrf34a32o1N-bzlj0WUUclXz2JwQT4pmA8cytYVdFft9-cwbadenaDHI40UYXnjpPcnefE56ANCHkDVvEwrTsETd2aMExYTF0%7E7dluWapi08%7E-pT6G6PpFGbOsY4SiOXI7z-B9PIeppX-zvVt8bDkJxQ6-it187qgyUEZpZL4hb-ZHBWug5z53xRP66g58dMQVBHLojo5vDUTq1hNoMYh%7EPvvkc9%7EbIP3A-%7En97jxU5A5Vp8xqhVXOqILXS13%7EeBPaEiwlXQL37cblB89G2QYFAfezSA2h655znHlgtibVYPxMGO8oImqzMWMvcbiSV4CpcWf9bAovSYlKHNa7JVsBNuJA5%7E6IjZBAqS6BadEPUIpsC21RqrusjkEGVMGwRcZg59STCxd4CE99fEOCP88ZgTgOjr0tr8BFqMBabZlfZvg3f34%7E%7EeV%7EsKGaJ9EEOyC2Yc3CRyKRT7t-hn8EpcVgGCxrH3RlEM1TY3etoRa7wpnfMNPlCWR9eg5TQ8ti2eWTA1CCe3IKSpIVR0L4B30p3lpMTKSK9EJqgdzKOCW8HTc2yY2Pe2kgeSwxZL3lNcm1nu4z93ldsNbWNtiJvheaLkVB0kq5WaevAE3H0Aq-wgnYk8FU66WvTndBJlS9%7EDosf5uhCWYe0MaeMHqnbQzuHWmAZbYEFkScMD%7E2W8LB8-uIjBdUMYN1ghCJFUJVdwEkDeruiNI0u-WU4j4aPxA9sARv8iqfbtyVnroXG3r2XrVyTZptkVddDn9AKyY3D25wxpCNLhGv7GIZQMYlTgm5ZEBwQpiUMqAwIKBwqEW5M2lLJqUaIuDGus6LnPn9Mzjjfv9LHfpX2k5aJqcVBlnotesd-ZvuSAFQ39Dq5V7MJwIonyMEOIlG99%7EckWBjmzT-ituia9ZxFaXxd9JbLJNGuMA6a0OEyaPSZkL4kP9t-rmM6OT3QGuEN01KXWj%7EkmLs593X2wmbCSXPdhANnyQbIpS6UVKK8LPcKgwkKehxsYrCSP3jUJskMgIX4voJ31jyx2Qlc0AeayInpInCJF_*32c600e91d396a83b936ff8581a92cf0*2*1768364824',
-//       audio: undefined
-//     },
-//     {
-//       quality: '480',
-//       format: 'mp4',
-//       size: 'Unknown',
-//       url: 'https://du.sf-converter.com/convert?payload=6uk888McK7t5zuuGHs5klL4yOi%7ElpxY4Xy3lnPa2d4uzoLSX79BDkychNlaH4dqR7TVOtA4YzdJN%7E4BcWWpeSIPzLKsG0tDeIatcpjpao85rt-ODEFI5h%7EaYWE1EmUSCjc2LxClhcIEeR22snso94rEMKFVueMnMXKZbcaCaZmmFXSJtlxnBJQ5w6vEbaQsXdqeP9GIF1%7E0rm1RkvlyKi3fj7fwJJrxTs-7x6xmuHOypABejyncSlUU-j9-YQ13MtMDh%7EUWJsfJ1aJM%7E6Z2kEBBkfpAbr7nVR3Uohdu6RvP9LIqpCYOtihKEXLJfuxPHIMbR7IePNrrxJ8RyCCXPIef3JfZnomL8T86RusrKHboRKmmgaorP%7EcUVZ5L65FzXI6uZX9l8VfIlsu2mwuLT-nduTMQcmrqQ3tht%7EpDgz-vQHza7f6cRY4B2AY5xU5Nit9eFo3ecNvvHaiYvGPfFzjr68VyqtgHq5LxvigNxKxx3QNc8yHVDSQ9FPZWemTEA9HuCyPGPs9xt2uTSdUTNU9DoYshu8rsodnlLffkYM6fFtveM9hVbAvsvBCJUdrWpam8ApL3E7BHVhTYZQ9%7Ec%7EJhaQi9RWaJGnP2RFTMgBI%7E3VGuhYanLC7oYTHxE5qc9l1tiRMyEm6mMUlaXkYins0ooeybXAFhBnOiBtPudho9OeNeWK9nm-mrPkqzEPK2gzz17PHAdh9PES8WSD%7ERb%7Ef2gcJc7dHjSH%7EpvlWVaehMhVW8UI3hd5sCfBr28dGr7KcJejw1DZymTrp069K3FkcNID81-NQKGcylg%7EumtWWZ2BgE29bpF4lZDRa9LpKr8tpr%7E2iYFy%7E0EAdVOIM66XCP1l-x4kJ%7EZE5DU0gNdzPWtzWRQI3rLYGqsS23tkAhUmlsCGcV9PnnuEL6LFE3SlgPqfvS8VZlL47Bs2-iH9k34%7EQ9jxdZm4yGC0XeVXpKT6K--HO%7EfdgPhx0RWirU4Z6ndfx0xK6zb4GsWKXHBgkn1CfVgDLqYWDX0Aj7yO1eaVcRB5RdaDlNC1DY8iUcpHNEnjqkUwlwzCKSFC962-9qyxCi8GvZGZJcgV1Nf-1d3CAWQEhpxOqNleRMUguKweOZV3PO6SP-B7AULmJumnXtg964x3kCqNHFuRKFoUZsIkDONpgvb04KGN09p8o-RxZzTGDWP5hkNWU%7EOHpZCtdfOcTSPZ4EEGnYdfJCXvdcjtA1nCbQS-OruBnlUXnsYK-txqvzRD7el991NGHoC%7EeaQSRfh1pFnaN2TTasPJqnHwPzPt%7EJ-JOJm7rqqQcAYtBviWVVYiSRYnrkuSBn5OAvVWGr7mXHFyPRCbo8QqNKIh7zlLIwoFiBmhTU5o5IgNjrzocwv3Qs7IYR7Do%7E9V4Q7Itil01nROevIDhbbaBlt03NGKZhT0D6EYeo1MsAG3aIWjn3Ud8i1tsmmUwxE3RUF35pLowWJZm5k61Io2ROugPUP3sIDT4Lx38uWdCQHKxhh-aKTxtX3WNRAUrhYUOH_*26d03361ccd626b6b54d453fb023b76a*2*1768364824',
-//       audio: undefined
-//     },
-//     {
-//       quality: '360',
-//       format: 'mp4',
-//       size: '24.26 MB',
-//       url: 'https://rr2---sn-2aqu-hoalr.googlevideo.com/videoplayback?expire=1768386423&ei=Fxtnac2VG8uY1d8P4uPRiAQ&ip=180.195.67.74&id=o-AH-wEuPYQplMm1lnYJTMKXIUGl-qmD4-ikGIU78QLRiV&itag=18&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=1&met=1768364823%2C&mh=qO&mm=31%2C29&mn=sn-2aqu-hoalr%2Csn-2aqu-hoall&ms=au%2Crdu&mv=m&mvi=2&pl=20&rms=au%2Cau&initcwndbps=1397500&bui=AW-iu_qhfl3GW90gD0o-Mq666pcHHI6WpMgG5wdA8JjXjSmd4EIdoGg_e07bsoRE9pVctxnwPdMmAPMG&vprv=1&svpuc=1&mime=video%2Fmp4&ns=CKvjXOicfEI-S07p7DRUg1oR&rqh=1&gir=yes&clen=25440485&ratebypass=yes&dur=289.622&lmt=1768276552586610&mt=1768364216&fvip=3&lmw=1&fexp=51557447%2C51565116%2C51565681%2C51580970&c=TVHTML5&sefc=1&txp=5538534&n=IBtIJHvk-fqEfQ&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cratebypass%2Cdur%2Clmt&sig=AJfQdSswRgIhAJ1BEteoT-gN-B4EXANsAWqz1hvvz64Ni-DS7sRZ2EZaAiEA_UMNjkvyNWF6xsDKsu3XXh15Bt_Xb5lPYVakMXZnbu8%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRAIgZhukKCpDBWvkombxenYh0oKvUA6jUo47oZMjdoNr4KcCIGxfkgEyzl6-ESm0OD4vxVfpcC9EQhtvhleg_ga7pbpv&title=Add-on%20BoBoiBug%20Galaxy%20V3%20(Ultimate%20bug%20update)%20%7C%7C%20MCPE%20Add-on',
-//       audio: false
-//     },
-//     {
-//       quality: '141',
-//       format: 'm4a',
-//       size: '4.47 MB',
-//       url: 'https://rr2---sn-2aqu-hoalr.googlevideo.com/videoplayback?expire=1768386423&ei=Fxtnac2VG8uY1d8P4uPRiAQ&ip=180.195.67.74&id=o-AH-wEuPYQplMm1lnYJTMKXIUGl-qmD4-ikGIU78QLRiV&itag=140&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=1&met=1768364823%2C&mh=qO&mm=31%2C29&mn=sn-2aqu-hoalr%2Csn-2aqu-hoall&ms=au%2Crdu&mv=m&mvi=2&pl=20&rms=au%2Cau&initcwndbps=1397500&bui=AW-iu_qS3Lngqe9IhyKuXsJ954_-Ryn123gg16WP_QSKO7UFuU1DoIZ0gQBEL4hLHQ5Ounf2j0yMBBe3&vprv=1&svpuc=1&mime=audio%2Fmp4&ns=YfKh39rq3QXKcLZ_kucSRTMR&rqh=1&gir=yes&clen=4688086&dur=289.622&lmt=1768275304676811&mt=1768364216&fvip=3&keepalive=yes&lmw=1&fexp=51557447%2C51565116%2C51565681%2C51580970&c=TVHTML5&sefc=1&txp=5532534&n=fGcrLRpWbQjqLg&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRgIhALAn3DsBuMlPtsRsCwaQtHE9MnTi41eyBo8N2aZ0asG6AiEAhfrdxq5UktJcOzVKCZFewrPhTjpvX1u-9YP0l6SZAks%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRAIgZhukKCpDBWvkombxenYh0oKvUA6jUo47oZMjdoNr4KcCIGxfkgEyzl6-ESm0OD4vxVfpcC9EQhtvhleg_ga7pbpv',
-//       audio: true
-//     },
-//     {
-//       quality: '56',
-//       format: 'opus',
-//       size: '1.79 MB',
-//       url: 'https://rr2---sn-2aqu-hoalr.googlevideo.com/videoplayback?expire=1768386423&ei=Fxtnac2VG8uY1d8P4uPRiAQ&ip=180.195.67.74&id=o-AH-wEuPYQplMm1lnYJTMKXIUGl-qmD4-ikGIU78QLRiV&itag=249&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=1&met=1768364823%2C&mh=qO&mm=31%2C29&mn=sn-2aqu-hoalr%2Csn-2aqu-hoall&ms=au%2Crdu&mv=m&mvi=2&pl=20&rms=au%2Cau&initcwndbps=1397500&bui=AW-iu_qS3Lngqe9IhyKuXsJ954_-Ryn123gg16WP_QSKO7UFuU1DoIZ0gQBEL4hLHQ5Ounf2j0yMBBe3&vprv=1&svpuc=1&mime=audio%2Fwebm&ns=YfKh39rq3QXKcLZ_kucSRTMR&rqh=1&gir=yes&clen=1877123&dur=289.581&lmt=1768275417575838&mt=1768364216&fvip=3&keepalive=yes&lmw=1&fexp=51557447%2C51565116%2C51565681%2C51580970&c=TVHTML5&sefc=1&txp=5532534&n=fGcrLRpWbQjqLg&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRQIhAN-x-9LsdRXd_9w6YkoRyokuHrjZAUUWK7s6aFpfnvp9AiAaaLBsTf558vNFycCMRGn7-xYAYy9_VQI512AccRNORQ%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRAIgZhukKCpDBWvkombxenYh0oKvUA6jUo47oZMjdoNr4KcCIGxfkgEyzl6-ESm0OD4vxVfpcC9EQhtvhleg_ga7pbpv',
-//       audio: true
-//     },
-//     {
-//       quality: '74',
-//       format: 'opus',
-//       size: '2.37 MB',
-//       url: 'https://rr2---sn-2aqu-hoalr.googlevideo.com/videoplayback?expire=1768386423&ei=Fxtnac2VG8uY1d8P4uPRiAQ&ip=180.195.67.74&id=o-AH-wEuPYQplMm1lnYJTMKXIUGl-qmD4-ikGIU78QLRiV&itag=250&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=1&met=1768364823%2C&mh=qO&mm=31%2C29&mn=sn-2aqu-hoalr%2Csn-2aqu-hoall&ms=au%2Crdu&mv=m&mvi=2&pl=20&rms=au%2Cau&initcwndbps=1397500&bui=AW-iu_qS3Lngqe9IhyKuXsJ954_-Ryn123gg16WP_QSKO7UFuU1DoIZ0gQBEL4hLHQ5Ounf2j0yMBBe3&vprv=1&svpuc=1&mime=audio%2Fwebm&ns=YfKh39rq3QXKcLZ_kucSRTMR&rqh=1&gir=yes&clen=2482944&dur=289.581&lmt=1768275417580678&mt=1768364216&fvip=3&keepalive=yes&lmw=1&fexp=51557447%2C51565116%2C51565681%2C51580970&c=TVHTML5&sefc=1&txp=5532534&n=fGcrLRpWbQjqLg&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRQIgH1BB5ylyRpJW8GuOe6WcOcEyKdhIFchTkOglb1qWMlsCIQDS6Z45iVFZL4s5FuEpyLkYiWF1v3Fcz0xZFiurXMH1_w%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRAIgZhukKCpDBWvkombxenYh0oKvUA6jUo47oZMjdoNr4KcCIGxfkgEyzl6-ESm0OD4vxVfpcC9EQhtvhleg_ga7pbpv',
-//       audio: true
-//     },
-//     {
-//       quality: '143',
-//       format: 'opus',
-//       size: '4.64 MB',
-//       url: 'https://rr2---sn-2aqu-hoalr.googlevideo.com/videoplayback?expire=1768386423&ei=Fxtnac2VG8uY1d8P4uPRiAQ&ip=180.195.67.74&id=o-AH-wEuPYQplMm1lnYJTMKXIUGl-qmD4-ikGIU78QLRiV&itag=251&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=1&met=1768364823%2C&mh=qO&mm=31%2C29&mn=sn-2aqu-hoalr%2Csn-2aqu-hoall&ms=au%2Crdu&mv=m&mvi=2&pl=20&rms=au%2Cau&initcwndbps=1397500&bui=AW-iu_qS3Lngqe9IhyKuXsJ954_-Ryn123gg16WP_QSKO7UFuU1DoIZ0gQBEL4hLHQ5Ounf2j0yMBBe3&vprv=1&svpuc=1&mime=audio%2Fwebm&ns=YfKh39rq3QXKcLZ_kucSRTMR&rqh=1&gir=yes&clen=4868401&dur=289.581&lmt=1768275417781099&mt=1768364216&fvip=3&keepalive=yes&lmw=1&fexp=51557447%2C51565116%2C51565681%2C51580970&c=TVHTML5&sefc=1&txp=5532534&n=fGcrLRpWbQjqLg&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRQIgHqxomztM97Ha8PAUiCae6xO2uY5F_2wEf2UberpUuFkCIQDlkv81jp3lL9-z9UOcDV1nnrSdSTq6S3SR45LAYD1HZw%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRAIgZhukKCpDBWvkombxenYh0oKvUA6jUo47oZMjdoNr4KcCIGxfkgEyzl6-ESm0OD4vxVfpcC9EQhtvhleg_ga7pbpv',
-//       audio: true
-//     }
-//   ]
-// }
+export async function remuxVideoBuffer(buf) {
+    const { execFile } = await import('child_process');
+    const { promisify } = await import('util');
+    const fs = await import('fs/promises');
+    const os = await import('os');
+    const path = await import('path');
+    const { randomUUID } = await import('crypto');
+    const execFileAsync = promisify(execFile);
+    const inPath = path.join(os.tmpdir(), `yt_in_${randomUUID()}.mp4`);
+    const outPath = path.join(os.tmpdir(), `yt_out_${randomUUID()}.mp4`);
+    try {
+        await fs.writeFile(inPath, buf);
+        const { stdout } = await execFileAsync('ffprobe', [
+            '-v',
+            'error',
+            '-print_format',
+            'json',
+            '-show_format',
+            '-show_streams',
+            inPath
+        ]);
+        const data = JSON.parse(stdout);
+        const duration = parseFloat(data?.format?.duration || '0');
+        const hasAudio = (data?.streams || []).some(s => s.codec_type === 'audio');
+        const args = ['-y', '-i', inPath, '-map', '0:v:0'];
+        if (hasAudio) args.push('-map', '0:a:0?');
+        args.push('-c:v', 'copy', '-c:a', 'copy');
+        if (duration > 0) args.push('-t', duration.toString());
+        args.push('-avoid_negative_ts', 'make_zero', '-movflags', '+faststart', outPath);
+        await execFileAsync('ffmpeg', args);
+        const fixedBuf = await fs.readFile(outPath);
+        return fixedBuf;
+    } catch {
+        return buf;
+    } finally {
+        await fs.unlink(inPath).catch(() => {});
+        await fs.unlink(outPath).catch(() => {});
+    }
+}
+
+export async function getYoutubeDirectUrl(url, format = '360') {
+    const formats = [format, '480', '720', '240', '144'].filter((v, i, a) => a.indexOf(v) === i);
+    let lastError = null;
+    for (const fmt of formats) {
+        try {
+            const res = await st.download(url, fmt);
+            if (res?.url) return res;
+        } catch (e) {
+            lastError = e;
+        }
+    }
+    throw lastError || new Error('Gagal mendapatkan link download video');
+}
+
+export async function downloadWithFallback(url, format) {
+    try {
+        return await st.download(url, format);
+    } catch (e1) {
+        console.warn(`[SaveTube] gagal: ${e1.message}, fallback ke QByte`);
+        const res = await qbyte.download(url, format);
+        return { ...res, url: null, _buffer: res.buffer };
+    }
+}
