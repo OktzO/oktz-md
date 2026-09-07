@@ -156,7 +156,20 @@ async function simpleImageToWebp(buffer) {
   const outputPath = path.join(tmpDir, `sticker_${Date.now()}.webp`);
   fs.writeFileSync(inputPath, buffer);
   return new Promise((resolve, reject) => {
-    ffmpeg(inputPath)
+    let settled = false;
+    const cleanup = () => {
+      if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+      if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+    };
+    // guard: ffmpeg hang = promise tak pernah settle + 2 temp file + proses leak
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      try { command.kill("SIGKILL"); } catch { }
+      reject(new Error("simpleImageToWebp timeout"));
+    }, 60000);
+    const command = ffmpeg(inputPath)
       .outputOptions([
         "-vcodec",
         "libwebp",
@@ -174,17 +187,27 @@ async function simpleImageToWebp(buffer) {
       .on("end", () => {
         try {
           const webpBuffer = fs.readFileSync(outputPath);
-          if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
-          if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
-          resolve(webpBuffer);
+          cleanup();
+          if (!settled) {
+            settled = true;
+            clearTimeout(timer);
+            resolve(webpBuffer);
+          }
         } catch (err) {
-          reject(err);
+          if (!settled) {
+            settled = true;
+            clearTimeout(timer);
+            reject(err);
+          }
         }
       })
       .on("error", (err) => {
-        if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
-        if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
-        reject(err);
+        cleanup();
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          reject(err);
+        }
       })
       .save(outputPath);
   });
