@@ -904,10 +904,8 @@ async function handler(m, { sock }) {
     });
     await aiRich.send(m.chat, { includesUnifiedResponse: true });
 
-    console.log(`[ytplay] ${m.pushName || m.sender} putar ${info?.title || yt?.title}`);
     await m.react("✅");
   } catch (err) {
-    console.error(`[ytplay] ${m.pushName || m.sender} error:`, err.message);
     await m.react("☢");
     await m.reply(`Gagal memutar video YouTube.\n${err.message || err}`);
   }
