@@ -1,10 +1,19 @@
-import { bratVid } from 'brat-canvas/video'
 import config from '../../config.js'
 import te from '../../src/lib/ourin-error.js'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
 import { ensureFfmpegOnPath } from '../../src/lib/ourin-ffmpeg.js'
+
+// RAM: brat-canvas/video mem-parse ~80MB emoji JSON saat import (+200MB RSS).
+// Lazy-load hanya saat command dijalankan.
+let _bratVid = null
+async function getBratVid() {
+    if (!_bratVid) {
+        _bratVid = (await import('brat-canvas/video')).bratVid
+    }
+    return _bratVid
+}
 
 const pluginConfig = {
     name: 'bratvid2',
@@ -37,7 +46,7 @@ async function handler(m, { sock }) {
         ensureFfmpegOnPath()
 
         const tempFile = path.join(os.tmpdir(), `brat2-${Date.now()}.webp`)
-        const buffer = await bratVid(text, {
+        const buffer = await (await getBratVid())(text, {
             outputFormat: 'mp4',
         })
         await fs.promises.writeFile(tempFile, buffer)
