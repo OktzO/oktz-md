@@ -2126,6 +2126,8 @@ async function messageUpdateHandler(updates, sock) {
  * Format: { groupId: { announce: boolean, restrict: boolean, lastUpdate: timestamp } }
  */
 const groupSettingsCache = new Map();
+const GROUP_SETTINGS_CACHE_MAX = 500;
+let _lastGroupSettingsPrune = 0;
 
 /**
  * Debounce cooldown untuk mencegah spam (dalam ms)
@@ -2140,12 +2142,26 @@ async function groupSettingsHandler(update, sock) {
     const groupId = update.id;
     if (!groupId || !groupId.endsWith("@g.us")) return;
 
+    const now = Date.now();
+
     if (update.announce === undefined && update.restrict === undefined) {
       return;
     }
 
+    // Prune berkala: buang entri yang idle > 1 jam supaya cache tidak unbounded.
+    if (
+      groupSettingsCache.size > GROUP_SETTINGS_CACHE_MAX &&
+      now - _lastGroupSettingsPrune > 60_000
+    ) {
+      _lastGroupSettingsPrune = now;
+      for (const [id, entry] of groupSettingsCache) {
+        if (entry.lastUpdate && now - entry.lastUpdate > 60 * 60 * 1000) {
+          groupSettingsCache.delete(id);
+        }
+      }
+    }
+
     const cached = groupSettingsCache.get(groupId) || {};
-    const now = Date.now();
 
     if (cached.lastUpdate && now - cached.lastUpdate > 60 * 60 * 1000) {
       groupSettingsCache.delete(groupId);

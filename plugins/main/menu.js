@@ -595,7 +595,7 @@ Welcome to ${config.bot?.name}, Our bot will help you
 > 🤖 *Name*: ${config.bot?.name}
 > ⚙️ *Version*: ${config.bot?.version}
 > 👨‍💻 *Developer*: ${config.bot?.developer}
-> 🧩 *Library*: \`oktz-baileys\`
+> 🧩 *Library*: \`OnigiS\`
 
 🍅 *USER INFORMATION*
 > 🧑 *Name*: ${m.pushName}
@@ -684,7 +684,7 @@ Welcome to ${config.bot?.name}, Our bot will help you
 > 🤖 *Name*: ${config.bot?.name}
 > ⚙️ *Version*: ${config.bot?.version}
 > 👨‍💻 *Developer*: ${config.bot?.developer}
-> 🧩 *Library*: \`ourin-baileys\`
+> 🧩 *Library*: \`OnigiS\`
 
 🍅 *USER INFORMATION*
 > 🧑 *Name*: ${m.pushName}

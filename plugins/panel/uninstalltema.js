@@ -1,5 +1,8 @@
-import { Client } from 'ssh2'
 import te from '../../src/lib/ourin-error.js'
+// RAM: ssh2 +15MB — lazy-load hanya saat command SSH dijalankan.
+async function getSshClient() {
+    return (await import('ssh2')).Client
+}
 const pluginConfig = {
     name: ['uinstalltema', 'uninstalltema', 'removetema', 'hapustema'],
     alias: [],
@@ -47,7 +50,7 @@ async function handler(m) {
     }
     
     const command = `bash <(curl -s https://raw.githubusercontent.com/veryLinh/Theme-Autoinstaller/main/install.sh)`
-    const ress = new Client()
+    const ress = new (await getSshClient())()
     
     m.react('🕕')
     await m.reply(`🕕 *ᴍᴇᴍᴘʀᴏsᴇs ᴜɴɪɴsᴛᴀʟʟ ᴛᴇᴍᴀ...*\n\n> Tunggu 1-10 menit hingga proses selesai`)

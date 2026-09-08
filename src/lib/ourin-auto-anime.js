@@ -8,6 +8,7 @@ const BASE_URL = 'https://winbu.net'
 const DATA_DIR = path.join(process.cwd(), 'src', 'data')
 const SENT_FILE = path.join(DATA_DIR, 'autoanime_winbu_sent.json')
 const STATE_FILE = path.join(DATA_DIR, 'autoanime_winbu_state.json')
+const SENT_MAX = 5000
 
 const HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
@@ -27,6 +28,15 @@ function loadSent() {
 
 async function saveSent(set) {
     try {
+        // RAM: cap history episode agar Set tidak tumbuh tanpa batas.
+        if (set.size > SENT_MAX) {
+            const excess = set.size - SENT_MAX
+            let dropped = 0
+            for (const key of set.keys()) {
+                if (dropped++ >= excess) break
+                set.delete(key)
+            }
+        }
         await fsp.mkdir(DATA_DIR, { recursive: true })
         await fsp.writeFile(SENT_FILE, JSON.stringify([...set]))
     } catch {}

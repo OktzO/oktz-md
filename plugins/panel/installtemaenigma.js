@@ -1,5 +1,8 @@
-import { Client } from 'ssh2'
 import te from '../../src/lib/ourin-error.js'
+// RAM: ssh2 +15MB — lazy-load hanya saat command SSH dijalankan.
+async function getSshClient() {
+    return (await import('ssh2')).Client
+}
 const pluginConfig = {
     name: 'installtemaenigma',
     alias: ['installthemaenigma', 'temaenigma'],
@@ -60,7 +63,7 @@ function execSSH(conn, cmd) {
     })
 }
 
-function handler(m) {
+async function handler(m) {
     const text = m.text?.trim()
 
     if (!text) {
@@ -88,7 +91,7 @@ function handler(m) {
         readyTimeout: 30000
     }
 
-    const conn = new Client()
+    const conn = new (await getSshClient())()
 
     m.react('🕕')
 

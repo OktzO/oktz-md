@@ -51,7 +51,7 @@ function startTempCleaner() {
     const now = Date.now()
     const ageThreshold = now - MAX_AGE_MS
     let grandTotal = 0, grandSize = 0
-    for (const dir of ['temp', 'tmp']) {
+    for (const dir of ['temp', 'tmp', path.join('storage', 'temp')]) {
       const dirPath = path.join(process.cwd(), dir)
       try {
         await fsp.access(dirPath)

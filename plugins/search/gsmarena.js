@@ -1,5 +1,13 @@
 import te from "../../src/lib/ourin-error.js";
-import gsmarena from "gsmarena-api";
+
+// RAM: gsmarena-api +14MB — lazy-load hanya saat command dijalankan.
+let _gsmarena = null;
+async function getGsmarena() {
+  if (!_gsmarena) {
+    _gsmarena = (await import("gsmarena-api")).default;
+  }
+  return _gsmarena;
+}
 
 const pluginConfig = {
   name: "gsmarena",
@@ -30,6 +38,7 @@ async function handler(m) {
   m.react("🕕");
 
   try {
+    const gsmarena = await getGsmarena();
     const results = await gsmarena.search.search(text);
 
     if (!results || results.length === 0) {
