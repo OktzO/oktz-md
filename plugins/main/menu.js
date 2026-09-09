@@ -645,7 +645,34 @@ ${readmore}${s}`
         break;
 
       case 3: {
-        const bodyText = `🥞 *Hello Brother*
+        // Cuaca via open-meteo (pola .allmenu variant 5): tampil sebagai
+        // kartu lokasi di quoted message, BUKAN section di body card.
+        // Non-blocking: fallback teks jika API gagal/offline.
+        const weatherCodeMap = {
+          0: "☀️ Cerah", 1: "🌤️ Cerah Berawan", 2: "⛅ Berawan", 3: "☁️ Mendung",
+          45: "🌫️ Berkabut", 48: "🌫️ Kabut Tebal", 51: "🌦️ Gerimis",
+          61: "🌧️ Hujan Ringan", 63: "🌧️ Hujan", 65: "⛈️ Hujan Lebat",
+          80: "🌦️ Hujan Lokal", 95: "⛈️ Badai Petir",
+        };
+        let weatherText = "Cuaca tidak tersedia";
+        try {
+          const geo = await axios.get(
+            "https://geocoding-api.open-meteo.com/v1/search?name=Merangin&count=1",
+            { timeout: 5000 },
+          );
+          const loc = geo.data.results?.[0];
+          if (loc) {
+            const res = await axios.get(
+              `https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=temperature_2m,weather_code`,
+              { timeout: 5000 },
+            );
+            const current = res.data.current;
+            const kondisi = weatherCodeMap[current.weather_code] || "🌤️ Cerah Berawan";
+            weatherText = `${kondisi} | 🌡️ ${Math.round(current.temperature_2m)}°C\n📍 ${loc.name}`;
+          }
+        } catch { }
+
+        const bodyText = `🥞 *Hello Brother* ${greeting}
 
 Welcome to ${config.bot?.name}, Our bot will help you
 
@@ -687,7 +714,9 @@ Welcome to ${config.bot?.name}, Our bot will help you
                 }
               : undefined,
             body: {
-              text: `🥞 *Hello Brother*\n\nWelcome to ${config.bot?.name}, Our bot will help you\n\n${bodyText}`,
+              // bodyText sudah berisi intro lengkap — JANGAN interpolasi
+              // ulang di sini (penyebab "Hello Brother" muncul 2x).
+              text: bodyText,
             },
             footer: { text: footerText },
             nativeFlowMessage: {
@@ -728,10 +757,28 @@ Welcome to ${config.bot?.name}, Our bot will help you
           },
         };
 
+        // Quoted kartu lokasi berisi cuaca (pola .allmenu variant 5):
+        // tampil sebagai "preview" di atas kartu menu.
+        const weatherThumb = await sharp(getAssetBuffer("ourin"))
+          .resize(300, 300)
+          .toBuffer()
+          .catch(() => null);
+        const qWeather = {
+          key: { fromMe: false, participant: "0@s.whatsapp.net", remoteJid: m.sender },
+          message: {
+            locationMessage: {
+              degreesLatitude: 0,
+              degreesLongitude: 0,
+              name: weatherText,
+              ...(weatherThumb ? { jpegThumbnail: weatherThumb } : {}),
+            },
+          },
+        };
+
         const listMsg = generateWAMessageFromContent(
           m.chat,
           wrapInteractive(menuCard),
-          { userJid: sock.user?.id },
+          { quoted: qWeather, userJid: sock.user?.id },
         );
 
         await sock.relayMessage(m.chat, listMsg.message, {
