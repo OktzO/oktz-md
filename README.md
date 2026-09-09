@@ -1,6 +1,6 @@
 <div align="center">
 
-# ⚡ OURIN-MD v3.3.1
+# ⚡ OKTZ-MD v3.3.1
 ### Next-Generation Modular WhatsApp Multi-Device Bot
 
 [![Node Version](https://img.shields.io/badge/Node.js-%3E%3D22.0.0-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
@@ -104,7 +104,7 @@
 ## 📂 Struktur Proyek
 
 ```text
-ourin-md/
+oktz-md/
 ├── 📁 assets/                 # Asset statis bot
 │   ├── 📁 audio/              # Sound effects & voice prompts
 │   ├── 📁 fonts/              # Custom typography & canvas fonts
@@ -179,8 +179,8 @@ ourin-md/
 
 ### 1. Clone & Install Dependencies
 ```bash
-git clone https://github.com/OktzO/ourin-md.git
-cd ourin-md
+git clone https://github.com/OktzO/oktz-md.git
+cd oktz-md
 npm install
 ```
 > `npm install` otomatis menginstall `oktz-signal` (Rust native) + `oktz-baileys` v9.1.5.
@@ -284,7 +284,7 @@ Setiap plugin baru diletakkan di `plugins/<kategori>/<nama-plugin>.js` menggunak
 
 ```javascript
 /**
- * Plugin Template - Ourin-MD
+ * Plugin Template - Oktz-MD
  */
 export const config = {
   name: "ping",                         // Nama command utama (wajib)
@@ -373,7 +373,7 @@ Ringkasan cepat:
 - **Base Engine:** [`oktz-baileys`](https://www.npmjs.com/package/oktz-baileys) v9.1.5 (fork of `ourin-baileys` → `@whiskeysockets/baileys`)
 - **E2EE Signal Engine:** [`oktz-signal`](https://www.npmjs.com/package/oktz-signal) v0.1.7 — MIT replacement untuk `libsignal` (GPL), Rust native
 - **License:** Distributed under the **ISC License**.
-- **Stack E2EE:** `oktz-signal` (X3DH + Double Ratchet, Rust) + `oktz-curve25519` (native curve helpers) → `oktz-baileys` → `ourin-md`.
+- **Stack E2EE:** `oktz-signal` (X3DH + Double Ratchet, Rust) + `oktz-curve25519` (native curve helpers) → `oktz-baileys` → `oktz-md`.
 
 <div align="center">
   <sub>Dibuat dengan ❤️ untuk ekosistem bot WhatsApp yang lebih andal dan efisien.</sub>

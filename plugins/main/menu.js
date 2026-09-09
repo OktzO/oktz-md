@@ -575,19 +575,21 @@ Tekan tombol dibawah untuk info lebih lanjut dan untuk memilih kategori
           image: getAssetBuffer("ourin")
         }, { upload: sock.waUploadToServer })
         const readmore = String.fromCharCode(8206).repeat(4001)
-        await sock.relayMessage(
-          m.chat,
-          {
-            messageContextInfo: {},
-                interactiveMessage: {
-                  header: {
-                    title: "",
-                    subtitle: "",
-                    hasMediaAttachment: true,
-                    imageMessage: media.imageMessage
-                  },
-                  body: {
-                    text: `🥞 *Hello Brother*
+        // Kartu interactiveMessage wajib dibungkus wrapInteractive
+        // (viewOnceMessage + deviceListMetadata) — tanpa itu relay sukses
+        // tapi kartu tidak muncul di chat. messageParamsJson lama berisi
+        // field invalid (bomboclard/ourin.site) — dibuang.
+        const msg2 = generateWAMessageFromContent(m.chat, wrapInteractive({
+          messageContextInfo: {},
+          interactiveMessage: {
+            header: {
+              title: "",
+              subtitle: "",
+              hasMediaAttachment: true,
+              imageMessage: media.imageMessage
+            },
+            body: {
+              text: `🥞 *Hello Brother*
 
 Welcome to ${config.bot?.name}, Our bot will help you
 
@@ -607,71 +609,38 @@ Welcome to ${config.bot?.name}, Our bot will help you
 > 🍬 *Register*: ${user.isRegistered ? "Sudah" : "Belum"}
 
 ${readmore}${s}`
-                  },
-                  footer: {
-                    text: "Pilih tombol dibawah untuk info lebih lanjut"
-                  },
-                  contextInfo: {
-                    isForwarded: true,
-                    fprwardingScore: 9,
-                    participant: "0@s.whatsapp.net",
-                    quotedMessage: {
-                      conversation: `${config.bot?.name}`
-                    },
-                    mentionedJid: [
-                      `${m.sender}`
-                    ]
-                  },
-                  nativeFlowMessage: {
-                    messageParamsJson: JSON.stringify({
-                      limited_time_offer: {
-                        text: `${greeting}`,
-                        url: "Hai",
-                        copy_code: "Dibuat oleh " + config.bot?.developer,
-                        expiration_time: Date.now() + 1000000,
-                      },
-                      bottom_sheet: {
-                        in_thread_buttons_limit: 2,
-                        divider_indices: [1, 2, 3, 4, 5, 999],
-                        list_title: "Silahkan pilih menu yang kamu inginkan",
-                        button_title: "🍅 Selengkapnya",
-                      },
-                      tap_target_configuration: {
-                        title: " X ",
-                        description: "bomboclard",
-                        canonical_url: "https://ourin.site",
-                        domain: "shop.example.com",
-                        button_index: 0,
-                      },
-                    }),
-                    buttons: [
-                      {
-                        name: "single_select",
-                        buttonParamsJson: JSON.stringify({
-                          has_multiple_buttons: true
-                        })
-                      },
-                      {
-                        name: "cta_url",
-                        buttonParamsJson: JSON.stringify({
-                          display_text: "🍫 Owner Kami",
-                          url: `https://wa.me/${botConfig.owner?.number?.[0]}`,
-                          merchant_url: `https://wa.me/${config.owner?.number?.[0]}`,
-                        })
-                      },
-                      {
-                        name: "quick_reply",
-                        buttonParamsJson: JSON.stringify({
-                          display_text: "🍛 Dapatkan Script ( Gratis )",
-                          id: `${m.prefix}sc`
-                        })
-                      }
-                    ]
-                  }
+            },
+            footer: {
+              text: "Pilih tombol dibawah untuk info lebih lanjut"
+            },
+            contextInfo: {
+              mentionedJid: [m.sender]
+            },
+            nativeFlowMessage: {
+              buttons: [
+                {
+                  name: "cta_url",
+                  buttonParamsJson: JSON.stringify({
+                    display_text: "🍫 Owner Kami",
+                    url: `https://wa.me/${botConfig.owner?.number?.[0]}`,
+                    merchant_url: `https://wa.me/${config.owner?.number?.[0]}`,
+                  })
+                },
+                {
+                  name: "quick_reply",
+                  buttonParamsJson: JSON.stringify({
+                    display_text: "🍛 Dapatkan Script ( Gratis )",
+                    id: `${m.prefix}sc`
+                  })
                 }
-              },
-          {}
-        )
+              ]
+            }
+          }
+        }), { userJid: sock.user?.id })
+
+        await sock.relayMessage(m.chat, msg2.message, {
+          messageId: msg2.key.id,
+        })
 
         break;
 

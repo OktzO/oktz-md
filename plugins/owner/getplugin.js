@@ -1,7 +1,6 @@
 import fs from "fs";
 import path from "path";
 import config from "../../config.js";
-import { AIRich } from "../../src/lib/ourin-builder.js";
 const pluginConfig = {
   name: "getplugin",
   alias: ["gp", "getcode", "plugincode", "sourcecode"],
@@ -151,18 +150,13 @@ async function handler(m, { sock }) {
 
   const code = fs.readFileSync(pluginInfo.path);
 
+  // Key `interactiveButtons` pada sendMessage tidak didukung lib ourin/onigis
+  // (di-drop diam-diam / throw) — kirim source sebagai document .js saja.
   return await sock.sendMessage(m.chat, {
-    text: "Langsung aja, pencet tombol dibawah",
-    footer: config.bot.name,
-    interactiveButtons: [
-      {
-        name: "cta_copy",
-        buttonParamsJson: JSON.stringify({
-          display_text: "Salin Kode",
-          copy_code: code.toString("utf-8")
-        })
-      }
-    ]
+    document: code,
+    mimetype: "application/javascript",
+    fileName: pluginInfo.file,
+    caption: `📁 *${pluginInfo.category}/${pluginInfo.file}*\n${code.length} bytes`,
   }, { quoted: m });
 }
 

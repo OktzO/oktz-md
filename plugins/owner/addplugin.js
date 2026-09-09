@@ -43,12 +43,13 @@ async function handler(m, { sock }) {
 
   let code = quoted.text || quoted.body || "";
 
-  if (
-    quoted.mimetype === "application/javascript" ||
-    quoted.filename?.endsWith(".js")
-  ) {
+  // Quoted document plugin: objek serialize tidak punya `mimetype`/`filename`
+  // — deteksi via isDocument/type lalu unduh isi file aslinya. Tanpa ini,
+  // caption (bukan kode) yang tertulis ke file plugin.
+  if (quoted.isDocument || quoted.type === "documentMessage" || quoted.isMedia) {
     try {
-      code = (await quoted.download()).toString();
+      const buf = await quoted.download();
+      if (buf && buf.length) code = buf.toString();
     } catch (e) {
       return m.reply(`Maaf *${m.pushName}*, proses gagal karena file tidak dapat diunduh.`);
     }
