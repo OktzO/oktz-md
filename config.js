@@ -148,6 +148,7 @@ const config = {
   features: {
     antiCall: false, // Jika true, bot akan menolak panggilan masuk
     blockIfCall: false, // Jika true, bot akan memblokir nomor yang menelpon bot
+    antiSpam: true, // Rate limiter per-user (rate-limiter-flexible) — tanpa ini isSpamming() selalu false
     autoTyping: true,
     autoRead: true,
     logMessage: true,

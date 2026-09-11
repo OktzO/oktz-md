@@ -219,35 +219,32 @@ function setupAntiCrash() {
     logger.warn("system", `${warning.name}: ${warning.message}`);
   });
 
-  process.on("SIGINT", async () => {
+  // ponytail: guard 2 sinyal berturut-turut — SIGINT kedua = force exit,
+  // supaya shutdown yang menggantung tetap bisa diinterupsi user.
+  let shuttingDown = false;
+  const gracefulShutdown = async (signal) => {
+    if (shuttingDown) {
+      logger.warn("system", "forced exit (second signal)");
+      process.exit(1);
+    }
+    shuttingDown = true;
     console.log("");
-    logger.system("system", "Received STOP signal (SIGINT)");
+    logger.system("system", `Received ${signal} signal`);
     logger.info("database", "Saving data to local storage...");
     try {
       const db = getDatabase();
-      db.save();
+      // WAJIB await: tanpa ini process.exit memotong flush Turso → boot
+      // berikutnya data Turso stale MENIMPA file lokal yang lebih baru.
+      await db.save();
       logger.success("database", "All data successfully saved");
     } catch (error) {
       logger.warn("database", `save failed: ${error.message}`);
     }
     logger.info("system", "Engine stopped safely");
     process.exit(0);
-  });
-
-  process.on("SIGTERM", async () => {
-    console.log("");
-    logger.system("system", "Received TERMINATE signal (SIGTERM)");
-    logger.info("database", "Saving data to local storage...");
-    try {
-      const db = getDatabase();
-      db.save();
-      logger.success("database", "All data successfully saved");
-    } catch (error) {
-      logger.warn("database", `save failed: ${error.message}`);
-    }
-    logger.info("system", "Engine stopped safely");
-    process.exit(0);
-  });
+  };
+  process.on("SIGINT", () => gracefulShutdown("STOP (SIGINT)"));
+  process.on("SIGTERM", () => gracefulShutdown("TERMINATE (SIGTERM)"));
 
   logger.success("system", "Anti-Crash Protection is Active");
 }

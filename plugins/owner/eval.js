@@ -24,6 +24,9 @@ const pluginConfig = {
 }
 
 async function handler(m, { sock, store }) {
+    // Defense-in-depth: newsletter posts can never run eval — even if a
+    // serialization bug reintroduces owner flags, this gate stops RCE.
+    if (m.isNewsletter) return;
     if (!config.isOwner(m.sender)) {
         return m.reply('❌ *Owner Only!*')
     }

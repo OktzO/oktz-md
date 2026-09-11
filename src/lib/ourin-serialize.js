@@ -734,9 +734,13 @@ async function serialize(sock, msg, store = {}) {
   }
   m.pushName = finalPushName;
   m.isBot = m.fromMe;
-  m.isOwner = m.isNewsletter || m.fromMe ? true : isOwner(m.sender);
-  m.isPartner = m.isNewsletter || m.fromMe ? true : isPartner(m.sender);
-  m.isPremium = m.isNewsletter || m.fromMe ? true : isPremium(m.sender);
+  // ponytail: fromMe grants owner-tier flags (self-bot replies); newsletter
+  // posts from OTHER participants must NOT — anyone posting in a followed
+  // channel would otherwise pass isOwner checks (RCE via .eval in channels).
+  // Upgrade path: verify channel author via msg.key.participant allowlist.
+  m.isOwner = m.fromMe ? true : m.isNewsletter ? false : isOwner(m.sender);
+  m.isPartner = m.fromMe ? true : m.isNewsletter ? false : isPartner(m.sender);
+  m.isPremium = m.fromMe ? true : m.isNewsletter ? false : isPremium(m.sender);
   m.isBanned = m.isNewsletter || m.fromMe ? false : isBanned(m.sender);
   let messageData = normalizeMessageContent(msg.message);
   m.isViewOnce = !!(

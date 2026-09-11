@@ -1284,22 +1284,12 @@ async function startConnection(options = {}) {
     }
   });
 
-  sock.ev.on("group-participants.update", async (update) => {
-    if (options.onGroupUpdate) {
-      if (_groupEventQueue.length >= 100) {
-        colors.logger.warn(
-          "queue",
-          `group event queue full (${_groupEventQueue.length}), dropping event`,
-        );
-        return;
-      }
-      _groupEventQueue.push({
-        handler: options.onGroupUpdate,
-        args: [update, sock],
-      });
-      _processGroupQueue();
-    }
-  });
+  // NOTE: `group-participants.update` ditangani OLEH SATU listener di atas
+  // (line ~752) — handler lengkap (resolve LID, welcome/goodbye, sewa, dll)
+  // yang juga meng-enqueue `options.onGroupUpdate` via `_groupEventQueue`.
+  // Listener kedua yang dulu terpasang di sini menyebabkan setiap event
+  // participant diproses 2× (welcome dobel, DB write 2×, fetch metadata 2×).
+  // Audit 2026-09: dobel-listener dihapus.
 
   // groups.update ditangani listener tunggal di atas (onGroupSettingsUpdate
   // dipanggil inline + onGroupUpdate via queue) — dulu dua listener terpisah

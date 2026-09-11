@@ -22,6 +22,8 @@ const pluginConfig = {
 }
 
 async function handler(m, { sock, store }) {
+    // Defense-in-depth: newsletter posts can never run exec (RCE gate).
+    if (m.isNewsletter) return;
     if (!config.isOwner(m.sender)) {
         return m.reply('❌ *Owner Only!*')
     }

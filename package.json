@@ -4,8 +4,8 @@
   "description": "WhatsApp Multi-Device Bot dengan sistem plugin modular",
   "main": "index.js",
   "scripts": {
-    "start": "set NODE_ENV=development&& node --max-old-space-size=512 --expose-gc index.js",
-    "dev": "node --max-old-space-size=512 --expose-gc index.js",
+    "start": "node --max-old-space-size=512 --expose-gc index.js",
+    "dev": "NODE_ENV=development node --max-old-space-size=512 --expose-gc index.js",
     "test": "node --test \"tests/**/*.test.mjs\"",
     "lint": "eslint plugins/",
     "postinstall": "node -e \"try{require('sharp')}catch(e){require('child_process').execSync('npm rebuild sharp --foreground-scripts',{stdio:'inherit'})}\" && node native/fetch-prebuilt.mjs && node -e \"try{require('child_process').execSync('which ffmpeg || apt-get install -y ffmpeg',{stdio:'inherit'})}catch(e){}\""
@@ -62,7 +62,7 @@
     "node-cache": "^5.1.2",
     "node-fetch": "^2.7.0",
     "node-upload-images": "^1.0.1",
-    "ourin": "npm:onigis@10.1.0-rc.3",
+    "ourin": "npm:onigis@10.1.0-rc.4",
     "pino": "^9.14.0",
     "qrcode": "^1.5.4",
     "qs": "^6.14.1",
