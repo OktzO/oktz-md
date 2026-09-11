@@ -215,9 +215,73 @@ async function simpleImageToWebp(buffer) {
 
 async function extendSocket(sock) {
   const _originalSendMessage = sock.sendMessage.bind(sock);
+
+  // Normalisasi tombol legacy: `interactiveButtons` bukan field proto valid
+  // di onigis — hilang saat encode (tombol tak muncul). Translate ke
+  // interactiveMessage.nativeFlowMessage yang valid. Support kombinasi
+  // text/footer/header/contextInfo/media seperti pola plugin lama.
+  const normalizeLegacyButtons = async (content) => {
+    if (!content || !Array.isArray(content.interactiveButtons)) return content;
+
+    const {
+      interactiveButtons,
+      text,
+      caption,
+      footer,
+      header,
+      contextInfo,
+      image,
+      video,
+      document,
+      mimetype,
+      fileName,
+      ...rest
+    } = content;
+
+    const interactive = {
+      header: { hasMediaAttachment: false },
+      body: { text: text ?? caption ?? "" },
+      ...(footer ? { footer: { text: footer } } : {}),
+      nativeFlowMessage: { buttons: interactiveButtons },
+      ...(contextInfo ? { contextInfo } : {}),
+    };
+
+    if (typeof header === "string") interactive.header.title = header;
+
+    const mediaPayload = image
+      ? { image }
+      : video
+        ? { video }
+        : document
+          ? { document: { ...document, ...(fileName ? { fileName } : {}) } }
+          : null;
+
+    if (mediaPayload) {
+      try {
+        const media = await prepareWAMessageMedia(mediaPayload, {
+          upload: sock.waUploadToServer,
+        });
+        const mediaKey = image
+          ? "imageMessage"
+          : video
+            ? "videoMessage"
+            : "documentMessage";
+        if (media[mediaKey]) {
+          interactive.header.hasMediaAttachment = true;
+          interactive.header[mediaKey] = media[mediaKey];
+        }
+      } catch {
+        // media gagal upload — kartu tetap terkirim tanpa header media
+      }
+    }
+
+    return { ...rest, interactiveMessage: interactive };
+  };
+
   sock.sendMessage = async (jid, content, options) => {
+    const normalized = await normalizeLegacyButtons(content);
     try {
-      return await _originalSendMessage(jid, content, options);
+      return await _originalSendMessage(jid, normalized, options);
     } catch (err) {
       const isPrivate =
         jid &&
@@ -554,36 +618,62 @@ async function extendSocket(sock) {
     quoted,
     options = {},
   ) {
-    const msg = {};
-    if (options.header) msg.header = options.header;
-    if (options.contextInfo) msg.contextInfo = options.contextInfo;
-    if (text !== null) msg.caption = text;
-    if (options.footer) msg.footer = options.footer;
-    if (options.buttons) msg.interactiveButtons = options.buttons;
-    if (!options.footer) msg.footer = config.bot?.name || "Ourin-AI";
+    // Root cause tombol hilang: dulu pakai msg.interactiveButtons — bukan
+    // field proto valid, hilang saat encode. Bentuk yang valid adalah
+    // interactiveMessage.nativeFlowMessage (header/body/footer + buttons).
+    // sendMessage onigis auto-inject node <biz> untuk tipe "interactive",
+    // jadi cukup lewat sendMessage biasa.
+    const mediaType = options.type || options.mediaType || "image";
+    const header = { hasMediaAttachment: false };
+
     if (source) {
       let data = source;
-      const mediaType = options.type || options.mediaType || "image";
-      if (Buffer.isBuffer(source)) {
-      } else if (typeof source === "string" && /^https?:\/\//.test(source))
+      if (typeof source === "string" && /^https?:\/\//.test(source))
         data = { url: source };
       else if (typeof source === "string" && fs.existsSync(source))
         data = fs.readFileSync(source);
-      else if (source === null) data = null;
-      if (mediaType === "image" && data) msg.image = data;
-      else if (mediaType === "video" && data) {
-        msg.video = data;
-        msg.mimetype = options.mimetype || "video/mp4";
-      } else if (mediaType === "audio" && data) {
-        msg.audio = data;
-        msg.mimetype = options.mimetype || "audio/mpeg";
-      } else if (mediaType === "document" && data) {
-        msg.document = data;
-        msg.mimetype = options.mimetype || "application/octet-stream";
-        if (options.fileName) msg.fileName = options.fileName;
+
+      if (data) {
+        try {
+          const media = await prepareWAMessageMedia(
+            mediaType === "video"
+              ? { video: data }
+              : mediaType === "document"
+                ? { document: data, mimetype: options.mimetype }
+                : { image: data },
+            { upload: sock.waUploadToServer },
+          );
+          const mediaKey =
+            mediaType === "video"
+              ? "videoMessage"
+              : mediaType === "document"
+                ? "documentMessage"
+                : "imageMessage";
+          if (media[mediaKey]) {
+            header.hasMediaAttachment = true;
+            header[mediaKey] = media[mediaKey];
+          }
+        } catch {
+          // media gagal upload — kartu tetap terkirim tanpa header media
+        }
       }
     }
-    return sock.sendMessage(jid, msg, { quoted });
+
+    const interactive = {
+      header: { ...header, ...(options.header || {}) },
+      body: { text: text ?? "" },
+      footer: { text: options.footer || config.bot?.name || "Ourin-AI" },
+      nativeFlowMessage: {
+        buttons: options.buttons || [],
+      },
+      ...(options.contextInfo ? { contextInfo: options.contextInfo } : {}),
+    };
+
+    return sock.sendMessage(
+      jid,
+      { interactiveMessage: interactive },
+      { quoted },
+    );
   };
 
   const _originalProfilePictureUrl = sock.profilePictureUrl.bind(sock);
