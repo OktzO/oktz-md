@@ -72,7 +72,8 @@
     "tesseract.js": "^7.0.0",
     "tough-cookie": "^6.0.0",
     "undici": "^7.22.0",
-    "yt-search": "^2.13.1"
+    "yt-search": "^2.13.1",
+    "ytmusic-api": "^5.3.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
