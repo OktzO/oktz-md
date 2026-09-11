@@ -7,7 +7,6 @@ import axios from "axios";
 import crypto from "crypto";
 import te from "../../src/lib/ourin-error.js";
 import { f } from "../../src/lib/ourin-http.js";
-import { AIRich } from "../../src/lib/ourin-builder.js";
 
 const pluginConfig = {
   name: "pin",
@@ -30,46 +29,48 @@ async function handler(m, { sock }) {
   if (!query) {
     return m.reply(
       `🔍 *ᴘɪɴᴛᴇʀᴇsᴛ sᴇᴀʀᴄʜ*\n\n` +
-      `> Contoh:\n` +
-      `\`${m.prefix}pin Zhao Lusi\``,
+        `> Contoh:\n` +
+        `\`${m.prefix}pin Zhao Lusi\``,
     );
   }
-  m.react("🕕");
+  await m.react("🕕");
 
   try {
+    // cuki.biz.id mati (401) — pindah ke azbry (sama seperti pindl.js)
     const data = await f(
-      `https://api.cuki.biz.id/api/search/pinterest?apikey=cuki-x&query=${encodeURIComponent(query)}&type=image`
+      `https://api.azbry.com/api/search/pinterest?q=${encodeURIComponent(query)}`,
     );
 
-    const results = data?.data?.results?.filter(item => item.image_url)?.slice(0, 10);
-    if (!results || results.length === 0) {
-      m.react("❌");
+    const results = (data?.result || [])
+      .map((item) => item?.image || item?.images_url)
+      .filter(Boolean)
+      .slice(0, 10);
+    if (results.length === 0) {
+      await m.react("❌");
       return m.reply(`❌ Tidak ditemukan hasil untuk: ${query}`);
     }
 
     const mediaList = [];
 
-    for (const item of results) {
-      const imageUrl = item.image_url;
-      if (!imageUrl) continue;
-
+    for (const imageUrl of results) {
       try {
         const imgRes = await axios.get(imageUrl, {
           responseType: "arraybuffer",
           timeout: 15000,
+          headers: { Referer: "https://www.pinterest.com/" },
         });
         const imgBuffer = Buffer.from(imgRes.data);
 
         if (imgBuffer.length > 1000) {
           mediaList.push({ image: imgBuffer });
         }
-      } catch (e) {
+      } catch {
         continue;
       }
     }
 
     if (mediaList.length === 0) {
-      m.react("❌");
+      await m.react("❌");
       return m.reply("❌ Gagal memuat gambar");
     }
 
@@ -111,38 +112,22 @@ async function handler(m, { sock }) {
           messageId: msg.key.id,
         });
       }
-
-      m.react("✅");
     } catch (albumErr) {
-      console.log("[Pins] Album gagal, kirim satu-satu:", albumErr.message);
+      console.log("[Pin] Album gagal, kirim satu-satu:", albumErr.message);
 
-      const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-      const saluranName =
-        config.saluran?.name || config.bot?.name || "Ourin-AI";
-
+      // Fallback kirim satu-satu
       for (const content of mediaList) {
         await sock.sendMessage(
           m.chat,
-          {
-            image: content.image,
-            contextInfo: {
-              forwardingScore: 9999,
-              isForwarded: true,
-              forwardedNewsletterMessageInfo: {
-                newsletterJid: saluranId,
-                newsletterName: saluranName,
-                serverMessageId: 127,
-              },
-            },
-          },
+          { image: content.image },
           { quoted: m },
         );
       }
     }
-    m.react("✅");
+    await m.react("✅");
   } catch (err) {
-    console.error("[Pins] Error:", err.message);
-    m.react("☢");
+    console.error("[Pin] Error:", err.message);
+    await m.react("☢");
     m.reply(te(m.prefix, m.command, m.pushName));
   }
 }
