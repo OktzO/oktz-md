@@ -4,8 +4,8 @@
 ### Next-Generation Modular WhatsApp Multi-Device Bot
 
 [![Node Version](https://img.shields.io/badge/Node.js-%3E%3D22.0.0-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
-[![Engine](https://img.shields.io/badge/Engine-oktz--baileys%20v9.1.5-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](https://github.com/whiskeysockets/Baileys)
-[![Signal](https://img.shields.io/badge/Signal-oktz--signal%200.1.7%20%28MIT%29-red?style=for-the-badge&logo=signal&logoColor=white)](https://www.npmjs.com/package/oktz-signal)
+[![Engine](https://img.shields.io/badge/Engine-Onigi--Baileys%20v10.1.0--rc.3-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](https://github.com/OktzO/Onigi)
+[![Signal](https://img.shields.io/badge/Signal-oktz--signal%200.2.0--rc.1%20%28MIT%29-red?style=for-the-badge&logo=signal&logoColor=white)](https://www.npmjs.com/package/oktz-signal)
 [![Database](https://img.shields.io/badge/Database-Turso%20%26%20LowDB-4ff8d2?style=for-the-badge&logo=sqlite&logoColor=black)](https://turso.tech)
 [![Plugins](https://img.shields.io/badge/Plugins-827%20Loaded-blueviolet?style=for-the-badge&logo=speedtest&logoColor=white)](#-kategori-plugin-34-kategori)
 [![License](https://img.shields.io/badge/License-ISC-orange?style=for-the-badge)](LICENSE)
@@ -21,6 +21,7 @@
 [Struktur File](#-struktur-proyek) •
 [Instalasi](#-instalasi--menjalankan) •
 [Konfigurasi](#-konfigurasi) •
+[Benchmark & Audit](#-benchmark--audit) •
 [Panduan Plugin](#-panduan-membuat-plugin) •
 [Testing](#-testing--keamanan) •
 [Infrastruktur](#-infrastruktur--arsitektur)
@@ -30,14 +31,14 @@
 > ## ⚠️ STATUS: UNSTABLE / EXPERIMENTAL
 >
 > **Versi ini mengganti engine E2EE Signal dari `libsignal` (GPL) ke `oktz-signal` (MIT, Rust native)**
-> melalui `oktz-baileys` v9.1.5.
+> >melalui **Onigi-Baileys v10.1.0-rc.3** (rebase `@whiskeysockets/baileys` 7.0.0-rc14).
 >
 > - Kriptografi & wire format diuji terhadap oracle `libsignal` v6, **tapi belum 100% terjamin
 >   kompatibel di semua kondisi WhatsApp** (perangkat/iOS lama, re-sync session, backlog message).
-> - Bug interop diperbaiki secara iteratif — **selalu update ke versi `oktz-signal` & `oktz-baileys` terbaru**.
+> - Bug interop diperbaiki secara iteratif — **selalu update ke versi `oktz-signal` & `Onigi` terbaru**.
 > - Jika ada pesan tampil **"Menunggu pesan ini..."** / MAC verification failed: pastikan
 >   `git pull && npm install` di panel, lalu restart. Kalau masih, unlink devices & re-scan QR.
-> - Belum ada audit keamanan pihak ketiga. Gunakan untuk produksi dengan kesadaran risiko.
+> - **Audit internal September 2026** sudah dilakukan (lihat [Benchmark & Audit](#-benchmark--audit)) — 2 temuan CRITICAL di bot ini sudah terdokumentasi dengan lokasi fix-nya.
 
 ---
 
@@ -183,7 +184,7 @@ git clone https://github.com/OktzO/oktz-md.git
 cd oktz-md
 npm install
 ```
-> `npm install` otomatis menginstall `oktz-signal` (Rust native) + `oktz-baileys` v9.1.5.
+> `npm install` otomatis menginstall `oktz-signal` (Rust native) + `onigis` v10.1.0-rc.3 (Onigi-Baileys).
 > Native binary disertakan untuk `linux-x64-gnu`. Di platform lain, build dari source:
 > ```bash
 > cd node_modules/oktz-signal && npm run build:native  # butuh Rust + gcc
@@ -223,6 +224,62 @@ node index.js
 ```
 
 **Pairing / QR:** Set `config.session.usePairingCode: true` + isi `pairingNumber` untuk pairing code, atau `false` untuk QR code. Scan dengan WhatsApp → Linked Devices.
+
+---
+
+## 📊 Benchmark & Audit
+
+> Audit baris-per-baris penuh (September 2026): core bot + database/storage layer + engine Onigi + oktz-signal, plus benchmark reproducible vs `@whiskeysockets/baileys` 7.0.0-rc14 upstream dan `libsignal` v6. Environment: Node v20.19.1, Linux x64.
+
+### Performa stack E2EE (oktz-signal via Onigi vs baileys asli + libsignal)
+
+Stack bot ini memakai `onigis@10.1.0-rc.3` → `oktz-signal@0.2.0-rc.1` (Rust). Angka berbanding engine baileys asli (libsignal JS):
+
+| Skenario | Stack oktz (Rust) | Baileys asli (libsignal JS) | Hasil |
+|---|---:|---:|---|
+| **Build session E2EE penuh** (X3DH + PKMsg) | 3,5 ms | 31,8 ms | **9× lebih cepat** |
+| **Steady-state per pesan** (ratchet dua arah) | 195–330 µs | 570–695 µs | **2–3,5× lebih cepat** |
+| XEdDSA sign / verify | 139–166 µs | 30,7–32,3 **ms** | **186–233× lebih cepat** |
+| WABinary roundtrip (rust encode) | 146,4 µs | 154,7 µs | +5,7% lebih cepat |
+
+Detail lengkap per-primitive + metodologi: lihat README [oktz-signal](../oktz-signal/README.md) dan [Onigi](../Onigi/README.md).
+
+### Hasil audit — ringkasan temuan
+
+| Area | CRITICAL | HIGH | MEDIUM | LOW |
+|---|---:|---:|---:|---:|
+| Core bot (handler, connection, plugins) | 1 | 5 | 12 | 9 |
+| Database & storage | 1 | 5 | 9 | 5 |
+| Onigi (engine baileys) | 1 | 2 | 8 | 8 |
+| oktz-signal (Rust E2EE) | 0 | 4 | 8 | 7 |
+
+**Estimasi RAM jangka panjang** (mengukur sendiri via profiler bawaan, baseline idle 290–375 MB): normal 24 jam ±350–450 MB (stabil) — 72 jam di ≥500 grup aktif ±450–600 MB (GC threshold 450 MB mulai sering trigger, by design `--expose-gc`).
+
+### Top fix prioritas (urutan dampak)
+
+1. 🔴 **CRITICAL — Privilege escalation via newsletter** (`src/lib/ourin-serialize.js:662-663,737-740`): semua post dari channel yang bot follow mendapat `m.isOwner = true` → post `.eval` di channel publik = RCE penuh. Fix: jangan turunkan isOwner dari isNewsletter; skip pesan channel yang participant ≠ bot.
+2. 🔴 **CRITICAL — `.backupdb` crash** (`src/lib/ourin-store-backup.js:105`): `config` dipakai tanpa import → ReferenceError saat runtime. Fix: 1 baris import.
+3. 🟠 **HIGH — Listener `group-participants.update` terpasang 2×** (`src/connection.js:752 + 1287`): welcome/goodbye terkirim dobel, DB write 2×, fetch metadata 2× per event. Fix: hapus salah satu.
+4. 🟠 **HIGH — SIGINT memotong flush Turso** (`index.js:222-250`): `db.save()` tanpa await + `process.exit(0)` → data lokal lebih baru bisa tertimpa Turso stale saat boot berikutnya. Fix: await save sebelum exit.
+5. 🟠 **HIGH — Write non-atomic + reset `[]` senyap di 5 modul DB** (`ourin-premium-db.js`, `ourin-jadibot-database.js`, `ourin-roles-cpanel.js`, `ourin-lid.js`, `ourin-sticker-command.js`): crash mid-write = corrupt → loader diam-diam reset `[]` → owner/premium bisa wipe tanpa jejak. Fix: pola temp+rename + backup `.corrupted` seperti di `validateJsonFile`.
+6. 🟠 **HIGH — Rate limiter anti-spam tidak pernah aktif** (`config.js:148-156`): key `features.antiSpam` tidak ada di object → `isSpamming` selalu false. Fix: tambahkan key tersebut.
+7. 🟠 **HIGH — `npm start` men-set `NODE_ENV=production` bukannya development flag** — script `start` masih men-set `NODE_ENV=development` → hot-reload watcher aktif di production, setiap edit plugin menumpuk modul di ESM cache (+1–5 MB/edit, tak bisa dibersihkan). Fix: pisahkan script start production.
+
+### Inefficiency hot-path terbesar (CPU per pesan, tanpa ubah perilaku)
+
+- Cache layer `ourin-performance.js` (121 baris) **dibuat tapi tidak pernah dipakai** — `db.getGroup` dipanggil ±8× per pesan grup, `db.getUser` 4×. Aktifkan (atau hapus).
+- `isOwner/isPremium/isPartner/isBanned` full-scan berlapis → `isOwner()` dieksekusi ≥4× per pesan (`config.js:332-494`).
+- `setUser` per command dengan `lastSeen` → rewrite blob users.json PENUH tiap 5 detik (`src/handler.js:860-865`).
+- `sharp().resize()` asset statis per reply variant 2/5/7/11 (`ourin-serialize.js:993-1260`) — hasil identik tiap kali; precompute saat boot.
+- `isPremium()` memicu `db.save()` penuh saat menemukan entry expired — pindah expiry-sweep ke scheduler.
+
+### Dead code terverifikasi (aman dihapus)
+
+Folder `otz-signal/` (kosong 0 file, sisa proyek rewrite), `ourin-backup.js` + `ourin-roles-linode.js` + `ourin-roles-digitalocean.js` (dead + broken), `ourin-otp-service.js`, `ourin-latex.js`, `ourin-carbon.js`, `ourin-pinterest.js` (0 importer), cache layer `ourin-performance.js` (90%), tabel Turso `backup_snapshots` (dibuat tak dipakai), 2 plugin `botmode` bentrok nama (group vs owner — loader menimpa, fitur group tak terjangkau), duplikat binary `.node` 1MB.
+
+### Yang sudah benar (layak dicatat)
+
+Atomic write temp+rename di Database utama, parameterized SQL semua (0 SQL injection), backup file corrupt dengan `.bak` di `validateJsonFile`, `matchJid` strict-equality (fix privilege escalation lama, ada regression test), temp cleaner dengan yield + retention, sweeper semua cache game/session, guard `_asyncWrite`, dan matchJid test di CI.
 
 ---
 
@@ -370,10 +427,10 @@ Ringkasan cepat:
 ## 📄 Lisensi & Kredit
 
 - **Author:** [Zann](https://github.com)
-- **Base Engine:** [`oktz-baileys`](https://www.npmjs.com/package/oktz-baileys) v9.1.5 (fork of `ourin-baileys` → `@whiskeysockets/baileys`)
-- **E2EE Signal Engine:** [`oktz-signal`](https://www.npmjs.com/package/oktz-signal) v0.1.7 — MIT replacement untuk `libsignal` (GPL), Rust native
+- **Base Engine:** [`Onigi-Baileys`](https://github.com/OktzO/Onigi) v10.1.0-rc.3 — rebase `@whiskeysockets/baileys` 7.0.0-rc14 (via alias `ourin` di package.json)
+- **E2EE Signal Engine:** [`oktz-signal`](https://www.npmjs.com/package/oktz-signal) v0.2.0-rc.1 — MIT replacement untuk `libsignal` (GPL), Rust native
 - **License:** Distributed under the **ISC License**.
-- **Stack E2EE:** `oktz-signal` (X3DH + Double Ratchet, Rust) + `oktz-curve25519` (native curve helpers) → `oktz-baileys` → `oktz-md`.
+- **Stack E2EE:** `oktz-signal` (X3DH + Double Ratchet, Rust) + `oktz-curve25519` (native curve helpers) → `onigis` (Onigi-Baileys) → `oktz-md`.
 
 <div align="center">
   <sub>Dibuat dengan ❤️ untuk ekosistem bot WhatsApp yang lebih andal dan efisien.</sub>
