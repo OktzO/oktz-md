@@ -216,12 +216,82 @@ async function simpleImageToWebp(buffer) {
 async function extendSocket(sock) {
   const _originalSendMessage = sock.sendMessage.bind(sock);
 
+  // Kirim kartu tombol interaktif. Pola yang terbukti jalan di onigis
+  // (dipakai jpm.js): viewOnceMessage wrapper + proto.fromObject ->
+  // generateWAMessageFromContent -> relayMessage + node <biz> native_flow.
+  // CATATAN: sendMessage TIDAK mentransform content interactiveMessage —
+  // lewat sendMessage tombolnya hilang diam-diam.
+  const sendInteractiveCard = async (
+    jid,
+    { body, footer, header = {}, buttons = [], contextInfo },
+    options = {},
+  ) => {
+    const interactive = proto.Message.InteractiveMessage.fromObject({
+      body: proto.Message.InteractiveMessage.Body.fromObject({
+        text: body ?? "",
+      }),
+      ...(footer
+        ? {
+            footer: proto.Message.InteractiveMessage.Footer.fromObject({
+              text: footer,
+            }),
+          }
+        : {}),
+      header: proto.Message.InteractiveMessage.Header.fromObject({
+        hasMediaAttachment: false,
+        ...header,
+      }),
+      nativeFlowMessage:
+        proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
+          buttons,
+        }),
+      ...(contextInfo ? { contextInfo } : {}),
+    });
+
+    const msg = generateWAMessageFromContent(
+      jid,
+      {
+        viewOnceMessage: {
+          message: {
+            messageContextInfo: {
+              deviceListMetadata: {},
+              deviceListMetadataVersion: 2,
+            },
+            interactiveMessage: interactive,
+          },
+        },
+      },
+      { ...options },
+    );
+
+    await sock.relayMessage(jid, msg.message, {
+      messageId: msg.key.id,
+      additionalNodes: [
+        {
+          tag: "biz",
+          attrs: {},
+          content: [
+            {
+              tag: "interactive",
+              attrs: { type: "native_flow", v: "1" },
+              content: [
+                { tag: "native_flow", attrs: { v: "9", name: "mixed" } },
+              ],
+            },
+          ],
+        },
+      ],
+      ...options,
+    });
+    return msg;
+  };
+
   // Normalisasi tombol legacy: `interactiveButtons` bukan field proto valid
-  // di onigis — hilang saat encode (tombol tak muncul). Translate ke
-  // interactiveMessage.nativeFlowMessage yang valid. Support kombinasi
+  // di onigis — hilang saat encode (tombol tak muncul). Alihkan ke kartu
+  // interaktif via sendInteractiveCard. Support kombinasi
   // text/footer/header/contextInfo/media seperti pola plugin lama.
-  const normalizeLegacyButtons = async (content) => {
-    if (!content || !Array.isArray(content.interactiveButtons)) return content;
+  const normalizeLegacyButtons = async (jid, content, options) => {
+    if (!content || !Array.isArray(content.interactiveButtons)) return null;
 
     const {
       interactiveButtons,
@@ -235,18 +305,10 @@ async function extendSocket(sock) {
       document,
       mimetype,
       fileName,
-      ...rest
     } = content;
 
-    const interactive = {
-      header: { hasMediaAttachment: false },
-      body: { text: text ?? caption ?? "" },
-      ...(footer ? { footer: { text: footer } } : {}),
-      nativeFlowMessage: { buttons: interactiveButtons },
-      ...(contextInfo ? { contextInfo } : {}),
-    };
-
-    if (typeof header === "string") interactive.header.title = header;
+    const cardHeader = {};
+    if (typeof header === "string") cardHeader.title = header;
 
     const mediaPayload = image
       ? { image }
@@ -267,21 +329,33 @@ async function extendSocket(sock) {
             ? "videoMessage"
             : "documentMessage";
         if (media[mediaKey]) {
-          interactive.header.hasMediaAttachment = true;
-          interactive.header[mediaKey] = media[mediaKey];
+          cardHeader.hasMediaAttachment = true;
+          cardHeader[mediaKey] = media[mediaKey];
         }
       } catch {
         // media gagal upload — kartu tetap terkirim tanpa header media
       }
     }
 
-    return { ...rest, interactiveMessage: interactive };
+    await sendInteractiveCard(
+      jid,
+      {
+        body: text ?? caption ?? "",
+        footer,
+        header: cardHeader,
+        buttons: interactiveButtons,
+        contextInfo,
+      },
+      options,
+    );
+    return { sent: true };
   };
 
   sock.sendMessage = async (jid, content, options) => {
-    const normalized = await normalizeLegacyButtons(content);
+    const legacy = await normalizeLegacyButtons(jid, content, options);
+    if (legacy) return legacy;
     try {
-      return await _originalSendMessage(jid, normalized, options);
+      return await _originalSendMessage(jid, content, options);
     } catch (err) {
       const isPrivate =
         jid &&
@@ -619,12 +693,10 @@ async function extendSocket(sock) {
     options = {},
   ) {
     // Root cause tombol hilang: dulu pakai msg.interactiveButtons — bukan
-    // field proto valid, hilang saat encode. Bentuk yang valid adalah
-    // interactiveMessage.nativeFlowMessage (header/body/footer + buttons).
-    // sendMessage onigis auto-inject node <biz> untuk tipe "interactive",
-    // jadi cukup lewat sendMessage biasa.
+    // field proto valid, hilang saat encode. Sekarang lewat sendInteractiveCard
+    // (viewOnceMessage + relayMessage + node biz) — pola yang terbukti jalan.
     const mediaType = options.type || options.mediaType || "image";
-    const header = { hasMediaAttachment: false };
+    const cardHeader = {};
 
     if (source) {
       let data = source;
@@ -650,8 +722,8 @@ async function extendSocket(sock) {
                 ? "documentMessage"
                 : "imageMessage";
           if (media[mediaKey]) {
-            header.hasMediaAttachment = true;
-            header[mediaKey] = media[mediaKey];
+            cardHeader.hasMediaAttachment = true;
+            cardHeader[mediaKey] = media[mediaKey];
           }
         } catch {
           // media gagal upload — kartu tetap terkirim tanpa header media
@@ -659,20 +731,16 @@ async function extendSocket(sock) {
       }
     }
 
-    const interactive = {
-      header: { ...header, ...(options.header || {}) },
-      body: { text: text ?? "" },
-      footer: { text: options.footer || config.bot?.name || "Ourin-AI" },
-      nativeFlowMessage: {
-        buttons: options.buttons || [],
-      },
-      ...(options.contextInfo ? { contextInfo: options.contextInfo } : {}),
-    };
-
-    return sock.sendMessage(
+    return sendInteractiveCard(
       jid,
-      { interactiveMessage: interactive },
-      { quoted },
+      {
+        body: text ?? "",
+        footer: options.footer || config.bot?.name || "Ourin-AI",
+        header: { ...cardHeader, ...(options.header || {}) },
+        buttons: options.buttons || [],
+        contextInfo: options.contextInfo,
+      },
+      { quoted, ...(options.contextInfo ? {} : {}) },
     );
   };
 
