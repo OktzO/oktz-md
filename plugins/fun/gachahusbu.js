@@ -24,13 +24,14 @@ const pluginConfig = {
 
 async function getHusbuImage(keyword) {
   try {
-    const res = await axios.get(`https://api.cuki.biz.id/api/search/pinterest?apikey=cuki-x&query=${encodeURIComponent(keyword)}&type=image`);
-    const results = res.data?.data?.results;
-    if (results && results.length > 0) {
-      const validImages = results.filter((item) => item.image_url);
+    // cuki.biz.id mati (401) — pindah ke azbry (konsisten pin.js/pindl.js)
+    const res = await axios.get(`https://api.azbry.com/api/search/pinterest?q=${encodeURIComponent(keyword)}`, { timeout: 15000 });
+    const results = res.data?.result;
+    if (Array.isArray(results) && results.length > 0) {
+      const validImages = results.map((item) => item?.image).filter(Boolean);
       if (validImages.length > 0) {
         const limit = Math.min(15, validImages.length);
-        return validImages[Math.floor(Math.random() * limit)].image_url;
+        return validImages[Math.floor(Math.random() * limit)];
       }
     }
   } catch (e) {
@@ -41,7 +42,11 @@ async function getHusbuImage(keyword) {
 
 async function getBuffer(url) {
   try {
-    const res = await axios.get(url, { responseType: "arraybuffer", timeout: 15000 });
+    const res = await axios.get(url, {
+      responseType: "arraybuffer",
+      timeout: 15000,
+      headers: { Referer: "https://www.pinterest.com/" },
+    });
     return Buffer.from(res.data);
   } catch {
     return null;
@@ -61,14 +66,28 @@ function angerMeter(h) {
 }
 
 async function sendHusbuMessage(m, sock, husbu, textContent, customButtons = null) {
+  // Gambar random tiap kali dipanggil (bukan hanya saat imageUrl kosong)
   let imgBuffer = null;
-  if (husbu.imageUrl) imgBuffer = await getBuffer(husbu.imageUrl);
-  if (!imgBuffer) {
-    const newUrl = await getHusbuImage(husbu.keyword);
+  const newUrl = await getHusbuImage(husbu.keyword);
+  if (newUrl) {
     husbu.imageUrl = newUrl;
-    imgBuffer = await getBuffer(newUrl) || Buffer.alloc(0);
+    imgBuffer = await getBuffer(newUrl);
   }
-  const media = await prepareWAMessageMedia({ image: imgBuffer }, { upload: sock.waUploadToServer });
+  if (!imgBuffer || !imgBuffer.length) {
+    imgBuffer = husbu.imageUrl ? await getBuffer(husbu.imageUrl) : null;
+  }
+
+  // Buffer kosong/null => JANGAN buat imageMessage. Header dengan
+  // hasMediaAttachment:true tapi imageMessage kosong menghasilkan pesan
+  // invalid ("versi WhatsApp tidak mendukung"). Kartu teks tetap valid.
+  let media = null;
+  if (imgBuffer && imgBuffer.length > 100) {
+    try {
+      media = await prepareWAMessageMedia({ image: imgBuffer }, { upload: sock.waUploadToServer });
+    } catch {
+      media = null;
+    }
+  }
   let buttons = customButtons;
   if (!buttons) {
     if (husbu.affection < 80) {
@@ -115,8 +134,8 @@ async function sendHusbuMessage(m, sock, husbu, textContent, customButtons = nul
           header: {
             title: `🌟 *${husbu.tier.toUpperCase()} TIER HUSBANDO* 🌟`,
             subtitle: husbu.name,
-            hasMediaAttachment: true,
-            imageMessage: media.imageMessage,
+            hasMediaAttachment: !!media,
+            ...(media?.imageMessage ? { imageMessage: media.imageMessage } : {}),
           },
           nativeFlowMessage: { buttons },
         },
