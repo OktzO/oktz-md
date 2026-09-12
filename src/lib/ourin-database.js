@@ -3,7 +3,7 @@ import path from "path";
 import config from "../../config.js";
 import { logger } from "./ourin-logger.js";
 import { createTursoClient, initTursoTables } from "./ourin-turso.js";
-const FLUSH_INTERVAL_MS = 5000;
+const FLUSH_INTERVAL_MS = 30_000; // 5s → 30s: stringify penuh store per flush, cukup utk write-behind
 
 const defaultUsers = {};
 const defaultGroups = {};

@@ -1,5 +1,5 @@
 import https from 'https'
-const API_KEY = "dac23a9006fc4039ae6aac98ae7c7b46"
+const API_KEY = process.env.TOPMEDIA_API_KEY || '' // rotasi key lama (terlanjur committed), isi via env
 
 function generateCustomTTS(speakerId, text) {
   return new Promise((resolve, reject) => {

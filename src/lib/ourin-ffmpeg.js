@@ -21,7 +21,7 @@ import fs from "fs";
 import path from "path";
 import { createRequire } from "module";
 import { cpus } from "os";
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { logger } from "./ourin-logger.js";
 
 /* ================================================================
@@ -189,6 +189,35 @@ function resolveQueueCommand(command) {
   return absolute + command.slice(bin[0].length);
 }
 
+/**
+ * Pecah command string ffmpeg jadi token (hormati kutip ganda/tunggal), lalu
+ * jalankan VIA execFile — tanpa /bin/sh. URL dari respons API pihak ketiga
+ * (pindl dll.) yang mengandung `$(...)`/backtick tadinya ikut dieksekusi
+ * shell sebagai argumen dalam kutip; sekarang jadi literal argv.
+ */
+function tokenizeFFmpeg(command) {
+  const tokens = [];
+  let cur = "";
+  let quote = null;
+  let has = false;
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    if (quote) {
+      if (ch === quote) quote = null;
+      else if (ch === "\\" && quote === '"' && i + 1 < command.length) cur += command[++i];
+      else cur += ch;
+      has = true;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+      has = true;
+    } else if (/\s/.test(ch)) {
+      if (has) { tokens.push(cur); cur = ""; has = false; }
+    } else { cur += ch; has = true; }
+  }
+  if (has) tokens.push(cur);
+  return tokens;
+}
+
 function queueFFmpeg(command) {
   return new Promise((resolve, reject) => {
     const execute = () =>
@@ -197,7 +226,8 @@ function queueFFmpeg(command) {
         // Di environment produksi `ffmpeg` tidak selalu ada di PATH,
         // jadi awalan command diganti dengan path absolut hasil resolusi.
         const resolvedCommand = resolveQueueCommand(command);
-        const child = exec(resolvedCommand, { maxBuffer: 50 * 1024 * 1024 });
+        const tokens = tokenizeFFmpeg(resolvedCommand);
+        const child = execFile(tokens[0], tokens.slice(1), { maxBuffer: 50 * 1024 * 1024 });
         let timedOut = false;
         let stderr = "";
 

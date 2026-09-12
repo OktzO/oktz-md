@@ -8,6 +8,9 @@ const CLEAN_INTERVAL = 30 * 60 * 1000
 const MAX_AGE_MS = 60 * 60 * 1000
 const MIN_AGE_MS = 5 * 60 * 1000
 const PROFILING_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+// aset yang di-cache plugin di tmp/ (font & emoji map) — kalau dihapus,
+// plugin re-download dari CDN pihak ketiga tiap jam & mati saat CDN-nya down
+const KEEP_FILES = new Set(['impact.ttf', 'emoji-apple.json'])
 
 let cleanerTimer = null
 
@@ -29,7 +32,7 @@ async function scanDir(dirPath, ageThreshold) {
           size += sub.size
           const remaining = await fsp.readdir(fullPath)
           if (remaining.length === 0) await fsp.rmdir(fullPath)
-        } else if (entry.isFile()) {
+        } else if (entry.isFile() && !KEEP_FILES.has(entry.name)) {
           const stat = await fsp.stat(fullPath)
           const age = Date.now() - stat.mtimeMs
           if (age > ageThreshold) {

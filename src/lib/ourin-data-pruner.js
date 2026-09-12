@@ -75,7 +75,10 @@ function startDailyPruner() {
             const contacts = db.setting?.('contacts')
             if (contacts && typeof contacts === 'object') {
                 for (const jid of Object.keys(contacts)) {
-                    if (!users?.[jid]) {
+                    // users key = numeric JID (getUser strip @domain) — dulu
+                    // dibandingkan dengan key penuh sehingga SEMUA contacts
+                    // dianggap yatim & terhapus tiap siklus
+                    if (!users?.[String(jid).replace(/@.+/, "")]) {
                         delete contacts[jid]
                         prunedContacts++
                     }

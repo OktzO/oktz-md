@@ -581,7 +581,12 @@ async function startSewaChecker(sock) {
     activeCronJobs.delete("sewaChecker");
   }
 
+  let _sewaBusy = false;
   const doCheck = async () => {
+    // re-entry guard: run >10 menit (tidur 2-3 dtk/grup) akan tumpang-tindih
+    // dengan tick cron berikutnya → pesan expired keluar dobel
+    if (_sewaBusy) return;
+    _sewaBusy = true;
     try {
       const db = getDatabase();
       const sewaData = db.db.data.sewa;
@@ -682,6 +687,8 @@ async function startSewaChecker(sock) {
       }
     } catch (error) {
       logger.error("Scheduler", `Sewa check failed: ${error.message}`);
+    } finally {
+      _sewaBusy = false;
     }
   };
 

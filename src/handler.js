@@ -1958,11 +1958,6 @@ async function groupHandler(update, sock) {
       const saluranName =
         config.saluran?.name || config.bot?.name || "Ourin-AI";
 
-      let groupPpUrl = null;
-      try {
-        groupPpUrl = await sock.profilePictureUrl(groupJid, "image");
-      } catch { }
-
       const rankActions = {
         promote: {
           notifKey: "notifPromote",
@@ -2012,7 +2007,13 @@ async function groupHandler(update, sock) {
             }
           };
 
-          const media4 = await prepareWAMessageMedia({ image: groupHandler[rankCfg.imgKey] }, { upload: sock.waUploadToServer });
+          // Reuse handle media yang sama — upload sekali per banner, bukan
+          // per event promote/demote (kuota waUploadToServer + latensi)
+          let rankImageMsg = groupHandler[rankCfg.imgKey + "Msg"];
+          if (!rankImageMsg) {
+            const media4 = await prepareWAMessageMedia({ image: groupHandler[rankCfg.imgKey] }, { upload: sock.waUploadToServer });
+            rankImageMsg = groupHandler[rankCfg.imgKey + "Msg"] = media4.imageMessage;
+          }
 
           const promoteButtons = [
             {
@@ -2047,7 +2048,7 @@ async function groupHandler(update, sock) {
               message: {
                 messageContextInfo: {},
                 interactiveMessage: {
-                  header: { title: "", subtitle: "", hasMediaAttachment: true, imageMessage: media4.imageMessage },
+                  header: { title: "", subtitle: "", hasMediaAttachment: true, imageMessage: rankImageMsg },
                   footer: { text: config.bot?.name || "Ourin-AI" },
                   body: { text: rankCfg.text(pNum, aNum) },
                   contextInfo: {
