@@ -189,44 +189,73 @@ async function sendGoodbyeMessage(sock, groupJid, participant, groupMeta) {
           config.command?.prefix || ".",
         )
         : `Terima kasih sudah bergabung di *${groupName}*\nSisa ${memberCount} member`;
-      await sock.sendMessage(groupJid, {
-        interactiveMessage: {
-          body: {
-            text: `👋 *Sayonara* *@${userName}*`,
-          },
-          footer: { text: config.bot?.name || "Ourin-AI" },
-          header: { title: "Goodbye", hasMediaAttachment: false },
-          carouselMessage: {
-            cards: [
-              {
-                header: {
-                  imageMessage: { url: ppUrl },
-                },
+
+      // imageMessage proto tidak punya field 'url' — upload dulu via
+      // prepareWAMessageMedia. Gagal upload -> kartu tanpa media (tetap jalan).
+      let cardMedia = null;
+      if (ppUrl) {
+        try {
+          const m2 = await prepareWAMessageMedia(
+            { image: { url: ppUrl } },
+            { upload: sock.waUploadToServer },
+          );
+          if (m2?.imageMessage) cardMedia = m2.imageMessage;
+        } catch { }
+      }
+
+      // sendMessage TIDAK mentransform interactiveMessage di onigis —
+      // kartu harus lewat generateWAMessageFromContent + relayMessage.
+      const msg2 = generateWAMessageFromContent(
+        groupJid,
+        {
+          viewOnceMessage: {
+            message: {
+              messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
+              interactiveMessage: {
                 body: {
-                  text: cardBody,
+                  text: `👋 *Sayonara* *@${userName}*`,
                 },
                 footer: { text: config.bot?.name || "Ourin-AI" },
-                nativeFlowMessage: {
-                  buttons: [
+                header: { title: "Goodbye", hasMediaAttachment: false },
+                carouselMessage: {
+                  cards: [
                     {
-                      name: "quick_reply",
-                      buttonParamsJson: JSON.stringify({
-                        display_text: "👋 Selamat Tinggal",
-                        id: "bye",
-                      }),
+                      header: {
+                        hasMediaAttachment: !!cardMedia,
+                        ...(cardMedia ? { imageMessage: cardMedia } : {}),
+                      },
+                      body: {
+                        text: cardBody,
+                      },
+                      footer: { text: config.bot?.name || "Ourin-AI" },
+                      nativeFlowMessage: {
+                        buttons: [
+                          {
+                            name: "quick_reply",
+                            buttonParamsJson: JSON.stringify({
+                              display_text: "👋 Selamat Tinggal",
+                              id: "bye",
+                            }),
+                          },
+                        ],
+                      },
                     },
                   ],
+                  messageVersion: 1,
+                  carouselCardType: 1,
+                },
+                contextInfo: {
+                  ...saluranCtx(),
+                  mentionedJid: [realParticipant],
                 },
               },
-            ],
-            messageVersion: 1,
-            carouselCardType: 1,
-          },
-          contextInfo: {
-            ...saluranCtx(),
-            mentionedJid: [realParticipant],
+            },
           },
         },
+        { userJid: sock.user?.jid },
+      );
+      await sock.relayMessage(groupJid, msg2.message, {
+        messageId: msg2.key.id,
       });
     } else if (goodbyeType === 3) {
       const textOnly = groupData?.goodbyeMsg
@@ -297,9 +326,18 @@ async function sendGoodbyeMessage(sock, groupJid, participant, groupMeta) {
         }
       };
 
-      const media = await prepareWAMessageMedia({
-        image: { url: ppUrl }
-      }, { upload: sock.waUploadToServer });
+      // PP user bisa null/gagal fetch — tanpa guard prepareWAMessageMedia
+      // crash dan goodbye tidak terkirim sama sekali. Fallback: kartu teks.
+      let media = null;
+      if (ppUrl) {
+        try {
+          media = await prepareWAMessageMedia({
+            image: { url: ppUrl }
+          }, { upload: sock.waUploadToServer });
+        } catch {
+          media = null;
+        }
+      }
 
       const msg = generateWAMessageFromContent(groupJid, {
         viewOnceMessage: {
@@ -309,8 +347,8 @@ async function sendGoodbyeMessage(sock, groupJid, participant, groupMeta) {
               header: {
                 title: "",
                 subtitle: "",
-                hasMediaAttachment: true,
-                imageMessage: media.imageMessage
+                hasMediaAttachment: !!media?.imageMessage,
+                ...(media?.imageMessage ? { imageMessage: media.imageMessage } : {})
               },
               body: {
                 text: text
@@ -364,20 +402,29 @@ async function sendGoodbyeMessage(sock, groupJid, participant, groupMeta) {
       } catch (e) {
         console.error("Goodbye Canvas Error:", e.message);
       }
-      await sock.sendMessage(groupJid, {
-        image: canvasBuffer,
-        caption: text,
-        mentions: [realParticipant],
-        contextInfo: {
-          ...saluranCtx(),
-          mentionedJid: [realParticipant],
-          forwardedNewsletterMessageInfo: {
-            newsletterJid: saluranId,
-            newsletterName: saluranName,
-            serverMessageId: 127,
+      // canvas gagal -> jangan kirim image:null (pesan invalid);
+      // fallback teks supaya goodbye tetap sampai.
+      if (canvasBuffer && canvasBuffer.length) {
+        await sock.sendMessage(groupJid, {
+          image: canvasBuffer,
+          caption: text,
+          mentions: [realParticipant],
+          contextInfo: {
+            ...saluranCtx(),
+            mentionedJid: [realParticipant],
+            forwardedNewsletterMessageInfo: {
+              newsletterJid: saluranId,
+              newsletterName: saluranName,
+              serverMessageId: 127,
+            },
           },
-        },
-      });
+        });
+      } else {
+        await sock.sendMessage(groupJid, {
+          text: text,
+          mentions: [realParticipant],
+        });
+      }
     }
     return true;
   } catch (error) {
