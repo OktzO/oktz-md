@@ -6,7 +6,7 @@ import path from "path";
 import crypto from "crypto";
 
 const API_URL = "https://fgsi.dpdns.org/api/tools/enchantVideo";
-const DEFAULT_API_KEY = "fgsiapi-20c1605c-6d";
+const DEFAULT_API_KEY = process.env.FGSI_API_KEY || ""; // rotasi key lama (terlanjur committed), isi via env
 const PENDING_STATUSES = new Set([
   "pending",
   "processing",

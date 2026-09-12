@@ -45,10 +45,12 @@ async function handler(m, { sock }) {
             
             if (isWindows) {
                 command = 'cmd.exe'
-                args = ['/c', 'start', '/b', 'node', 'index.js']
+                args = ['/c', 'start', '/b', 'node', ...process.execArgv, 'index.js']
             } else {
                 command = 'node'
-                args = ['index.js']
+                // warisi execArgv — tanpa ini --max-old-space-size=512 &
+                // --expose-gc hilang setelah restart (monitor GC mati)
+                args = [...process.execArgv, 'index.js']
             }
             
             const child = spawn(command, args, {

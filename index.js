@@ -210,7 +210,7 @@ function setupAntiCrash() {
   });
 
   process.on("unhandledRejection", (reason, promise) => {
-    logErrorBox("unhandled rejection", String(reason));
+    logErrorBox("unhandled rejection", reason?.stack || String(reason));
     console.error(c.gray("Promise:"), promise);
     logger.system("system", "Engine is still running");
   });

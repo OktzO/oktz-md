@@ -9,7 +9,7 @@ import {
   normalizeMessageContent,
 } from "ourin";
 import { writeFileSync, mkdirSync, existsSync, unlinkSync } from "fs";
-import { join } from "path";
+import { join, basename } from "path";
 import config, {
   isBanned,
   isOwner,
@@ -563,7 +563,7 @@ async function serializeQuotedMessage(
       if (!existsSync(tempDir)) {
         mkdirSync(tempDir, { recursive: true });
       }
-      const filepath = join(tempDir, filename);
+      const filepath = join(tempDir, basename(filename));
       writeFileSync(filepath, buffer);
       return filepath;
     }
@@ -1677,7 +1677,7 @@ END:VCARD`;
       if (!existsSync(tempDir)) {
         mkdirSync(tempDir, { recursive: true });
       }
-      const filepath = join(tempDir, filename);
+      const filepath = join(tempDir, basename(filename));
       writeFileSync(filepath, buffer);
       return filepath;
     }

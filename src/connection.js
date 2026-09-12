@@ -82,6 +82,13 @@ function clearScheduledReconnect() {
   reconnectScheduled = false;
 }
 
+// Exponential backoff + jitter (ceiling 2 menit). Jitter menghindari banyak
+// instance reconnect serempak saat server/ jaringan pulih barengan.
+function reconnectDelayMs(attempt, base) {
+  const capped = Math.min((base || 15e3) * 1.6 ** attempt, 120e3);
+  return Math.round(capped * (0.85 + Math.random() * 0.3));
+}
+
 function scheduleReconnect(delay, options) {
   if (reconnectScheduled) {
     colors.logger.debug("whatsapp", "reconnect udah dijadwalin, skip");
@@ -96,20 +103,17 @@ function scheduleReconnect(delay, options) {
       await startConnection(options);
       connectionState.reconnectAttempts = 0;
     } catch (error) {
+      connectionState.reconnectAttempts++;
       colors.logger.error(
         "whatsapp",
-        `reconnect gagal: ${error.message}, coba lagi...`,
+        `reconnect gagal (#${connectionState.reconnectAttempts}): ${error.message}`,
       );
-      connectionState.reconnectAttempts++;
-      const m = config.session?.maxReconnectAttempts || 5;
-      if (connectionState.reconnectAttempts <= m) {
-        scheduleReconnect(delay, options);
-      } else {
-        colors.logger.error(
-          "whatsapp",
-          `gagal sambung ulang setelah ${m} percobaan`,
-        );
-      }
+      // selalu retry dengan backoff — berhenti total meninggalkan proses
+      // zombie tanpa koneksi maupun timer
+      scheduleReconnect(
+        reconnectDelayMs(connectionState.reconnectAttempts, delay),
+        options,
+      );
     }
   }, delay);
   if (reconnectTimer.unref) reconnectTimer.unref();
@@ -299,6 +303,27 @@ function askQuestion(question) {
  *   }
  * });
  */
+// Fetch versi WA di-cache 6 jam + fallback: gagal HTTP saat boot/reconnect
+// tidak boleh merobohkan proses (dulu reject → main().catch → exit(1)).
+let _waVersionCache = null;
+async function getWaVersion() {
+  if (_waVersionCache && Date.now() - _waVersionCache.t < 6 * 3600e3) {
+    return _waVersionCache.v;
+  }
+  let v;
+  try {
+    v = (await fetchLatestBaileysVersion()).version;
+  } catch {
+    try {
+      v = (await fetchLatestWaWebVersion()).version;
+    } catch {
+      v = _waVersionCache?.v; // pakai terakhir yang diketahui; undefined → default library
+    }
+  }
+  if (v) _waVersionCache = { v, t: Date.now() };
+  return v;
+}
+
 async function startConnection(options = {}) {
   if (connectionState.sock) {
     try {
@@ -343,7 +368,7 @@ async function startConnection(options = {}) {
     saveCreds = result.saveCreds;
   }
 
-  const { version, isLatest } = await fetchLatestBaileysVersion()
+  const version = await getWaVersion()
   const usePairingCode = config.session?.usePairingCode === true;
   const pairingNumber = config.session?.pairingNumber || "";
   const sock = makeWASocket({
@@ -504,7 +529,19 @@ async function startConnection(options = {}) {
               config.session?.folderName || "session",
             );
             if (fs.existsSync(sessionPath)) {
-              fs.rmSync(sessionPath, { recursive: true, force: true });
+              // rename, jangan rm — 401 transien masih bisa dipulihkan manual
+              // dari backup; rm langsung = sesi hilang permanen
+              const parent = path.dirname(sessionPath);
+              const base = path.basename(sessionPath);
+              for (const f of fs.readdirSync(parent)) {
+                if (f.startsWith(`${base}.broken-`)) {
+                  try { fs.rmSync(path.join(parent, f), { recursive: true, force: true }); } catch { }
+                }
+              }
+              fs.renameSync(
+                sessionPath,
+                `${sessionPath}.broken-${Date.now()}`,
+              );
             }
           } catch (e) { }
           if (TURSO_ENABLED) {
@@ -552,22 +589,13 @@ async function startConnection(options = {}) {
 
       if (r) {
         connectionState.reconnectAttempts++;
-        const m = config.session?.maxReconnectAttempts || 5;
-        if (connectionState.reconnectAttempts <= m) {
-          colors.logger.info(
-            "whatsapp",
-            `percobaan sambung ulang ${connectionState.reconnectAttempts}/${m}`,
-          );
-          scheduleReconnect(
-            config.session?.reconnectInterval || 15e3,
-            options,
-          );
-        } else {
-          colors.logger.error(
-            "whatsapp",
-            `gagal sambung ulang setelah ${m} percobaan`,
-          );
-        }
+        const base = config.session?.reconnectInterval || 15e3;
+        const wait = reconnectDelayMs(connectionState.reconnectAttempts, base);
+        colors.logger.info(
+          "whatsapp",
+          `percobaan sambung ulang #${connectionState.reconnectAttempts} dalam ${Math.round(wait / 1000)} detik`,
+        );
+        scheduleReconnect(wait, options);
       } else {
         connectionState.reconnectAttempts = 0;
       }
