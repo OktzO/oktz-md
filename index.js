@@ -343,6 +343,18 @@ async function main() {
       }
     },
 
+    // Root cause welcome/goodbye mati: event 'group-participants.update'
+    // (connection.js) memanggil options.onParticipantsUpdate, tapi callback
+    // ini tidak pernah di-pass — groupHandler (welcome/goodbye/promote/dll)
+    // tidak pernah menerima event add/remove.
+    onParticipantsUpdate: async (update, sock) => {
+      try {
+        await groupHandler(update, sock);
+      } catch (error) {
+        logger.error("PARTICIPANTS", error.message);
+      }
+    },
+
     onMessageUpdate: async (updates, sock) => {
       try {
         await messageUpdateHandler(updates, sock);
