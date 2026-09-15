@@ -435,20 +435,57 @@ function getParticipantJids(participants = []) {
   return participants.map((p) => getParticipantJid(p));
 }
 
+function normalizeComparableJid(jid) {
+  let value = String(jid || "").trim();
+  if (!value) return "";
+
+  if (isLid(value)) {
+    const safe = lidToJidSafe(value);
+    value = safe || lidToJid(value) || value;
+  }
+
+  if (value.includes(":") && value.endsWith("@s.whatsapp.net")) {
+    value = `${value.split(":")[0]}@s.whatsapp.net`;
+  }
+
+  return value;
+}
+
+function isSameParticipant(left, right) {
+  const leftJid = normalizeComparableJid(left);
+  const rightJid = normalizeComparableJid(right);
+  if (!leftJid || !rightJid) return false;
+  if (leftJid === rightJid) return true;
+
+  const leftNum = leftJid.replace(/[^0-9]/g, "");
+  const rightNum = rightJid.replace(/[^0-9]/g, "");
+  if (!leftNum || !rightNum) return false;
+
+  return (
+    leftNum === rightNum ||
+    leftNum.endsWith(rightNum) ||
+    rightNum.endsWith(leftNum)
+  );
+}
+
 function findParticipantByNumber(participants, targetJid) {
   if (!participants || !targetJid) return null;
 
   const targetNumber = targetJid.replace(/@.*$/, "");
 
   for (const p of participants) {
+    // phoneNumber wajib dicek: di grup addressing_mode=lid ourin mengirim
+    // { id: LID, phoneNumber: PN }, jadi tanpa itu bot/user tidak pernah ketemu.
     const pId = (p.id || "").replace(/@.*$/, "");
     const pJid = (p.jid || "").replace(/@.*$/, "");
     const pLid = (p.lid || "").replace(/@.*$/, "");
+    const pPn = (p.phoneNumber || "").replace(/@.*$/, "");
 
     if (
       pId === targetNumber ||
       pJid === targetNumber ||
-      pLid === targetNumber
+      pLid === targetNumber ||
+      pPn === targetNumber
     ) {
       return p;
     }
@@ -529,6 +566,8 @@ function getLidCacheSize() {
 
 export {
   isLid,
+  normalizeComparableJid,
+  isSameParticipant,
   isLidConverted,
   lidToJid,
   lidToJidSafe,

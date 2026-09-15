@@ -132,20 +132,23 @@ function _numHit(nums, num) {
  * cache 5 menit yang membuat admin baru tidak dikenali sampai TTL habis.
  *
  * @param {Object[]} participants - array participant groupMetadata
- * @param {string} senderJid - JID pengirim (boleh LID atau LID-converted)
- * @param {string[]} botJids - [sock.user.id, sock.user.lid]
+ * @param {string|string[]} senderJid - JID pengirim (boleh LID/LID-converted);
+ *   array = beberapa kandidat (raw addressing + versi resolved)
+ * @param {string|string[]} botJids - [sock.user.id, sock.user.lid]
  */
 function adminFlagsFor(participants = [], senderJid, botJids = []) {
-  const senderNum = (senderJid || "").replace(/[^0-9]/g, "");
-  const botNums = botJids
-    .map((j) => (j || "").replace(/[^0-9]/g, ""))
-    .filter(Boolean);
+  const toNums = (v) =>
+    (Array.isArray(v) ? v : [v])
+      .map((j) => (j || "").toString().replace(/[^0-9]/g, ""))
+      .filter(Boolean);
+  const senderNums = toNums(senderJid);
+  const botNums = toNums(botJids);
   let isAdmin = false;
   let isBotAdmin = false;
   for (const p of participants) {
     if (!p || !p.admin) continue;
     const nums = _participantNums(p);
-    if (!isAdmin && _numHit(nums, senderNum)) isAdmin = true;
+    if (!isAdmin && senderNums.some((sn) => _numHit(nums, sn))) isAdmin = true;
     if (!isBotAdmin && botNums.some((bn) => _numHit(nums, bn))) isBotAdmin = true;
     if (isAdmin && isBotAdmin) break;
   }

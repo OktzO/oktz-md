@@ -41,7 +41,10 @@ async function handler(m, { sock, args }) {
             remoteJid: m.chat,
             fromMe: m.quoted.key.fromMe || false,
             id: m.quoted.key.id,
-            participant: m.quoted.key.participant || m.quoted.sender
+            // rawParticipant = addressing asli server. Di grup addressing_mode=lid
+            // pesan disimpan dengan participant LID, jadi versi PN hasil resolve
+            // membuat pin tidak dicocokkan server.
+            participant: m.quoted.key.rawParticipant || m.quoted.key.participant || m.quoted.sender
         };
         
         await sock.sendMessage(m.chat, {
