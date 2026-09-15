@@ -45,7 +45,7 @@ let thumbFish = getAssetBuffer("ourin-fishit") || null;
 
 function ctx(title, body) {
   const sId = config.saluran?.id || "120363400911374213@newsletter";
-  const sName = config.saluran?.name || config.bot?.name || "Ourin-AI";
+  const sName = config.saluran?.name || config.bot?.name || "Bot";
   const c = {
     forwardingScore: 9999,
     isForwarded: true,

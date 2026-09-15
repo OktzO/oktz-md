@@ -49,7 +49,7 @@ function getRandomPraise() {
 
 function _saluranCtx() {
   const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-  const saluranName = config.saluran?.name || config.bot?.name || "Ourin-AI";
+  const saluranName = config.saluran?.name || config.bot?.name || "Bot";
   return {
     forwardingScore: 9,
     isForwarded: true,
@@ -169,7 +169,7 @@ function checkFastAnswer(session) {
   return { isFast: false, elapsed: elapsed };
 }
 
-function createFakeQuoted(botName = "Ourin-AI", verified = true) {
+function createFakeQuoted(botName = "Bot", verified = true) {
   return {
     key: {
       fromMe: false,

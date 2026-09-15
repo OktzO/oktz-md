@@ -422,8 +422,8 @@ async function handleSmartTriggers(m, sock, db) {
 
   try {
     const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-    const saluranName = config.saluran?.name || config.bot?.name || "Ourin-AI";
-    const botName = config.bot?.name || "Ourin-AI";
+    const saluranName = config.saluran?.name || config.bot?.name || "Bot";
+    const botName = config.bot?.name || "Bot";
 
     let isAutoreplyEnabled = globalSmartTriggers;
 
@@ -1956,7 +1956,7 @@ async function groupHandler(update, sock) {
 
       const saluranId = config.saluran?.id || "120363400911374213@newsletter";
       const saluranName =
-        config.saluran?.name || config.bot?.name || "Ourin-AI";
+        config.saluran?.name || config.bot?.name || "Bot";
 
       const rankActions = {
         promote: {
@@ -2049,7 +2049,7 @@ async function groupHandler(update, sock) {
                 messageContextInfo: {},
                 interactiveMessage: {
                   header: { title: "", subtitle: "", hasMediaAttachment: true, imageMessage: rankImageMsg },
-                  footer: { text: config.bot?.name || "Ourin-AI" },
+                  footer: { text: config.bot?.name || "Bot" },
                   body: { text: rankCfg.text(pNum, aNum) },
                   contextInfo: {
                     mentionedJid: mentions,
@@ -2057,7 +2057,7 @@ async function groupHandler(update, sock) {
                     forwardingScore: 9999,
                     forwardedNewsletterMessageInfo: {
                       newsletterJid: config.saluran?.id || "120363400911374213@newsletter",
-                      newsletterName: config.saluran?.name || config.bot?.name || "Ourin-AI",
+                      newsletterName: config.saluran?.name || config.bot?.name || "Bot",
                       serverMessageId: 127,
                     },
                   },
@@ -2069,7 +2069,7 @@ async function groupHandler(update, sock) {
                         expiration_time: Date.now() + 1000000
                       },
                       bottom_sheet: { in_thread_buttons_limit: 2, divider_indices: [1, 2], list_title: "Opsi", button_title: "🍙 Lihat Opsi" },
-                      tap_target_configuration: { title: " X ", description: "bomboclard", canonical_url: "https://ourin.site", domain: "shop.example.com", button_index: 0 },
+                      tap_target_configuration: { title: " X ", description: "bomboclard", canonical_url: "https://example.com", domain: "shop.example.com", button_index: 0 },
                     }),
                     buttons: action === "promote" ? promoteButtons : demoteButtons
                   }

@@ -92,7 +92,7 @@ function getCommandSymbols(cmdName) {
 function getContextInfo(botConfig, m, thumbBuffer) {
   const saluranId = botConfig.saluran?.id || "120363400911374213@newsletter";
   const saluranName =
-    botConfig.saluran?.name || botConfig.bot?.name || "Ourin-AI";
+    botConfig.saluran?.name || botConfig.bot?.name || "Bot";
   const saluranLink = botConfig.saluran?.link || "";
   return {
     mentionedJid: [m.sender],
@@ -359,7 +359,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
               forwardingScore: 9,
               forwardedNewsletterMessageInfo: {
                 newsletterJid: config.saluran?.id || "120363400911374213@newsletter",
-                newsletterName: config.saluran?.name || config.bot?.name || "Ourin-AI",
+                newsletterName: config.saluran?.name || config.bot?.name || "Bot",
                 serverMessageId: 127,
               },
             },
@@ -367,7 +367,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
               messageParamsJson: JSON.stringify({
                 limited_time_offer: { text: `${greeting}`, url: "Hai", expiration_time: Date.now() + 10000 },
                 bottom_sheet: { in_thread_buttons_limit: 2, divider_indices: [1, 2, 3, 4, 5, 999], list_title: "Please select the menu", button_title: "🍙 See Category" },
-                tap_target_configuration: { title: " X ", description: "bomboclard", canonical_url: "https://ourin.site", domain: "shop.example.com", button_index: 0 },
+                tap_target_configuration: { title: " X ", description: "bomboclard", canonical_url: "https://example.com", domain: "shop.example.com", button_index: 0 },
               }),
               buttons: [
                 { name: "", buttonParamsJson: "" },
@@ -416,7 +416,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
               locationMessage: {
                 degreesLatitude: 0,
                 degreesLongitude: 0,
-                name: config.bot?.name || "Ourin-AI",
+                name: config.bot?.name || "Bot",
                 address: await weatherMenu(),
                 jpegThumbnail: thumbnail
               }
@@ -430,7 +430,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
               forwardingScore: 9,
               forwardedNewsletterMessageInfo: {
                 newsletterJid: config.saluran?.id || "120363400911374213@newsletter",
-                newsletterName: config.saluran?.name || config.bot?.name || "Ourin-AI",
+                newsletterName: config.saluran?.name || config.bot?.name || "Bot",
                 serverMessageId: 127,
               },
             },
@@ -586,7 +586,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
                     forwardingScore: 9,
                     forwardedNewsletterMessageInfo: {
                       newsletterJid: "120363351980387532@newsletter",
-                      newsletterName: "Ourin Bot",
+                      newsletterName: config.bot?.name || "Bot Channel",
                       serverMessageId: 127,
                     },
                   },

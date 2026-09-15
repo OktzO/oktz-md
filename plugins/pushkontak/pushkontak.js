@@ -126,7 +126,7 @@ function nativeFlowMsg(m, title, buttons) {
   return {
     interactiveMessage: {
       title,
-      footer: config.bot?.name || "Ourin-AI",
+      footer: config.bot?.name || "Bot",
       image: cachedThumb,
       contextInfo: {
         mentionedJid: [m.sender],
@@ -136,7 +136,7 @@ function nativeFlowMsg(m, title, buttons) {
       nativeFlowMessage: {
         messageParamsJson: JSON.stringify({
           limited_time_offer: {
-            text: config.bot?.name || "Ourin-AI",
+            text: config.bot?.name || "Bot",
             url: "",
             copy_code: "Push Kontak",
             expiration_time: Date.now() * 7,
@@ -150,7 +150,7 @@ function nativeFlowMsg(m, title, buttons) {
           tap_target_configuration: {
             title: " X ",
             description: "bomboclard",
-            canonical_url: "https://ourin.site",
+            canonical_url: "https://example.com",
             domain: "shop.example.com",
             button_index: 0,
           },

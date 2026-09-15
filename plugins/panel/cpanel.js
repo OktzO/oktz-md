@@ -104,7 +104,7 @@ async function handler(m, { sock }) {
     txt += `┃ \`${prefix}turnon\` | \`${prefix}turnoff\` | \`${prefix}restartvps\`\n`
     txt += `╰───────────────\n\n`
     
-    txt += `> _Powered by ${config.info?.website || 'OurinAI'}_`
+    txt += `> _Powered by ${config.info?.website || 'Panel'}_`
     
     await m.reply(txt)
 }

@@ -17,7 +17,7 @@ const pluginConfig = {
   isEnabled: true,
 };
 
-const NEOXR_APIKEY = config.APIkey?.neoxr || "Milik-Bot-OurinMD";
+const NEOXR_APIKEY = config.APIkey?.neoxr || '';
 
 async function handler(m, { sock }) {
   const url = m.text?.trim();
@@ -42,7 +42,7 @@ async function handler(m, { sock }) {
 
     const app = data.data;
     const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-    const saluranName = config.saluran?.name || config.bot?.name || "Ourin-AI";
+    const saluranName = config.saluran?.name || config.bot?.name || "Bot";
     if (app.url) {
       await sock.sendMessage(
         m.chat,

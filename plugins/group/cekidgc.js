@@ -119,7 +119,7 @@ async function handler(m, { sock }) {
     } catch {}
 
     const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-    const saluranName = config.saluran?.name || config.bot?.name || "Ourin-AI";
+    const saluranName = config.saluran?.name || config.bot?.name || "Bot";
 
     const infoText =
       `── .✦ 𝗚𝗥𝗢𝗨𝗣 𝗜𝗡𝗙𝗢 ✦. ── 𝜗ৎ\n\n` +
@@ -136,7 +136,7 @@ async function handler(m, { sock }) {
       `│  ✦ ᴊᴏɪɴ ᴍᴏᴅᴇ  : *${joinMode}*\n` +
       `│  ✦ ᴅᴇsᴋʀɪᴘsɪ  : ${descPreview}\n` +
       `╰──────────────⬣\n\n` +
-      `.☘︎ ݁˖ © ${config.bot?.name || "Ourin-AI"}`;
+      `.☘︎ ݁˖ © ${config.bot?.name || "Bot"}`;
 
     const buttons = [
       {
@@ -175,7 +175,7 @@ async function handler(m, { sock }) {
                   text: infoText,
                 }),
                 footer: proto.Message.InteractiveMessage.Footer.fromObject({
-                  text: `© ${config.bot?.name || "Ourin-AI"}`,
+                  text: `© ${config.bot?.name || "Bot"}`,
                 }),
                 header: proto.Message.InteractiveMessage.Header.fromObject({
                   hasMediaAttachment: !!headerMedia,
@@ -218,7 +218,7 @@ async function handler(m, { sock }) {
                   text: infoText,
                 }),
                 footer: proto.Message.InteractiveMessage.Footer.fromObject({
-                  text: `© ${config.bot?.name || "Ourin-AI"}`,
+                  text: `© ${config.bot?.name || "Bot"}`,
                 }),
                 nativeFlowMessage:
                   proto.Message.InteractiveMessage.NativeFlowMessage.fromObject(

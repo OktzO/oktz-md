@@ -12,7 +12,7 @@ import {
 import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
 const execAsync = promisify(exec);
-const NEOXR_APIKEY = config.APIkey?.neoxr || "Milik-Bot-OurinMD";
+const NEOXR_APIKEY = config.APIkey?.neoxr || '';
 
 const pluginConfig = {
   name: "pinvid",
@@ -51,7 +51,7 @@ async function handler(m, { sock }) {
 
   try {
     const res = await axios.get(
-      `https://firefly.maiku.my.id/api/pinterestvideo?apikey=OurinNextGen&q=${encodeURIComponent(query)}`,
+      `https://firefly.maiku.my.id/api/pinterestvideo?apikey=${config.APIkey?.firefly || "default"}&q=${encodeURIComponent(query)}`,
       {
         timeout: 60000,
       },
@@ -186,7 +186,7 @@ async function handler(m, { sock }) {
 
       const saluranId = config.saluran?.id || "120363400911374213@newsletter";
       const saluranName =
-        config.saluran?.name || config.bot?.name || "Ourin-AI";
+        config.saluran?.name || config.bot?.name || "Bot";
 
       for (const content of mediaList) {
         await sock.sendMessage(

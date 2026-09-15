@@ -31,7 +31,7 @@ function resolvePlaceholders(
     .replace(/{date}/gi, timeHelper.formatPattern(now, "DD/MM/YYYY"))
     .replace(/{time}/gi, timeHelper.formatPattern(now, "HH:mm"))
     .replace(/{day}/gi, dayId)
-    .replace(/{bot}/gi, config.bot?.name || "Ourin")
+    .replace(/{bot}/gi, config.bot?.name || "Bot")
     .replace(/{prefix}/gi, prefix);
 }
 const pluginConfig = {
@@ -154,7 +154,7 @@ async function sendWelcomeMessage(sock, groupJid, participant, groupMeta) {
       config.command?.prefix || ".",
     );
     const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-    const saluranName = config.saluran?.name || config.bot?.name || "Ourin-AI";
+    const saluranName = config.saluran?.name || config.bot?.name || "Bot";
     if (welcomeType === 2) {
       const cardBody = groupData?.welcomeMsg
         ? resolvePlaceholders(
@@ -193,7 +193,7 @@ async function sendWelcomeMessage(sock, groupJid, participant, groupMeta) {
                 body: {
                   text: `👋 Welcome *@${userName}*`,
                 },
-                footer: { text: config.bot?.name || "Ourin-AI" },
+                footer: { text: config.bot?.name || "Bot" },
                 header: { title: "Welcome", hasMediaAttachment: false },
                 carouselMessage: {
                   cards: [
@@ -205,7 +205,7 @@ async function sendWelcomeMessage(sock, groupJid, participant, groupMeta) {
                       body: {
                         text: cardBody,
                       },
-                      footer: { text: config.bot?.name || "Ourin-AI" },
+                      footer: { text: config.bot?.name || "Bot" },
                       nativeFlowMessage: {
                         buttons: [
                           {
@@ -332,7 +332,7 @@ async function sendWelcomeMessage(sock, groupJid, participant, groupMeta) {
                 text: text
               },
               footer: {
-                text: config.bot?.name || "Ourin-AI"
+                text: config.bot?.name || "Bot"
               },
               contextInfo: {
                 mentionedJid: [realParticipant],

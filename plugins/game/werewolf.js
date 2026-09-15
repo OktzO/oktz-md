@@ -75,7 +75,7 @@ const PHASE_DURATION = {
 
 function wwCtx(mentions) {
   const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-  const saluranName = config.saluran?.name || config.bot?.name || "Ourin-AI";
+  const saluranName = config.saluran?.name || config.bot?.name || "Bot";
   return {
     forwardingScore: 9999,
     isForwarded: true,

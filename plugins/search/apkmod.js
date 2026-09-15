@@ -19,7 +19,7 @@ const pluginConfig = {
   isEnabled: true,
 };
 
-const NEOXR_APIKEY = config.APIkey?.neoxr || "Milik-Bot-OurinMD";
+const NEOXR_APIKEY = config.APIkey?.neoxr || '';
 
 async function handler(m, { sock }) {
   const text = m.text?.trim();
@@ -51,7 +51,7 @@ async function handler(m, { sock }) {
     const apps = data.data.slice(0, 15);
 
     const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-    const saluranName = config.saluran?.name || config.bot?.name || "Ourin-AI";
+    const saluranName = config.saluran?.name || config.bot?.name || "Bot";
 
     let caption = `📱 *Hasil pencarian dari ${text}*\n\n`;
 

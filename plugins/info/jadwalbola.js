@@ -18,7 +18,7 @@ const pluginConfig = {
   isEnabled: true,
 };
 
-const NEOXR_APIKEY = config.APIkey?.neoxr || "Milik-Bot-OurinMD";
+const NEOXR_APIKEY = config.APIkey?.neoxr || '';
 
 const LEAGUE_EMOJI = {
   "liga inggris": "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
@@ -81,7 +81,7 @@ async function handler(m, { sock }) {
     }
 
     const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-    const saluranName = config.saluran?.name || config.bot?.name || "Ourin-AI";
+    const saluranName = config.saluran?.name || config.bot?.name || "Bot";
 
     let text = `⚽ *ᴊᴀᴅᴡᴀʟ ᴘᴇʀᴛᴀɴᴅɪɴɢᴀɴ*\n\n`;
     if (filter) text += `> Filter: \`${filter}\`\n\n`;

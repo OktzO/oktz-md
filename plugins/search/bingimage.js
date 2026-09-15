@@ -30,7 +30,7 @@ async function handler(m, { sock }) {
 
     await m.react("🔍");
 
-    const apikey = config.APIkey?.neoxr || "Milik-Bot-OurinMD";
+    const apikey = config.APIkey?.neoxr || '';
     const data = await ourinApi.apiFaa.get(
       "/faa/google-image",
       {

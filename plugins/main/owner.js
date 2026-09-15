@@ -31,7 +31,7 @@ async function handler(m, { sock, config: botConfig }) {
   const configOwners = botConfig.owner?.number || [];
   const dbOwners = db.data.owner || [];
   const ownerNumbers = [...new Set([...configOwners, ...dbOwners])];
-  const botName = botConfig.bot?.name || "Ourin-AI";
+  const botName = botConfig.bot?.name || "Bot";
   if (ownerType === 2) {
     const contacts = [];
 

@@ -72,7 +72,7 @@ async function handler(m, { sock, text }) {
             address: `🎤 ${firstResult.artist} | ⏱️ ${firstResult.duration}`
           },
           contentText: contentText,
-          footerText: '🚀 OURIN MD - Spotify Search',
+          footerText: '🚀 Spotify Search',
           headerType: 6,
         },
       };

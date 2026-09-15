@@ -17,7 +17,7 @@ const pluginConfig = {
     isEnabled: true
 }
 
-const NEOXR_APIKEY = config.APIkey?.neoxr || 'Milik-Bot-OurinMD'
+const NEOXR_APIKEY = config.APIkey?.neoxr || ''
 
 async function handler(m, { sock }) {
     const text = m.text?.trim()

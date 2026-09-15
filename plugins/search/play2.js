@@ -46,7 +46,7 @@ const MAX_BASE64_AUDIO_BYTES = 8 * 1024 * 1024;
  * ========================================================= */
 
 const LRCLIB_API = "https://lrclib.net/api";
-const LRCLIB_USER_AGENT = "OurinMD-Play2/1.0 (https://github.com/)";
+const LRCLIB_USER_AGENT = "WA-Bot/1.0 (https://github.com/)";
 
 async function getLRCLyrics({ title, artist, duration = 0, album = "" }) {
   try {

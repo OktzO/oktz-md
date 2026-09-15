@@ -1,11 +1,11 @@
 import { live3d } from "../../src/scraper/seaart.js";
 const pluginConfig = {
-  name: "ourinbanana",
+  name: "bananagen",
   alias: [],
   category: "ai",
   description: "Edit gambar dengan AI menggunakan prompt",
-  usage: ".ourinbanana <prompt>",
-  example: ".ourinbanana make it anime style",
+  usage: ".bananagen <prompt>",
+  example: ".bananagen make it anime style",
   isOwner: false,
   isPremium: false,
   isGroup: false,
@@ -19,9 +19,9 @@ async function handler(m, { sock }) {
   const prompt = m.args.join(" ");
   if (!prompt) {
     return m.reply(
-      `🍌 *OURIN BANANA SUPER*\n\n` +
+      `🍌 *BANANA GEN*\n\n` +
         `> Edit gambar dengan AI\n\n` +
-        `\`Contoh: ${m.prefix}ourinbanana make it anime style\`\n\n` +
+        `\`Contoh: ${m.prefix}bananagen make it anime style\`\n\n` +
         `> Reply atau kirim gambar dengan caption`,
     );
   }

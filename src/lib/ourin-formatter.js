@@ -263,7 +263,7 @@ function createDashboard(data) {
  */
 function createBotInfo(data) {
   const {
-    botName = config.bot?.name || "Ourin-AI",
+    botName = config.bot?.name || "Bot",
     developer = config.owner?.name || "Owner",
     version = config.bot?.version || "1.0.0",
     uptime = "0s",
@@ -332,7 +332,7 @@ function createUserProfile(data) {
  */
 function createBotStatus(data) {
   const {
-    botName = config.bot?.name || "Ourin-AI",
+    botName = config.bot?.name || "Bot",
     uptime = "0s",
     mode = "Public",
     totalCommands = 0,

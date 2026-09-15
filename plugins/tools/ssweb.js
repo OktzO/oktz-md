@@ -57,7 +57,7 @@ async function handler(m, { sock }) {
     const imageBuffer = await ssweb(text, mode);
 
     const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-    const saluranName = config.saluran?.name || config.bot?.name || "Ourin-AI";
+    const saluranName = config.saluran?.name || config.bot?.name || "Bot";
 
     await sock.sendMedia(m.chat, imageBuffer, null, m, {
       type: "image",

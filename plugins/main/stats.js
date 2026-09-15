@@ -56,7 +56,7 @@ async function handler(m, { sock, db, uptime, config: botConfig }) {
     const premiumUsers = Object.values(users).filter((u) => u.premium).length;
 
     const statsObj = {
-      bot: botConfig?.bot?.name || "Ourin-AI",
+      bot: botConfig?.bot?.name || "Bot",
       version: `v${botConfig?.bot?.version || "1.0.0"}`,
       uptime: formatUptime(uptime),
       database: {

@@ -148,7 +148,7 @@ async function checkAndNotifyLevelUp(sock, m, db, user, oldExp, newExp) {
     }
 
     const role = getRole(newLevel);
-    const botName = config.bot?.name || "Ourin-AI";
+    const botName = config.bot?.name || "Bot";
     const saluranId = config.saluran?.id || "120363400911374213@newsletter";
     const saluranName = config.saluran?.name || botName;
 

@@ -114,7 +114,7 @@ async function handler(m, { sock }) {
     });
     const buffer = Buffer.from(response.data);
     await sock.sendImageAsSticker(m.chat, buffer, m, {
-      packname: config.sticker?.packname || "Ourin-AI",
+      packname: config.sticker?.packname || "Bot",
       author: config.sticker?.author || "Bot",
     });
     m.react("✅");

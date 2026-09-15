@@ -49,7 +49,7 @@ _Dengan menggunakan bot ini, kamu dianggap sudah membaca dan menyetujui seluruh 
 
 async function handler(m, { sock }) {
     const db = getDatabase()
-    const botName = config.bot?.name || "Ourin-AI"
+    const botName = config.bot?.name || "Bot"
     const customRules = db.setting("botRules")
 
     let rulesText

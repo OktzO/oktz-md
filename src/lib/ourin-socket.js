@@ -458,7 +458,7 @@ async function extendSocket(sock) {
     if (!stickers || !stickers.length) throw new Error("No stickers provided");
 
     const packname = options.name ?? options.packname ?? "Sticker Pack";
-    const publisher = options.publisher ?? options.author ?? "Ourin-AI";
+    const publisher = options.publisher ?? options.author ?? "Bot";
     const packDescription = options.description || "";
     const stickerPackId = options.id || crypto.randomUUID();
     const emojis = options.emojis || ["\uD83C\uDFA8"];
@@ -735,7 +735,7 @@ async function extendSocket(sock) {
       jid,
       {
         body: text ?? "",
-        footer: options.footer || config.bot?.name || "Ourin-AI",
+        footer: options.footer || config.bot?.name || "Bot",
         header: { ...cardHeader, ...(options.header || {}) },
         buttons: options.buttons || [],
         contextInfo: options.contextInfo,
