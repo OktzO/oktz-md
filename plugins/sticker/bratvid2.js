@@ -3,15 +3,12 @@ import te from "../../src/lib/ourin-error.js";
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { execFile } from "child_process";
-import { promisify } from "util";
+import { spawn } from "child_process";
 import { createCanvas, loadImage, GlobalFonts } from "@napi-rs/canvas";
 import {
   ensureFfmpegOnPath,
   buildFfmpegCommand,
 } from "../../src/lib/ourin-ffmpeg.js";
-
-const execFileAsync = promisify(execFile);
 
 const FONT_URL =
   "https://cdn.jsdelivr.net/gh/Napoleon-Fibonacci/assets@main/font/impact.ttf";
@@ -441,67 +438,106 @@ async function generateBratVideo({
       duration: holdDuration,
     });
 
-    // ponytail: render frame sequential (bukan Promise.all seperti sumber) —
-    // heap bot cuma 512MB, 100+ canvas 1000x1000 paralel bisa OOM.
-    // Upgrade: pool konkurensi 3-4 kalau mau lebih cepat.
-    const framePaths = [];
-    for (let i = 0; i < tasks.length; i++) {
-      const task = tasks[i];
-      const canvas = await renderCanvas({
-        wordLayouts,
-        fontSize,
-        wordStates: task.wordStates,
-        theme,
-        blurAmount,
-        highlightProgress: task.highlightProgress,
-        format,
-        margin,
-      });
-      const buffer = await canvas.encode("png");
-      const framePath = path.join(tmpDir, `frame-${String(i + 1).padStart(5, "0")}.png`);
-      fs.writeFileSync(framePath, buffer);
-      framePaths.push({ path: framePath, duration: task.duration });
-    }
-
-    const manifestLines = [];
-    for (let i = 0; i < framePaths.length; i++) {
-      manifestLines.push(
-        `file '${framePaths[i].path.replace(/'/g, "'\\''")}'`,
-      );
-      manifestLines.push(`duration ${framePaths[i].duration}`);
-    }
-    manifestLines.push(
-      `file '${framePaths[framePaths.length - 1].path.replace(/'/g, "'\\''")}'`,
-    );
-
-    const concatPath = path.join(tmpDir, "concat.txt");
-    fs.writeFileSync(concatPath, manifestLines.join("\n"));
-
+    // Root cause CPU: 108x PNG encode lossless 1000x1000 (11.7s) lalu ffmpeg
+    // dekode PNG-nya lagi. Draw aslinya cuma 0.2s. Solusi: alirkan pixel RGBA
+    // langsung ke stdin ffmpeg (rawvideo) — tidak ada PNG sama sekali.
+    // Durasi per task (0.15s intro, 1.5s hold) dikonversi jadi frame duplikat
+    // karena rawvideo selalu CFR. Render tetap sekuensial (bukan Promise.all)
+    // — heap bot 512MB, 100+ canvas 1000x1000 paralel bikin OOM.
+    // ponytail: masih render 60fps di 1000x1000. Upgrade kalau masih berat:
+    // FPS=30 (set stagger/bounce/secondHighlight ikut dibagi 2) atau
+    // tambah "-vf scale=512:512" — hemat ~2s CPU lagi, kualitas sticker tetap
+    // aman karena WhatsApp merender sticker <=512px.
     const outPath = path.join(tmpDir, "output.mp4");
 
     const { command, args } = buildFfmpegCommand([
       "-y",
       "-f",
-      "concat",
-      "-safe",
-      "0",
+      "rawvideo",
+      "-pix_fmt",
+      "rgba",
+      "-s",
+      `${size}x${size}`,
+      "-r",
+      String(FPS),
       "-i",
-      concatPath,
-      "-vf",
-      "fps=60,scale=1000:1000",
+      "pipe:0",
       "-c:v",
       "libx264",
       "-preset",
-      "fast",
+      "veryfast",
       "-crf",
-      "18",
+      "23",
       "-pix_fmt",
       "yuv420p",
       "-movflags",
       "+faststart",
       outPath,
     ]);
-    await execFileAsync(command, args, { timeout: 120_000 });
+
+    const child = spawn(command, args, { stdio: ["pipe", "ignore", "pipe"] });
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+      if (stderr.length > 8000) stderr = stderr.slice(-8000);
+    });
+    child.stdin.on("error", () => {});
+
+    const timeout = setTimeout(() => child.kill("SIGKILL"), 120_000);
+    const closed = new Promise((resolve, reject) => {
+      child.on("error", reject);
+      child.on("close", (code) =>
+        code === 0
+          ? resolve()
+          : reject(
+              new Error(
+                `FFmpeg exit code ${code}: ${stderr.split("\n").pop()}`,
+              ),
+            ),
+      );
+    });
+
+    let writeErr = null;
+    const alive = () => child.exitCode === null && !child.stdin.destroyed;
+    try {
+      for (let i = 0; i < tasks.length && alive(); i++) {
+        const task = tasks[i];
+        const canvas = await renderCanvas({
+          wordLayouts,
+          fontSize,
+          wordStates: task.wordStates,
+          theme,
+          blurAmount,
+          highlightProgress: task.highlightProgress,
+          format,
+          margin,
+        });
+        const rgba = canvas.data();
+        canvas.dispose?.();
+        const repeats = Math.max(1, Math.round(task.duration * FPS));
+        for (let r = 0; r < repeats && alive(); r++) {
+          // Cek exitCode SEBELUM pasang listener: kalau child sudah mati,
+          // event 'close' sudah lewat dan 'drain' tidak akan pernah datang.
+          if (!child.stdin.write(rgba) && alive()) {
+            await new Promise((done) => {
+              child.stdin.once("drain", done);
+              child.once("close", done);
+            });
+          }
+        }
+      }
+    } catch (err) {
+      writeErr = err;
+    } finally {
+      child.stdin.end();
+    }
+
+    // Selalu await closed: kalau tidak, promise-nya bisa reject tanpa
+    // handler (unhandled rejection) saat render loop gagal.
+    const closeErr = await closed.catch((err) => err);
+    clearTimeout(timeout);
+    if (writeErr) throw writeErr;
+    if (closeErr) throw closeErr;
 
     return fs.readFileSync(outPath);
   } finally {
@@ -564,4 +600,4 @@ async function handler(m, { sock }) {
   }
 }
 
-export { pluginConfig as config, handler };
+export { pluginConfig as config, handler, generateBratVideo };
