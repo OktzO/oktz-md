@@ -85,64 +85,73 @@ function invalidatePrefixCache() {
   _prefixCacheTime = 0;
 }
 
-const _adminCache = new Map();
-const ADMIN_CACHE_TTL = 5 * 60 * 1000;
-const ADMIN_CACHE_MAX = 500;
-
-function _buildAdminCache(cacheKey, participants, botNum) {
-  const exactNums = new Set();
-  const suffixNums = [];
-  let botAdmin = false;
-  for (const p of participants) {
-    if (!p.admin) continue;
-    const pJid = p.jid || p.id || "";
-    const pLid = p.lid || "";
-    let pNum = pJid.replace(/[^0-9]/g, "");
-    const pLidNum = pLid.replace(/[^0-9]/g, "");
-    if (isLid(pJid) || isLidConverted(pJid)) {
-      const resolved = getCachedJid(pJid) || getCachedJid(pLid);
-      if (resolved) pNum = resolved.replace(/[^0-9]/g, "");
-    }
-    exactNums.add(pNum);
-    exactNums.add(pLidNum);
-    suffixNums.push(pNum);
-    if (
-      pNum === botNum ||
-      (pNum.length >= 8 &&
-        botNum.length >= 8 &&
-        (pNum.endsWith(botNum) || botNum.endsWith(pNum)))
-    ) {
-      botAdmin = true;
-    }
+/**
+ * Semua varian nomor identitas satu participant.
+ *
+ * Root cause bug ".del: sudah admin tapi ditolak": ourin mengembalikan
+ * participant dalam DUA bentuk berbeda tergantung addressing_mode grup:
+ *   - grup PN  : { id: PN, lid: LID }
+ *   - grup LID : { id: LID, phoneNumber: PN }   <- `lid` TIDAK ada
+ * Implementasi lama cuma membaca `p.jid || p.id` + `p.lid`, jadi di grup LID
+ * hanya satu nomor yang masuk, dan begitu lidCache hangat nomor itu berubah
+ * jadi PN sementara m.sender (yang masih LID saat dicek) hilang dari set.
+ * Akibatnya admin (dan bot) tidak dikenali lagi.
+ */
+function _participantNums(p) {
+  const nums = new Set();
+  const add = (jid) => {
+    if (!jid) return;
+    const n = String(jid).replace(/[^0-9]/g, "");
+    if (n) nums.add(n);
+  };
+  const idJid = p.jid || p.id || "";
+  add(idJid);
+  add(p.lid);
+  add(p.phoneNumber);
+  if (isLid(idJid) || isLidConverted(idJid)) {
+    add(getCachedJid(idJid) || getCachedJid(p.lid));
   }
-  const entry = { exactNums, suffixNums, botAdmin, ts: Date.now() };
-  if (_adminCache.size >= ADMIN_CACHE_MAX) {
-    _adminCache.delete(_adminCache.keys().next().value);
-  }
-  _adminCache.set(cacheKey, entry);
-  return entry;
+  return nums;
 }
 
-function _getAdminCache(chatId, participants, botNum) {
-  const cacheKey = chatId + "|" + botNum;
-  const cached = _adminCache.get(cacheKey);
-  if (cached && Date.now() - cached.ts < ADMIN_CACHE_TTL) return cached;
-  return _buildAdminCache(cacheKey, participants, botNum);
-}
-
-function _matchAdminNum(entry, num) {
-  if (entry.exactNums.has(num)) return true;
+function _numHit(nums, num) {
+  if (!num) return false;
+  if (nums.has(num)) return true;
+  // Fuzzy suffix: dipertahankan dari implementasi lama (PN dengan/tanpa
+  // kode negara, device suffix, dsb).
   if (num.length < 8) return false;
-  for (const pNum of entry.suffixNums) {
-    if (
-      pNum.length >= 8 &&
-      (pNum.endsWith(num) || num.endsWith(pNum))
-    ) {
-      return true;
-    }
+  for (const n of nums) {
+    if (n.length >= 8 && (n.endsWith(num) || num.endsWith(n))) return true;
   }
   return false;
 }
+
+/**
+ * Compute isAdmin/isBotAdmin tanpa cache: participants[] sudah ada di memori
+ * (groupMetadata per pesan), jadi scan sekali jalan lebih murah daripada
+ * cache 5 menit yang membuat admin baru tidak dikenali sampai TTL habis.
+ *
+ * @param {Object[]} participants - array participant groupMetadata
+ * @param {string} senderJid - JID pengirim (boleh LID atau LID-converted)
+ * @param {string[]} botJids - [sock.user.id, sock.user.lid]
+ */
+function adminFlagsFor(participants = [], senderJid, botJids = []) {
+  const senderNum = (senderJid || "").replace(/[^0-9]/g, "");
+  const botNums = botJids
+    .map((j) => (j || "").replace(/[^0-9]/g, ""))
+    .filter(Boolean);
+  let isAdmin = false;
+  let isBotAdmin = false;
+  for (const p of participants) {
+    if (!p || !p.admin) continue;
+    const nums = _participantNums(p);
+    if (!isAdmin && _numHit(nums, senderNum)) isAdmin = true;
+    if (!isBotAdmin && botNums.some((bn) => _numHit(nums, bn))) isBotAdmin = true;
+    if (isAdmin && isBotAdmin) break;
+  }
+  return { isAdmin, isBotAdmin };
+}
+
 
 const _thumbCache = new LRUCache({ max: 50, ttl: 10 * 60 * 1000 });
 async function getCachedThumb(filePath) {
@@ -485,9 +494,15 @@ async function serializeQuotedMessage(
     pushName: qPushName,
     key: {
       remoteJid: message.key?.remoteJid || "",
-      fromMe: quotedParticipant === decodeJid(sock?.user?.id),
+      fromMe:
+        quotedParticipant === decodeJid(sock?.user?.id) ||
+        (!!sock?.user?.lid && contextInfo.participant === sock.user.lid),
       id: contextInfo.stanzaId || "",
       participant: quotedParticipant,
+      // Addressing asli dari server (belum di-resolve LID->PN). Revoke/pin/star
+      // harus pakai ini: di grup addressing_mode=lid pesan disimpan dengan
+      // participant LID, jadi key berisi PN tidak akan dicocokkan server.
+      rawParticipant: contextInfo.participant || "",
     },
     id: contextInfo.stanzaId || "",
     sender: quotedParticipant,
@@ -820,12 +835,12 @@ async function serialize(sock, msg, store = {}) {
         ?.filter((p) => p.admin)
         .map((p) => p.jid || p.id || p.lid || "");
 
-      const senderNum = m.sender?.replace(/[^0-9]/g, "") || "";
-      const botNum = decodeJid(sock.user.id)?.replace(/[^0-9]/g, "") || "";
-
-      const adminCache = _getAdminCache(m.chat, m.groupMembers, botNum);
-      m.isAdmin = _matchAdminNum(adminCache, senderNum);
-      m.isBotAdmin = adminCache.botAdmin;
+      const flags = adminFlagsFor(m.groupMembers, m.sender, [
+        decodeJid(sock.user?.id) || sock.user?.id,
+        sock.user?.lid,
+      ]);
+      m.isAdmin = flags.isAdmin;
+      m.isBotAdmin = flags.isBotAdmin;
 
       cacheParticipantLids(m.groupMembers);
 
@@ -1779,6 +1794,7 @@ function createJid(number) {
 
 export {
   serialize,
+  adminFlagsFor,
   decodeJid,
   getMessageType,
   getMessageBody,

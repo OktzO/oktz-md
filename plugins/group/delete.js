@@ -22,9 +22,9 @@ async function handler(m, { sock }) {
     }
 
     const quotedSender = m.quoted.sender || m.quoted.key?.participant
-    const botJid = sock.user?.id?.split(':')[0] + '@s.whatsapp.net'
+    const botJids = [sock.user?.id?.split(':')[0] + '@s.whatsapp.net', sock.user?.lid].filter(Boolean)
     const isOwnMessage = m.quoted.key?.fromMe || quotedSender === m.sender
-    const isBotMessage = quotedSender === botJid || m.quoted.key?.fromMe
+    const isBotMessage = m.quoted.key?.fromMe || botJids.includes(quotedSender) || botJids.includes(m.quoted.key?.rawParticipant)
 
     if (!isOwnMessage && !isBotMessage) {
         if (!m.isBotAdmin) {
@@ -40,13 +40,18 @@ async function handler(m, { sock }) {
             remoteJid: m.chat,
             id: m.quoted.key.id,
             fromMe: m.quoted.key.fromMe,
-            participant: quotedSender
+            // rawParticipant = addressing asli dari server. Di grup
+            // addressing_mode=lid, pesan disimpan dengan participant LID;
+            // pakai nomor PN hasil resolve bikin revoke tidak dicocokkan
+            // server (pesan tampak "tidak terhapus" tanpa error).
+            participant: m.quoted.key.rawParticipant || quotedSender
         }
 
         await sock.sendMessage(m.chat, { delete: key })
         await m.react('✅')
 
     } catch (err) {
+        console.error('[Delete Error]', err)
         if (err.message?.includes('not found') || err.message?.includes('forbidden')) {
             await m.reply('❌ *Gagal menghapus!*\n> Pesan mungkin sudah dihapus atau terlalu lama.')
         } else {
