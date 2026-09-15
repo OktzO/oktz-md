@@ -3,7 +3,7 @@ import { createCanvas } from '@napi-rs/canvas'
 import config from '../../config.js'
 import { f } from '../../src/lib/ourin-http.js'
 import te from '../../src/lib/ourin-error.js'
-const NEOXR_APIKEY = config.APIkey?.neoxr || 'Milik-Bot-OurinMD'
+const NEOXR_APIKEY = config.APIkey?.neoxr || ''
 const pluginConfig = {
     name: 'attp',
     alias: ['attp2', 'attp3'],

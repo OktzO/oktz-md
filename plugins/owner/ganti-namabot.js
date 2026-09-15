@@ -7,7 +7,7 @@ const pluginConfig = {
     category: 'owner',
     description: 'Ganti nama bot di config.js',
     usage: '.ganti-namabot <nama baru>',
-    example: '.ganti-namabot Ourin MD',
+    example: '.ganti-namabot Bot Baru',
     isOwner: true,
     isPremium: false,
     isGroup: false,

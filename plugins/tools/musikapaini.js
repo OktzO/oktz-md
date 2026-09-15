@@ -90,7 +90,7 @@ async function handler(m, { sock }) {
     const data = await ourinApi.neoxr.whatMusic(
       {
         url: audioUrl,
-        apikey: config.APIkey?.neoxr || "Milik-Bot-OurinMD",
+        apikey: config.APIkey?.neoxr || '',
       },
       {
         timeout: 60000,

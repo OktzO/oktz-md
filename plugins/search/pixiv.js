@@ -29,7 +29,7 @@ async function handler(m, { sock }) {
 
     await m.react("🔍");
 
-    const apikey = config.APIkey?.neoxr || "Milik-Bot-OurinMD";
+    const apikey = config.APIkey?.neoxr || '';
     const url = `https://api.neoxr.eu/api/pixiv-search?q=${encodeURIComponent(query)}&apikey=${apikey}`;
 
     const response = await axios.get(url, { timeout: 30000 });
@@ -43,7 +43,7 @@ async function handler(m, { sock }) {
     const results = data.data.slice(0, 10);
 
     const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-    const saluranName = config.saluran?.name || config.bot?.name || "Ourin-AI";
+    const saluranName = config.saluran?.name || config.bot?.name || "Bot";
 
     let caption = `🎨 *ᴘɪxɪᴠ sᴇᴀʀᴄʜ*\n`;
     caption += `📝 *ᴋᴜᴇʀʏ:* ${query}\n`;

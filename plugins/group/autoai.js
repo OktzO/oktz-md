@@ -14,8 +14,8 @@ const pluginConfig = {
   description:
     "Toggle auto AI response untuk grup dengan pilihan text atau voice",
   usage:
-    ".autoai on/off --ourinmode=<character|custom> --logic=<custom instruction> --type=<text|voice> --mode=<onlychat|assistant>",
-  example: ".autoai on --ourinmode=furina --type=voice --mode=onlychat",
+    ".autoai on/off --persona=<character|custom> --logic=<custom instruction> --type=<text|voice> --mode=<onlychat|assistant>",
+  example: ".autoai on --persona=furina --type=voice --mode=onlychat",
   isOwner: false,
   isPremium: false,
   isGroup: true,
@@ -115,7 +115,7 @@ async function handler(m) {
     };
     db.save();
     return m.reply(
-      `✅ *Persona ditambahkan*\n\n> Nama: ${personaArgs[0]}\n> Key: ${pName}\n> Logic: ${pInstruction.substring(0, 80)}${pInstruction.length > 80 ? "..." : ""}\n\n> Gunakan: .autoai on --ourinmode=${pName}`,
+      `✅ *Persona ditambahkan*\n\n> Nama: ${personaArgs[0]}\n> Key: ${pName}\n> Logic: ${pInstruction.substring(0, 80)}${pInstruction.length > 80 ? "..." : ""}\n\n> Gunakan: .autoai on --persona=${pName}`,
     );
   }
 
@@ -201,7 +201,7 @@ async function handler(m) {
     txt += `*Bawaan:*\n${builtIn}\n\n`;
     txt += `*Custom:*\n${custom}\n\n`;
     txt += `*Global:* ${db.db.data.autoai_global.enabled ? "✅ Aktif" : "❌ Nonaktif"}\n\n`;
-    txt += `> .autoai on --ourinmode=<key>\n`;
+    txt += `> .autoai on --persona=<key>\n`;
     txt += `> .autoai tambahpersona nama | logic\n`;
     txt += `> .autoai hapuspersona nama\n`;
     txt += `> .autoai global on/off`;
@@ -216,11 +216,11 @@ async function handler(m) {
         `❌ Format salah!\n\n> .autoai global on/off\n\n> Global saat ini: ${db.db.data.autoai_global.enabled ? "✅ Aktif" : "❌ Nonaktif"}`,
       );
     if (globalMode === "on") {
-      const modeMatch = fullArgs.match(/--ourinmode=(\w+)/i);
+      const modeMatch = fullArgs.match(/--persona=(\w+)/i);
       const typeMatch = fullArgs.match(/--type=(text|voice)/i);
       const aimodeMatch = fullArgs.match(/--mode=(onlychat|assistant)/i);
       const logicMatch = fullArgs.match(
-        /--logic=(.+?)(?=\s+--(?:ourinmode|type|logic|mode)|$)/i,
+        /--logic=(.+?)(?=\s+--(?:persona|type|logic|mode)|$)/i,
       );
       const charKey = modeMatch ? modeMatch[1].toLowerCase() : null;
       const responseType = typeMatch ? typeMatch[1].toLowerCase() : "text";
@@ -251,7 +251,7 @@ async function handler(m) {
           characterName = existingGlobal.characterName || "Global";
         } else {
           return m.reply(
-            `❌ Belum ada persona global yang diset!\n\n> .autoai global on --ourinmode=furina\n> .autoai global on --ourinmode=custom --logic=...`,
+            `❌ Belum ada persona global yang diset!\n\n> .autoai global on --persona=furina\n> .autoai global on --persona=custom --logic=...`,
           );
         }
       } else {
@@ -292,11 +292,11 @@ async function handler(m) {
   }
 
   const mode = subcmd;
-  const modeMatch = fullArgs.match(/--ourinmode=(\w+)/i);
+  const modeMatch = fullArgs.match(/--persona=(\w+)/i);
   const typeMatch = fullArgs.match(/--type=(text|voice)/i);
   const aimodeMatch = fullArgs.match(/--mode=(onlychat|assistant)/i);
   const logicMatch = fullArgs.match(
-    /--logic=(.+?)(?=\s+--(?:ourinmode|type|logic|mode)|$)/i,
+    /--logic=(.+?)(?=\s+--(?:persona|type|logic|mode)|$)/i,
   );
   const charKey = modeMatch ? modeMatch[1].toLowerCase() : null;
   const responseType = typeMatch ? typeMatch[1].toLowerCase() : "text";
@@ -314,7 +314,7 @@ async function handler(m) {
     let txt = `🤖 *ᴀᴜᴛᴏ ᴀɪ*\n\n`;
     txt += `> Mengaktifkan/menonaktifkan auto AI response\n\n`;
     txt += `*Penggunaan:*\n`;
-    txt += `> .autoai on --ourinmode=<karakter|custom> --type=<text|voice> --mode=<onlychat|assistant>\n`;
+    txt += `> .autoai on --persona=<karakter|custom> --type=<text|voice> --mode=<onlychat|assistant>\n`;
     txt += `> .autoai off\n`;
     txt += `> .autoai tambahpersona nama | logic\n`;
     txt += `> .autoai hapuspersona nama\n`;
@@ -331,10 +331,10 @@ async function handler(m) {
     txt += `> assistant - Bot bisa jalankan aksi (buka tutup grup, kick, rich message)\n`;
     txt += `> onlychat - Bot hanya murni chat santai biasa\n\n`;
     txt += `*Contoh:*\n`;
-    txt += `> .autoai on --ourinmode=furina --type=text\n`;
-    txt += `> .autoai on --ourinmode=custom --logic=kamu adalah nexa ai\n`;
+    txt += `> .autoai on --persona=furina --type=text\n`;
+    txt += `> .autoai on --persona=custom --logic=kamu adalah nexa ai\n`;
     txt += `> .autoai tambahpersona nexa | kamu adalah nexa ai\n`;
-    txt += `> .autoai global on --ourinmode=furina`;
+    txt += `> .autoai global on --persona=furina`;
     return m.reply(txt);
   }
 
@@ -356,14 +356,14 @@ async function handler(m) {
       "custom",
     ].join(", ");
     return m.reply(
-      `❌ Karakter tidak valid!\n\n> Karakter tersedia: ${charList}\n\n> Contoh: .autoai on --ourinmode=furina --type=voice\n> Custom: .autoai on --ourinmode=custom --logic=kamu adalah nexa ai`,
+      `❌ Karakter tidak valid!\n\n> Karakter tersedia: ${charList}\n\n> Contoh: .autoai on --persona=furina --type=voice\n> Custom: .autoai on --persona=custom --logic=kamu adalah nexa ai`,
     );
   }
 
   if (charKey === "custom") {
     if (!customLogic) {
       return m.reply(
-        `❌ Mode custom membutuhkan --logic!\n\n> Contoh: .autoai on --ourinmode=custom --logic=kamu adalah nexa ai, ...`,
+        `❌ Mode custom membutuhkan --logic!\n\n> Contoh: .autoai on --persona=custom --logic=kamu adalah nexa ai, ...`,
       );
     }
     db.db.data.autoai[m.chat] = {
@@ -430,7 +430,7 @@ async function handler(m) {
       "custom",
     ].join(", ");
     return m.reply(
-      `❌ Karakter tidak valid!\n\n> Karakter tersedia: ${charList}\n\n> Contoh: .autoai on --ourinmode=furina --type=voice`,
+      `❌ Karakter tidak valid!\n\n> Karakter tersedia: ${charList}\n\n> Contoh: .autoai on --persona=furina --type=voice`,
     );
   }
 

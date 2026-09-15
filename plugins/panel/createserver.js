@@ -223,7 +223,7 @@ async function handler(m, { sock }) {
     return m.reply(`❌ Paket tidak ditemukan.`);
   }
 
-  const email = `${username}@ourin.md`;
+  const email = `${username}@example.com`;
   const name = capitalize(username) + " Server";
   const password = username + crypto.randomBytes(3).toString("hex");
   const serverLabel = serverVersion.toUpperCase();

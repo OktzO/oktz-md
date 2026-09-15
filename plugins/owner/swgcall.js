@@ -226,7 +226,7 @@ async function handler(m, { sock, db }) {
           newsletterName: botConfig?.saluran?.name,
         },
       },
-      footer: "OURIN MD",
+      footer: config?.bot?.name || "Bot",
       interactiveButtons: [
         {
           name: "quick_reply",

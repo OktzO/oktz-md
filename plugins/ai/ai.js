@@ -28,7 +28,7 @@ function saveSession(userJid, sessionId) {
   }
 }
 
-const systemPrompt = `Kamu adalah asisten AI yang cerdas dan canggih (Ourin AI).
+const systemPrompt = `Kamu adalah asisten AI yang cerdas dan canggih.
 Gunakan format markdown secara ketat:
 1. Jika membuat daftar perbandingan atau sekumpulan data, SELALU gunakan format tabel markdown (diawali dan diakhiri dengan '|').
 2. Jika memberikan kode pemrograman, SELALU bungkus dengan markdown code block (\`\`\`bahasa ... \`\`\`).

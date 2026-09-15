@@ -39,7 +39,7 @@ async function handler(m, { sock }) {
     m.react('🕕')
 
     try {
-        const NEOXR_APIKEY = config.APIkey?.neoxr || 'Milik-Bot-OurinMD'
+        const NEOXR_APIKEY = config.APIkey?.neoxr || ''
         const apiUrl = `https://api.neoxr.eu/api/ai-anime?q=${encodeURIComponent(prompt)}&apikey=${NEOXR_APIKEY}`
         
         const data = await f(apiUrl)

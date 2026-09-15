@@ -8,7 +8,7 @@ const pluginConfig = {
   category: "canvas",
   description: "Buat gambar teks dengan efek watercolor",
   usage: ".watercolortext <teks>",
-  example: ".watercolortext OURIN",
+  example: ".watercolortext Halo",
   isOwner: false,
   isPremium: false,
   isGroup: false,
@@ -23,7 +23,7 @@ async function handler(m, { sock }) {
 
   if (!text) {
     return m.reply(
-      `🎨 *ᴡᴀᴛᴇʀᴄᴏʟᴏʀ ᴛᴇxᴛ*\n\n> Masukkan teks yang ingin dijadikan gambar\n\n\`Contoh: ${m.prefix}watercolortext OURIN\``,
+      `🎨 *ᴡᴀᴛᴇʀᴄᴏʟᴏʀ ᴛᴇxᴛ*\n\n> Masukkan teks yang ingin dijadikan gambar\n\n\`Contoh: ${m.prefix}watercolortext Halo\``,
     );
   }
 

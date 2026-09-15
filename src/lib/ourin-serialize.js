@@ -880,7 +880,7 @@ async function serialize(sock, msg, store = {}) {
   m.to = m.chat;
   m.botNumber = decodeJid(sock.user?.id)?.replace(/@.+/g, "") || "";
   m.botJid = decodeJid(sock.user?.id) || "";
-  m.botName = sock.user?.name || config.bot?.name || "Ourin-AI";
+  m.botName = sock.user?.name || config.bot?.name || "Bot";
   m.messageId = m.id;
   m.chatId = m.chat;
   m.senderId = m.sender;
@@ -1029,7 +1029,7 @@ async function serialize(sock, msg, store = {}) {
         {
           caption: `${config.info?.website}\n\n${text}`,
           url: config.info?.website || "https://github.com",
-          title: config.bot?.name || "Ourin-AI",
+          title: config.bot?.name || "Bot",
           description:
             `Pengembang: ${config.bot.developer} | Versi: ${config.bot.version}` ||
             "WhatsApp Bot",
@@ -1044,7 +1044,7 @@ async function serialize(sock, msg, store = {}) {
             forwardingScore: 9,
             forwardedNewsletterMessageInfo: {
               newsletterJid: config.saluran?.id,
-              newsletterName: config.saluran?.name || config.bot?.name || "Ourin-AI",
+              newsletterName: config.saluran?.name || config.bot?.name || "Bot",
               serverMessageId: Math.floor(Math.random() * 1000000),
             },
           },
@@ -1064,7 +1064,7 @@ async function serialize(sock, msg, store = {}) {
             itemCount: 999,
             status: 1,
             surface: 1,
-            message: config.bot?.name || "Ourin-AI",
+            message: config.bot?.name || "Bot",
             orderTitle: "System Notification",
             sellerJid: "0@s.whatsapp.net",
             token: "ARU1+",
@@ -1120,7 +1120,7 @@ async function serialize(sock, msg, store = {}) {
                 locationMessage: {
                   degreesLatitude: 0,
                   degreesLongitude: 0,
-                  name: config.bot?.name || "Ourin-AI",
+                  name: config.bot?.name || "Bot",
                   address: "Bot Wa Multi Device",
                   jpegThumbnail: await sharp(thumbnailBuf).resize(300, 300).toBuffer(),
                 }
@@ -1267,7 +1267,7 @@ async function serialize(sock, msg, store = {}) {
       const uploadMedia = await prepareWAMessageMedia({ image: thumbBuf1280 }, { upload: sock.waUploadToServer, mediaTypeOverride: "thumbnail-link" });
       const uploadFav = await prepareWAMessageMedia({ image: favBuf512 }, { upload: sock.waUploadToServer, mediaTypeOverride: "thumbnail-link" });
 
-      const botName = config.bot?.name || "Ourin-AI";
+      const botName = config.bot?.name || "Bot";
       const senderNum = m.sender.split('@')[0];
 
       const msg = generateWAMessageFromContent(m.chat, {

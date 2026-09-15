@@ -2,7 +2,7 @@ import axios from "axios";
 import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
 import { saluranCtx } from "../../src/lib/ourin-context.js";
-const NEOXR_APIKEY = config.APIkey?.neoxr || "Milik-Bot-OurinMD";
+const NEOXR_APIKEY = config.APIkey?.neoxr || '';
 
 const pluginConfig = {
   name: "emojitoanimasi",

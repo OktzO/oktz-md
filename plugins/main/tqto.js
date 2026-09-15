@@ -25,10 +25,10 @@ async function handler(m, { sock }) {
 
     const credits = [
         { name: 'hyuuOkkotsuX', role: 'Lead Staff', icon: '👨‍💻' },
-        { name: 'Zann', role: 'Creator Ourin MD dan APK Stardem Ourin', icon: '👨‍💻' },
+        { name: 'Zann', role: 'Creator', icon: '👨‍💻' },
         { name: 'SenzOkkotsu', role: 'Developer', icon: '👨‍💻' },
         { name: 'Ell', role: 'Developer', icon: '👨‍💻' },
-        { name: 'Aqell', role: 'Developer SC BUG Ourin Glitch', icon: '👨‍💻' },
+        { name: 'Aqell', role: 'Developer', icon: '👨‍💻' },
         { name: 'Mobbc', role: 'Staff', icon: '👨‍💻' },
         { name: 'Raka', role: 'Staff', icon: '👨‍💻' },
         { name: 'Sanxz', role: 'Tangan Kanan', icon: '👨‍💻' },

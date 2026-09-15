@@ -31,7 +31,7 @@ function getTempDir() {
 }
 
 const DEFAULT_METADATA = {
-    packname: 'Ourin-AI',
+    packname: 'Sticker',
     author: 'Bot',
     packId: 'com.ourin.sticker',
     emojis: ['🤖']
@@ -348,28 +348,28 @@ function cleanTempFiles(maxAge = 3600000) {
 
 const PRESETS = {
     default: {
-        packname: 'Ourin-AI',
+        packname: 'Sticker',
         author: 'Bot',
         emojis: ['🤖']
     },
     meme: {
         packname: 'Meme Pack',
-        author: 'Ourin-AI',
+        author: 'Bot',
         emojis: ['😂', '🤣']
     },
     love: {
         packname: 'Love Pack',
-        author: 'Ourin-AI',
+        author: 'Bot',
         emojis: ['❤️', '💕', '💖']
     },
     sad: {
         packname: 'Sad Pack',
-        author: 'Ourin-AI',
+        author: 'Bot',
         emojis: ['😢', '😭', '💔']
     },
     angry: {
         packname: 'Angry Pack',
-        author: 'Ourin-AI',
+        author: 'Bot',
         emojis: ['😠', '😡', '💢']
     }
 };

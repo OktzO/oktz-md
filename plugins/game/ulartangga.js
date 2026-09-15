@@ -38,7 +38,7 @@ let thumbUT = getAssetBuffer("ourin-games") || null;
 
 function utCtx(mentions) {
   const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-  const saluranName = config.saluran?.name || config.bot?.name || "Ourin-AI";
+  const saluranName = config.saluran?.name || config.bot?.name || "Bot";
   const normalizedMentions = uniqueMentions(mentions);
   return {
     forwardingScore: 9999,

@@ -75,7 +75,7 @@ async function handler(m, { sock }) {
     }
 
     const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-    const saluranName = config.saluran?.name || config.bot?.name || "Ourin-AI";
+    const saluranName = config.saluran?.name || config.bot?.name || "Bot";
 
     let text = `🏆 *ɪɴꜰᴏ ᴛᴜʀɴᴀᴍᴇɴ ᴍᴏʙɪʟᴇ ʟᴇɢᴇɴᴅs*\n\n`;
     text += `> 5 Turnamen Terbaru\n\n`;

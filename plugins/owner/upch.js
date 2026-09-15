@@ -54,7 +54,7 @@ function generateWaveform(audioBuf, samples = 64) {
 async function handler(m, { sock }) {
     const args = m.text?.replace(/^\.upch\s+/i, '').split(" ") || []
     const chId = args[0]?.includes("@newsletter") ? args.shift() : config?.saluran?.id
-    const chName = config?.saluran?.name || config?.bot?.name || "Ourin-AI"
+    const chName = config?.saluran?.name || config?.bot?.name || "Bot"
     const caption = args.join(" ").trim()
 
     const quoted = m.quoted || m

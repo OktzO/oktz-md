@@ -187,7 +187,7 @@ async function createEpicPingCanvas(data) {
     
     ctx.fillStyle = '#cbd5e1';
     ctx.font = 'bold 24px Courier New';
-    ctx.fillText(`STATUS: ONLINE | TERMINAL: OURIN MD`, 50, 110);
+    ctx.fillText(`STATUS: ONLINE`, 50, 110);
     
     ctx.beginPath();
     ctx.moveTo(50, 130);

@@ -2,12 +2,12 @@ import { UnlimitedAI } from "../../src/scraper/unlimitedai.js";
 import te from "../../src/lib/ourin-error.js";
 
 const pluginConfig = {
-  name: "ourin-ai",
-  alias: ["ourinai", "ourin"],
+  name: "aiassist",
+  alias: ["asisten", "tanya-ai"],
   category: "ai",
-  description: "Chat dengan Ourin AI — Asisten bot cerdas",
-  usage: ".ourin-ai <pertanyaan>",
-  example: ".ourin-ai Apa itu Node.js?",
+  description: "Chat dengan AI Assistant — Asisten bot cerdas",
+  usage: ".aiassist <pertanyaan>",
+  example: ".aiassist Apa itu Node.js?",
   isOwner: false,
   isPremium: false,
   isGroup: false,
@@ -21,23 +21,23 @@ async function handler(m, { sock }) {
   const text = m.args.join(" ");
   if (!text) {
     return m.reply(
-      `🤖 *Ourin AI*\n\n` +
+      `🤖 *AI Assistant*\n\n` +
         `> Asisten cerdas siap membantu\n\n` +
         `*PENGGUNAAN:*\n` +
-        `> *${m.prefix}ourin-ai <pertanyaan>*\n\n` +
+        `> *${m.prefix}aiassist <pertanyaan>*\n\n` +
         `*CONTOH:*\n` +
-        `> *${m.prefix}ourin-ai Apa itu Node.js?*`
+        `> *${m.prefix}aiassist Apa itu Node.js?*`
     );
   }
 
   await m.react("🕕");
 
   try {
-    const result = await UnlimitedAI(text, "ourin-ai");
+    const result = await UnlimitedAI(text, "aiassist");
 
     if (!result.status) {
       await m.react("☢");
-      return m.reply(`❌ *Ourin AI Error*\n\n> ${result.error || "Gagal mendapatkan respons"}`);
+      return m.reply(`❌ *AI Assistant Error*\n\n> ${result.error || "Gagal mendapatkan respons"}`);
     }
 
     await m.react("✅");

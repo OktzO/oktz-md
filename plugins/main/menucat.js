@@ -341,7 +341,7 @@ async function handler(m, { sock, db }) {
                     forwardingScore: 9,
                     forwardedNewsletterMessageInfo: {
                       newsletterJid: config.saluran?.id || "120363400911374213@newsletter",
-                      newsletterName: config.saluran?.name || config.bot?.name || "Ourin-AI",
+                      newsletterName: config.saluran?.name || config.bot?.name || "Bot",
                       serverMessageId: 127,
                     },
                   },
@@ -349,7 +349,7 @@ async function handler(m, { sock, db }) {
                     messageParamsJson: JSON.stringify({
                       limited_time_offer: { text: `${greeting}`, url: "Hai", expiration_time: Date.now() + 10000 },
                       bottom_sheet: { in_thread_buttons_limit: 2, divider_indices: [1, 2, 3, 4, 5, 999], list_title: "Please select the menu", button_title: "🍙 See Category" },
-                      tap_target_configuration: { title: " X ", description: "bomboclard", canonical_url: "https://ourin.site", domain: "shop.example.com", button_index: 0 },
+                      tap_target_configuration: { title: " X ", description: "bomboclard", canonical_url: "https://example.com", domain: "shop.example.com", button_index: 0 },
                     }),
                     buttons: [
                       { name: "", buttonParamsJson: "" },
@@ -538,7 +538,7 @@ async function handler(m, { sock, db }) {
                   forwardingScore: 9,
                   forwardedNewsletterMessageInfo: {
                     newsletterJid: config.saluran?.id || "120363400911374213@newsletter",
-                    newsletterName: config.saluran?.name || config.bot?.name || "Ourin-AI",
+                    newsletterName: config.saluran?.name || config.bot?.name || "Bot",
                     serverMessageId: 127,
                   },
                 },
@@ -546,7 +546,7 @@ async function handler(m, { sock, db }) {
                   messageParamsJson: JSON.stringify({
                     limited_time_offer: { text: `${greeting}`, url: "Hai", expiration_time: Date.now() + 10000 },
                     bottom_sheet: { in_thread_buttons_limit: 2, divider_indices: [1, 2, 3, 4, 5, 999], list_title: "Please select the menu", button_title: "🍙 See Category" },
-                    tap_target_configuration: { title: " X ", description: "bomboclard", canonical_url: "https://ourin.site", domain: "shop.example.com", button_index: 0 },
+                    tap_target_configuration: { title: " X ", description: "bomboclard", canonical_url: "https://example.com", domain: "shop.example.com", button_index: 0 },
                   }),
                   buttons: [
                     { name: "", buttonParamsJson: "" },
@@ -599,7 +599,7 @@ async function handler(m, { sock, db }) {
                   locationMessage: {
                     degreesLatitude: 0,
                     degreesLongitude: 0,
-                    name: config.bot?.name || "Ourin-AI",
+                    name: config.bot?.name || "Bot",
                     address: await weatherMenu(),
                     jpegThumbnail: thumbnail
                   }
@@ -613,7 +613,7 @@ async function handler(m, { sock, db }) {
                   forwardingScore: 9,
                   forwardedNewsletterMessageInfo: {
                     newsletterJid: config.saluran?.id || "120363400911374213@newsletter",
-                    newsletterName: config.saluran?.name || config.bot?.name || "Ourin-AI",
+                    newsletterName: config.saluran?.name || config.bot?.name || "Bot",
                     serverMessageId: 127,
                   },
                 },

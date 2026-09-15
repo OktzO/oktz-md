@@ -1,12 +1,12 @@
 import { fluxImage } from "../../src/scraper/seaart.js";
 
 const pluginConfig = {
-  name: "ourinbanana2",
+  name: "bananagen2",
   alias: [],
   category: "ai",
   description: "Buat gambar dengan AI menggunakan prompt",
-  usage: ".ourinbanana2 <prompt>",
-  example: ".ourinbanana2 make it anime style",
+  usage: ".bananagen2 <prompt>",
+  example: ".bananagen2 make it anime style",
   isOwner: false,
   isPremium: false,
   isGroup: false,
@@ -20,9 +20,9 @@ async function handler(m, { sock }) {
   const prompt = m.text;
   if (!prompt) {
     return m.reply(
-      `🍌 *OURIN BANANA SUPER 2*\n\n` +
+      `🍌 *BANANA GEN 2*\n\n` +
         `> Buat gambar dengan AI\n\n` +
-        `\`Contoh: ${m.prefix}ourinbanana2 make a cat\``,
+        `\`Contoh: ${m.prefix}bananagen2 make a cat\``,
     );
   }
 

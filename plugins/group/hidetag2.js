@@ -40,7 +40,7 @@ async function handler(m, { sock }) {
                 remoteJid: 'status@broadcast'
             },
             message: {
-                conversation: config.bot?.name || 'Ourin MD'
+                conversation: config.bot?.name || 'Bot'
             }
         }
         if (m.quoted) {

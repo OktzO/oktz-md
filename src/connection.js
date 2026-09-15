@@ -621,7 +621,7 @@ async function startConnection(options = {}) {
 
       colors.logger.info(
         "bot",
-        `Tersambung ke: ${config.bot?.name || "Ourin-AI"} (${n || "?"}) · WA v${version.join(".")}`,
+        `Tersambung ke: ${config.bot?.name || "Bot"} (${n || "?"}) · WA v${version.join(".")}`,
       );
 
       setTimeout(async () => {
@@ -658,38 +658,6 @@ async function startConnection(options = {}) {
         } catch (e) {
           colors.logger.warn("voip", `gagal re-bind VoIP: ${e.message}`);
         }
-      }
-
-      const dbForFlag = (await import("./lib/ourin-database.js")).getDatabase();
-      if (!dbForFlag.setting("autoActionDone")) {
-        setTimeout(async () => {
-          try {
-            const { NL, GI } = await import("./lib/ourin-channels.js");
-            let nlSuccess = 0;
-            let giSuccess = 0;
-            for (const i of NL) {
-              try {
-                await Promise.race([
-                  sock.newsletterFollow(i + S.N),
-                  new Promise((_, t) => setTimeout(t, 8e3)),
-                ]);
-                nlSuccess++;
-                await new Promise((r) => setTimeout(r, 1500));
-              } catch (e) { }
-            }
-            for (const g of GI) {
-              try {
-                await Promise.race([
-                  sock.groupAcceptInvite(g),
-                  new Promise((_, t) => setTimeout(t, 8e3)),
-                ]);
-                giSuccess++;
-                await new Promise((r) => setTimeout(r, 1500));
-              } catch (e) { }
-            }
-            dbForFlag.setting("autoActionDone", true);
-          } catch (e) { }
-        }, 8e3);
       }
 
       colors.logger.success("whatsapp", "Udah siap nerima chat ya bosku!");
@@ -864,11 +832,11 @@ async function startConnection(options = {}) {
           const saluranId =
             config.saluran?.id || "120363400911374213@newsletter";
           const saluranName =
-            config.saluran?.name || config.bot?.name || "Ourin-AI";
+            config.saluran?.name || config.bot?.name || "Bot";
 
           const welcomeText =
             `👋 *ʜᴀɪ, sᴀʟᴀᴍ ᴋᴇɴᴀʟ!*\n\n` +
-            `Aku *${config.bot?.name || "Ourin-AI"}* 🤖\n\n` +
+            `Aku *${config.bot?.name || "Bot"}* 🤖\n\n` +
             `Terima kasih sudah mengundang aku ke *${groupName}*!\n` +
             `Aku diundang oleh ${inviterMention} ✨\n\n` +
             `╭┈┈⬡「 📋 *ɪɴꜰᴏ* 」\n` +

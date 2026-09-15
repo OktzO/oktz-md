@@ -150,7 +150,7 @@ async function handler(m, { sock }) {
       return m.reply(`── .✦ ──\n\n> Gagal mendownload sticker .☘︎ ݁˖`);
     }
 
-    const packname = randPick.name || config.sticker?.packname || "Ourin-AI";
+    const packname = randPick.name || config.sticker?.packname || "Bot";
     const author = config.bot?.developer || config.sticker?.author || "Bot";
 
     try {

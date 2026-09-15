@@ -276,7 +276,7 @@ async function sendBackupToOwner(backupInfo) {
       `┃ ⏱️ Interval: ${formatInterval(state.intervalMs)}\n` +
       `┃ #️⃣ Backup ke-${state.backupCount + 1}\n` +
       `╰┈┈┈┈┈┈┈┈⬡\n\n` +
-      `> ${config.bot?.name || "Ourin-AI"} Auto Backup System`;
+      `> ${config.bot?.name || "Bot"} Auto Backup System`;
 
     await sockInstance.sendMessage(ownerJid, {
       document: { url: backupInfo.path },

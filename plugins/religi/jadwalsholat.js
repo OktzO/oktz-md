@@ -40,7 +40,7 @@ async function handler(m, { sock }) {
     const daerah = jadwalData.daerah || "";
     const today = timeHelper.formatNow("dddd, DD MMMM YYYY");
     const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-    const saluranName = config.saluran?.name || config.bot?.name || "Ourin-AI";
+    const saluranName = config.saluran?.name || config.bot?.name || "Bot";
 
     const caption = `🕌 *ᴊᴀᴅᴡᴀʟ sʜᴏʟᴀᴛ*
 ╭┈┈⬡「 📍 *${lokasi}* 」
