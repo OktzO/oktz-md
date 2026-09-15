@@ -1,6 +1,6 @@
 import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
-import { drawBrat } from "../../src/lib/ourin-brat.js";
+import { generateBrat, parseBratArgs } from "../../src/lib/ourin-brat.js";
 
 const pluginConfig = {
   name: "bratgreen",
@@ -27,21 +27,8 @@ async function handler(m, { sock }) {
   m.react("🕕");
 
   try {
-    const buffer = await drawBrat({
-      text,
-      bgColor: "#8ACE00",
-      width: 512,
-      height: 512,
-      maxWidth: 450,
-      maxHeight: 450,
-      centerX: 256,
-      centerY: 256,
-      maxFontSize: 130,
-      fontDecrement: 5,
-      lineHeightMult: 1.1,
-      textColor: "#000000"
-    });
-
+    const { text: parsed, blur } = parseBratArgs(text);
+    const buffer = await generateBrat({ text: parsed, theme: "green", blur });
     await sock.sendImageAsSticker(m.chat, buffer, m, {
       packname: config.sticker.packname,
       author: config.sticker.author,
