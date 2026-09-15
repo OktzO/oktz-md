@@ -1,5 +1,6 @@
 import { getDatabase } from "../../src/lib/ourin-database.js";
 import { saluranCtx } from "../../src/lib/ourin-context.js";
+import { isSameParticipant } from "../../src/lib/ourin-lid.js";
 
 const pluginConfig = {
   name: "anticulik",
@@ -67,7 +68,6 @@ async function handleAntiCulik(event, sock, db) {
 
   const botNumber =
     sock.user?.id?.split(":")[0] || sock.user?.id?.split("@")[0];
-  const botLid = sock.user?.id;
 
   const isBotAdded = (event.participants || []).some((p) => {
     const rJid = typeof p === "object" && p !== null ? p.phoneNumber || p.id : p;
@@ -75,7 +75,8 @@ async function handleAntiCulik(event, sock, db) {
     const pNum = rJid.split("@")[0].split(":")[0];
     return (
       pNum === botNumber ||
-      rJid === botLid ||
+      isSameParticipant(rJid, sock.user?.id) ||
+      isSameParticipant(rJid, sock.user?.lid) ||
       rJid.includes(botNumber)
     );
   });
@@ -89,12 +90,14 @@ async function handleAntiCulik(event, sock, db) {
   const ownerNumbers = (global.owner || []).map((o) =>
     typeof o === "string" ? o.split("@")[0] : o
   );
-  const inviterNum = inviter.split("@")[0].split(":")[0];
 
+  // event.author di grup LID berupa LID, jadi perbandingan digits/ string
+  // saja membuat owner yang mengundang bot dianggap orang asing -> bot keluar
+  // sendiri dari grupnya pemiliknya.
   const isOwnerInviter =
-    inviterNum === botNumber ||
-    ownerNumbers.includes(inviterNum) ||
-    inviter === botLid;
+    isSameParticipant(inviter, sock.user?.id) ||
+    isSameParticipant(inviter, sock.user?.lid) ||
+    ownerNumbers.some((o) => isSameParticipant(String(o), inviter));
 
   if (isOwnerInviter) return false;
 

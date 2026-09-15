@@ -2,6 +2,7 @@ import { getDatabase } from "../../src/lib/ourin-database.js";
 import {
   findParticipantByNumber,
   getParticipantJid,
+  isSameParticipant,
 } from "../../src/lib/ourin-lid.js";
 import config from "../../config.js";
 const pluginConfig = {
@@ -240,7 +241,10 @@ async function detectBot(m, sock) {
 
   const myNumber = sock.user?.id?.split(":")[0] || sock.user?.id?.split("@")[0];
   const myJid = myNumber + "@s.whatsapp.net";
-  if (botJid === myJid) return false;
+  // isSameParticipant: di grup LID pesan dari bot sendiri datang dengan
+  // participant LID, jadi perbandingan string biasa tidak pernah match dan
+  // bot bisa menganggap dirinya sendiri bot asing.
+  if (m.key?.fromMe || isSameParticipant(botJid, myJid)) return false;
 
   const botParticipant = findParticipantByNumber(groupMeta.participants, myJid);
   if (!botParticipant?.admin) return false;
@@ -251,8 +255,11 @@ async function detectBot(m, sock) {
   );
   if (targetParticipant?.admin) return false;
 
+  // p.id = addressing asli dari server (sama seperti yang dipakai kick.js).
+  // getParticipantJid() memberi PN, dan grup addressing_mode=lid menolak PN
+  // untuk operasi member.
   const targetJidToKick = targetParticipant
-    ? getParticipantJid(targetParticipant)
+    ? targetParticipant.id || getParticipantJid(targetParticipant)
     : botJid;
 
   try {
@@ -264,7 +271,7 @@ async function detectBot(m, sock) {
           remoteJid: m.chat,
           fromMe: false,
           id: m.key?.id || m.id,
-          participant: m.sender,
+          participant: m.key?.participant || m.sender,
         },
       });
     }

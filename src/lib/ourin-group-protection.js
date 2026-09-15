@@ -1,5 +1,12 @@
 import { downloadMediaMessage } from "ourin";
-import { isLid, lidToJid, lidToJidSafe } from "./ourin-lid.js";
+import {
+  isLid,
+  lidToJid,
+  lidToJidSafe,
+  isSameParticipant,
+  normalizeComparableJid,
+} from "./ourin-lid.js";
+import { adminFlagsFor } from "./ourin-serialize.js";
 import config from "../../config.js";
 const messageCache = new Map();
 const CACHE_EXPIRY = 10 * 60 * 1000;
@@ -248,28 +255,41 @@ const IP_URL_PATTERN =
 const AT_IN_URL_PATTERN = /https?:\/\/[^\s/]+@[^\s]+/i;
 const PUNYCODE_PATTERN = /xn--[a-z0-9-]+/i;
 
-function isAdminCheck(participants, senderNumber) {
-  return participants.some((p) => {
-    if (!p.admin) return false;
-    const pJid = p.jid || p.id || "";
-    const pLid = p.lid || "";
-    const pNum = pJid.replace(/[^0-9]/g, "");
-    const pLidNum = pLid.replace(/[^0-9]/g, "");
-    return (
-      pNum === senderNumber ||
-      pLidNum === senderNumber ||
-      pNum.includes(senderNumber) ||
-      senderNumber.includes(pNum)
-    );
-  });
+/**
+ * Satu sumber kebenaran untuk cek admin, dipakai juga oleh serialize.
+ *
+ * Bug lama: helper ini hanya membaca `p.jid || p.id` (+ `p.lid`). ourin
+ * mengirim participant berbeda per addressing_mode: grup LID memberi
+ * { id: LID, phoneNumber: PN }, jadi (a) bot admin tidak pernah terdeteksi
+ * (semua proteksi diam / balas "notAdmin") dan (b) pesan admin ikut
+ * dihapus. Sekarang semua varian nomor dibandingkan dan pemanggil wajib
+ * mengirim KANDIDAT JID (raw addressing + versi resolved), bukan digits.
+ *
+ * @param {Object[]} participants
+ * @param {string|string[]} senderJid  - mis. [m.key?.participant, m.sender]
+ */
+function isAdminCheck(participants, senderJid) {
+  return adminFlagsFor(participants, senderJid, []).isAdmin;
 }
 
-function isBotAdminCheck(participants, botNum) {
-  return participants.some((p) => {
-    if (!p.admin) return false;
-    const pNum = (p.jid || p.id || "").replace(/[^0-9]/g, "");
-    return pNum === botNum || pNum.includes(botNum) || botNum.includes(pNum);
-  });
+/** @param {string|string[]} botJids - mis. [sock.user.id, sock.user.lid] */
+function isBotAdminCheck(participants, botJids) {
+  return adminFlagsFor(participants, [], botJids).isBotAdmin;
+}
+
+/**
+ * Key revoke untuk pesan yang BARANG DATANG: pakai key asli dari server.
+ * Di grup addressing_mode=lid pesan disimpan dengan participant LID, jadi
+ * participant versi PN (hasil resolve m.sender) tidak dicocokkan server —
+ * pesan tampak tidak terhapus tanpa error.
+ */
+function revokeKey(m) {
+  return m.key || {
+    remoteJid: m.chat,
+    fromMe: false,
+    id: m.id,
+    participant: m.sender,
+  };
 }
 
 function normalizeProtectionMode(mode, fallback = "remove") {
@@ -282,39 +302,6 @@ function normalizeProtectionMode(mode, fallback = "remove") {
 
 function getProtectionText(m) {
   return String(m.body || m.text || "").trim();
-}
-
-function normalizeComparableJid(jid) {
-  let value = String(jid || "").trim();
-  if (!value) return "";
-
-  if (isLid(value)) {
-    const safe = lidToJidSafe(value);
-    value = safe || lidToJid(value) || value;
-  }
-
-  if (value.includes(":") && value.endsWith("@s.whatsapp.net")) {
-    value = `${value.split(":")[0]}@s.whatsapp.net`;
-  }
-
-  return value;
-}
-
-function isSameParticipant(left, right) {
-  const leftJid = normalizeComparableJid(left);
-  const rightJid = normalizeComparableJid(right);
-  if (!leftJid || !rightJid) return false;
-  if (leftJid === rightJid) return true;
-
-  const leftNum = leftJid.replace(/[^0-9]/g, "");
-  const rightNum = rightJid.replace(/[^0-9]/g, "");
-  if (!leftNum || !rightNum) return false;
-
-  return (
-    leftNum === rightNum ||
-    leftNum.endsWith(rightNum) ||
-    rightNum.endsWith(leftNum)
-  );
 }
 
 function resolveMessageSenderJid(key, sock) {
@@ -514,6 +501,10 @@ function matchCustomRule(text, rules = []) {
   return null;
 }
 
+/**
+ * @param {string} sender - addressing ASLI server (key.participant), dipakai
+ *   untuk revoke, kick, dan mention; bukan m.sender yang sudah di-resolve ke PN.
+ */
 async function executeProtectionAction({
   sock,
   chatId,
@@ -577,17 +568,17 @@ async function handleTextProtection({
 
   const botNumber = sock.user?.id?.split(":")[0] + "@s.whatsapp.net";
   const selfMode = db.setting("selfMode") === true;
-  if (!selfMode && m.sender === botNumber) return false;
+  if (!selfMode && isSameParticipant(m.key?.participant || m.sender, botNumber)) return false;
 
   try {
     const groupMeta = await sock.groupMetadata(m.chat);
-    const senderNum = m.sender?.replace(/[^0-9]/g, "") || "";
-    const botNum = botNumber?.replace(/[^0-9]/g, "") || "";
+    const senderCand = [m.key?.participant, m.sender];
+    const botCand = [botNumber, sock.user?.lid];
     const senderTag = m.sender.split("@")[0];
 
-    if (isAdminCheck(groupMeta.participants, senderNum)) return false;
+    if (isAdminCheck(groupMeta.participants, senderCand)) return false;
 
-    if (!isBotAdminCheck(groupMeta.participants, botNum)) {
+    if (!isBotAdminCheck(groupMeta.participants, botCand)) {
       await sock.sendMessage(m.chat, {
         text: gpMsg("notAdmin"),
         mentions: [m.sender],
@@ -600,7 +591,7 @@ async function handleTextProtection({
       sock,
       chatId: m.chat,
       keyId: m.key.id || m.id,
-      sender: m.sender,
+      sender: m.key?.participant || m.sender,
       senderTag,
       mode,
       removeMessageKey,
@@ -629,17 +620,17 @@ async function handleAntilink(m, sock, db) {
   if (!hasLink) return false;
 
   const botNumber = sock.user?.id?.split(":")[0] + "@s.whatsapp.net";
-  if (m.sender === botNumber) return false;
+  if (isSameParticipant(m.key?.participant || m.sender, botNumber)) return false;
 
   try {
     const groupMeta = await sock.groupMetadata(m.chat);
-    const senderNum = m.sender?.replace(/[^0-9]/g, "") || "";
-    const botNum = botNumber?.replace(/[^0-9]/g, "") || "";
+    const senderCand = [m.key?.participant, m.sender];
+    const botCand = [botNumber, sock.user?.lid];
     const senderTag = m.sender.split("@")[0];
 
-    if (isAdminCheck(groupMeta.participants, senderNum)) return false;
+    if (isAdminCheck(groupMeta.participants, senderCand)) return false;
 
-    if (!isBotAdminCheck(groupMeta.participants, botNum)) {
+    if (!isBotAdminCheck(groupMeta.participants, botCand)) {
       await sock.sendMessage(m.chat, {
         text: gpMsg("notAdmin"),
         mentions: [m.sender],
@@ -647,18 +638,11 @@ async function handleAntilink(m, sock, db) {
       return true;
     }
 
-    await sock.sendMessage(m.chat, {
-      delete: {
-        remoteJid: m.chat,
-        fromMe: false,
-        id: m.key.id,
-        participant: m.sender,
-      },
-    });
+    await sock.sendMessage(m.chat, { delete: revokeKey(m) });
     const mode = group.antilinkMode || "remove";
 
     if (mode === "kick") {
-      await sock.groupParticipantsUpdate(m.chat, [m.sender], "remove");
+      await sock.groupParticipantsUpdate(m.chat, [m.key?.participant || m.sender], "remove");
       await sock.sendMessage(m.chat, {
         text: gpMsg("antilinkKick", { user: senderTag }),
         mentions: [m.sender],
@@ -697,16 +681,16 @@ async function handleAntiTagSW(rawMsg, sock, db) {
 
   const sender = key.participant || key.remoteJid;
   const botNumber = sock.user?.id?.split(":")[0] + "@s.whatsapp.net";
-  if (sender === botNumber) return false;
+  if (isSameParticipant(sender, botNumber)) return false;
 
   try {
     const groupMeta = await sock.groupMetadata(chatId);
-    const senderNum = sender?.replace(/[^0-9]/g, "") || "";
-    const botNum = botNumber?.replace(/[^0-9]/g, "") || "";
+    const senderCand = [sender];
+    const botCand = [botNumber, sock.user?.lid];
     const senderTag = sender.split("@")[0];
 
-    if (isAdminCheck(groupMeta.participants, senderNum)) return false;
-    if (!isBotAdminCheck(groupMeta.participants, botNum)) {
+    if (isAdminCheck(groupMeta.participants, senderCand)) return false;
+    if (!isBotAdminCheck(groupMeta.participants, botCand)) {
       await sock.sendMessage(chatId, {
         text: gpMsg("notAdmin"),
         mentions: [sender],
@@ -756,7 +740,7 @@ async function handleAntiViewOnce(rawMsg, sock, db) {
 
   const sender = key.participant || key.remoteJid;
   const botNumber = sock.user?.id?.split(":")[0] + "@s.whatsapp.net";
-  if (sender === botNumber) return false;
+  if (isSameParticipant(sender, botNumber)) return false;
 
   try {
     let mediaType = null;
@@ -1187,30 +1171,23 @@ async function handleAntilinkGc(m, sock, db) {
 
   const botNumber = sock.user?.id?.split(":")[0] + "@s.whatsapp.net";
   const selfMode = db.setting("selfMode") === true;
-  if (!selfMode && m.sender === botNumber) return false;
+  if (!selfMode && isSameParticipant(m.key?.participant || m.sender, botNumber)) return false;
 
   try {
     const groupMeta = await sock.groupMetadata(m.chat);
-    const senderNum = m.sender?.replace(/[^0-9]/g, "") || "";
-    const botNum = botNumber?.replace(/[^0-9]/g, "") || "";
+    const senderCand = [m.key?.participant, m.sender];
+    const botCand = [botNumber, sock.user?.lid];
     const senderTag = m.sender.split("@")[0];
 
-    if (isAdminCheck(groupMeta.participants, senderNum)) return false;
-    if (!isBotAdminCheck(groupMeta.participants, botNum)) return false;
+    if (isAdminCheck(groupMeta.participants, senderCand)) return false;
+    if (!isBotAdminCheck(groupMeta.participants, botCand)) return false;
 
-    await sock.sendMessage(m.chat, {
-      delete: {
-        remoteJid: m.chat,
-        fromMe: false,
-        id: m.key.id || m.id,
-        participant: m.sender,
-      },
-    });
+    await sock.sendMessage(m.chat, { delete: revokeKey(m) });
     const mode = group.antilinkgcMode || "remove";
 
     if (mode === "kick") {
       try {
-        await sock.groupParticipantsUpdate(m.chat, [m.sender], "remove");
+        await sock.groupParticipantsUpdate(m.chat, [m.key?.participant || m.sender], "remove");
         await sock.sendMessage(m.chat, {
           text: gpMsg("antilinkGcKick", { user: senderTag }),
           mentions: [m.sender],
@@ -1249,30 +1226,23 @@ async function handleAntilinkAll(m, sock, db) {
 
   const botNumber = sock.user?.id?.split(":")[0] + "@s.whatsapp.net";
   const selfMode = db.setting("selfMode") === true;
-  if (!selfMode && m.sender === botNumber) return false;
+  if (!selfMode && isSameParticipant(m.key?.participant || m.sender, botNumber)) return false;
 
   try {
     const groupMeta = await sock.groupMetadata(m.chat);
-    const senderNum = m.sender?.replace(/[^0-9]/g, "") || "";
-    const botNum = botNumber?.replace(/[^0-9]/g, "") || "";
+    const senderCand = [m.key?.participant, m.sender];
+    const botCand = [botNumber, sock.user?.lid];
     const senderTag = m.sender.split("@")[0];
 
-    if (isAdminCheck(groupMeta.participants, senderNum)) return false;
-    if (!isBotAdminCheck(groupMeta.participants, botNum)) return false;
+    if (isAdminCheck(groupMeta.participants, senderCand)) return false;
+    if (!isBotAdminCheck(groupMeta.participants, botCand)) return false;
 
-    await sock.sendMessage(m.chat, {
-      delete: {
-        remoteJid: m.chat,
-        fromMe: false,
-        id: m.key.id || m.id,
-        participant: m.sender,
-      },
-    });
+    await sock.sendMessage(m.chat, { delete: revokeKey(m) });
     const mode = group.antilinkallMode || "remove";
 
     if (mode === "kick") {
       try {
-        await sock.groupParticipantsUpdate(m.chat, [m.sender], "remove");
+        await sock.groupParticipantsUpdate(m.chat, [m.key?.participant || m.sender], "remove");
         await sock.sendMessage(m.chat, {
           text: gpMsg("antilinkAllKick", { user: senderTag }),
           mentions: [m.sender],
@@ -1337,16 +1307,16 @@ async function handleAntiCustom(m, sock, db) {
 
   const botNumber = sock.user?.id?.split(":")[0] + "@s.whatsapp.net";
   const selfMode = db.setting("selfMode") === true;
-  if (!selfMode && m.sender === botNumber) return false;
+  if (!selfMode && isSameParticipant(m.key?.participant || m.sender, botNumber)) return false;
 
   try {
     const groupMeta = await sock.groupMetadata(m.chat);
-    const senderNum = m.sender?.replace(/[^0-9]/g, "") || "";
-    const botNum = botNumber?.replace(/[^0-9]/g, "") || "";
+    const senderCand = [m.key?.participant, m.sender];
+    const botCand = [botNumber, sock.user?.lid];
     const senderTag = m.sender.split("@")[0];
 
-    if (isAdminCheck(groupMeta.participants, senderNum)) return false;
-    if (!isBotAdminCheck(groupMeta.participants, botNum)) {
+    if (isAdminCheck(groupMeta.participants, senderCand)) return false;
+    if (!isBotAdminCheck(groupMeta.participants, botCand)) {
       await sock.sendMessage(m.chat, {
         text: gpMsg("notAdmin"),
         mentions: [m.sender],
@@ -1362,7 +1332,7 @@ async function handleAntiCustom(m, sock, db) {
       sock,
       chatId: m.chat,
       keyId: m.key.id || m.id,
-      sender: m.sender,
+      sender: m.key?.participant || m.sender,
       senderTag,
       mode,
       removeMessageKey: "anticustom",
@@ -1398,13 +1368,13 @@ async function handleAntiSwGc(rawMsg, sock, db) {
 
   try {
     const groupMeta = await sock.groupMetadata(chatId);
-    const senderNum = sender?.replace(/[^0-9]/g, "") || "";
-    const botNum = botNumber?.replace(/[^0-9]/g, "") || "";
+    const senderCand = [sender];
+    const botCand = [botNumber, sock.user?.lid];
     const senderTag = (sender || botNumber || "Unknown").split("@")[0];
 
-    if (!isSelfSender && isAdminCheck(groupMeta.participants, senderNum))
+    if (!isSelfSender && isAdminCheck(groupMeta.participants, senderCand))
       return false;
-    if (!isBotAdminCheck(groupMeta.participants, botNum)) {
+    if (!isBotAdminCheck(groupMeta.participants, botCand)) {
       await sock.sendMessage(chatId, {
         text: gpMsg("notAdmin"),
         mentions: sender?.includes("@") ? [sender] : [],
@@ -1454,14 +1424,7 @@ async function handleAntiHidetag(m, sock, db) {
     if (m.isAdmin || m.isOwner || m.fromMe) return false;
     if (!m.isBotAdmin) return false;
 
-    await sock.sendMessage(m.chat, {
-      delete: {
-        remoteJid: m.chat,
-        fromMe: false,
-        id: m.key.id,
-        participant: m.sender,
-      },
-    });
+    await sock.sendMessage(m.chat, { delete: revokeKey(m) });
 
     const senderTag = m.sender.split("@")[0];
     await sock.sendMessage(m.chat, {
