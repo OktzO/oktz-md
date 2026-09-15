@@ -1,4 +1,6 @@
-import { createCanvas, loadImage } from "@napi-rs/canvas";
+import { createCanvas, loadImage, GlobalFonts } from "@napi-rs/canvas";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
+import path from "path";
 
 function getTokenWidth(ctx, token, fontSize) {
   if (token.type === "space") return ctx.measureText(" ").width;
@@ -6,8 +8,8 @@ function getTokenWidth(ctx, token, fontSize) {
   return ctx.measureText(token.value || "").width;
 }
 
-function buildLines(ctx, tokens, fontSize, maxW) {
-  ctx.font = `bold ${fontSize}px sans-serif`;
+function buildLines(ctx, tokens, fontSize, maxW, family) {
+  ctx.font = `bold ${fontSize}px ${family}`;
   const lines = [];
   let line = [];
   let lineW = 0;
@@ -102,6 +104,7 @@ export async function drawBrat({
   textBaseline = "middle"
 }) {
   let bg = null;
+  const family = await loadBratFont();
   if (bgUrl) {
     bg = await loadImage(bgUrl);
     width = width || bg.width;
@@ -120,10 +123,10 @@ export async function drawBrat({
 
   const tokens = tokenize(text);
   let fontSize = maxFontSize;
-  let lines = buildLines(ctx, tokens, fontSize, maxWidth);
+  let lines = buildLines(ctx, tokens, fontSize, maxWidth, family);
 
   while (fontSize > minFontSize) {
-    lines = buildLines(ctx, tokens, fontSize, maxWidth);
+    lines = buildLines(ctx, tokens, fontSize, maxWidth, family);
     const totalH = lines.length * fontSize * lineHeightMult;
     if (totalH <= maxHeight) break;
     fontSize -= fontDecrement;
@@ -146,7 +149,7 @@ export async function drawBrat({
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const y = startY + i * lineHeight;
-    ctx.font = `bold ${fontSize}px sans-serif`;
+    ctx.font = `bold ${fontSize}px ${family}`;
 
     let currentX = align === "center" ? -line.width / 2 : -(maxWidth / 2);
 
@@ -165,4 +168,257 @@ export async function drawBrat({
 
   ctx.restore();
   return canvas.encode("png");
+}
+
+// ─── Brat tema (white/black/green) + emoji apple + blur ───
+// Port dari plugin brattheme dengan perbaikan:
+// - FONT BLANK FIX: aset TTF/JSON divalidasi dulu (cek magic-byte/JSON) sebelum
+//   cache ke disk; cache korup self-heal; register gagal -> fallback ke font
+//   lokal repo (assets/ourin-font.ttf). Dulu: HTML dari proxy (HTTP 200) ke-cache
+//   sebagai .ttf -> register gagal diam -> VPS tanpa font sistem = teks tak
+//   ter-render -> sticker putih polos "blank" tanpa error.
+// - JSON emoji besar hanya dimuat saat teks benar-benar ada emoji (hemat RAM).
+// - ctx.filter blur di @napi-rs/canvas itu no-op -> blur asli pakai sharp,
+//   dan hanya diimpor saat blur > 0 (nol overhead di jalur default).
+
+const BRAT_THEMES = {
+  black: { bg: "#000000", text: "#ffffff" },
+  white: { bg: "#ffffff", text: "#000000" },
+  green: { bg: "#8ace00", text: "#000000" },
+};
+
+const EMOJI_SPLIT_RE = /(\p{Emoji_Presentation}\uFE0F?|\p{Emoji}\uFE0F|[\u{1F1E0}-\u{1F1FF}]{2}|\p{Extended_Pictographic}\uFE0F?)/gu;
+const EMOJI_TEST_RE = /\p{Emoji_Presentation}\uFE0F?|\p{Emoji}\uFE0F|[\u{1F1E0}-\u{1F1FF}]{2}|\p{Extended_Pictographic}\uFE0F?/u;
+
+const bratTmp = () => {
+  const d = path.join(process.cwd(), "tmp");
+  if (!existsSync(d)) mkdirSync(d, { recursive: true });
+  return d;
+};
+
+let bratFontFamily = null;
+let bratFontPromise = null;
+let bratEmojiMap = null;
+let bratEmojiPromise = null;
+const BRAT_EMOJI_CACHE_MAX = 128;
+const bratEmojiCache = new Map();
+
+function isTrueTypeBuffer(b) {
+  if (!b || b.length < 1024) return false;
+  const magic = b.readUInt32BE(0);
+  return magic === 0x00010000 || magic === 0x4f54544f; // \0\1 TrueType | 'OTTO'
+}
+
+function isJsonBuffer(b) {
+  if (!b || b.length < 16) return false;
+  const c = b[0];
+  return c === 0x7b || c === 0x5b; // '{' | '['
+}
+
+function validCachedFile(p, check) {
+  if (!existsSync(p)) return false;
+  try {
+    const fd = readFileSync(p);
+    if (check(fd)) return true;
+    unlinkSync(p); // self-heal cache korup
+  } catch {}
+  return false;
+}
+
+async function bratDownloadValidated(url, dest, check) {
+  const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (!check(buf)) throw new Error("payload invalid (bukan font/JSON — kena intercept proxy?)");
+  writeFileSync(dest, buf);
+  return buf;
+}
+
+async function loadBratFont() {
+  if (bratFontFamily) return bratFontFamily;
+  if (!bratFontPromise) {
+    bratFontPromise = (async () => {
+      const remote = path.join(bratTmp(), "ARIALN.ttf");
+      const local = path.join(process.cwd(), "assets", "ourin-font.ttf");
+      const candidates = [];
+      try {
+        if (!validCachedFile(remote, isTrueTypeBuffer)) {
+          await bratDownloadValidated(
+            process.env.BRAT_FONT_URL || "https://raw.githubusercontent.com/Ditzzx-vibecoder/Assets/main/Font/ARIALN.ttf",
+            remote,
+            isTrueTypeBuffer,
+          ).catch(() => {});
+        }
+        if (validCachedFile(remote, isTrueTypeBuffer)) candidates.push(remote);
+      } catch {}
+      if (validCachedFile(local, isTrueTypeBuffer)) candidates.push(local);
+
+      for (const p of candidates) {
+        try {
+          if (GlobalFonts.registerFromPath(p, "ArialNarrow")) {
+            bratFontFamily = "ArialNarrow";
+            return bratFontFamily;
+          }
+        } catch {}
+      }
+      bratFontFamily = "sans-serif";
+      return bratFontFamily;
+    })().finally(() => { bratFontPromise = null; });
+  }
+  return bratFontPromise;
+}
+
+// Dipakai drawBrat (varian lama) + generateBrat: pastikan font nyata ke-register.
+export const ensureBratFont = loadBratFont;
+
+async function loadBratEmojiMap() {
+  if (bratEmojiMap) return bratEmojiMap;
+  if (!bratEmojiPromise) {
+    bratEmojiPromise = (async () => {
+      const dest = path.join(bratTmp(), "emoji-apple.json");
+      try {
+        if (!validCachedFile(dest, isJsonBuffer)) {
+          await bratDownloadValidated(
+            process.env.BRAT_EMOJI_URL || "https://media.githubusercontent.com/media/Ditzzx-vibecoder/entahlah/main/emoji-apple.json",
+            dest,
+            isJsonBuffer,
+          );
+        }
+        bratEmojiMap = JSON.parse(readFileSync(dest, "utf-8"));
+      } catch {
+        bratEmojiMap = {}; // emoji map gagal -> emoji digambar via fillText, teks tetap jalan
+      }
+    })().finally(() => { bratEmojiPromise = null; });
+  }
+  return bratEmojiPromise;
+}
+
+function emojiToUnicode(emoji) {
+  return [...emoji].map((c) => c.codePointAt(0).toString(16).padStart(4, "0")).join("-");
+}
+
+async function getBratEmojiImage(emoji) {
+  if (bratEmojiCache.has(emoji)) return bratEmojiCache.get(emoji);
+  const map = await loadBratEmojiMap();
+  const base = emojiToUnicode(emoji);
+  const noVs = base.replace(/-fe0f/gi, "");
+  const variants = [base, noVs, `${noVs}-fe0f`, base.toUpperCase(), noVs.toUpperCase(), `${noVs.toUpperCase()}-FE0F`];
+  let b64 = null;
+  for (const v of variants) if (map[v]) { b64 = map[v]; break; }
+  if (!b64) return null;
+  const img = await loadImage(Buffer.from(b64, "base64"));
+  if (bratEmojiCache.size >= BRAT_EMOJI_CACHE_MAX) bratEmojiCache.delete(bratEmojiCache.keys().next().value);
+  bratEmojiCache.set(emoji, img);
+  return img;
+}
+
+function bratMeasure(ctx, text, fontSize, family) {
+  let w = 0;
+  for (const part of text.split(EMOJI_SPLIT_RE)) {
+    if (!part) continue;
+    w += EMOJI_TEST_RE.test(part) ? fontSize : ctx.measureText(part).width;
+  }
+  return w;
+}
+
+function bratWrap(ctx, text, maxWidth, fontSize, family) {
+  ctx.font = `${fontSize}px ${family}`;
+  const lines = [];
+  let cur = "";
+  for (const word of text.split(" ")) {
+    const test = cur ? `${cur} ${word}` : word;
+    if (bratMeasure(ctx, test, fontSize, family) > maxWidth && cur) {
+      lines.push(cur);
+      cur = word;
+    } else {
+      cur = test;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+function bratFits(ctx, text, fontSize, maxWidth, maxHeight, lineGap, family) {
+  const lines = bratWrap(ctx, text, maxWidth, fontSize, family);
+  let longestWord = 0;
+  for (const w of text.split(" ")) {
+    const lw = bratMeasure(ctx, w, fontSize, family);
+    if (lw > longestWord) longestWord = lw;
+  }
+  const totalHeight = lines.length * (fontSize + lineGap) - lineGap;
+  return { ok: longestWord <= maxWidth && totalHeight <= maxHeight, lines };
+}
+
+function bratBestFontSize(ctx, text, maxWidth, maxHeight, lineGap, family) {
+  let lo = 10, hi = 700, best = 10;
+  let cached = null;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const r = bratFits(ctx, text, mid, maxWidth, maxHeight, lineGap, family);
+    if (r.ok) { best = mid; cached = { size: mid, lines: r.lines }; lo = mid + 1; }
+    else hi = mid - 1;
+  }
+  return cached || { size: best, lines: bratWrap(ctx, text, maxWidth, best, family) };
+}
+
+export async function generateBrat({ text = "Halo Guys Nama Saya", theme = "white", blur = 0, bgColor, textColor } = {}) {
+  const t = BRAT_THEMES[theme] || BRAT_THEMES.white;
+  const selectedTheme = { bg: bgColor || t.bg, text: textColor || t.text };
+  const blurAmount = [1, 2, 3].includes(blur) ? blur : 0;
+
+  const size = 1000;
+  const padding = 80;
+  const lineGap = 20;
+  const maxWidth = size - padding * 2;
+  const maxHeight = size - padding * 2;
+
+  const family = await loadBratFont();
+  if (EMOJI_TEST_RE.test(text)) await loadBratEmojiMap();
+
+  const canvas = createCanvas(size, size);
+  const ctx = canvas.getContext("2d");
+
+  const { size: fontSize, lines } = bratBestFontSize(ctx, text, maxWidth, maxHeight, lineGap, family);
+
+  ctx.fillStyle = selectedTheme.bg;
+  ctx.fillRect(0, 0, size, size);
+  ctx.fillStyle = selectedTheme.text;
+  ctx.font = `${fontSize}px ${family}`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+
+  const totalTextHeight = lines.length * (fontSize + lineGap) - lineGap;
+  let y = (size - totalTextHeight) / 2;
+  for (const line of lines) {
+    let curX = padding;
+    for (const part of line.split(EMOJI_SPLIT_RE)) {
+      if (!part) continue;
+      if (EMOJI_TEST_RE.test(part)) {
+        const img = await getBratEmojiImage(part);
+        if (img) ctx.drawImage(img, curX, y, fontSize, fontSize);
+        else ctx.fillText(part, curX, y);
+        curX += fontSize;
+      } else {
+        ctx.fillText(part, curX, y);
+        curX += ctx.measureText(part).width;
+      }
+    }
+    y += fontSize + lineGap;
+  }
+
+  let buf = await canvas.encode("png");
+  if (blurAmount > 0) {
+    const { default: sharp } = await import("sharp");
+    buf = await sharp(buf).blur(blurAmount).png().toBuffer();
+  }
+  return buf;
+}
+
+// ".bratimg halo -blur 2" -> { text: "halo", blur: 2 }. Flag tak dikenal dibiarkan sbg teks.
+export function parseBratArgs(input = "") {
+  let text = String(input).trim();
+  let blur = 0;
+  const m = text.match(/-blur\s*([0-3])/);
+  if (m) { blur = Number(m[1]); text = text.replace(m[0], "").trim(); }
+  return { text, blur };
 }
