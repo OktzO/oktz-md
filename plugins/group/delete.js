@@ -1,3 +1,4 @@
+import { isSameGroupMember } from '../../src/lib/ourin-lid.js'
 const pluginConfig = {
     name: 'delete',
     alias: ['del', 'hapus', 'd'],
@@ -23,7 +24,8 @@ async function handler(m, { sock }) {
 
     const quotedSender = m.quoted.sender || m.quoted.key?.participant
     const botJids = [sock.user?.id?.split(':')[0] + '@s.whatsapp.net', sock.user?.lid].filter(Boolean)
-    const isOwnMessage = m.quoted.key?.fromMe || quotedSender === m.sender
+    // peserta yang sama bisa tertulis LID di satu sisi, PN di sisi lain
+    const isOwnMessage = m.quoted.key?.fromMe || isSameGroupMember(m.groupMembers, quotedSender, m.sender)
     const isBotMessage = m.quoted.key?.fromMe || botJids.includes(quotedSender) || botJids.includes(m.quoted.key?.rawParticipant)
 
     if (!isOwnMessage && !isBotMessage) {

@@ -468,6 +468,19 @@ function isSameParticipant(left, right) {
   );
 }
 
+/**
+ * Dua JID mengacu ke member yang sama. isSameParticipant hanya bisa cocokkan
+ * LID->PN kalau lidCache sudah tahu mapping-nya; di dalam grup daftar
+ * participant adalah kamus resminya ({ id: LID, phoneNumber: PN }), jadi pakai
+ * itu sebagai fallback.
+ */
+function isSameGroupMember(participants, a, b) {
+  if (!a || !b) return false;
+  if (isSameParticipant(a, b)) return true;
+  const pa = findParticipantByNumber(participants || [], a);
+  return !!pa && pa === findParticipantByNumber(participants || [], b);
+}
+
 function findParticipantByNumber(participants, targetJid) {
   if (!participants || !targetJid) return null;
 
@@ -568,6 +581,7 @@ export {
   isLid,
   normalizeComparableJid,
   isSameParticipant,
+  isSameGroupMember,
   isLidConverted,
   lidToJid,
   lidToJidSafe,

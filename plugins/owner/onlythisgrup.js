@@ -1,4 +1,5 @@
 import { getDatabase } from '../../src/lib/ourin-database.js'
+import { findParticipantByNumber } from '../../src/lib/ourin-lid.js'
 import te from '../../src/lib/ourin-error.js'
 
 const pluginConfig = {
@@ -36,7 +37,11 @@ async function handler(m, { sock }) {
         }
 
         const participants = groupMetadata.participants
-        const isBotAdmin = participants.find(p => p.id === botNumber)?.admin !== null
+        // p.id berisi LID di grup addressing_mode=lid, dan admin non-admin datang
+        // sebagai null/undefined -> cek manual "?.admin !== null" selalu salah arah.
+        const botParticipant = findParticipantByNumber(participants, botNumber) ||
+            findParticipantByNumber(participants, sock.user?.lid)
+        const isBotAdmin = !!botParticipant?.admin
 
         if (!isBotAdmin) {
             return m.reply(`❌ *AKSES DITOLAK*\n\nBot harus menjadi admin di grup ini terlebih dahulu agar bisa mengambil tautan undangan (link grup).`)

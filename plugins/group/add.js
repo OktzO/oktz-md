@@ -1,3 +1,4 @@
+import { findParticipantByNumber } from '../../src/lib/ourin-lid.js'
 import te from '../../src/lib/ourin-error.js'
 const pluginConfig = {
     name: 'add',
@@ -73,19 +74,14 @@ async function handler(m, { sock }) {
     try {
         const groupMeta = await sock.groupMetadata(targetGroup)
         const botId = sock.user?.id?.split(':')[0] + '@s.whatsapp.net'
-        const botParticipant = groupMeta.participants.find(p => 
-            p.id === botId || p.jid === botId || p.id?.includes(sock.user?.id?.split(':')[0])
-        )
+        const botParticipant = findParticipantByNumber(groupMeta.participants, botId)
         
         if (!botParticipant || !['admin', 'superadmin'].includes(botParticipant.admin)) {
             return m.reply(`❌ *ɢᴀɢᴀʟ*\n\n> Bot bukan admin di grup *${groupMeta.subject}*!`)
         }
         
         if (!m.isGroup) {
-            const senderId = m.sender?.split('@')[0]
-            const senderParticipant = groupMeta.participants.find(p => 
-                p.id?.includes(senderId) || p.jid?.includes(senderId)
-            )
+            const senderParticipant = findParticipantByNumber(groupMeta.participants, m.sender)
             
             if (!senderParticipant || !['admin', 'superadmin'].includes(senderParticipant.admin)) {
                 return m.reply(`❌ *ɢᴀɢᴀʟ*\n\n> Kamu bukan admin di grup *${groupMeta.subject}*!`)
@@ -96,9 +92,7 @@ async function handler(m, { sock }) {
         const alreadyInGroup = []
         
         for (const num of targetNumbers) {
-            const existingMember = groupMeta.participants.find(p => 
-                p.id?.includes(num) || p.jid?.includes(num)
-            )
+            const existingMember = findParticipantByNumber(groupMeta.participants, num + '@s.whatsapp.net')
             
             if (existingMember) {
                 alreadyInGroup.push(num)

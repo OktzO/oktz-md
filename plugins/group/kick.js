@@ -1,4 +1,8 @@
-import { findParticipantByNumber } from '../../src/lib/ourin-lid.js'
+import {
+  findParticipantByNumber,
+  isSameParticipant,
+  isSameGroupMember,
+} from '../../src/lib/ourin-lid.js'
 import te from '../../src/lib/ourin-error.js'
 const pluginConfig = {
     name: 'kick',
@@ -39,12 +43,12 @@ async function handler(m, { sock }) {
     const botNumber = sock.user?.id?.split(':')[0] + '@s.whatsapp.net'
     const targetNumber = targetJid.replace(/@.*$/, '')
 
-    if (targetJid === botNumber || targetNumber === botNumber.replace(/@.*$/, '')) {
+    if (isSameParticipant(targetJid, botNumber)) {
         await m.reply(`❌ *ɢᴀɢᴀʟ*\n\n> Tidak bisa kick bot sendiri!`)
         return
     }
 
-    if (targetJid === m.sender) {
+    if (isSameParticipant(targetJid, m.sender)) {
         await m.reply(`❌ *ɢᴀɢᴀʟ*\n\n> Tidak bisa kick diri sendiri!`)
         return
     }
@@ -55,6 +59,20 @@ async function handler(m, { sock }) {
         
         if (!targetParticipant) {
             await m.reply(`❌ *ɢᴀɢᴀʟ*\n\n> User tidak ditemukan dalam grup!`)
+            return
+        }
+
+        // Peserta yang sama bisa tertulis LID di satu sisi dan PN di sisi lain
+        // (reply ke pesan ber-addressing LID). Daftar participant = kamusnya.
+        if (isSameGroupMember(groupMeta.participants, targetJid, m.sender)) {
+            await m.reply(`❌ *ɢᴀɢᴀʟ*\n\n> Tidak bisa kick diri sendiri!`)
+            return
+        }
+        if (
+            isSameGroupMember(groupMeta.participants, targetJid, sock.user?.id) ||
+            isSameGroupMember(groupMeta.participants, targetJid, sock.user?.lid)
+        ) {
+            await m.reply(`❌ *ɢᴀɢᴀʟ*\n\n> Tidak bisa kick bot sendiri!`)
             return
         }
         

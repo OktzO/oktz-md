@@ -1,5 +1,9 @@
 import { getDatabase } from '../../src/lib/ourin-database.js'
-import { isLid, lidToJid, resolveAnyLidToJid } from '../../src/lib/ourin-lid.js'
+import {
+  isLid,
+  lidToJid,
+  findParticipantByNumber,
+} from '../../src/lib/ourin-lid.js'
 
 const pluginConfig = {
     name: 'mutemember',
@@ -56,10 +60,10 @@ async function handler(m, { sock }) {
     const targetNumber = targetJid.replace(/@.+/g, '')
 
     if (m.isGroup) {
-        const isTargetAdmin = m.groupMetadata?.participants?.some(p => {
-            const pJid = (p.id || p.jid || '').replace(/@.+/g, '')
-            return pJid === targetNumber && (p.admin === 'admin' || p.admin === 'superadmin')
-        })
+        // findParticipantByNumber juga membandingkan p.phoneNumber: di grup LID p.id
+        // berisi LID sehingga admin tidak pernah terdeteksi -> admin bisa dimute.
+        const targetParticipant = findParticipantByNumber(m.groupMetadata?.participants || [], targetJid)
+        const isTargetAdmin = !!targetParticipant?.admin
         if (isTargetAdmin) {
             return m.reply(`❌ *ɢᴀɢᴀʟ*\n\n> Tidak dapat mute admin grup`)
         }

@@ -1,5 +1,8 @@
 import { getDatabase } from '../../src/lib/ourin-database.js'
-import { getParticipantJid } from '../../src/lib/ourin-lid.js'
+import {
+  findParticipantByNumber,
+  isSameParticipant,
+} from '../../src/lib/ourin-lid.js'
 import te from '../../src/lib/ourin-error.js'
 const pluginConfig = {
     name: 'warn',
@@ -71,7 +74,7 @@ async function handler(m, { sock }) {
     }
     try {
         const groupMeta = m.groupMetadata
-        const participant = groupMeta.participants.find(p => getParticipantJid(p) === targetUser)
+        const participant = findParticipantByNumber(groupMeta.participants, targetUser)
         if (participant?.admin) {
             await m.reply(`❌ Tidak bisa memberikan warning kepada admin grup.`)
             return
@@ -79,7 +82,7 @@ async function handler(m, { sock }) {
     } catch (e) {}
     
     const botJid = sock.user?.id?.split(':')[0] + '@s.whatsapp.net'
-    if (targetUser === botJid) {
+    if (isSameParticipant(targetUser, botJid)) {
         await m.reply(`❌ Gak usah warn aku, aku cuma bot.`)
         return
     }
@@ -101,8 +104,10 @@ async function handler(m, { sock }) {
     const targetName = targetUser.split('@')[0]
     
     if (warnCount >= maxWarns) {
+        // operasi member: addressing asli server (p.id)
+        const targetParticipant = findParticipantByNumber(m.groupMetadata?.participants || [], targetUser)
         try {
-            await sock.groupParticipantsUpdate(m.chat, [targetUser], 'remove')
+            await sock.groupParticipantsUpdate(m.chat, [targetParticipant?.id || targetUser], 'remove')
             await m.reply(
                 `🚨 *MAX WARNING TERCAPAI*\n\n` +
                 `@${targetName} telah dikeluarkan dari grup karena mencapai batas pelanggaran!\n\n` +
