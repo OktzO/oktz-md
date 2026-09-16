@@ -1,4 +1,4 @@
-import { getParticipantJid } from '../../src/lib/ourin-lid.js'
+import { findParticipantByNumber } from '../../src/lib/ourin-lid.js'
 import te from '../../src/lib/ourin-error.js'
 const pluginConfig = {
     name: 'demote',
@@ -38,7 +38,10 @@ async function handler(m, { sock }) {
 
     try {
         const groupMeta = m.groupMetadata
-        const participant = groupMeta.participants.find(p => getParticipantJid(p) === target)
+        // findParticipantByNumber: di grup addressing_mode=lid ourin mengirim
+        // { id: LID, phoneNumber: PN }, jadi perbandingan dengan target (PN hasil
+        // resolve) tidak pernah ketemu -> "User tidak ditemukan".
+        const participant = findParticipantByNumber(groupMeta.participants, target)
 
         if (!participant) {
             await m.reply(`❌ *ɢᴀɢᴀʟ*\n\n> User tidak ditemukan di grup!`)
@@ -55,7 +58,9 @@ async function handler(m, { sock }) {
             return
         }
 
-        await sock.groupParticipantsUpdate(m.chat, [target], 'demote')
+        // operasi member wajib memakai addressing asli server (p.id), bukan PN
+        // hasil resolve - sama seperti kick.js.
+        await sock.groupParticipantsUpdate(m.chat, [participant.id || target], 'demote')
 
         await m.reply(
             `@${target.split('@')[0]} sekarang bukan admin lagi.`,
