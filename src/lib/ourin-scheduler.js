@@ -432,6 +432,9 @@ function initScheduler(config, sock = null) {
     true,
     TZ,
   );
+
+  saverJob.threshold = 5000;
+
   activeCronJobs.set("messageSaverTick", saverJob);
 
   logger.success("Scheduler", "Scheduler initialized");
@@ -560,6 +563,8 @@ async function startGroupScheduleChecker(sock) {
     true,
     TZ,
   );
+
+  job.threshold = 5000;
 
   activeCronJobs.set("groupSchedule", job);
   logger.info(
@@ -695,6 +700,7 @@ async function startSewaChecker(sock) {
   doCheck();
 
   const job = new CronJob("*/10 * * * *", doCheck, null, true, TZ);
+  job.threshold = 5000;
   activeCronJobs.set("sewaChecker", job);
   logger.info("Scheduler", "Sewa checker enabled (CronJob, every 10 minutes)");
 }

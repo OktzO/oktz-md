@@ -26,9 +26,9 @@ import {
 } from "./lib/ourin-lid.js";
 import { initAutoBackup } from "./lib/ourin-auto-backup.js";
 import { AsyncPool } from "./lib/ourin-async-pool.js";
-const groupCache = new NodeCache({ stdTTL: 5 * 60, useClones: false });
-const processedMessages = new NodeCache({ stdTTL: 30, useClones: false });
-const msgRetryCounterCache = new NodeCache({ stdTTL: 60, useClones: false });
+const groupCache = new NodeCache({ stdTTL: 5 * 60, useClones: false, maxKeys: 500 });
+const processedMessages = new NodeCache({ stdTTL: 30, useClones: false, maxKeys: 5000 });
+const msgRetryCounterCache = new NodeCache({ stdTTL: 60, useClones: false, maxKeys: 2000 });
 
 let lastMessageReceived = Date.now();
 let watchdogTimer = null;
@@ -385,6 +385,7 @@ async function startConnection(options = {}) {
     markOnlineOnConnect: false,
     generateHighQualityLinkPreview: false,
     shouldIgnoreJid: (jid) => (jid ? jid.includes("meta_ai") : false),
+    keepAliveIntervalMs: 10000,
     getMessage: async (key) => {
       if (store) {
         const msg = store.messages.get(key.remoteJid)?.get(key.id);

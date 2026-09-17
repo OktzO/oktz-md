@@ -414,6 +414,24 @@ export async function generateBrat({ text = "Halo Guys Nama Saya", theme = "whit
   return buf;
 }
 
+export async function fetchBratFromAPI(text, timeout = 15000) {
+  const url = `https://api.theresav.eu/api/maker/brat?text=${encodeURIComponent(text)}`;
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(id);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const arrayBuffer = await res.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch (err) {
+    clearTimeout(id);
+    if (err.name === "AbortError") throw new Error("timeout");
+    throw err;
+  }
+}
+
 // ".bratimg halo -blur 2" -> { text: "halo", blur: 2 }. Flag tak dikenal dibiarkan sbg teks.
 export function parseBratArgs(input = "") {
   let text = String(input).trim();

@@ -1,7 +1,7 @@
 import config from "../config.js";
 import { isSelf } from "../config.js";
 import { generateWAMessageFromContent, prepareWAMessageMedia } from "ourin";
-import { serialize, getCachedThumb } from "./lib/ourin-serialize.js";
+import { serialize, getCachedThumb, getCachedSharpThumb } from "./lib/ourin-serialize.js";
 import { saluranCtx } from "./lib/ourin-context.js";
 import {
   getPlugin,
@@ -613,6 +613,14 @@ async function messageHandler(msg, sock, options = {}) {
       return;
     }
 
+    // Fast-path dedup di paling atas (sblm 15x await anti-*): pesan duplikat
+    // dari Baileys retry langsung dibuang tanpa sentuh DB/network.
+    // Latency pesan unik tidak berubah (satu Map.get/set ~nanosecond).
+    const _botIdEarly = sock.user?.id?.split(":")[0] || "unknown";
+    if (m?.id && debounceMessage(`${_botIdEarly}_${m.chat}_${m.sender}_${m.id}`)) {
+      return;
+    }
+
     if (!m.isBot && m.sender && m.isGroup) {
       let contacts = db.setting("contacts") || {};
       const currentName = m.pushName;
@@ -825,11 +833,7 @@ async function messageHandler(msg, sock, options = {}) {
       }
     }
 
-    const botId = sock.user?.id?.split(":")[0] || "unknown";
-    const msgKey = `${botId}_${m.chat}_${m.sender}_${m.id}`;
-    if (debounceMessage(msgKey)) {
-      return;
-    }
+    // (dedup sudah dilakukan di fast-path atas, sblm anti-* checks)
 
     if (db.setting("autoRead") ?? config.features?.autoRead) {
       sock.readMessages([m.key]).catch(() => { });
@@ -858,10 +862,16 @@ async function messageHandler(msg, sock, options = {}) {
     }
 
     if (m.isCommand) {
-      db.setUser(m.sender, {
-        name: m.originalPushName || m.pushName,
-        lastSeen: new Date().toISOString(),
-      });
+      // Throttle lastSeen: update max 1x/menit per user supaya users.json
+      // tidak ditandai dirty + di-stringify tiap command (write amplification).
+      const _existing = db.getUser(m.sender);
+      const _last = _existing?.lastSeen ? Date.parse(_existing.lastSeen) : 0;
+      if (!_last || Date.now() - _last > 60_000 || _existing?.name !== (m.originalPushName || m.pushName)) {
+        db.setUser(m.sender, {
+          name: m.originalPushName || m.pushName,
+          lastSeen: new Date().toISOString(),
+        });
+      }
     }
 
     const cmdVnEnabled = db.setting("cmdVn") || false;
@@ -1388,7 +1398,7 @@ async function messageHandler(msg, sock, options = {}) {
       }
     }
 
-    const spamKey = `${botId}_${m.sender}`;
+    const spamKey = `${_botIdEarly}_${m.sender}`;
     if (!m.isOwner && !m.isPremium && (await isSpamming(spamKey))) {
       return;
     }
@@ -1514,7 +1524,7 @@ async function messageHandler(msg, sock, options = {}) {
                 url: config.info.website,
                 title: "Command not found",
                 description: `Suggestions Command | ${config.bot.name}`,
-                jpegThumbnail: await sharp(fs.readFileSync(config.assets["ourin2"])).resize(300, 300).toBuffer(),
+                jpegThumbnail: await getCachedSharpThumb(config.assets["ourin2"], 300, 300),
                 previewType: 1,
               },
               { quoted: m }
