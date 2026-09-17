@@ -1,9 +1,30 @@
-import { request } from 'undici'
+import { request, Agent, setGlobalDispatcher } from 'undici'
 import axios from 'axios'
+import http from 'http'
+import https from 'https'
 
-const REQUEST_TIMEOUT = 60_000
+const REQUEST_TIMEOUT = 15_000
 
-export const httpAxios = axios.create({ timeout: 30000 })
+// Shared keep-alive agents — axios default membuat socket TCP/TLS baru per
+// request (281 pemakaian di codebase). Dengan keepAlive, koneksi di-reuse:
+// latency turun (tanpa handshake ulang) + RAM stabil (tanpa socket churn).
+// Sumber: undici docs (Agent/Pool connection pooling) + Node.js cli docs.
+const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 50, maxFreeSockets: 10, timeout: 30_000 })
+const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 50, maxFreeSockets: 10, timeout: 30_000 })
+
+try {
+  const undiciAgent = new Agent({ connections: 50, keepAliveTimeout: 30_000, keepAliveMaxTimeout: 600_000, pipelining: 1 })
+  setGlobalDispatcher(undiciAgent)
+} catch { }
+
+export const httpAxios = axios.create({
+  timeout: 15000,
+  httpAgent,
+  httpsAgent,
+  maxRedirects: 3,
+  maxContentLength: 25 * 1024 * 1024,
+  maxBodyLength: 25 * 1024 * 1024,
+})
 
 async function f(url, responseType = "json", method = "GET", headers = {}, body = null) {
     const controller = new AbortController()

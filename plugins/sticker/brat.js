@@ -1,4 +1,4 @@
-import { generateBrat, parseBratArgs } from "../../src/lib/ourin-brat.js";
+import { generateBrat, parseBratArgs, fetchBratFromAPI } from "../../src/lib/ourin-brat.js";
 import { wrapInteractive } from "../../src/lib/ourin-rich-messages.js";
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import { prepareWAMessageMedia, generateWAMessageFromContent } from "ourin";
@@ -137,7 +137,12 @@ async function handler(m, { sock }) {
 
   try {
     const { text: parsed, blur } = parseBratArgs(text);
-    const buffer = await generateBrat({ text: parsed, theme: "white", blur });
+    let buffer;
+    try {
+      buffer = await fetchBratFromAPI(parsed);
+    } catch {
+      buffer = await generateBrat({ text: parsed, theme: "white", blur });
+    }
 
     await sock.sendImageAsSticker(m.chat, buffer, m, {
       packname: config.sticker.packname,

@@ -210,7 +210,7 @@ class Database {
       this.ready = true;
       logger.success(
         "database",
-        "Database siap dipakai (autosave 5s)",
+        "Database siap dipakai (autosave 15s write-behind)",
       );
       return this;
     } catch (error) {
@@ -233,7 +233,11 @@ class Database {
 
   startFlushTimer() {
     if (this.flushTimer) clearInterval(this.flushTimer);
-    this.flushTimer = setInterval(() => this.flushDirty(), config.turso?.syncInterval || FLUSH_INTERVAL_MS);
+    // Floor 15s: syncInterval 5s men-stringify seluruh store tiap 5 detik
+    // (write amplification → GC pressure + latency spike per pesan).
+    // 15s tetap aman untuk write-behind (shutdown hook flush sync).
+    const interval = Math.max(config.turso?.syncInterval || FLUSH_INTERVAL_MS, 15_000);
+    this.flushTimer = setInterval(() => this.flushDirty(), interval);
     if (this.flushTimer.unref) this.flushTimer.unref();
   }
 

@@ -1,4 +1,3 @@
-import axios from "axios";
 import crypto from "crypto";
 import archiver from "archiver";
 import { LRUCache } from "lru-cache";
@@ -49,9 +48,9 @@ function getTempDir() {
 }
 
 async function downloadBuffer(url) {
-  const response = await axios.get(url, {
+  const { httpAxios } = await import("./ourin-http.js");
+  const response = await httpAxios.get(url, {
     responseType: "arraybuffer",
-    timeout: 60000,
     headers: {
       "User-Agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",

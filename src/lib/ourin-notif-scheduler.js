@@ -65,6 +65,7 @@ function buildCronJobs() {
             const job = new CronJob(`${m} ${h} * * *`, async () => {
                 await processEntry(entry, jam, 'makan', key, db, todayStr)
             }, null, true, TZ)
+            job.threshold = 10000
 
             notifCronJobs.set(cronKey, job)
         }
@@ -80,6 +81,7 @@ function buildCronJobs() {
             const job = new CronJob(`${m} ${h} * * *`, async () => {
                 await processEntry(entry, jam, 'tidur', key, db, todayStr)
             }, null, true, TZ)
+            job.threshold = 10000
 
             notifCronJobs.set(cronKey, job)
         }

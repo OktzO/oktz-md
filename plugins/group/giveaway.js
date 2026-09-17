@@ -359,17 +359,20 @@ async function endGiveaway(giveawayId, sock, db) {
 }
 
 let _giveawayChecker = null;
+let _giveawayDb = null;
+let _giveawaySock = null;
 
 function startGiveawayChecker(sock, db) {
   if (_giveawayChecker) _giveawayChecker.stop();
+  _giveawayDb = db;
+  _giveawaySock = sock;
+
   _giveawayChecker = new CronJob(
     "* * * * *",
     async () => {
       try {
-        const { getDatabase } = await import("../../src/lib/ourin-database.js");
-        const currentDb = getDatabase();
-        const { getSocket } = await import("../../src/connection.js");
-        const currentSock = getSocket();
+        const currentDb = _giveawayDb || (await import("../../src/lib/ourin-database.js")).getDatabase();
+        const currentSock = _giveawaySock || (await import("../../src/connection.js")).getSocket();
         if (!currentSock) return;
 
         const giveaways = currentDb.setting("giveaways") || {};
@@ -385,6 +388,7 @@ function startGiveawayChecker(sock, db) {
     true,
     "Asia/Jakarta",
   );
+  _giveawayChecker.threshold = 5000;
   return _giveawayChecker;
 }
 

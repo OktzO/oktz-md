@@ -118,6 +118,7 @@ async function schedulePrayerTimes() {
       true,
       cityTz,
     );
+    job.threshold = 10000;
 
     sholatCronJobs.set(sholat, job);
   }
@@ -298,6 +299,7 @@ function initSholatScheduler(socketInstance) {
     true,
     TZ,
   );
+  dailyRefreshJob.threshold = 10000;
 
   schedulePrayerTimes();
   logger.info(

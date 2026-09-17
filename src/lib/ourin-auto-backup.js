@@ -324,6 +324,7 @@ function startAutoBackup(sock) {
 
   const cronExp = intervalToCron(state.intervalMs);
   activeCronJob = new CronJob(cronExp, doBackup, null, true, "Asia/Jakarta");
+  activeCronJob.threshold = 30000;
   logger.info(
     "AutoBackup",
     `Started with interval: ${formatInterval(state.intervalMs)} (cron: ${cronExp})`,

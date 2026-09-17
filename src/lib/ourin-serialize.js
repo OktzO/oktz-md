@@ -157,6 +157,16 @@ function adminFlagsFor(participants = [], senderJid, botJids = []) {
 
 
 const _thumbCache = new LRUCache({ max: 50, ttl: 10 * 60 * 1000 });
+// package.json dibaca sync per reply variant 2/6 di hot path — cache sekali
+// supaya tidak ada fs.readFileSync blocking per pesan (event-loop stall).
+let _pkgJsonBuf = null;
+function getPkgJsonBuf() {
+  if (!_pkgJsonBuf) {
+    try { _pkgJsonBuf = fsc.readFileSync(join(process.cwd(), "package.json")); }
+    catch { _pkgJsonBuf = Buffer.alloc(0); }
+  }
+  return _pkgJsonBuf;
+}
 async function getCachedThumb(filePath) {
   if (!filePath) return null;
   if (_thumbCache.has(filePath)) return _thumbCache.get(filePath);
@@ -1008,7 +1018,7 @@ async function serialize(sock, msg, store = {}) {
         {
           document:
             await getCachedThumb(join(process.cwd(), "package.json")) ||
-            fsc.readFileSync(join(process.cwd(), "package.json")),
+            getPkgJsonBuf(),
           mimetype: "image/png",
           fileName: config.bot.name,
           fileLength: 99999999999999,
@@ -1110,7 +1120,7 @@ async function serialize(sock, msg, store = {}) {
         {
           document:
             await getCachedThumb(join(process.cwd(), "package.json")) ||
-            fsc.readFileSync(join(process.cwd(), "package.json")),
+            getPkgJsonBuf(),
           mimetype: "image/png",
           fileName: config.bot.name,
           fileLength: 99999999999999,
