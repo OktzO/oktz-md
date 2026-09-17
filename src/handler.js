@@ -616,10 +616,10 @@ async function messageHandler(msg, sock, options = {}) {
     // Fast-path dedup di paling atas (sblm 15x await anti-*): pesan duplikat
     // dari Baileys retry langsung dibuang tanpa sentuh DB/network.
     // Latency pesan unik tidak berubah (satu Map.get/set ~nanosecond).
-    const _botIdEarly = sock.user?.id?.split(":")[0] || "unknown";
-    if (m?.id && debounceMessage(`${_botIdEarly}_${m.chat}_${m.sender}_${m.id}`)) {
-      return;
-    }
+    // const _botIdEarly = sock.user?.id?.split(":")[0] || "unknown";
+    // if (m?.id && debounceMessage(`${_botIdEarly}_${m.chat}_${m.sender}_${m.id}`)) {
+    //   return;
+    // }
 
     if (!m.isBot && m.sender && m.isGroup) {
       let contacts = db.setting("contacts") || {};
@@ -833,7 +833,13 @@ async function messageHandler(msg, sock, options = {}) {
       }
     }
 
-    // (dedup sudah dilakukan di fast-path atas, sblm anti-* checks)
+    // Dedup: cek pesan duplikat (Baileys retry) setelah command di-parse
+    // supaya m.id sudah pasti tersedia. Posisi ini setelah anti-* checks
+    // seperti versi lama, tapi sebelum autoRead & lastSeen update.
+    const botId = sock.user?.id?.split(":")[0] || "unknown";
+    if (m?.id && debounceMessage(`${botId}_${m.chat}_${m.sender}_${m.id}`)) {
+      return;
+    }
 
     if (db.setting("autoRead") ?? config.features?.autoRead) {
       sock.readMessages([m.key]).catch(() => { });
@@ -1398,7 +1404,7 @@ async function messageHandler(msg, sock, options = {}) {
       }
     }
 
-    const spamKey = `${_botIdEarly}_${m.sender}`;
+    const spamKey = `${botId}_${m.sender}`;
     if (!m.isOwner && !m.isPremium && (await isSpamming(spamKey))) {
       return;
     }
