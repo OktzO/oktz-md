@@ -361,6 +361,48 @@ function bratBestFontSize(ctx, text, maxWidth, maxHeight, lineGap, family) {
   return cached || { size: best, lines: bratWrap(ctx, text, maxWidth, best, family) };
 }
 
+async function generateBratWithBratCanvas({ text = "Halo Guys Nama Saya", theme = "white", blur = 0, bgColor, textColor } = {}) {
+  const t = BRAT_THEMES[theme] || BRAT_THEMES.white;
+  const selectedTheme = { bg: bgColor || t.bg, text: textColor || t.text };
+  const blurAmount = [1, 2, 3].includes(blur) ? blur : 0;
+  
+  const bgMap = { "#ffffff": "white", "#000000": "black", "#8ace00": "green" };
+  const textMap = { "#ffffff": "white", "#000000": "black" };
+  
+  const { bratGen } = await import("brat-canvas");
+  const buf = await bratGen({
+    text,
+    background: bgMap[selectedTheme.bg] || "white",
+    color: textMap[selectedTheme.text] || "black",
+  });
+  
+  if (blurAmount > 0) {
+    const { default: sharp } = await import("sharp");
+    return sharp(buf).blur(blurAmount).png().toBuffer();
+  }
+  return buf;
+}
+
+async function isBlankImage(buf) {
+  if (!buf || buf.length < 100) return true;
+  try {
+    const { default: sharp } = await import("sharp");
+    const { data } = await sharp(buf)
+      .resize(50, 50, { fit: "fill" })
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const firstR = data[0], firstG = data[1], firstB = data[2], firstA = data[3];
+    for (let i = 4; i < data.length; i += 4) {
+      if (data[i] !== firstR || data[i+1] !== firstG || data[i+2] !== firstB || data[i+3] !== firstA) {
+        return false;
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function generateBrat({ text = "Halo Guys Nama Saya", theme = "white", blur = 0, bgColor, textColor } = {}) {
   const t = BRAT_THEMES[theme] || BRAT_THEMES.white;
   const selectedTheme = { bg: bgColor || t.bg, text: textColor || t.text };
@@ -407,6 +449,12 @@ export async function generateBrat({ text = "Halo Guys Nama Saya", theme = "whit
   }
 
   let buf = await canvas.encode("png");
+  
+  if (isBlankImage(buf)) {
+    console.warn("[generateBrat] Native canvas produced blank image, falling back to brat-canvas");
+    return generateBratWithBratCanvas({ text, theme, blur, bgColor, textColor });
+  }
+  
   if (blurAmount > 0) {
     const { default: sharp } = await import("sharp");
     buf = await sharp(buf).blur(blurAmount).png().toBuffer();
