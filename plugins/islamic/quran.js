@@ -4,7 +4,7 @@ import te from "../../src/lib/ourin-error.js";
 
 const pluginConfig = {
   name: "quran",
-  alias: ["surah", "alquran", "bacaquran"],
+  alias: ["alquran", "bacaquran"],
   category: "islamic",
   description: "Baca ayat Al-Quran berdasarkan nama surah",
   usage: ".quran <nama surah>",

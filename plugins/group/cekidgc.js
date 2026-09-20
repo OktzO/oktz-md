@@ -6,7 +6,7 @@ import te from "../../src/lib/ourin-error.js";
 
 const pluginConfig = {
   name: "cekidgc",
-  alias: ["idgc", "idgrup", "groupid", "infogc", "groupinfo"],
+  alias: ["idgc", "idgrup", "groupid"],
   category: "group",
   description: "Cek ID dan info lengkap grup",
   usage: ".cekidgc [link grup]",

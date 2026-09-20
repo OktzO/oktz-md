@@ -7,7 +7,7 @@ const NEOXR_APIKEY = config.APIkey?.neoxr || '';
 
 const pluginConfig = {
   name: "film",
-  alias: ["movie", "nonton", "lk21"],
+  alias: ["nonton", "lk21"],
   category: "search",
   description: "Cari film dan nonton online",
   usage: ".film <judul>",

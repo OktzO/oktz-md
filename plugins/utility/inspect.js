@@ -1,7 +1,7 @@
 import te from '../../src/lib/ourin-error.js'
 const pluginConfig = {
     name: 'inspect',
-    alias: ['cekgrup', 'ceksaluran', 'groupinfo', 'channelinfo'],
+    alias: ['cekgrup', 'ceksaluran', 'channelinfo'],
     category: 'utility',
     description: 'Inspect info grup atau saluran WhatsApp via link',
     usage: '.inspect <link grup/saluran>',

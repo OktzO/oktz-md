@@ -1,10 +1,10 @@
 const pluginConfig = {
-    name: 'pinchat',
+    name: 'gcpinchat',
     alias: ['pinmsg', 'pinpesan'],
     category: 'group',
     description: 'Pin pesan penting di grup',
-    usage: '.pinchat (reply pesan)',
-    example: '.pinchat',
+    usage: '.gcpinchat (reply pesan)',
+    example: '.gcpinchat',
     isOwner: false,
     isPremium: false,
     isGroup: true,

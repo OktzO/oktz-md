@@ -7,7 +7,7 @@ const nexrayTypes = [
   "waifu", "neko", "shinobu", "megumin", "bully", "cuddle", "cry", "hug",
   "awoo", "kiss", "lick", "pat", "smug", "bonk", "yeet", "blush", "smile",
   "wave", "highfive", "handhold", "nom", "bite", "glomp", "slap", "kill",
-  "happy", "wink", "poke", "dance", "cringe"
+  "happy", "poke", "dance", "cringe"
 ];
 
 const pluginConfig = {

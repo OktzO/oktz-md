@@ -2,7 +2,7 @@ import { getDatabase } from "../../src/lib/ourin-database.js";
 import { addExpWithLevelCheck } from "../../src/lib/ourin-level.js";
 const pluginConfig = {
   name: "beg",
-  alias: ["ngemis", "minta"],
+  alias: ["ngemis"],
   category: "rpg",
   description: "Mengemis untuk mendapatkan uang receh",
   usage: ".beg",

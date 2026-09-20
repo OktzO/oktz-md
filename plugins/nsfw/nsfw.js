@@ -49,7 +49,7 @@ const API_CATEGORIES = {
 
 const ALL_COMMANDS = [
   ...Object.keys(JSON_CATEGORIES),
-  ...Object.keys(API_CATEGORIES),
+  ...Object.keys(API_CATEGORIES).filter((k) => k !== "neko"),
   "nsfw",
   "nsfwon",
   "nsfwoff",

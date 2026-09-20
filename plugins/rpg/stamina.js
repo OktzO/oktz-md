@@ -2,7 +2,7 @@ import { getDatabase } from "../../src/lib/ourin-database.js";
 import { sendRpgPreview } from "../../src/lib/ourin-context.js";
 const pluginConfig = {
   name: "stamina",
-  alias: ["energy", "cekstamina"],
+  alias: ["cekstamina"],
   category: "rpg",
   description: "Cek dan pulihkan stamina",
   usage: ".stamina / .stamina isi",

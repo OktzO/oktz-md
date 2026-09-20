@@ -1,7 +1,7 @@
 import { getDatabase } from "../../src/lib/ourin-database.js";
 const pluginConfig = {
   name: "gacha",
-  alias: ["spin", "pull", "lucky"],
+  alias: ["pull", "lucky"],
   category: "rpg",
   description: "Gacha untuk dapat hadiah random",
   usage: ".gacha",

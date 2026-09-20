@@ -2,7 +2,7 @@ import { cocofun } from 'btch-downloader'
 import te from '../../src/lib/ourin-error.js'
 const pluginConfig = {
     name: 'cocofundl',
-    alias: ['cfdl', 'cocofun', 'cf'],
+    alias: ['cfdl', 'cocofun'],
     category: 'download',
     description: 'Download video CocoFun',
     usage: '.cfdl <url>',

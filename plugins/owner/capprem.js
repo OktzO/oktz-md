@@ -3,7 +3,7 @@ import { getDatabase } from "../../src/lib/ourin-database.js";
 
 const config = {
   name: "capprem",
-  alias: ["cappremium", "setprem"],
+  alias: ["cappremium"],
   category: "owner",
   description: "Mengecap banyak fitur sekaligus menjadi premium",
   usage: ".capprem <nama_fitur1> <nama_fitur2> ...",

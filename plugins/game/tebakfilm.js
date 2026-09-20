@@ -1,7 +1,7 @@
 import { games } from '../../src/lib/ourin-games.js'
 
 games.register('tebakfilm', {
-    alias: ['tf', 'guessmovie'],
+    alias: ['guessmovie'],
     emoji: '🎬',
     title: 'TEBAK FILM',
     description: 'Tebak judul film'

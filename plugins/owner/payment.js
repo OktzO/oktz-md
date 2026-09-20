@@ -3,7 +3,7 @@ import { getDatabase } from '../../src/lib/ourin-database.js'
 
 const pluginConfig = {
   name: 'payment',
-  alias: ['pay', 'qris'],
+  alias: ['qris'],
   category: 'owner',
   description: 'Menampilkan info payment',
   usage: '.payment',

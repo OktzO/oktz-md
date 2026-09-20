@@ -2,7 +2,7 @@ import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
 const pluginConfig = {
   name: "leave",
-  alias: ["leavegrup", "leavegroup", "keluar", "bye"],
+  alias: ["leavegrup", "leavegroup", "keluar"],
   category: "owner",
   description: "Bot keluar dari grup",
   usage: ".leave [link]",

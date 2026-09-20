@@ -5,7 +5,7 @@
 import { getDatabase } from '../../src/lib/ourin-database.js'
 const pluginConfig = {
     name: 'putus',
-    alias: ['breakup', 'cerai'],
+    alias: ['breakup'],
     category: 'fun',
     description: 'Memutuskan hubungan dengan pasangan',
     usage: '.putus',

@@ -3,7 +3,7 @@ import { addExpWithLevelCheck } from "../../src/lib/ourin-level.js";
 
 const pluginConfig = {
   name: "challenge",
-  alias: ["daily", "dailychallenge", "tantangan"],
+  alias: ["dailychallenge", "tantangan"],
   category: "rpg",
   description: "Daily challenge untuk hadiah spesial",
   usage: ".challenge",

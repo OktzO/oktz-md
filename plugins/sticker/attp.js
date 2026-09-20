@@ -6,7 +6,7 @@ import te from '../../src/lib/ourin-error.js'
 const NEOXR_APIKEY = config.APIkey?.neoxr || ''
 const pluginConfig = {
     name: 'attp',
-    alias: ['attp2', 'attp3'],
+    alias: ['attp3'],
     category: 'sticker',
     description: 'Membuat sticker animated text',
     usage: '.attp <teks>',

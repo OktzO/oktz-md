@@ -1,6 +1,6 @@
 const pluginConfig = {
     name: 'cekjahat',
-    alias: ['jahat', 'evil'],
+    alias: ['evil'],
     category: 'cek',
     description: 'Cek seberapa jahat kamu',
     usage: '.cekjahat <nama>',

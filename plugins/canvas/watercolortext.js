@@ -3,12 +3,12 @@ import config from "../../config.js";
 import axios from "axios";
 
 const pluginConfig = {
-  name: "watercolortext",
+  name: "watercolorfx",
   alias: ["watercolor", "wctext"],
   category: "canvas",
   description: "Buat gambar teks dengan efek watercolor",
-  usage: ".watercolortext <teks>",
-  example: ".watercolortext Halo",
+  usage: ".watercolorfx <teks>",
+  example: ".watercolorfx Halo",
   isOwner: false,
   isPremium: false,
   isGroup: false,

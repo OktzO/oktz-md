@@ -1,7 +1,7 @@
 import { getDatabase } from "../../src/lib/ourin-database.js";
 const pluginConfig = {
   name: "merchant",
-  alias: ["npc", "toko", "tokoku"],
+  alias: ["npc", "tokoku"],
   category: "rpg",
   description: "Jual beli item ke NPC merchant",
   usage: ".merchant <buy/sell> <item> <qty>",

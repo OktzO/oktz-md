@@ -2,7 +2,7 @@ import { getDatabase } from "../../src/lib/ourin-database.js";
 import config from "../../config.js";
 const pluginConfig = {
   name: "antimedia",
-  alias: ["am", "nomedia"],
+  alias: ["nomedia"],
   category: "group",
   description: "Mengatur antimedia di grup (blokir gambar/video/audio/dokumen)",
   usage: ".antimedia <on/off>",

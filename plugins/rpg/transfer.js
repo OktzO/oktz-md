@@ -2,7 +2,7 @@ import { getDatabase } from "../../src/lib/ourin-database.js";
 
 const pluginConfig = {
   name: "transfer",
-  alias: ["tf", "kirim", "pay"],
+  alias: ["tf", "pay"],
   category: "rpg",
   description: "Transfer uang atau item ke user lain",
   usage: ".transfer <money/nama_item> <jumlah> @user",

@@ -2,7 +2,7 @@ import { getDatabase } from "../../src/lib/ourin-database.js";
 import { addExpWithLevelCheck } from "../../src/lib/ourin-level.js";
 const pluginConfig = {
   name: "enchant",
-  alias: ["upgrade", "enhance", "tingkatkan"],
+  alias: ["upgrade", "tingkatkan"],
   category: "rpg",
   description: "Upgrade equipment dengan enchantment",
   usage: ".enchant <item>",

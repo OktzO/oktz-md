@@ -2,7 +2,7 @@ import { getDatabase } from '../../src/lib/ourin-database.js'
 import config from '../../config.js'
 const pluginConfig = {
     name: 'antisticker',
-    alias: ['as', 'nosticker'],
+    alias: ['nosticker'],
     category: 'group',
     description: 'Mengatur antisticker di grup',
     usage: '.antisticker <on/off>',

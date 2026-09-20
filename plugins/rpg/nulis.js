@@ -2,12 +2,12 @@ import { getDatabase } from "../../src/lib/ourin-database.js";
 import { addExpWithLevelCheck } from "../../src/lib/ourin-level.js";
 
 const pluginConfig = {
-  name: "nulis",
+  name: "cerpen",
   alias: ["author", "wattpad"],
   category: "rpg",
   description: "Nulis cerpen atau artikel untuk dapet royalti",
-  usage: ".nulis",
-  example: ".nulis",
+  usage: ".cerpen",
+  example: ".cerpen",
   isOwner: false,
   isPremium: false,
   isGroup: false,

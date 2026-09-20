@@ -1,5 +1,5 @@
 const pluginConfig = {
-    name: ['pinchat', 'pin'],
+    name: ['pinchat'],
     alias: [],
     category: 'owner',
     description: 'Pin/unpin chat',

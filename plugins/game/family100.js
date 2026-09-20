@@ -16,7 +16,7 @@ import { addExpWithLevelCheck } from "../../src/lib/ourin-level.js";
 
 const pluginConfig = {
   name: "family100",
-  alias: ["f100", "survei"],
+  alias: ["f100"],
   category: "game",
   description: "Survey says! Tebak jawaban teratas survei",
   usage: ".family100",

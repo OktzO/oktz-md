@@ -3,7 +3,7 @@ import { getDatabase } from "../../src/lib/ourin-database.js";
 
 const config = {
   name: "howmuchenergy",
-  alias: ["cekenergi"],
+  alias: [],
   category: "info",
   description: "Mengecek penggunaan energi banyak fitur sekaligus",
   usage: ".howmuchenergy <nama_fitur1> <nama_fitur2> ...",

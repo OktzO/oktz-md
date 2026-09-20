@@ -4,7 +4,7 @@ import te from "../../src/lib/ourin-error.js";
 
 const pluginConfig = {
   name: "murrotal",
-  alias: ["murottal", "audioquran", "quraudio"],
+  alias: ["audioquran", "quraudio"],
   category: "islamic",
   description: "Dengarkan audio murottal Al-Quran berdasarkan surah",
   usage: ".murrotal <nama surah>",

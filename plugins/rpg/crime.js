@@ -3,7 +3,7 @@ import { addExpWithLevelCheck } from "../../src/lib/ourin-level.js";
 
 const pluginConfig = {
   name: "crime",
-  alias: ["curi", "jahat"],
+  alias: ["jahat"],
   category: "rpg",
   description: "Melakukan kejahatan membobol ATM (risiko tinggi)",
   usage: ".crime",

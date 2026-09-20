@@ -2,7 +2,7 @@ import { getDatabase } from "../../src/lib/ourin-database.js";
 import { saluranCtx } from "../../src/lib/ourin-context.js";
 const pluginConfig = {
   name: "tembak",
-  alias: ["nembak", "propose"],
+  alias: ["nembak"],
   category: "fun",
   description: "Menembak seseorang untuk pacaran",
   usage: ".tembak @tag",
