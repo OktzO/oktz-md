@@ -72,8 +72,16 @@ async function handler(m, { sock }) {
     );
   }
 
+  if (itemsArr.some((i) => i.price < 0)) {
+    return m.reply(`❌ Harga item tidak boleh negatif! Gunakan angka positif.`);
+  }
+
   const total =
     parseInt(totalRaw) || itemsArr.reduce((sum, i) => sum + i.price, 0);
+
+  if (total < 0) {
+    return m.reply(`❌ Total tidak boleh negatif! Gunakan angka positif.`);
+  }
 
   m.react("🧾");
 

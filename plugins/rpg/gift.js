@@ -29,6 +29,9 @@ async function handler(m, { sock }) {
   const itemKey = args[0]?.toLowerCase();
   const amount = parseInt(args[1]) || 1;
 
+  if (!Number.isInteger(amount) || amount <= 0)
+    return m.reply("❌ Jumlah item tidak valid. Gunakan angka positif!");
+
   if (!itemKey) {
     return m.reply(
       `🎁 *ɢɪꜰᴛ*\n\n` +

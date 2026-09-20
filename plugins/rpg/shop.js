@@ -94,7 +94,7 @@ async function handler(m, { sock }) {
   }
 
   const itemKey = args[1]?.toLowerCase();
-  const amount = parseInt(args[2]) || 1;
+  const amount = Math.max(1, parseInt(args[2]) || 1);
 
   if (!itemKey || !ITEMS[itemKey]) {
     return m.reply(`Aduh kak, barang *${args[1] || "itu"}* nggak ada di daftar! 😭❌\nCoba cek lagi list barangnya ketik \`.shop\` ya.`);

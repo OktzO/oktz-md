@@ -110,8 +110,9 @@ async function handler(m, { sock }) {
             break
         }
         case 'stok': {
-            product.stock = value.toLowerCase() === 'unlimited' ? -1 : parseInt(value)
-            if (isNaN(product.stock)) return m.reply(`❌ *Stok tidak valid.* Gunakan angka atau \`unlimited\` 📊`)
+            const parsed = parseInt(value)
+            if (isNaN(parsed) || parsed < -1) return m.reply(`❌ *Stok tidak valid.* Gunakan angka ≥ 0 atau \`unlimited\``)
+            product.stock = value.toLowerCase() === 'unlimited' ? -1 : parsed
             break
         }
         case 'tipe': {
