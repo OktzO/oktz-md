@@ -148,14 +148,10 @@ function hasFullAccess(jid, server, isOwner = false) {
 
 function canManageRole(jid, server, targetRole, isOwner = false) {
     if (isOwner) return true
-    
     const userRole = getUserRole(jid, server)
-    if (!userRole) return false
-    
-    if (userRole === 'owner') return true
-    if (userRole === 'ceo') return true
-    
-    return false
+    if (!userRole || userRole === 'reseller') return false
+    if (targetRole === 'owner') return false
+    return true
 }
 
 function getAllRolesForUser(jid) {

@@ -123,6 +123,13 @@ async function handler(m, { sock }) {
       category,
       file.endsWith(".js") ? file : `${file}.js`,
     );
+    if (
+      !/^[\w-]+$/.test(category) ||
+      !/^[\w.-]+$/.test(file) ||
+      !path.resolve(filePath).startsWith(path.resolve(pluginsDir) + path.sep)
+    ) {
+      return m.reply("❌ Nama plugin tidak valid.");
+    }
     if (fs.existsSync(filePath)) {
       pluginInfo = {
         path: filePath,

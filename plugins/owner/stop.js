@@ -1,3 +1,4 @@
+import config from "../../config.js"
 const pluginConfig = {
     name: 'stop',
     alias: ['shutdown', 'kill'],
@@ -15,6 +16,9 @@ const pluginConfig = {
 }
 
 async function handler(m, { sock }) {
+    if (!config.isOwner(m.sender)) {
+        return m.reply("❌ *Owner Only!*")
+    }
     await m.reply('🛑 *Stopping Bot...*\n\n> Bot dimatikan. Harus dinyalakan manual dari terminal.')
     console.log('Stopping via command...')
     
