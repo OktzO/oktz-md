@@ -20,7 +20,7 @@ const pluginConfig = {
 async function handler(m, { sock }) {
     const url = m.args?.[0]?.trim()
     
-    if (!url || !url.includes('store.line.me')) {
+    if (!url || !/^(https?:\/\/store\.line\.me\/)/.test(url)) {
         return m.reply(
             `🎨 *ʟɪɴᴇ sᴛɪᴄᴋᴇʀ ᴘᴀᴄᴋ*\n\n` +
             `> Download LINE sticker pack\n\n` +
