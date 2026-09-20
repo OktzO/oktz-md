@@ -23,7 +23,7 @@ const pluginConfig = {
   isEnabled: true,
 };
 
-const termaiKey = "AIzaBj7z2z3xBjsk";
+const termaiKey = process.env.TERMAI_UPLOAD_KEY || "";
 const termaiDomain = "https://c.termai.cc";
 
 async function detectExt(buffer, fallback = "bin") {

@@ -18,7 +18,7 @@ const pluginConfig = {
     isEnabled: true
 }
 
-const CUKI_APIKEY = config.APIkey?.cuki || 'cuki-x'
+const CUKI_APIKEY = config.APIkey?.cuki || ""
 
 function trimText(text, max = 60) {
     const value = (text || '').replace(/\s+/g, ' ').trim()
@@ -48,6 +48,10 @@ async function handler(m, { sock }) {
 
     if (!query) {
         return m.reply(`📚 *MANGATOON SEARCH*\n\n> Contoh:\n\`${m.prefix}mangatoon love\``)
+    }
+
+    if (!CUKI_APIKEY) {
+        return m.reply(`❌ *API Key belum diset!*\n\n> Isi \`APIKEY_CUKI\` di file \`.env\`, lalu restart bot`)
     }
 
     m.react('🔍')

@@ -35,7 +35,15 @@ async function handler(m, { sock }) {
     );
   }
 
-  const api_dev_key = "h9WMT2Mn9QW-qDhvUSc-KObqAYcjI0he";
+  const api_dev_key = process.env.PASTEBIN_DEV_KEY || "";
+  if (!api_dev_key) {
+    return m.reply(
+      `❌ *PASTEBIN API Key belum diset!*\n\n` +
+        `> Owner harus set \`PASTEBIN_DEV_KEY\` di file \`.env\`\n` +
+        `> Ambil key di: https://pastebin.com/api\n` +
+        `> Lalu restart bot`
+    );
+  }
   const api_paste_code = text.trim();
   const api_paste_name = `Paste dari ${m.pushName || "User"} - ${new Date().toLocaleDateString("id-ID")}`;
 

@@ -976,10 +976,10 @@ class OurinApiManager {
         baseURL: "https://api.cuki.biz.id",
         auth: {
           params: {
-            apikey: () => this.pickCfg(["APIkey.cuki"], "cuki-x"),
+            apikey: () => this.pickCfg(["APIkey.cuki"], ""),
           },
           headers: {
-            "x-api-key": () => this.pickCfg(["APIkey.cuki"], "cuki-x"),
+            "x-api-key": () => this.pickCfg(["APIkey.cuki"], ""),
           },
         },
       },
@@ -1003,7 +1003,7 @@ class OurinApiManager {
         baseURL: "https://fgsi.dpdns.org",
         auth: {
           headers: {
-            apikey: () => this.pickCfg(["APIkey.fgsi"], "fgsiapi-20c1605c-6d"),
+            apikey: () => this.pickCfg(["APIkey.fgsi"], ""),
           },
         },
       },

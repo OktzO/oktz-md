@@ -26,7 +26,7 @@ async function uploadTo0x0(buffer, filename) {
   });
 
   const res = await axios.post(
-    "https://c.termai.cc/api/upload?key=AIzaBj7z2z3xBjsk",
+    `https://c.termai.cc/api/upload?key=${process.env.TERMAI_UPLOAD_KEY || ""}`,
     form,
     {
       headers: form.getHeaders(),

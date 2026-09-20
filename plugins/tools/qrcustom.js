@@ -24,7 +24,7 @@ async function uploadTo0x0(buffer) {
         const form = new FormData()
         form.append('file', buffer, { filename: 'logo.png', contentType: 'image/png' })
         
-        const response = await axios.post('https://c.termai.cc/api/upload?key=AIzaBj7z2z3xBjsk', form, {
+        const response = await axios.post(`https://c.termai.cc/api/upload?key=${process.env.TERMAI_UPLOAD_KEY || ''}`, form, {
             headers: form.getHeaders(),
             timeout: 30000
         })

@@ -1,5 +1,7 @@
 import axios from 'axios'
 import te from '../../src/lib/ourin-error.js'
+import config from '../../config.js'
+const CUKI_APIKEY = config.APIkey?.cuki || ""
 const pluginConfig = {
     name: 'spamngl',
     alias: [],
@@ -23,11 +25,12 @@ async function handler(m, { sock }) {
     if(!kata) return m.reply(`*KATA KATA NYA MANA ??*\n\nContoh: \`${m?.prefix}spamngl https://ngl.link/xxxx | hai | 10`)
     if(!jumlah) return m.reply(`*JUMLAH NYA MANA ??*\n\nContoh: \`${m?.prefix}spamngl https://ngl.link/xxxx | hai | 10`)
     if(isNaN(jumlah)) return m.reply(`*JUMLAH NYA HARUS ANGKA*\n\nContoh: \`${m?.prefix}spamngl https://ngl.link/xxxx | hai | 10`)
+    if(!CUKI_APIKEY) return m.reply(`❌ *API Key belum diset!*\n\n> Isi \`APIKEY_CUKI\` di file \`.env\`, lalu restart bot`)
     m.react('🎴')
     
     try {
         for(let i = 0; i < jumlah; i++) {
-            axios.get(`https://api.cuki.biz.id/api/tools/sendngl?apikey=cuki-x&link=${encodeURIComponent(link)}&text=${encodeURIComponent(kata)}`, {
+            axios.get(`https://api.cuki.biz.id/api/tools/sendngl?apikey=${encodeURIComponent(CUKI_APIKEY)}&link=${encodeURIComponent(link)}&text=${encodeURIComponent(kata)}`, {
                 timeout: 30000
             })
             await new Promise(resolve => setTimeout(resolve, 4000))
