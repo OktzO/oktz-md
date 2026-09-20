@@ -4,7 +4,7 @@ import config from '../../config.js'
 import te from '../../src/lib/ourin-error.js'
 const pluginConfig = {
   name: "autobackup",
-  alias: ["backup", "ab"],
+  alias: ["ab"],
   category: "owner",
   description: "Kelola sistem auto backup",
   usage: ".autobackup <on/off/status/now> [interval]",

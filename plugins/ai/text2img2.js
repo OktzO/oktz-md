@@ -3,7 +3,7 @@ import te from '../../src/lib/ourin-error.js'
 
 const pluginConfig = {
   name: 'text2img2',
-  alias: ['t2i2', 'genimg'],
+  alias: ['genimg'],
   category: 'ai',
   description: 'Generate image from text using AI',
   usage: '.text2img2 <prompt>',

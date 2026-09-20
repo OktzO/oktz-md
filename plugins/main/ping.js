@@ -6,7 +6,7 @@ import te from "../../src/lib/ourin-error.js"
 
 const pluginConfig = {
   name: "ping",
-  alias: ["speed", "p", "latency", "sys", "status"],
+  alias: ["speed", "p", "sys"],
   category: "main",
   description: "Cek performa dan status sistem bot secara real-time (Canvas Epic)",
   usage: ".ping",

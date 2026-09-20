@@ -2,7 +2,7 @@ import axios from 'axios'
 import te from '../../src/lib/ourin-error.js'
 const pluginConfig = {
     name: 'ramalanjodoh',
-    alias: ['jodoh', 'cekjodoh'],
+    alias: ['cekjodoh'],
     category: 'primbon',
     description: 'Ramalan jodoh berdasarkan primbon Jawa',
     usage: '.ramalanjodoh nama1 tgl1 bln1 thn1 nama2 tgl2 bln2 thn2',

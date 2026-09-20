@@ -7,7 +7,7 @@ import { getDatabase } from '../../src/lib/ourin-database.js'
 import te from '../../src/lib/ourin-error.js'
 const pluginConfig = {
     name: 'public',
-    alias: ['publicmode', 'open'],
+    alias: ['publicmode'],
     category: 'owner',
     description: 'Mengaktifkan mode public (semua user bisa akses)',
     usage: '.public',

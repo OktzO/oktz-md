@@ -3,7 +3,7 @@ import * as cheerio from "cheerio";
 
 const pluginConfig = {
     name: 'spekhp',
-    alias: ['spek', 'spesifikasi'],
+    alias: ['spek'],
     category: 'search',
     description: 'Mencari spesifikasi lengkap smartphone dari Carisinyal.',
     usage: '.spekhp <nama hp>',

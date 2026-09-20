@@ -1,11 +1,11 @@
 import { getDatabase } from '../../src/lib/ourin-database.js'
 const pluginConfig = {
-    name: 'botmode',
-    alias: ['setmode', 'mode'],
+    name: 'botmodegrup',
+    alias: ['setmodegrup', 'modegrup'],
     category: 'group',
     description: 'Atur mode bot untuk grup ini',
-    usage: '.botmode <md/cpanel/pushkontak/store/otp/all>',
-    example: '.botmode store',
+    usage: '.botmodegrup <md/cpanel/pushkontak/store/otp/all>',
+    example: '.botmodegrup store',
     isOwner: false,
     isPremium: false,
     isGroup: true,

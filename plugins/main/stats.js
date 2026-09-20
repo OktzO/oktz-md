@@ -3,7 +3,7 @@ import te from "../../src/lib/ourin-error.js";
 
 const pluginConfig = {
   name: "stats",
-  alias: ["botstats", "status", "stat"],
+  alias: ["botstats", "stat"],
   category: "main",
   description: "Menampilkan statistik bot",
   usage: ".stats",

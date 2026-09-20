@@ -3,7 +3,7 @@ import { addExpWithLevelCheck } from "../../src/lib/ourin-level.js";
 
 const pluginConfig = {
   name: "arena",
-  alias: ["pvp", "battle", "fight"],
+  alias: ["battle"],
   category: "rpg",
   description: "Bertarung di arena PvP",
   usage: ".arena <@user>",

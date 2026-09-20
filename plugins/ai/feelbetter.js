@@ -4,7 +4,7 @@ import te from "../../src/lib/ourin-error.js";
 
 const pluginConfig = {
   name: "feelbetter",
-  alias: ["fb", "feelbetterbot", "healing"],
+  alias: ["feelbetterbot", "healing"],
   category: "ai",
   description: "Chat dengan FeelBetterBot — AI yang siap mendengarkan tanpa menghakimi",
   usage: ".feelbetter <curhat/pertanyaan>",

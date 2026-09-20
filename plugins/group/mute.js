@@ -1,11 +1,11 @@
 import { getDatabase } from '../../src/lib/ourin-database.js'
 const pluginConfig = {
-    name: 'mute',
+    name: 'muteanggota',
     alias: ['bisukan'],
     category: 'group',
     description: 'Bisukan seluruh grup (hanya admin yang bisa kirim pesan)',
-    usage: '.mute',
-    example: '.mute',
+    usage: '.muteanggota',
+    example: '.muteanggota',
     isOwner: false,
     isPremium: false,
     isGroup: true,

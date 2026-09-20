@@ -9,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const pluginConfig = {
   name: "carifitur",
-  alias: ["searchcmd", "findcmd", "cari", "search", "cf"],
+  alias: ["searchcmd", "findcmd", "cari", "search"],
   category: "main",
   description: "Mencari fitur berdasarkan keyword dengan detail lengkap",
   usage: ".carifitur <keyword>",

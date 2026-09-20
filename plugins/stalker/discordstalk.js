@@ -6,7 +6,7 @@ const NEOXR_APIKEY = config.APIkey?.neoxr || '';
 
 const pluginConfig = {
   name: "discordstalk",
-  alias: ["dcstalk", "dsstalk", "stalkdc", "stalkdiscord"],
+  alias: ["dcstalk", "dsstalk", "stalkdc"],
   category: "stalker",
   description: "Stalk akun Discord berdasarkan User ID",
   usage: ".discordstalk <userid>",

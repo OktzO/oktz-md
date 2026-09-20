@@ -25,7 +25,7 @@ async function getSharp() {
 }
 const pluginConfig = {
   name: "allmenu",
-  alias: ["fullmenu", "am", "allcommand", "semua"],
+  alias: ["fullmenu", "allcommand", "semua"],
   category: "main",
   description: "Menampilkan semua command lengkap per kategori",
   usage: ".allmenu",

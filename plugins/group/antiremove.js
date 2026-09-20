@@ -1,6 +1,6 @@
 const pluginConfig = {
     name: 'antiremove',
-    alias: ['antidelete', 'antihapus', 'ar'],
+    alias: ['antidelete', 'antihapus'],
     category: 'group',
     description: 'Mengaktifkan/menonaktifkan anti hapus pesan di grup',
     usage: '.antiremove <on/off>',

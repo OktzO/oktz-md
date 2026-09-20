@@ -3,7 +3,7 @@ import config from '../../config.js'
 import te from '../../src/lib/ourin-error.js'
 const pluginConfig = {
     name: 'lahelu',
-    alias: ['randommeme'],
+    alias: [],
     category: 'random',
     description: 'Random gambar lahelu',
     usage: '.lahelu',

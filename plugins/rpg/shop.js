@@ -2,7 +2,7 @@ import { getDatabase } from "../../src/lib/ourin-database.js";
 
 const pluginConfig = {
   name: "shop",
-  alias: ["beli", "jual", "toko", "store", "buy", "sell"],
+  alias: ["beli", "jual", "toko", "store", "sell"],
   category: "rpg",
   description: "Beli dan jual item RPG",
   usage: ".shop <buy/sell> <item> <jumlah>",

@@ -1,11 +1,11 @@
 import { downloadContentFromMessage } from 'ourin'
 const pluginConfig = {
-    name: 'rvo',
+    name: 'openvo',
     alias: [],
     category: 'group',
     description: 'Membuka pesan 1x lihat yang di-reply',
-    usage: '.rvo (reply pesan 1x lihat)',
-    example: '.rvo',
+    usage: '.openvo (reply pesan 1x lihat)',
+    example: '.openvo',
     isOwner: false,
     isPremium: false,
     isGroup: false,

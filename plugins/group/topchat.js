@@ -1,7 +1,7 @@
 import { getDatabase } from "../../src/lib/ourin-database.js";
 const pluginConfig = {
   name: "topchat",
-  alias: ["chatstat", "chatstats", "totalchat", "leaderboard"],
+  alias: ["chatstat", "chatstats", "totalchat"],
   category: "group",
   description: "Lihat statistik chat member di grup",
   usage: ".topchat",

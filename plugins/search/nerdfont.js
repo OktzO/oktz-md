@@ -47,12 +47,12 @@ async function nerdfonts() {
   }
 }
 const pluginConfig = {
-  name: "dafont",
-  alias: ["nerdfont", "font"],
+  name: "nerdfont",
+  alias: [],
   category: "search",
   description: "Cari font di DaFont",
-  usage: ".dafont <query>",
-  example: ".dafont Coolvetica",
+  usage: ".nerdfont <query>",
+  example: ".nerdfont Coolvetica",
   isOwner: false,
   isPremium: false,
   isGroup: false,

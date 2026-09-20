@@ -4,7 +4,7 @@ import te from "../../src/lib/ourin-error.js";
 
 const pluginConfig = {
     name: "dungeon",
-    alias: ["dg", "explore", "labirin"],
+    alias: ["dg", "labirin"],
     category: "game",
     description: "Jelajahi dungeon dan lawan monster secara interaktif",
     usage: ".dungeon",

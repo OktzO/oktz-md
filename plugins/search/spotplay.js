@@ -3,7 +3,7 @@ import te from "../../src/lib/ourin-error.js";
 
 const pluginConfig = {
   name: "spotplay",
-  alias: ["splay", "sp"],
+  alias: ["splay"],
   category: "search",
   description: "Putar musik dari Spotify",
   usage: ".spotplay <query>",

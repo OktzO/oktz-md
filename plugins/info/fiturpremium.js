@@ -3,7 +3,7 @@ import { getDatabase } from "../../src/lib/ourin-database.js";
 
 const config = {
   name: "fiturpremium",
-  alias: ["listprem", "listpremium", "fiturprem"],
+  alias: ["listpremium", "fiturprem"],
   category: "info",
   description: "Melihat daftar seluruh fitur premium bot",
   usage: ".fiturpremium",

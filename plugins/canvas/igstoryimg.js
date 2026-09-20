@@ -25,7 +25,7 @@ const configLayout = {
 
 const pluginConfig = {
     name: 'igstoryimg',
-    alias: ['igstory', 'igstoryimage'],
+    alias: ['igstoryimage'],
     category: 'canvas',
     description: 'Membuat gambar layout Instagram Story dari gambarmu.',
     usage: '.igstoryimg [kirim/reply gambar]',

@@ -2,7 +2,7 @@ import config from '../../config.js'
 import { getDatabase } from '../../src/lib/ourin-database.js'
 const pluginConfig = {
     name: 'automedia',
-    alias: ['automedi', 'am'],
+    alias: ['automedi'],
     category: 'group',
     description: 'Toggle auto media - otomatis jadikan sticker jadi gambar/video',
     usage: '.automedia on/off',

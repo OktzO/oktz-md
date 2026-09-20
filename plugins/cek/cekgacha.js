@@ -1,6 +1,6 @@
 const pluginConfig = {
     name: 'cekgacha',
-    alias: ['gacha', 'luck'],
+    alias: ['luck'],
     category: 'cek',
     description: 'Cek hoki gacha kamu',
     usage: '.cekgacha <nama>',

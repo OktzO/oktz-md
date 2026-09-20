@@ -4,7 +4,7 @@ import { sendRpgPreview } from "../../src/lib/ourin-context.js";
 
 const pluginConfig = {
   name: "maling",
-  alias: ["copet", "pickpocket"],
+  alias: ["copet"],
   category: "rpg",
   description: "Mencopet orang di pasar (lebih berisiko dari crime)",
   usage: ".maling",

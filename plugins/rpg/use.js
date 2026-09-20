@@ -1,7 +1,7 @@
 import { getDatabase } from "../../src/lib/ourin-database.js";
 const pluginConfig = {
   name: "use",
-  alias: ["pake", "makan", "open"],
+  alias: ["pake", "makan"],
   category: "rpg",
   description: "Menggunakan item consumable atau membuka crate",
   usage: ".use <item>",
