@@ -40,12 +40,12 @@ async function handler(m, { sock }) {
     
     m.react('🕕')
 
-    try {
+    const tempFile = path.join(os.tmpdir(), `brat-${Date.now()}.webp`)
+        try {
         // brat-canvas menjalankan `spawn("ffmpeg")` dari PATH.
         // Tanpa ini, ffmpeg tidak ketemu => ENOENT => command gagal diam-diam.
         ensureFfmpegOnPath()
 
-        const tempFile = path.join(os.tmpdir(), `brat-${Date.now()}.webp`)
         const buffer = await (await getBratVid())(text, {
             outputFormat: 'mp4',
         })
@@ -54,11 +54,12 @@ async function handler(m, { sock }) {
             packname: config.sticker.packname,
             author: config.sticker.author
         })
-        await fs.promises.unlink(tempFile)
         m.react('✅')
     } catch (error) {
         m.react('☢')
         m.reply(te(m.prefix, m.command, m.pushName))
+    } finally {
+        await fs.promises.unlink(tempFile).catch(() => {})
     }
 }
 

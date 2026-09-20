@@ -29,8 +29,14 @@ async function handler(m, { sock }) {
 
   m.react("🕕");
 
+  const apiKey = config.APIkey?.cuki || "";
+  if (!apiKey) {
+    m.react("❌");
+    return m.reply(`❌ API key cuki belum dikonfigurasi (APIKEY_CUKI)`);
+  }
+
   try {
-    const url = `https://api.cuki.biz.id/api/search/whatsapp-group?apikey=${config.APIkey.cuki}&query=${encodeURIComponent(text)}`;
+    const url = `https://api.cuki.biz.id/api/search/whatsapp-group?apikey=${apiKey}&query=${encodeURIComponent(text)}`;
     const { data } = await axios.get(url, { timeout: 30000 });
 
     if (!data.status || !data.data?.groups?.length) {

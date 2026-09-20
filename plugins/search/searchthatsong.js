@@ -55,6 +55,7 @@ function _vyrRequest(method, url, body, headers = {}) {
         }
       });
     });
+    req.setTimeout(20000, () => req.destroy(new Error("request timeout")));
     req.on("error", reject);
     if (payload) req.write(payload);
     req.end();

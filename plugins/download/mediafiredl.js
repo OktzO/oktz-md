@@ -47,6 +47,10 @@ async function handler(m, { sock }) {
 
   try {
     const result = await mediafire(url);
+    if (!result?.download?.link_download) {
+      m.react("❌");
+      return m.reply(`❌ Gagal mendapatkan link download. File mungkin tidak tersedia.`);
+    }
     await sock.sendMessage(
       m.chat,
       {

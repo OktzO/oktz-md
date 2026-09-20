@@ -58,8 +58,8 @@ async function handler(m, { sock }) {
             text += `   └ Lokasi: ${kotaSetting.nama}\n`;
 
             try {
-                const { schedule } = await getTodaySchedule(kotaSetting.id);
-                const times = extractPrayerTimes(schedule);
+                const jadwalData = await getTodaySchedule(kotaSetting.id);
+                const times = extractPrayerTimes(jadwalData);
                 const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
                 const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 

@@ -177,15 +177,14 @@ async function handler(m, { sock }) {
     if (cmd === "brathd") {
       const url = `https://aqul-brat.hf.space/?text=${encodeURIComponent(text)}`;
       const response = await axios.get(url, {
-          responseType: 'arraybuffer',
-          headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-              'Accept': 'image/png,image/*,*/*;q=0.8',
-              'Referer': 'https://aqul-brat.hf.space/',
-              'Connection': 'keep-alive'
-          }
+        responseType: 'arraybuffer',
+        validateStatus: () => true,
       });
-      await sock.sendImageAsSticker(m.chat, Buffer.from(response.data), m, {
+      const buf = Buffer.from(response.data);
+      if (!/^image\//.test(response.headers['content-type'] || '') || buf.length < 100) {
+        throw new Error("brathd gagal");
+      }
+      await sock.sendImageAsSticker(m.chat, buf, m, {
         packname: config.sticker.packname,
         author: config.sticker.author
       });

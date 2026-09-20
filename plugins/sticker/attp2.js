@@ -74,35 +74,16 @@ async function handler(m, { sock }) {
   await m.react('🕕')
 
   try {
-    const colors = encodeURIComponent(JSON.stringify(["#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#00FFFF", "#FF00FF"]))
-    const apiUrl = `https://api.neoxr.eu/api/attp2?text=${encodeURIComponent(text)}&color=${colors}&apikey=${config.APIkey.neoxr}`
-
-    let sent = false
-    try {
-        const response = await axios.get(apiUrl)
-        if (response.data.status && response.data.data?.url) {
-            const stickerUrl = response.data.data.url
-            const stickerBuffer = await axios.get(stickerUrl, { responseType: 'arraybuffer' }).then(res => res.data)
-            await sock.sendVideoAsSticker(m.chat, stickerBuffer, m, {
+    const frames = await localAnimatedText(text)
+    for (const buf of frames) {
+        try {
+            const sticker = await addExifToWebp(buf, {
                 packname: config.sticker.packname,
                 author: config.sticker.author
             })
-            sent = true
-        }
-    } catch (e) { }
-
-    if (!sent) {
-        const frames = await localAnimatedText(text)
-        for (const buf of frames) {
-            try {
-                const sticker = await addExifToWebp(buf, {
-                    packname: config.sticker.packname,
-                    author: config.sticker.author
-                })
-                await sock.sendMessage(m.chat, { sticker }, { quoted: m })
-                await new Promise(r => setTimeout(r, 300))
-            } catch (e) { }
-        }
+            await sock.sendMessage(m.chat, { sticker }, { quoted: m })
+            await new Promise(r => setTimeout(r, 300))
+        } catch (e) { }
     }
 
     await m.react('✅')
