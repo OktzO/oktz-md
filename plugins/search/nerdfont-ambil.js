@@ -78,6 +78,7 @@ async function handler(m, { sock }) {
     const data = res.find(
       (d, i) => d?.name.toLowerCase() === query.toLowerCase(),
     );
+    if (!data) return m.reply(`❌ Font *${query}* tidak ditemukan`);
     sock.sendMessage(m.chat, {
       document: { url: data.download_url },
       fileName: data.name,

@@ -93,6 +93,7 @@ async function handler(m, { sock }) {
         await sock.sendMedia(m.chat, buf, null, m, { type: 'audio' })
     } catch (e) {
         console.log('cekkhodam tts error:', e.message)
+        await m.reply('❌ Gagal membuat audio khodam, coba lagi nanti.')
     } finally {
         try { fs.unlinkSync(tempPath) } catch { }
     }

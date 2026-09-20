@@ -35,17 +35,17 @@ async function handler(m, { sock }) {
     m.react('🕕')
 
     try {
-        const { data } = await f(`https://api.neoxr.eu/api/sfile?url=${encodeURIComponent(url)}&apikey=${config.APIkey.neoxr}`)
+        const res = await f(`https://api.neoxr.eu/api/sfile?url=${encodeURIComponent(url)}&apikey=${config.APIkey.neoxr}`)
 
-        if (!data.url) {
+        if (!res?.data?.url) {
             m.react('❌')
             return m.reply(`❌ Gagal mendapatkan link download. File mungkin tidak tersedia.`)
         }
 
-        await sock.sendMedia(m.chat, data.url, null, m, {
+        await sock.sendMedia(m.chat, res.data.url, null, m, {
             type: 'document',
-            fileName: data.filename,
-            mimetype: data.mime,
+            fileName: res.data.filename,
+            mimetype: res.data.mime,
             contextInfo: {
                 forwardingScore: 99,
                 isForwarded: true

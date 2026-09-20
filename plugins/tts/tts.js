@@ -26,7 +26,7 @@ async function handler(m, { sock }) {
       const response = await ourinApi.nexray.geminiTts(text);
       return response;
     } catch (error) {
-      return error;
+      throw error;
     }
   }
 
