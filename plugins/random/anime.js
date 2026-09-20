@@ -31,6 +31,9 @@ async function handler(m, { sock }) {
     const cmd = m.command.toLowerCase();
 
     if (cmd === "loli") {
+      if (!m.isPremium && !m.isOwner) {
+        return m.reply(`🔞 *Konten Premium*\n\nKonten ini khusus pengguna *Premium*.\n> Ketik *${m.prefix}benefitpremium* untuk info upgrade`)
+      }
       return await sock.sendMessage(
         m.chat,
         {

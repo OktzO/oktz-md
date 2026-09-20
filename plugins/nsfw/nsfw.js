@@ -123,6 +123,11 @@ function isNsfwAllowed(m, db) {
   return groupData.nsfw === true
 }
 
+function requirePremium(m) {
+  if (m.isPremium || m.isOwner) return true
+  return false
+}
+
 async function handler(m, { sock }) {
   const db = getDatabase()
   const cmd = m.command.toLowerCase()
@@ -173,6 +178,13 @@ async function handler(m, { sock }) {
     if (args[0]) {
       const sub = args[0].toLowerCase()
       if (JSON_CATEGORIES[sub] || API_CATEGORIES[sub]) {
+        if (!requirePremium(m)) {
+          return m.reply(
+            `🔞 *Konten Premium 18+*\n\n` +
+            `Konten NSFW hanya bisa diakses pengguna *Premium*.\n` +
+            `> Ketik *${m.prefix}benefitpremium* untuk info upgrade`
+          )
+        }
         return await sendNsfwImage(m, sock, sub)
       }
     }
@@ -180,6 +192,13 @@ async function handler(m, { sock }) {
   }
 
   if (JSON_CATEGORIES[cmd] || API_CATEGORIES[cmd]) {
+    if (!requirePremium(m)) {
+      return m.reply(
+        `🔞 *Konten Premium 18+*\n\n` +
+        `Konten NSFW hanya bisa diakses pengguna *Premium*.\n` +
+        `> Ketik *${m.prefix}benefitpremium* untuk info upgrade`
+      )
+    }
     return await sendNsfwImage(m, sock, cmd)
   }
 

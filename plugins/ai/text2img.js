@@ -28,11 +28,16 @@ async function handler(m, { sock }) {
 
   m.react("🕕");
 
+  if (!config.APIkey.firefly) {
+    return m.reply(`❌ *API Key belum diset!*\n\n> Owner harus set \`APIKEY_FIREFLY\` di \`.env\``)
+  }
+
   try {
     const url = `https://firefly.maiku.my.id/api/deepai?apikey=${config.APIkey.firefly}&prompt=${encodeURIComponent(text)}`;
-    const data = await axios.get(url);
+    const data = await axios.get(url, { timeout: 30000 });
 
-    const content = data.data.data.output_url;
+    const content = data?.data?.data?.output_url;
+    if (!content) throw new Error('Output kosong');
 
     m.react("✅");
     await sock.sendMedia(m.chat, content, text, m, {

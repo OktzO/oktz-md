@@ -19,27 +19,6 @@ const pluginConfig = {
     isEnabled: true
 };
 
-const USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-];
-
-function generateRandomIP() {
-    const ranges = [
-        [1, 1], [2, 2], [5, 5], [23, 23], [27, 27], [31, 31], [36, 36], [37, 37], [39, 39], [42, 42],
-        [46, 46], [49, 49], [50, 50], [60, 60], [114, 114], [117, 117], [118, 118], [119, 119], [120, 120],
-        [121, 121], [122, 122], [123, 123], [124, 124], [125, 125], [126, 126], [180, 180], [182, 182], [183, 183]
-    ];
-    const range = ranges[Math.floor(Math.random() * ranges.length)];
-    return [
-        range[0],
-        Math.floor(Math.random() * 256),
-        Math.floor(Math.random() * 256),
-        Math.floor(Math.random() * 256)
-    ].join('.');
-}
-
 function generateSessionId() {
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
     let id = 'dpste_ai_';
@@ -49,22 +28,13 @@ function generateSessionId() {
     return id;
 }
 
-function spoofHeaders() {
-    const ip = generateRandomIP();
-    const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+function baseHeaders() {
     return {
-        'User-Agent': ua,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         'Content-Type': 'application/json',
         'Accept': 'application/json, text/plain, */*',
         'Origin': `https://${BASE_HOST}`,
-        'Referer': `https://${BASE_HOST}/`,
-        'X-Forwarded-For': ip,
-        'X-Real-IP': ip,
-        'Client-IP': ip,
-        'True-Client-IP': ip,
-        'X-Originating-IP': ip,
-        'X-Cluster-Client-IP': ip,
-        'Forwarded': `for=${ip}`
+        'Referer': `https://${BASE_HOST}/`
     };
 }
 
@@ -89,7 +59,7 @@ async function saveSessions(data) {
 function httpsPost(pathname, body) {
     return new Promise((resolve, reject) => {
         const payload = JSON.stringify(body);
-        const headers = spoofHeaders();
+        const headers = baseHeaders();
         headers['Content-Length'] = Buffer.byteLength(payload);
 
         const req = https.request({
