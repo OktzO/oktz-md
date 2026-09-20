@@ -23,7 +23,7 @@ async function handler(m, { sock }) {
   const args = m.args || [];
   const url = args[0]?.trim();
 
-  if (!url || !url.includes("pixeldrain.com")) {
+  if (!url || !/^(https?:\/\/[\w.-]*\.?pixeldrain\.com\/)/.test(url)) {
     return m.reply(
       `📥 *ᴘɪxᴇʟᴅʀᴀɪɴ ᴅᴏᴡɴʟᴏᴀᴅ*\n\n` +
         `> Download file dari Pixeldrain\n\n` +

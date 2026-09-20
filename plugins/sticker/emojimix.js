@@ -43,7 +43,7 @@ async function handler(m, { sock }) {
     m.react('🕕')
 
     try {
-        const apiUrl = `https://api.neoxr.eu/api/emoji?q=${encodeURIComponent(emoji1 + '_' + emoji2)}&apikey=${config.APIkey.neoxr}`
+        const apiUrl = `https://api.neoxr.eu/api/emoji?q=${encodeURIComponent(emoji1 + '_' + emoji2)}&apikey=${config.APIkey?.neoxr || ''}`
 
         const data = await f(apiUrl)
 
