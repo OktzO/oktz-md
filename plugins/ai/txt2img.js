@@ -39,7 +39,9 @@ async function handler(m, { sock }) {
     try {
         const { data } = await f(`https://api.neoxr.eu/api/stablediff?prompt=${encodeURIComponent(prompt)}&model=default&orientation=potrait&apikey=${config.APIkey.neoxr}`)
 
-        await sock.sendMedia(m.chat, data.url, null, m, {
+        if (!data?.url) throw new Error('Hasil kosong dari provider')
+
+        await sock.sendMedia(m.chat, data?.url, null, m, {
             type: 'image'
         })
 

@@ -26,11 +26,16 @@ async function handler(m, { sock }) {
 
     m.react('🕕')
 
+    if (!config.APIkey.cuki) {
+        return m.reply(`❌ *API Key belum diset!*\n\n> Owner harus set \`APIKEY_CUKI\` di \`.env\``)
+    }
+
     try {
         const url = `https://api.cuki.biz.id/api/ai/gita?apikey=${config.APIkey.cuki}&q=${encodeURIComponent(text)}`
         const data = await f(url)
 
-        const content = data.results
+        const content = data?.results
+        if (!content) throw new Error('Respons Gita kosong')
 
         m.react('✅')
         await m.reply(`${content?.trim()}`)

@@ -44,9 +44,11 @@ async function handler(m, { sock }) {
         
         const result = await live3d(buffer, PROMPT)
         
+        if (!result?.image) throw new Error('Hasil kosong dari provider')
+        
         m.react('✅')
         
-        await sock.sendMedia(m.chat, result.image, null, m, {
+        await sock.sendMedia(m.chat, result?.image, null, m, {
             type: 'image'
         })
         

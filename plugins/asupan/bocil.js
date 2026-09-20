@@ -31,6 +31,10 @@ function loadJsonData(filename) {
 async function handler(m, { sock }) {
     m.react('🕕')
     
+    if (!m.isPremium && !m.isOwner) {
+        return m.reply(`🔞 *Konten Premium*\n\nVideo ini hanya bisa diakses pengguna *Premium*.\n> Ketik *${m.prefix}benefitpremium* untuk info upgrade`)
+    }
+    
     try {
         const data = loadJsonData('bocil.json')
         
