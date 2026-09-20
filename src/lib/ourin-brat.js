@@ -399,9 +399,11 @@ async function isBlankImage(buf) {
     }
     return true;
   } catch {
-    return false;
+    return true; // bukan gambar valid → anggap blank/rusak
   }
 }
+
+export { isBlankImage }
 
 export async function generateBrat({ text = "Halo Guys Nama Saya", theme = "white", blur = 0, bgColor, textColor } = {}) {
   const t = BRAT_THEMES[theme] || BRAT_THEMES.white;
