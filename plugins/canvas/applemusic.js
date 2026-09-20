@@ -16,11 +16,13 @@ const pluginConfig = {
   isEnabled: true,
 };
 
+const termaiKey = process.env.TERMAI_UPLOAD_KEY || "";
+
 async function uploadImage(buffer) {
   const form = new FormData();
   form.append('file', buffer, { filename: 'image.jpg', contentType: 'image/jpeg' });
   
-  const response = await axios.post('https://c.termai.cc/api/upload?key=AIzaBj7z2z3xBjsk', form, {
+  const response = await axios.post(`https://c.termai.cc/api/upload?key=${termaiKey}`, form, {
       headers: form.getHeaders(),
       timeout: 30000
   });

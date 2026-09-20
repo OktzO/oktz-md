@@ -300,7 +300,8 @@ const config = {
     covenant: process.env.APIKEY_COVENANT || "",
     obscura: process.env.APIKEY_OBSCURA || "",
     firefly: process.env.APIKEY_FIREFLY || "",
-    cuki: process.env.APIKEY_CUKI || ""
+    cuki: process.env.APIKEY_CUKI || "",
+    linode: process.env.LINODE_API_TOKEN || ""
   },
 };
 

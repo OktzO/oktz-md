@@ -1,7 +1,7 @@
 import axios from 'axios'
 import FormData from 'form-data'
 
-const termaiKey = 'AIzaBj7z2z3xBjsk'
+const termaiKey = process.env.TERMAI_UPLOAD_KEY || ''
 const termaiDomain = 'https://c.termai.cc'
 
 async function uploadTo0x0(buffer, opts) {

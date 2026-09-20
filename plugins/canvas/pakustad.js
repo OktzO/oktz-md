@@ -1,5 +1,7 @@
 import { f } from '../../src/lib/ourin-http.js'
 import te from '../../src/lib/ourin-error.js'
+import config from '../../config.js'
+const CUKI_APIKEY = config.APIkey?.cuki || ""
 const pluginConfig = {
     name: ['pakustad', 'pak-ustad', 'tanyaustad'],
     alias: [],
@@ -28,9 +30,13 @@ async function handler(m, { sock }) {
     }
     
     await m.react('🕕')
+
+    if (!CUKI_APIKEY) {
+        return m.reply(`❌ *API Key belum diset!*\n\n> Isi \`APIKEY_CUKI\` di file \`.env\`, lalu restart bot`)
+    }
     
     try {
-        const apiUrl = `https://api.cuki.biz.id/api/canvas/ustadz?apikey=cuki-x&text=${encodeURIComponent(text)}`
+        const apiUrl = `https://api.cuki.biz.id/api/canvas/ustadz?apikey=${encodeURIComponent(CUKI_APIKEY)}&text=${encodeURIComponent(text)}`
         const { results } = await f(apiUrl)
         await sock.sendMedia(m.chat, results.url, text, m, {
             type: 'image'

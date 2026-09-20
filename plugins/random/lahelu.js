@@ -18,7 +18,10 @@ const pluginConfig = {
 }
 
 async function handler(m, { sock }) {
-    const api = 'https://api.cuki.biz.id/api/random/lahelu?apikey=cuki-x'
+    if (!config.APIkey?.cuki) {
+        return m.reply(`❌ *API Key belum diset!*\n\n> Isi \`APIKEY_CUKI\` di file \`.env\`, lalu restart bot`)
+    }
+    const api = `https://api.cuki.biz.id/api/random/lahelu?apikey=${encodeURIComponent(config.APIkey.cuki)}`
     await m.react('🕕')
     
     try {

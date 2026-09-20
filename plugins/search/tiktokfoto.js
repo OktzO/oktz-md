@@ -20,7 +20,7 @@ const pluginConfig = {
     isEnabled: true
 }
 
-const CUKI_APIKEY = config.APIkey?.cuki || 'cuki-x'
+const CUKI_APIKEY = config.APIkey?.cuki || ""
 
 function formatNumber(n) {
     const value = Number(n) || 0
@@ -57,6 +57,10 @@ async function handler(m, { sock }) {
 
     if (!query) {
         return m.reply(`📸 *TIKTOK FOTO SEARCH*\n\n> Contoh:\n\`${m.prefix}tiktokfoto cosplay\``)
+    }
+
+    if (!CUKI_APIKEY) {
+        return m.reply(`❌ *API Key belum diset!*\n\n> Isi \`APIKEY_CUKI\` di file \`.env\`, lalu restart bot`)
     }
 
     m.react('🔍')
