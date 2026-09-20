@@ -1,6 +1,7 @@
 import { spawn } from 'child_process'
 import path from 'path'
 import te from '../../src/lib/ourin-error.js'
+import config from '../../config.js'
 const pluginConfig = {
     name: 'restart',
     alias: ['reset', 'reboot', 'restartbot'],
@@ -18,6 +19,9 @@ const pluginConfig = {
 }
 
 async function handler(m, { sock }) {
+    if (!config.isOwner(m.sender)) {
+        return m.reply("❌ *Owner Only!*")
+    }
     try {
         await m.react('🔄')
         

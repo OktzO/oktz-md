@@ -32,6 +32,8 @@ const EXCLUDE_DIRS = new Set([
   "coverage",
   "__pycache__",
   "build",
+  "storage",
+  "database",
 ]);
 
 const EXCLUDE_EXTENSIONS = new Set([
