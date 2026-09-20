@@ -1,4 +1,4 @@
-import { generateBrat, parseBratArgs, fetchBratFromAPI } from "../../src/lib/ourin-brat.js";
+import { generateBrat, parseBratArgs, fetchBratFromAPI, isBlankImage } from "../../src/lib/ourin-brat.js";
 import { wrapInteractive } from "../../src/lib/ourin-rich-messages.js";
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import { prepareWAMessageMedia, generateWAMessageFromContent } from "ourin";
@@ -140,6 +140,7 @@ async function handler(m, { sock }) {
     let buffer;
     try {
       buffer = await fetchBratFromAPI(parsed);
+      if (await isBlankImage(buffer)) throw new Error("API returned blank image");
     } catch {
       buffer = await generateBrat({ text: parsed, theme: "white", blur });
     }
