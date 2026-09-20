@@ -1721,9 +1721,12 @@ async function messageHandler(msg, sock, options = {}) {
     const user = db.getUser(m.sender);
 
     if (!m.isOwner && !m.isPartner && plugin.config.cooldown > 0) {
+      const cmdKey = Array.isArray(plugin.config.name)
+        ? plugin.config.name[0]
+        : plugin.config.name;
       const cooldownRemaining = db.checkCooldown(
         m.sender,
-        m.command,
+        cmdKey,
         plugin.config.cooldown,
       );
       if (cooldownRemaining) {
@@ -1804,7 +1807,10 @@ async function messageHandler(msg, sock, options = {}) {
     }
 
     if (!m.isOwner && !m.isPartner && plugin.config.cooldown > 0) {
-      db.setCooldown(m.sender, m.command, plugin.config.cooldown);
+      const cmdKey = Array.isArray(plugin.config.name)
+        ? plugin.config.name[0]
+        : plugin.config.name;
+      db.setCooldown(m.sender, cmdKey, plugin.config.cooldown);
     }
 
     db.incrementStat("commandsExecuted");

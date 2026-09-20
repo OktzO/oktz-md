@@ -23,7 +23,7 @@ async function handler(m, { sock }) {
   const args = m.args || [];
 
   const target = m.mentionedJid?.[0] || m.quoted?.sender;
-  const bet = parseInt(args[1]) || 1000;
+  const bet = args[1] ? parseInt(args[1]) : 1000;
 
   if (!target) {
     let txt = `⚔️ *DUEL TARUHAN* ⚔️\n\n`;
@@ -38,8 +38,8 @@ async function handler(m, { sock }) {
     return m.reply(`Hihihi kak, masak kamu mau ngajak berantem sama cermin? Tag teman yang lain yuk! 😂`);
   }
 
-  if (bet < 1000) {
-    return m.reply(`Wah taruhannya kekecilan kak! Minimal uang taruhan buat duel itu *Rp 1.000* ya! 💸`);
+  if (isNaN(bet) || bet < 1000) {
+    return m.reply(`Taruhan tidak valid! Minimal *Rp 1.000*. Gunakan angka.`);
   }
 
   const player1 = db.getUser(m.sender);
