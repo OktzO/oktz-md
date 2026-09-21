@@ -1,6 +1,7 @@
 import { createCanvas, loadImage, GlobalFonts } from "@napi-rs/canvas";
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import path from "path";
+import { loadEmojiMap } from "./ourin-emoji-map.js";
 
 function getTokenWidth(ctx, token, fontSize) {
   if (token.type === "space") return ctx.measureText(" ").width;
@@ -198,8 +199,6 @@ const bratTmp = () => {
 
 let bratFontFamily = null;
 let bratFontPromise = null;
-let bratEmojiMap = null;
-let bratEmojiPromise = null;
 const BRAT_EMOJI_CACHE_MAX = 128;
 const bratEmojiCache = new Map();
 
@@ -207,12 +206,6 @@ function isTrueTypeBuffer(b) {
   if (!b || b.length < 1024) return false;
   const magic = b.readUInt32BE(0);
   return magic === 0x00010000 || magic === 0x4f54544f; // \0\1 TrueType | 'OTTO'
-}
-
-function isJsonBuffer(b) {
-  if (!b || b.length < 16) return false;
-  const c = b[0];
-  return c === 0x7b || c === 0x5b; // '{' | '['
 }
 
 function validCachedFile(p, check) {
@@ -271,26 +264,9 @@ async function loadBratFont() {
 // Dipakai drawBrat (varian lama) + generateBrat: pastikan font nyata ke-register.
 export const ensureBratFont = loadBratFont;
 
-async function loadBratEmojiMap() {
-  if (bratEmojiMap) return bratEmojiMap;
-  if (!bratEmojiPromise) {
-    bratEmojiPromise = (async () => {
-      const dest = path.join(bratTmp(), "emoji-apple.json");
-      try {
-        if (!validCachedFile(dest, isJsonBuffer)) {
-          await bratDownloadValidated(
-            process.env.BRAT_EMOJI_URL || "https://media.githubusercontent.com/media/Ditzzx-vibecoder/entahlah/main/emoji-apple.json",
-            dest,
-            isJsonBuffer,
-          );
-        }
-        bratEmojiMap = JSON.parse(readFileSync(dest, "utf-8"));
-      } catch {
-        bratEmojiMap = {}; // emoji map gagal -> emoji digambar via fillText, teks tetap jalan
-      }
-    })().finally(() => { bratEmojiPromise = null; });
-  }
-  return bratEmojiPromise;
+// Emoji map lewat shared loader: parse emoji-apple.json sekali per proses.
+export async function loadBratEmojiMap() {
+  return loadEmojiMap();
 }
 
 function emojiToUnicode(emoji) {

@@ -9,17 +9,14 @@ import {
   ensureFfmpegOnPath,
   buildFfmpegCommand,
 } from "../../src/lib/ourin-ffmpeg.js";
+import { loadEmojiMap } from "../../src/lib/ourin-emoji-map.js";
 
 const FONT_URL =
   process.env.BRAT_FONT_URL ||
   "https://cdn.jsdelivr.net/gh/Napoleon-Fibonacci/assets@main/font/impact.ttf";
-const EMOJI_JSON_URL =
-  process.env.BRAT_EMOJI_URL ||
-  "https://media.githubusercontent.com/media/Ditzzx-vibecoder/entahlah/main/emoji-apple.json";
 
 const TMP_DIR = path.join(process.cwd(), "tmp");
 const FONT_PATH = path.join(TMP_DIR, "impact.ttf");
-const EMOJI_JSON_PATH = path.join(TMP_DIR, "emoji-apple.json");
 
 const THEMES = {
   black: { bg: "#000000", text: "#ffffff" },
@@ -47,21 +44,13 @@ async function ensureFont() {
   GlobalFonts.registerFromPath(FONT_PATH, "Impact");
 }
 
-let emojiMap = null;
+const BRAT_EMOJI_CACHE_MAX = 128;
 const emojiImageCache = new Map();
 
 function emojiToUnicode(emoji) {
   return [...emoji]
     .map((c) => c.codePointAt(0).toString(16).padStart(4, "0"))
     .join("-");
-}
-
-async function loadEmojiMap() {
-  if (emojiMap) return emojiMap;
-  if (!fs.existsSync(EMOJI_JSON_PATH))
-    await downloadFile(EMOJI_JSON_URL, EMOJI_JSON_PATH);
-  emojiMap = JSON.parse(fs.readFileSync(EMOJI_JSON_PATH, "utf-8"));
-  return emojiMap;
 }
 
 async function getEmojiImage(emoji) {
@@ -85,6 +74,8 @@ async function getEmojiImage(emoji) {
   }
   if (!b64) return null;
   const img = await loadImage(Buffer.from(b64, "base64"));
+  if (emojiImageCache.size >= BRAT_EMOJI_CACHE_MAX)
+    emojiImageCache.delete(emojiImageCache.keys().next().value);
   emojiImageCache.set(emoji, img);
   return img;
 }
@@ -602,4 +593,11 @@ async function handler(m, { sock }) {
   }
 }
 
-export { pluginConfig as config, handler, generateBratVideo };
+export {
+  pluginConfig as config,
+  handler,
+  generateBratVideo,
+  loadEmojiMap,
+  getEmojiImage,
+  emojiImageCache,
+};
