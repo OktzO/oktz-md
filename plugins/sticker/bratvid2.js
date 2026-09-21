@@ -11,8 +11,10 @@ import {
 } from "../../src/lib/ourin-ffmpeg.js";
 
 const FONT_URL =
+  process.env.BRAT_FONT_URL ||
   "https://cdn.jsdelivr.net/gh/Napoleon-Fibonacci/assets@main/font/impact.ttf";
 const EMOJI_JSON_URL =
+  process.env.BRAT_EMOJI_URL ||
   "https://media.githubusercontent.com/media/Ditzzx-vibecoder/entahlah/main/emoji-apple.json";
 
 const TMP_DIR = path.join(process.cwd(), "tmp");
