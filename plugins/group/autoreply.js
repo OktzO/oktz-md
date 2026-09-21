@@ -369,7 +369,7 @@ async function handler(m, { sock }) {
         let text = `📋 *DAFTAR AUTOREPLY GRUP*\n\n`
         
         text += `*DEFAULT TRIGGERS:*\n`
-        defaultTriggers.forEach((r, i) => {
+        defaultTriggers.forEach((r, _) => {
             text += `• *${r.trigger}*\n`
             text += `  ↳ ${r.reply}\n`
         })
@@ -377,7 +377,7 @@ async function handler(m, { sock }) {
         
         if (customReplies.length > 0) {
             text += `*CUSTOM TRIGGERS:*\n`
-            customReplies.forEach((r, i) => {
+            customReplies.forEach((r, _) => {
                 const hasImage = r.image ? '🖼️' : ''
                 text += `• *${r.trigger}* ${hasImage}\n`
                 if (r.reply) {

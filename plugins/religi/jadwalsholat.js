@@ -1,6 +1,5 @@
 import axios from "axios";
 import * as timeHelper from "../../src/lib/ourin-time.js";
-import config from "../../config.js";
 import {
   searchKota,
   getTodaySchedule,
@@ -39,8 +38,6 @@ async function handler(m, { sock }) {
     const lokasi = jadwalData.lokasi || kota.lokasi;
     const daerah = jadwalData.daerah || "";
     const today = timeHelper.formatNow("dddd, DD MMMM YYYY");
-    const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-    const saluranName = config.saluran?.name || config.bot?.name || "Bot";
 
     const caption = `🕌 *ᴊᴀᴅᴡᴀʟ sʜᴏʟᴀᴛ*
 ╭┈┈⬡「 📍 *${lokasi}* 」

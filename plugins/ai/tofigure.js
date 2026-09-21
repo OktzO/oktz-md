@@ -1,6 +1,5 @@
 import axios from 'axios'
 import { uploadImage } from '../../src/lib/ourin-uploader.js'
-import { f } from '../../src/lib/ourin-http.js'
 import te from '../../src/lib/ourin-error.js'
 const pluginConfig = {
     name: 'tofigure',

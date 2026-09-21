@@ -122,7 +122,7 @@ async function handleSession(m, sock) {
         { buttons, footer: "Pilih grup untuk giveaway" },
       );
     } catch (e) {
-      session.groupId = currentGroup;
+      session.groupId = session.chatId;
       session.step = "q3";
       await m.reply("⚠️ Gagal mengambil daftar grup. Menggunakan grup ini.");
       await askPrizeDetails(m, sock, session);

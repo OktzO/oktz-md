@@ -60,12 +60,6 @@ async function handler(m, { sock }) {
 
     caption += `> 🎨 Powered by Pixiv`;
 
-    const buttons = results.slice(0, 5).map((art, i) => ({
-      title: `${art.title.slice(0, 20)}${art.title.length > 20 ? "..." : ""}`,
-      description: `by ${art.userName}`,
-      id: `.pixivget ${art.url}`,
-    }));
-
     await m.react("🎨");
 
     await sock.sendMessage(

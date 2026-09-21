@@ -1,5 +1,4 @@
 import { spawn } from 'child_process'
-import path from 'path'
 import te from '../../src/lib/ourin-error.js'
 import config from '../../config.js'
 const pluginConfig = {

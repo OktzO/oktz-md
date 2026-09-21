@@ -17,7 +17,7 @@ const pluginConfig = {
   isEnabled: true,
 };
 
-async function handler(m, { sock, plugin }) {
+async function handler(m, { sock, _ }) {
   const db = getDatabase();
   const user = db.getUser(m.sender);
 

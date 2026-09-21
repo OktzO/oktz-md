@@ -23,7 +23,7 @@ const pluginConfig = {
   isEnabled: true,
 };
 
-async function handler(m, { sock, plugins }) {
+async function handler(m, { sock }) {
   const db = getDatabase();
   const cmd = m.command.toLowerCase();
   const isAdd = ["addakses", "addaccess"].includes(cmd);

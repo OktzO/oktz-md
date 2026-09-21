@@ -57,7 +57,7 @@ function execSSH(conn, cmd) {
         conn.exec(cmd, { pty: true }, (err, stream) => {
             if (err) return reject(err)
             let output = ''
-            stream.on('close', (code, signal) => {
+            stream.on('close', (code, _) => {
                 if (code !== 0) return reject(new Error(`Command failed with code ${code}\nOutput: ${output}`))
                 resolve(output)
             })

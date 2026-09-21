@@ -24,7 +24,7 @@ async function handler(m, { sock, text }) {
     const [pengikut, mengikuti, postingan, username, bio, verif] = text.split("|").map(v => v.trim());
     if (!pengikut || !mengikuti || !postingan || !username || !bio || !verif) return m.reply(`Pastikan semua argumen diisi dengan benar, dipisah dengan tanda |.`);
 
-    let imgUrl = "";
+    let imgUrl;
     const isImage = m.type === "imageMessage" || (m.quoted && m.quoted.type === "imageMessage");
 
     await m.react("🕕");

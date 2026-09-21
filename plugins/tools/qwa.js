@@ -1,6 +1,5 @@
 import axios from 'axios'
 import { uploadImage } from '../../src/lib/ourin-uploader.js'
-import te from '../../src/lib/ourin-error.js'
 import { serialize } from '../../src/lib/ourin-serialize.js'
 import { parsePhoneNumber } from 'awesome-phonenumber'
 
@@ -95,7 +94,7 @@ async function handler(m, { sock }) {
         }
 
         const payload = {
-            sender_name:  `~ ${mainMsg.pushName}` || "~ User",
+            sender_name: mainMsg.pushName ? `~ ${mainMsg.pushName}` : "~ User",
             sender_number: formatNumber(mainMsg.sender),
             sender_avatar: await getPp(sock, mainMsg.sender),
             message: textToQuote,
@@ -107,7 +106,7 @@ async function handler(m, { sock }) {
 
         if (quoteMsg) {
             payload.quoted = {
-                name: `~ ${quoteMsg.pushName}` || "~ User",
+                name: quoteMsg.pushName ? `~ ${quoteMsg.pushName}` : "~ User",
                 number: formatNumber(quoteMsg.sender),
                 message: quoteMsg.body || ""
             }

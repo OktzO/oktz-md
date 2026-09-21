@@ -1,7 +1,6 @@
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import axios from "axios";
 import config from "../../config.js";
-import fs from "fs";
 import te from "../../src/lib/ourin-error.js";
 const NEOXR_APIKEY = config.APIkey?.neoxr || '';
 
@@ -57,7 +56,7 @@ async function handler(m, { sock }) {
 
     text += `> _Pilih film dari list di bawah_`;
 
-    const listItems = films.map((f, i) => ({
+    const listItems = films.map((f, _) => ({
       header: "",
       title: f.title,
       description: `⭐ ${f.rating} | ${f.quality} | ${f.release}`,

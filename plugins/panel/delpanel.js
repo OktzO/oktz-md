@@ -131,7 +131,7 @@ async function handler(m, { sock }) {
                 result += `\n✅ *ᴜsᴇʀ ᴅɪʜᴀᴘᴜs*\n`
                 result += `> Username: \`${userInfo.username}\`\n`
                 result += `> ID: \`${userId}\``
-            } catch (userErr) {
+            } catch (err) {
                 result += `\n⚠️ User gagal dihapus (mungkin masih punya server lain)`
             }
         } else if (option === 'full' && isUserAdmin) {

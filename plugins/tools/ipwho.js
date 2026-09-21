@@ -1,6 +1,5 @@
-import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
-import { sendToolsPreview, saluranCtx } from "../../src/lib/ourin-context.js";
+import { sendToolsPreview } from "../../src/lib/ourin-context.js";
 const pluginConfig = {
   name: "ipwho",
   alias: ["ip", "iplookup", "ipinfo"],

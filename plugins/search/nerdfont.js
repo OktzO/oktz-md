@@ -1,10 +1,6 @@
-import _sharp from 'sharp'
 import axios from "axios";
 import * as cheerio from "cheerio";
 
-function getSharp() {
-  return _sharp;
-}
 import te from "../../src/lib/ourin-error.js";
 async function nerdfonts() {
   try {
@@ -43,7 +39,7 @@ async function nerdfonts() {
     });
     return result;
   } catch (error) {
-    throw new Error(error.message);
+    throw new Error(error.message, { cause: error });
   }
 }
 const pluginConfig = {
@@ -61,19 +57,10 @@ const pluginConfig = {
   energi: 0,
   isEnabled: true,
 };
-function formatNumber(num) {
-  const n = parseInt(num);
-  if (isNaN(n)) return num;
-  if (n >= 1000000000) return (n / 1000000000).toFixed(1) + "B";
-  if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
-  if (n >= 1000) return (n / 1000).toFixed(1) + "K";
-  return n.toString();
-}
 async function handler(m, { sock }) {
-  const query = m.text?.trim();
   try {
     const res = await nerdfonts();
-    const rows = res.map((f, i) => {
+    const rows = res.map((f, _) => {
       return {
         header: `Font ${f.name}`,
         title: f.info,

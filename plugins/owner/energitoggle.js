@@ -1,5 +1,4 @@
 import { getDatabase } from '../../src/lib/ourin-database.js'
-import config from '../../config.js'
 const pluginConfig = {
     name: ['disableenergi', 'enableenergi'],
     alias: ['offenergi', 'onenergi'],

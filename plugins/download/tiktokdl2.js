@@ -2,7 +2,6 @@ import axios from 'axios'
 import * as cheerio from 'cheerio'
 import crypto from 'crypto'
 import { generateWAMessage, generateWAMessageFromContent, jidNormalizedUser } from 'ourin'
-import config from '../../config.js'
 import te from '../../src/lib/ourin-error.js'
 const headers = {
     'Content-Type': 'application/x-www-form-urlencoded',

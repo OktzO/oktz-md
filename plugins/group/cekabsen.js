@@ -1,5 +1,4 @@
 import * as timeHelper from "../../src/lib/ourin-time.js";
-import config from "../../config.js";
 const pluginConfig = {
   name: "cekabsen",
   alias: ["listabsen", "daftarabsen", "lihathadir"],
@@ -35,8 +34,6 @@ async function handler(m, { sock }) {
       .map((jid, i) => `┃ ${i + 1}. @${jid.split("@")[0]}`)
       .join("\n");
   }
-  const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-  const saluranName = config.saluran?.name || config.bot?.name || "Bot";
   await m.reply(
     `📋 *DAFTAR YANG UDAH ABSEN*\n\n` +
       `╭┈┈⬡「 📋 *INFO* 」\n` +

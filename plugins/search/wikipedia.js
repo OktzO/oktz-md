@@ -1,6 +1,5 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
-import te from "../../src/lib/ourin-error.js";
 
 const pluginConfig = {
   name: "wikipedia",

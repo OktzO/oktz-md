@@ -1,10 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import config from '../../config.js';
 import { getDatabase } from '../../src/lib/ourin-database.js';
 import te from '../../src/lib/ourin-error.js';
-import { prepareWAMessageMedia, generateWAMessageFromContent, generateWAMessage, jidNormalizedUser } from 'ourin';
+import { generateWAMessageFromContent, generateWAMessage, jidNormalizedUser } from 'ourin';
 
 const pluginConfig = {
     name: 'srt',

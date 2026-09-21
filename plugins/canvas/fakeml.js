@@ -1,8 +1,5 @@
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
-import * as _canvas from '@napi-rs/canvas'
 import axios from "axios";
-import path from "path";
-import fs from "fs";
 
 
 import { uploadTo0x0 } from "../../src/lib/ourin-tmpfiles.js";
@@ -22,7 +19,6 @@ const pluginConfig = {
   energi: 1,
   isEnabled: true,
 };
-let fontRegistered = false;
 async function handler(m, { sock }) {
   const name = m.text?.trim();
   if (!name) {

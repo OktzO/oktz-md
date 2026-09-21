@@ -1,11 +1,8 @@
 import { createCanvas, loadImage, GlobalFonts } from '@napi-rs/canvas';
-import { writeFile, readFile, mkdir } from 'node:fs/promises';
+import { writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import fs from 'node:fs';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const pluginConfig = {
     name: "iqcpink",
@@ -270,7 +267,7 @@ async function render(text, time, imgUrl, outputPath) {
     const lineGap = Math.round(12 * SY);
     const textTotalHeight = (textLines.length * s.fontSize) + (Math.max(0, textLines.length - 1) * lineGap);
 
-    let bubbleHeight = 0;
+    let bubbleHeight;
     if (timestampOnNewRow || !s.text) {
         bubbleHeight = paddingTop + textTotalHeight + Math.round(16 * SY) + timestampHeight + paddingBottom;
     } else {
@@ -336,7 +333,7 @@ async function render(text, time, imgUrl, outputPath) {
 
     ctx.save();
     let timeX = bubbleX + bubbleActualW - textPaddingX - timestampWidth;
-    let timeY = 0;
+    let timeY;
 
     if (timestampOnNewRow || !s.text) {
         timeY = currentBubbleY + bubbleHeight - paddingBottom - timestampHeight + Math.round(4 * SY);

@@ -1,6 +1,5 @@
 import { getDatabase } from "../../src/lib/ourin-database.js";
 import * as timeHelper from "../../src/lib/ourin-time.js";
-import fs from "fs";
 import te from "../../src/lib/ourin-error.js";
 import { saluranCtx } from "../../src/lib/ourin-context.js";
 const pluginConfig = {

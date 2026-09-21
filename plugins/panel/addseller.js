@@ -2,8 +2,6 @@ import config from '../../config.js'
 import fs from 'fs'
 import path from 'path'
 import { isLid, lidToJid } from '../../src/lib/ourin-lid.js'
-import { getDatabase } from '../../src/lib/ourin-database.js'
-import { getGroupMode } from '../group/botmode.js'
 const pluginConfig = {
     name: 'addseller',
     alias: ['addreseller', 'delseller', 'delreseller', 'listseller', 'listreseller'],
@@ -61,7 +59,6 @@ function hasAccess(senderJid, isOwner, legacyData) {
 }
 
 function handler(m, { sock }) {
-    const db = getDatabase()
     const cmd = m.command.toLowerCase()
     
     let legacyData = getLegacyData()

@@ -29,7 +29,6 @@ import {
   TOKEN_SHOP,
   GACHA_COST_COINS,
   GACHA_PITY_LIMIT,
-  SMELT_RECIPES,
   CRAFT_RECIPES,
 } from "../../src/lib/ourin-minecraft-data.js";
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
@@ -50,21 +49,7 @@ const encCost = (r) =>
 
 let thumbMC = getAssetBuffer("ourin-minecraft") || null;
 
-function ctx() {
-  const sId = config.saluran?.id || "120363400911374213@newsletter";
-  const sName = config.saluran?.name || config.bot?.name || "Bot";
-  return {
-    forwardingScore: 9999,
-    isForwarded: true,
-    forwardedNewsletterMessageInfo: {
-      newsletterJid: sId,
-      newsletterName: sName,
-      serverMessageId: 127,
-    },
-  };
-}
-
-function send(sock, m, text, title, body) {
+function send(sock, m, text) {
   const msgId = sock.sendPreview(
     m.chat,
     {
@@ -307,7 +292,7 @@ async function handler(m, { sock }) {
     if (found.length === 0)
       return m.reply(`_📚 Ore Book kosong!_ \`.mct mine\` _dulu_`);
     let txt = `*📚 ORE BOOK* _(${found.length} ore)_\n\n`;
-    for (const [k, b] of Object.entries(biomes)) {
+    for (const [, b] of Object.entries(biomes)) {
       const fl = b.listOre.filter((o) =>
         found.includes(o.name.replace(/[\u{1F300}-\u{1F9FF}]/gu, "").trim()),
       );
@@ -368,7 +353,7 @@ async function handler(m, { sock }) {
 
   if (sub === "shop") {
     let txt = `*🛒 TOKO PICKAXE*\n\n`;
-    for (const [k, pick] of Object.entries(pickaxes)) {
+    for (const [, pick] of Object.entries(pickaxes)) {
       if (pick.price > 0)
         txt += `*${pick.name}*\n   _💰 ${formatMoney(pick.price)}_\n   _🍀 Luck +${(pick.luck * 100).toFixed(0)}% | ⚡ Speed +${(pick.speed * 100).toFixed(0)}% | 📦 Combo: ${pick.comboOre}_\n   _${pick.description}_\n\n`;
     }

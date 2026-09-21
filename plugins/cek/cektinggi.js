@@ -19,7 +19,7 @@ async function handler(m) {
 
         const tinggi = Math.floor(Math.random() * 50) + 150
     
-    let desc = ''
+    let desc
     if (tinggi >= 190) {
         desc = 'TINGGI BANGET! Model basketball! 🏀'
     } else if (tinggi >= 175) {

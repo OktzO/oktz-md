@@ -1,6 +1,5 @@
 import http from "http";
 import https from "https";
-import te from "../../src/lib/ourin-error.js";
 
 const pluginConfig = {
   name: "searchthatsong",

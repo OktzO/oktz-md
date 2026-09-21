@@ -1,11 +1,8 @@
-import { getCaseCount, getCasesByCategory } from "../../case/ourin.js";
+import { getCasesByCategory } from "../../case/ourin.js";
 import {
   prepareWAMessageMedia,
   generateWAMessageFromContent,
-  proto,
 } from "ourin";
-import { createCanvas, loadImage, GlobalFonts } from "@napi-rs/canvas";
-import _sharp from "sharp";
 import config from "../../config.js";
 import {
   formatUptime,
@@ -15,14 +12,9 @@ import {
   getCommandsByCategory,
   getCategories,
 } from "../../src/lib/ourin-plugins.js";
-import { getDatabase } from "../../src/lib/ourin-database.js";
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import fs from "fs";
 import path from "path";
-
-function getSharp() {
-  return _sharp;
-}
 import axios from "axios";
 import sharp from "sharp";
 import { wrapInteractive } from "../../src/lib/ourin-rich-messages.js";
@@ -80,41 +72,6 @@ const CATEGORY_EMOJIS = {
   vps: "🌊",
   panel: "🖥️"
 };
-function toSmallCaps(text) {
-  const smallCaps = {
-    a: "ᴀ",
-    b: "ʙ",
-    c: "ᴄ",
-    d: "ᴅ",
-    e: "ᴇ",
-    f: "ꜰ",
-    g: "ɢ",
-    h: "ʜ",
-    i: "ɪ",
-    j: "ᴊ",
-    k: "ᴋ",
-    l: "ʟ",
-    m: "ᴍ",
-    n: "ɴ",
-    o: "ᴏ",
-    p: "ᴘ",
-    q: "ǫ",
-    r: "ʀ",
-    s: "s",
-    t: "ᴛ",
-    u: "ᴜ",
-    v: "ᴠ",
-    w: "ᴡ",
-    x: "x",
-    y: "ʏ",
-    z: "ᴢ",
-  };
-  return text
-    .toLowerCase()
-    .split("")
-    .map((c) => smallCaps[c] || c)
-    .join("");
-}
 const toMonoUpperBold = (text) => {
   const chars = {
     A: "𝗔",
@@ -215,48 +172,28 @@ function getSortedCategories(m, botMode) {
   }
   return { sorted: result, totalCmds, commandsByCategory };
 }
-async function formatTime(date) {
-  const timeHelper = await import("../../src/lib/ourin-time.js");
-  return timeHelper.formatTime("HH:mm");
-}
-async function formatDateShort(date) {
-  const timeHelper = await import("../../src/lib/ourin-time.js");
-  return timeHelper.formatFull("dddd, DD MMMM YYYY");
-}
 async function buildMenuText(
   m,
   botConfig,
   db,
   uptime,
   botMode = "md",
-  useBracketBoxStyle = false,
+  _ = false,
 ) {
   const prefix = botConfig.command?.prefix || ".";
-  const user = db.getUser(m.sender);
   const timeHelper = await import("../../src/lib/ourin-time.js");
   const timeStr = timeHelper.formatTime("HH:mm");
-  const dateStr = timeHelper.formatFull("dddd, DD MMMM YYYY");
   const categories = getCategories();
   const commandsByCategory = getCommandsByCategory();
-  let totalCommands = 0;
-  for (const category of categories) {
-    totalCommands += (commandsByCategory[category] || []).length;
-  }
-  const totalCases = getCaseCount();
   const casesByCategory = getCasesByCategory();
-  const totalFeatures = totalCommands + totalCases;
-  let userRole = "User",
-    roleEmoji = "👤";
+  let userRole = "User";
   if (m.isOwner) {
     userRole = "Owner";
-    roleEmoji = "👑";
   } else if (m.isPremium) {
     userRole = "Premium";
-    roleEmoji = "💎";
   }
   const greeting = getTimeGreeting();
   const uptimeFormatted = formatUptime(uptime);
-  const totalUsers = db.getUserCount();
   let txt = `${greeting}\n\n`;
   txt += `      ${m.pushName || "User"}\n\n`;
   txt += `Halo Kawan 🌱\n`;
@@ -366,41 +303,6 @@ async function buildMenuText(
   return txt;
 }
 
-function createBracketBox(title, lines = [], emoji = "🤖") {
-  let text = `╭─〔 ${emoji} \`${title}\`〕─⬣\n`;
-  for (const line of lines) {
-    text += `│ ✦ *${line}*\n`;
-  }
-  text += `╰─⬣\n\n`;
-  return text;
-}
-
-function getContextInfo(
-  botConfig,
-  m,
-  thumbBuffer,
-  renderLargerThumbnail = false,
-) {
-  const saluranId = botConfig.saluran?.id || "120363400911374213@newsletter";
-  const saluranName =
-    botConfig.saluran?.name || botConfig.bot?.name || "Bot";
-  const saluranLink = botConfig.saluran?.link || "";
-  const ctx = {
-    mentionedJid: [m.sender],
-    forwardingScore: 9,
-    isForwarded: true,
-    externalAdReply: {
-      title: botConfig.bot?.name || "Bot",
-      body: `BOT WHATSAPP MULTI DEVICE`,
-      sourceUrl: saluranLink,
-      previewType: "VIDEO",
-      showAdAttribution: false,
-      renderLargerThumbnail,
-    },
-  };
-  if (thumbBuffer) ctx.externalAdReply.thumbnail = thumbBuffer;
-  return ctx;
-}
 function getVerifiedQuoted(botConfig, m) {
   if (m) {
     return {
@@ -447,12 +349,9 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
   );
 
   let imageBuffer = null;
-  let thumbBuffer = null;
-  let videoBuffer = null;
 
   try {
     imageBuffer = getAssetBuffer("ourin")
-    thumbBuffer = getAssetBuffer("ourin2")
   } catch (e) {
     console.error("Gagal load assets:", e.message);
   }
@@ -460,16 +359,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
   const saluranId = botConfig.saluran?.id || "120363400911374213@newsletter";
   const saluranName =
     botConfig.saluran?.name || botConfig.bot?.name || "Bot";
-  const saluranLink =
-    botConfig.saluran?.link ||
-    "https://whatsapp.com/channel/0029VbB37bgBfxoAmAlsgE0t";
-  const {
-    sorted: menuSorted,
-    totalCmds,
-    commandsByCategory,
-  } = getSortedCategories(m, botMode);
   const greeting = getTimeGreeting();
-  const uptimeFormatted = formatUptime(uptime);
   const user = await db.getUser(m.sender) || {}
   try {
     const categories = getSortedCategories(m, botMode);
@@ -561,9 +451,9 @@ Tekan tombol dibawah untuk info lebih lanjut dan untuk memilih kategori
           await m.reply(text);
         }
         break;
-      case 2:
+      case 2: {
         let s = ""
-        categories.sorted.map(({ cat, cmds, emoji }) => {
+        categories.sorted.map(({ cat, cmds, _ }) => {
           s += `╭─☰ ${toMonoUpperBold(cat)}\n`
           cmds.map((cmd) => {
             s += `> ${m.prefix}${cmd}\n`
@@ -641,6 +531,7 @@ ${readmore}${s}`
           messageId: msg2.key.id,
         })
 
+        }
         break;
 
       case 3: {
@@ -907,7 +798,6 @@ Enjoy your use brother.`
           seconds = Number(seconds);
 
           const d = Math.floor(seconds / (3600 * 24));
-          const h = Math.floor(seconds % (3600 * 24) / 3600);
           const m = Math.floor(seconds % 3600 / 60);
           const s = Math.floor(seconds % 60);
 
@@ -1064,16 +954,6 @@ _i am an automated system (WhatsApp bot) that can help to do something search an
         break;
       }
       case 6: {
-        function runtime(seconds) {
-          seconds = Number(seconds);
-
-          const d = Math.floor(seconds / (3600 * 24));
-          const h = Math.floor(seconds % (3600 * 24) / 3600);
-          const m = Math.floor(seconds % 3600 / 60);
-          const s = Math.floor(seconds % 60);
-
-          return `${d} Jam ${m} Menit ${s} Detik`;
-        }
 
         const weatherCode = {
           0: "☀️ Cerah",
@@ -1355,34 +1235,8 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
         break;
       }
       case 8: {
-        function runtimeStr(seconds) {
-          seconds = Number(seconds);
-          const d = Math.floor(seconds / (3600 * 24));
-          if (d > 0) return `${d} hari`;
-          const h = Math.floor((seconds % (3600 * 24)) / 3600);
-          if (h > 0) return `${h} jam`;
-          const m = Math.floor((seconds % 3600) / 60);
-          if (m > 0) return `${m} menit`;
-          const s = Math.floor(seconds % 60);
-          return `${s} detik`;
-        }
-
-        const toMathSansBold = (text) => {
-          const chars = {
-            A: "𝗔", B: "𝗕", C: "𝗖", D: "𝗗", E: "𝗘", F: "𝗙", G: "𝗚", H: "𝗛", I: "𝗜", J: "𝗝", K: "𝗞", L: "𝗟", M: "𝗠",
-            N: "𝗡", O: "𝗢", P: "𝗣", Q: "𝗤", R: "𝗥", S: "𝗦", T: "𝗧", U: "𝗨", V: "𝗩", W: "𝗪", X: "𝗫", Y: "𝗬", Z: "𝗭"
-          };
-          return text.toUpperCase().split("").map(c => chars[c] || c).join("");
-        };
-
         const botName = config.bot?.name || "velyx store";
-        const botModeLower = (config.mode || "public").toLowerCase();
         const botPrefix = config.command?.prefix || ".";
-        const runTime = runtimeStr(process.uptime());
-
-        const userName = m.pushName || "User";
-        const userStatus = m.isPremium ? "premium" : "free";
-        const userRole = m.isOwner ? "owner" : "user";
         const dbUser = db.getUser(m.sender);
         const userLimit = (dbUser?.limit === Infinity || dbUser?.limit === null || dbUser?.limit === undefined) ? "unlimited" : dbUser.limit;
 

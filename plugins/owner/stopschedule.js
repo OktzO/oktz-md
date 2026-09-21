@@ -1,4 +1,4 @@
-import { stopSchedulerByName, getFullSchedulerStatus } from '../../src/lib/ourin-scheduler.js'
+import { stopSchedulerByName } from '../../src/lib/ourin-scheduler.js'
 import { stopSholatScheduler } from '../../src/lib/ourin-sholat-scheduler.js'
 import { getDatabase } from '../../src/lib/ourin-database.js'
 import te from '../../src/lib/ourin-error.js'

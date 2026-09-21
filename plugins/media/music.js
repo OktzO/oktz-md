@@ -19,7 +19,7 @@ const pluginConfig = {
     isEnabled: true
 }
 
-async function handler(m, { sock, command }) {
+async function handler(m, { sock }) {
     const musicNum = m?.command.replace('music', '')
     const num = parseInt(musicNum)
     

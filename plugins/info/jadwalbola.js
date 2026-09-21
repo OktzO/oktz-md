@@ -1,4 +1,3 @@
-import axios from "axios";
 import config from "../../config.js";
 import { f } from "../../src/lib/ourin-http.js";
 import te from "../../src/lib/ourin-error.js";
@@ -79,9 +78,6 @@ async function handler(m, { sock }) {
       if (!grouped[date]) grouped[date] = [];
       grouped[date].push(match);
     }
-
-    const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-    const saluranName = config.saluran?.name || config.bot?.name || "Bot";
 
     let text = `⚽ *ᴊᴀᴅᴡᴀʟ ᴘᴇʀᴛᴀɴᴅɪɴɢᴀɴ*\n\n`;
     if (filter) text += `> Filter: \`${filter}\`\n\n`;

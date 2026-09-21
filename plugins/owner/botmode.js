@@ -1,4 +1,3 @@
-import config from '../../config.js'
 import { getDatabase } from '../../src/lib/ourin-database.js'
 
 const pluginConfig = {
@@ -33,7 +32,6 @@ async function handler(m, { sock }) {
     const args = m.args || []
     
     let mode = (args[0] || '').toLowerCase()
-    const flags = args.slice(1).map(f => f.toLowerCase())
     const globalMode = db.setting('botMode') || 'all'
     const groupData = m.isGroup ? (db.getGroup(m.chat) || {}) : {}
     const groupMode = groupData.botMode || null

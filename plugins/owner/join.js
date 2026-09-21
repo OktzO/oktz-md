@@ -1,6 +1,4 @@
-import config from "../../config.js";
 import { saluranCtx } from "../../src/lib/ourin-context.js";
-import te from "../../src/lib/ourin-error.js";
 
 const pluginConfig = {
   name: "join",

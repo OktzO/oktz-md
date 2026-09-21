@@ -1,6 +1,5 @@
 import * as timeHelper from '../../src/lib/ourin-time.js'
 import PhoneNum from 'awesome-phonenumber'
-import config from '../../config.js'
 const pluginConfig = {
     name: 'wastalk',
     alias: ['whatsappstalk', 'stalkwa'],

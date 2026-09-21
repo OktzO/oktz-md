@@ -1,5 +1,4 @@
 import { getDatabase } from '../../src/lib/ourin-database.js'
-import config from '../../config.js'
 const pluginConfig = {
     name: 'setbirthday',
     alias: ['setbday', 'setultah', 'settgl'],
@@ -42,7 +41,7 @@ async function handler(m) {
         return m.reply(text)
     }
     
-    const dateRegex = /^(\d{1,2})[-\/](\d{1,2})$/
+    const dateRegex = /^(\d{1,2})[-/](\d{1,2})$/
     const match = input.match(dateRegex)
     
     if (!match) {

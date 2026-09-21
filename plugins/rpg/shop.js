@@ -76,7 +76,7 @@ async function handler(m, { sock }) {
     txt += `Ketik \`.shop sell <nama> <jumlah>\` buat jual.\n\n`;
 
     txt += `*🛍️ Barang yang Dijual (BUY):*\n`;
-    for (const [key, item] of Object.entries(ITEMS)) {
+    for (const [, item] of Object.entries(ITEMS)) {
       if (item.type === "buyable") {
         txt += `${item.name}: *Rp ${item.price.toLocaleString("id-ID")}*\n`;
       }
@@ -84,7 +84,7 @@ async function handler(m, { sock }) {
     txt += `\n`;
 
     txt += `*💰 Barang yang Diterima (SELL):*\n`;
-    for (const [key, item] of Object.entries(ITEMS)) {
+    for (const [, item] of Object.entries(ITEMS)) {
       if (item.type === "sellable") {
         txt += `${item.name}: *Rp ${item.price.toLocaleString("id-ID")}*\n`;
       }

@@ -1,4 +1,3 @@
-import config from '../../config.js'
 import os from 'os'
 import { exec } from 'child_process'
 import { promisify } from 'util'
@@ -76,11 +75,6 @@ async function handler(m, { sock }) {
                 const speed = cpus[0].speed;
                 const cores = cpus.length;
                 
-                const text = `🖥️ *CPU INFO*\n\n` +
-                             `Model: ${model}\n` +
-                             `Speed: ${speed} MHz\n` +
-                             `Cores: ${cores} Core(s)\n` +
-                             `Uptime: ${formatSize(os.uptime())} (Wrong format, raw seconds)`; 
                 const uptime = os.uptime();
                 const hours = Math.floor(uptime / 3600);
                 const minutes = Math.floor((uptime % 3600) / 60);

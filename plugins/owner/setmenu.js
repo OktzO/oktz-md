@@ -1,7 +1,5 @@
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
-import fs from "fs";
 import config from "../../config.js";
-import { getDatabase } from "../../src/lib/ourin-database.js";
 const pluginConfig = {
   name: "setmenu",
   alias: ["menuvariant", "menustyle"],

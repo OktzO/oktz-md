@@ -1,9 +1,7 @@
 import {
   isToxic,
-  handleToxicMessage,
   DEFAULT_TOXIC_WORDS,
 } from "./antitoxic.js";
-import config from "../../config.js";
 import { getDatabase } from "../../src/lib/ourin-database.js";
 import te from "../../src/lib/ourin-error.js";
 import { saluranCtx } from "../../src/lib/ourin-context.js";
@@ -154,9 +152,8 @@ async function handleLabelChange(msg, sock) {
       } catch {}
     }
     if (groupData.notifLabelChange !== true) return false;
-    let groupMeta = null;
     try {
-      groupMeta = await sock.groupMetadata(groupJid);
+      await sock.groupMetadata(groupJid);
     } catch {}
     let notifText = "";
     if (label && label.trim()) {

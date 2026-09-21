@@ -85,7 +85,7 @@ async function handler(m) {
         } finally {
             conn.end()
         }
-    }).on('error', (err) => {
+    }).on('error', (_) => {
         m.react('❌')
         m.reply(`❌ Koneksi gagal!\n\n> IP atau Password tidak valid.`)
     }).connect(connSettings)

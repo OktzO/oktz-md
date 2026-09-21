@@ -285,7 +285,7 @@ async function handler(m, { sock }) {
       }
 
       // Check if player already in another room
-      const existingRoom = Object.entries(ww).find(([chatId, room]) =>
+      const existingRoom = Object.entries(ww).find(([, room]) =>
         room.players.some((p) => p.id === m.sender),
       );
       if (existingRoom) {
@@ -576,7 +576,7 @@ async function handler(m, { sock }) {
       }
 
       const playerList = ww[m.chat].players
-        .map((p, i) => {
+        .map((p) => {
           const status = p.alive
             ? "✅"
             : `☠️ (${ROLES[p.role]?.name || "Unknown"})`;
@@ -1040,7 +1040,6 @@ async function endGame(chatId, sock, db, winner) {
 
 // Night action handler for PM commands
 async function nightActionHandler(m, { sock }) {
-  const db = getDatabase();
   const ww = global.werewolfGames;
   const prefix = m.prefix || config.command?.prefix || ".";
 

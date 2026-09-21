@@ -1,4 +1,3 @@
-import config from '../../config.js'
 const pluginConfig = {
     name: 'templateplugin',
     alias: ['tplplugin', 'plugin-template'],

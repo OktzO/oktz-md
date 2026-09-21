@@ -1,4 +1,4 @@
-import { setNotifTidur, toggleNotif, getNotif, deleteNotif, parseJadwal } from '../../src/lib/ourin-notif-scheduler.js'
+import { setNotifTidur, toggleNotif, getNotif, parseJadwal } from '../../src/lib/ourin-notif-scheduler.js'
 
 const pluginConfig = {
     name: 'notiftidur',

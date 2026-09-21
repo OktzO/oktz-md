@@ -21,7 +21,7 @@ const pluginConfig = {
     isEnabled: true,
 };
 
-async function handler(m, { sock, args, text }) {
+async function handler(m, { sock, args }) {
     if (!args || args.length === 0) {
         return m.reply(`🤖 *CHARACTER AI*\n\n` +
             `Gunakan perintah berikut:\n` +

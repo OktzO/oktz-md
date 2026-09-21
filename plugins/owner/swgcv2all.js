@@ -1,11 +1,6 @@
-import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import { fileTypeFromBuffer } from "file-type";
-import { config } from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
-import { saluranCtx } from "../../src/lib/ourin-context.js";
 import { generateWAMessage } from "ourin";
-
-const botConfig = config;
 
 function buildSyntheticSwGcRawMessage(sock, remoteJid, innerMessage, messageId) {
   const botJid = sock.user?.id?.split(":")[0] + "@s.whatsapp.net";
@@ -44,7 +39,7 @@ const pluginConfig = {
 async function handler(m, { sock }) {
   const text = m.text || "";
 
-  let rawContent = null;
+  let rawContent;
 
   if (m.isMedia || (m.quoted && m.quoted.isMedia)) {
     let buffer;

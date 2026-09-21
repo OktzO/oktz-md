@@ -22,7 +22,6 @@ async function handler(m, { sock }) {
   const text = m.text?.trim();
 
   let mediaBuffer = null;
-  let mimetype = null;
 
   if (m.quoted?.message) {
     const type = getContentType(m.quoted.message);
@@ -35,7 +34,6 @@ async function handler(m, { sock }) {
         "buffer",
         {}
       );
-      mimetype = m.quoted.message[type]?.mimetype;
     } catch (e) {
       return m.reply("😔 *Gagal mendownload gambar.* Coba kirim ulang gambarnya ya.");
     }
@@ -50,7 +48,6 @@ async function handler(m, { sock }) {
         "buffer",
         {}
       );
-      mimetype = m.message[type]?.mimetype;
     } catch (e) {
       return m.reply("😔 *Gagal mendownload gambar.* Coba kirim ulang gambarnya ya.");
     }

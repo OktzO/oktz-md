@@ -1,5 +1,5 @@
 import * as botmodePlugin from "../group/botmode.js";
-import { generateWAMessageFromContent, prepareWAMessageMedia, proto } from "ourin";
+import { generateWAMessageFromContent, prepareWAMessageMedia } from "ourin";
 import config from "../../config.js";
 import axios from "axios";
 import {
@@ -9,9 +9,7 @@ import fs from "fs"
 import {
   getCommandsByCategory,
   getCategories,
-  getPluginCount,
   getPlugin,
-  getPluginsByCategory,
 } from "../../src/lib/ourin-plugins.js";
 import { getCasesByCategory, getCaseCount } from "../../case/ourin.js";
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
@@ -89,11 +87,10 @@ function getCommandSymbols(cmdName) {
   if (plugin.config.isPrivate) symbols.push("🅟🅡");
   return symbols.length > 0 ? " " + symbols.join(" ") : "";
 }
-function getContextInfo(botConfig, m, thumbBuffer) {
+function getContextInfo(botConfig, m) {
   const saluranId = botConfig.saluran?.id || "120363400911374213@newsletter";
   const saluranName =
     botConfig.saluran?.name || botConfig.bot?.name || "Bot";
-  const saluranLink = botConfig.saluran?.link || "";
   return {
     mentionedJid: [m.sender],
     forwardingScore: 9999,
@@ -105,7 +102,7 @@ function getContextInfo(botConfig, m, thumbBuffer) {
     },
   };
 }
-async function handler(m, { sock, config: botConfig, db, uptime }) {
+async function handler(m, { sock, config: botConfig, db }) {
   const prefix = botConfig.command?.prefix || ".";
   const user = db.getUser(m.sender);
   const groupData = m.isGroup ? db.getGroup(m.chat) || {} : {};
@@ -119,14 +116,11 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
   }
   const totalCases = getCaseCount();
   const totalFeatures = totalCommands + totalCases;
-  let userRole = "User",
-    roleEmoji = "👤";
+  let userRole = "User";
   if (m.isOwner) {
     userRole = "Owner";
-    roleEmoji = "👑";
   } else if (m.isPremium) {
     userRole = "Premium";
-    roleEmoji = "💎";
   }
   const greeting = getTimeGreeting();
   let txt = ``;
@@ -136,22 +130,6 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
   try {
     imageBuffer = getAssetBuffer("ourin");
     thumbBuffer = getAssetBuffer("ourin2");
-  } catch (e) { }
-
-  const weatherCodeMap = {
-    0: "☀️ Cerah", 1: "🌤️ Cerah Berawan", 2: "⛅ Berawan", 3: "☁️ Mendung", 45: "🌫️ Berkabut", 48: "🌫️ Kabut Tebal", 51: "🌦️ Gerimis", 61: "🌧️ Hujan Ringan", 63: "🌧️ Hujan", 65: "⛈️ Hujan Lebat", 80: "🌦️ Hujan Lokal", 95: "⛈️ Badai Petir"
-  };
-
-  let weatherText = "Merangin Cerah Berawan 22°C ☀️";
-  try {
-    const geo = await axios.get(`https://geocoding-api.open-meteo.com/v1/search?name=Merangin&count=1`);
-    const loc = geo.data.results?.[0];
-    if (loc) {
-      const res = await axios.get(`https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=temperature_2m,weather_code`);
-      const current = res.data.current;
-      const kondisi = weatherCodeMap[current.weather_code] || "Cerah Berawan";
-      weatherText = `Merangin ${kondisi} ${Math.round(current.temperature_2m)}°C`;
-    }
   } catch (e) { }
 
   const userLimit = (m.isPremium || m.isOwner) ? "∞ Unlimited" : (user?.limit || 0);
@@ -257,7 +235,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
       case 1:
         await m.reply(txt);
         break;
-      case 2:
+      case 2: {
         const media = await prepareWAMessageMedia({
           image: getAssetBuffer("ourin")
         }, { upload: sock.waUploadToServer })
@@ -313,16 +291,8 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
           {}
         )
         break;
+      }
       case 5: {
-        function runtime(seconds) {
-          seconds = Number(seconds);
-          const d = Math.floor(seconds / (3600 * 24));
-          const h = Math.floor(seconds % (3600 * 24) / 3600);
-          const m = Math.floor(seconds % 3600 / 60);
-          const s = Math.floor(seconds % 60);
-          return `${d} Jam ${m} Menit ${s} Detik`;
-        }
-
         const weatherCode = {
           0: "☀️ Cerah", 1: "🌤️ Cerah Berawan", 2: "⛅ Berawan", 3: "☁️ Mendung", 45: "🌫️ Berkabut", 48: "🌫️ Kabut Tebal", 51: "🌦️ Gerimis", 61: "🌧️ Hujan Ringan", 63: "🌧️ Hujan", 65: "⛈️ Hujan Lebat", 80: "🌦️ Hujan Lokal", 95: "⛈️ Badai Petir"
         }
@@ -570,11 +540,11 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
                     (thumbBuffer || imageBuffer ? await (await getSharp())(thumbBuffer || imageBuffer)
                       .resize({ width: 300, height: 300 })
                       .toBuffer() : null),
-                  itemCount: totalCmds,
+                  itemCount: totalCommands,
                   status: "INQUIRY",
                   surface: "CATALOG",
                   message: `★ ${config.bot.name}`,
-                  orderTitle: `📋 ${totalCmds} Commands`,
+                  orderTitle: `📋 ${totalCommands} Commands`,
                   sellerJid: botConfig.botNumber
                     ? `${botConfig.botNumber}@s.whatsapp.net`
                     : m.sender,
@@ -602,7 +572,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
                 },
                 { quoted: ftroliQuoted },
               );
-            } catch (ffmpegErr) {
+            } catch (e) {
               await sock.sendMessage(
                 m.chat,
                 {

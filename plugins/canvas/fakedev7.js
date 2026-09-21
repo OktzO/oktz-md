@@ -1,7 +1,6 @@
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import * as _canvas from '@napi-rs/canvas';
 import axios from "axios";
-import path from "path";
 
 import te from "../../src/lib/ourin-error.js";
 
@@ -26,7 +25,7 @@ async function handler(m, { sock }) {
   if (!name) {
     return m.reply(`🎮 *ꜰᴀᴋᴇ ᴅᴇᴠᴇʟᴏᴘᴇʀ 7*\n\n> Masukkan nama untuk profile\n\n*ᴄᴀʀᴀ ᴘᴀᴋᴀɪ:*\n> 1. Kirim foto + caption \`${m.prefix}fakedev7 <nama>\`\n> 2. Reply foto dengan \`${m.prefix}fakedev7 <nama>\``);
   }
-  let buffer = null;
+  let buffer;
   if (m.quoted && (m.quoted.type === "imageMessage" || m.quoted.mtype === "imageMessage")) {
     try { buffer = await m.quoted.download(); } catch (e) { return m.reply(te(m.prefix, m.command, m.pushName)); }
   } else if (m.isMedia && m.type === "imageMessage") {

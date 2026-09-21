@@ -1,4 +1,3 @@
-import config from '../../config.js'
 import { getDatabase } from '../../src/lib/ourin-database.js'
 const pluginConfig = {
     name: 'automedia',

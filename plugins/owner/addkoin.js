@@ -66,7 +66,7 @@ async function handler(m, { sock }) {
         )
     }
 
-    const newKoin = db.updateKoin(targetJid, amount)
+    db.updateKoin(targetJid, amount)
 
     await m.react('✅')
     await m.reply(

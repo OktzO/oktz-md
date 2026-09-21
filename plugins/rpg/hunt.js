@@ -60,7 +60,7 @@ async function handler(m, { sock }) {
   }
 
   user.inventory[caught.item] = (user.inventory[caught.item] || 0) + 1;
-  const levelResult = await addExpWithLevelCheck(sock, m, db, user, caught.exp);
+  await addExpWithLevelCheck(sock, m, db, user, caught.exp);
 
   db.save();
 

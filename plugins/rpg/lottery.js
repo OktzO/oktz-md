@@ -116,7 +116,7 @@ async function handler(m, { sock }) {
   let hasRare = false;
   let hasLegendary = false;
 
-  for (const [key, item] of Object.entries(grouped)) {
+  for (const [, item] of Object.entries(grouped)) {
     const rarityIcon = RARITY_COLORS[item.rarity] || "⚪";
     if (item.item === "trash") {
       txt += `> ${rarityIcon} ${item.name} *(Ampas x${item.count})*\n`;

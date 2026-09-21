@@ -1,7 +1,4 @@
 import config from '../../config.js'
-import { getDatabase } from '../../src/lib/ourin-database.js'
-import fs from 'fs'
-import path from 'path'
 const pluginConfig = {
     name: 'setownertype',
     alias: ['ownertype', 'ownervariant', 'ownerstyle'],

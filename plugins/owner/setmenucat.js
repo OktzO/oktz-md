@@ -1,6 +1,5 @@
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import config from "../../config.js";
-import { getDatabase } from "../../src/lib/ourin-database.js";
 
 const pluginConfig = {
   name: "setmenucat",

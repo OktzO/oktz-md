@@ -1,5 +1,4 @@
 import { getDatabase } from '../../src/lib/ourin-database.js'
-import { DEFAULT_INTRO } from './intro.js'
 const pluginConfig = {
     name: 'resetintro',
     alias: ['introdel', 'delintro', 'deleteintro'],

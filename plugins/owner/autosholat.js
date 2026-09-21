@@ -1,6 +1,5 @@
 import * as timeHelper from "../../src/lib/ourin-time.js";
 import { getDatabase } from "../../src/lib/ourin-database.js";
-import config from "../../config.js";
 import {
   getTodaySchedule,
   extractPrayerTimes,
@@ -26,7 +25,7 @@ const pluginConfig = {
 
 const AUDIO_ADZAN = "https://media.vocaroo.com/mp3/1ofLT2YUJAjQ";
 
-async function handler(m, { sock, db }) {
+async function handler(m, { sock }) {
   const args = m.args[0]?.toLowerCase();
   const database = getDatabase();
   

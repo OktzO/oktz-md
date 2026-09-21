@@ -48,7 +48,7 @@ async function handler(m, { sock }) {
 
   db.save();
 
-  let txt = "";
+  let txt;
   if (result.success && result.money > 0) {
     txt = `🙏 *ɴɢᴇᴍɪs sᴜᴋsᴇs*\n\n> ${result.msg}\n> 💰 Dapat: *+Rp ${result.money.toLocaleString("id-ID")}*`;
     if (result.exp > 0) txt += `\n> 🚄 Exp: *+${result.exp}*`;

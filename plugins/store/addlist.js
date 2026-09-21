@@ -86,7 +86,6 @@ async function handler(m, { sock }) {
         try {
             const buffer = hasQuotedMedia ? await m.quoted.download() : await m.download()
             if (buffer) {
-                const isImage = m.quoted?.isImage || m.quoted?.type === 'imageMessage' || m.isImage
                 const isVideo = m.quoted?.isVideo || m.quoted?.type === 'videoMessage' || m.isVideo
                 const url = await uploadToCatbox(buffer, isVideo ? 'video.mp4' : 'image.jpg')
                 if (url) {

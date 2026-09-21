@@ -10,11 +10,14 @@ export default [
       "temp/",
       "native/",
       "**.min.js",
+      "tests/",
     ],
   },
   js.configs.recommended,
   {
     languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "module",
       globals: {
         Buffer: "readonly",
         console: "readonly",
@@ -37,10 +40,25 @@ export default [
         TextDecoder: "readonly",
         performance: "readonly",
         queueMicrotask: "readonly",
+        Blob: "readonly",
+        FormData: "readonly",
+        AbortSignal: "readonly",
       },
     },
   },
   {
-    ignores: ["tests/"],
+    // Konvensi codebase: handler menerima `{ sock }` tapi tak semua memakainya;
+    // catch error sering sengaja tak dipakai; catch kosong = swallow API third-party.
+    rules: {
+      "no-unused-vars": [
+        "error",
+        {
+          args: "after-used",
+          argsIgnorePattern: "^(sock|_)$",
+          caughtErrorsIgnorePattern: "^(e|err|error)$",
+        },
+      ],
+      "no-empty": ["error", { allowEmptyCatch: true }],
+    },
   },
 ];

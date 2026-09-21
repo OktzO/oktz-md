@@ -1,6 +1,3 @@
-import { getDatabase } from "../../src/lib/ourin-database.js";
-import config from "../../config.js";
-
 const pluginConfig = {
   name: "autobio",
   alias: ["autostatus"],
@@ -66,7 +63,7 @@ async function handler(m, { sock, db }) {
       return m.reply("❌ *Format Salah*\n\nContoh: `.autobio ganti_setiap 30 detik` atau `1 jam`");
     }
 
-    let ms = 0;
+    let ms;
     const value = parseInt(timeStr);
     if (isNaN(value)) {
       return m.reply("❌ *Format Salah*\n\nMasukkan angka yang valid. Contoh: `.autobio ganti_setiap 30 detik`");

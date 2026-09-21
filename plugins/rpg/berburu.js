@@ -67,7 +67,7 @@ async function handler(m, { sock }) {
   }
 
   user.koin = (user.koin || 0) + totalMoney;
-  const levelResult = await addExpWithLevelCheck(sock, m, db, user, totalExp);
+  await addExpWithLevelCheck(sock, m, db, user, totalExp);
 
   db.save();
 

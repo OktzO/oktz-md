@@ -1,5 +1,5 @@
 import config from '../../config.js'
-import { getRoles, getUserRole, getAccessibleServers, VALID_SERVERS } from '../../src/lib/ourin-roles-cpanel.js'
+import { getAccessibleServers, VALID_SERVERS } from '../../src/lib/ourin-roles-cpanel.js'
 const pluginConfig = {
     name: 'cpanel',
     alias: ['panelmenu', 'menupanel'],

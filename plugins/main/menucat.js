@@ -4,12 +4,10 @@ import { prepareWAMessageMedia, generateWAMessageFromContent } from "ourin";
 import config from "../../config.js";
 import axios from "axios";
 import sharp from "sharp";
-import {
-  getCommandsByCategory,
+import { getCommandsByCategory,
   getCategories,
   getPlugin,
 } from "../../src/lib/ourin-plugins.js";
-import { getDatabase } from "../../src/lib/ourin-database.js";
 import { getTimeGreeting } from "../../src/lib/ourin-formatter.js";
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import fs from "fs"
@@ -294,15 +292,6 @@ async function handler(m, { sock, db }) {
           break;
         }
         case 5: {
-          function runtime(seconds) {
-            seconds = Number(seconds);
-            const d = Math.floor(seconds / (3600 * 24));
-            const h = Math.floor(seconds % (3600 * 24) / 3600);
-            const m = Math.floor(seconds % 3600 / 60);
-            const s = Math.floor(seconds % 60);
-            return `${d} Jam ${m} Menit ${s} Detik`;
-          }
-
           const weatherCode = {
             0: "☀️ Cerah", 1: "🌤️ Cerah Berawan", 2: "⛅ Berawan", 3: "☁️ Mendung", 45: "🌫️ Berkabut", 48: "🌫️ Kabut Tebal", 51: "🌦️ Gerimis", 61: "🌧️ Hujan Ringan", 63: "🌧️ Hujan", 65: "⛈️ Hujan Lebat", 80: "🌦️ Hujan Lokal", 95: "⛈️ Badai Petir"
           }
@@ -491,15 +480,6 @@ async function handler(m, { sock, db }) {
         break;
       }
       case 5: {
-        function runtime(seconds) {
-          seconds = Number(seconds);
-          const d = Math.floor(seconds / (3600 * 24));
-          const h = Math.floor(seconds % (3600 * 24) / 3600);
-          const m = Math.floor(seconds % 3600 / 60);
-          const s = Math.floor(seconds % 60);
-          return `${d} Jam ${m} Menit ${s} Detik`;
-        }
-
         const weatherCode = {
           0: "☀️ Cerah", 1: "🌤️ Cerah Berawan", 2: "⛅ Berawan", 3: "☁️ Mendung", 45: "🌫️ Berkabut", 48: "🌫️ Kabut Tebal", 51: "🌦️ Gerimis", 61: "🌧️ Hujan Ringan", 63: "🌧️ Hujan", 65: "⛈️ Hujan Lebat", 80: "🌦️ Hujan Lokal", 95: "⛈️ Badai Petir"
         }

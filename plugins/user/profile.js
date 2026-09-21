@@ -1,7 +1,6 @@
 import config from "../../config.js";
 import { getDatabase } from "../../src/lib/ourin-database.js";
 import { getRole } from "./level.js";
-import fs from "fs";
 import { getDevice } from "ourin";
 
 const pluginConfig = {
@@ -112,7 +111,7 @@ async function handler(m, { sock }) {
   const isOwnerUser = config.isOwner(target);
   const isPremiumUser = config.isPremium(target);
 
-  let ppMedia = null;
+  let ppMedia;
   try {
     const ppUrl = await sock.profilePictureUrl(target, "image");
     if (ppUrl) {

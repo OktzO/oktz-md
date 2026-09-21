@@ -129,7 +129,7 @@ async function fetchImageUrls(type) {
 
   for (const provider of PROVIDERS) {
     for (const q of queries) {
-      let url = null;
+      let url;
       try {
         url = provider.build(q, apiKey);
       } catch {

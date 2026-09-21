@@ -23,7 +23,7 @@ async function handler(m) {
     const bulan = Math.floor(Math.random() * 12)
     const hari = Math.floor(Math.random() * 30)
     
-    let desc = ''
+    let desc
     if (tahun > 80) {
         desc = 'Panjang umur banget! 🎉'
     } else if (tahun > 60) {

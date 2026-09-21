@@ -2,7 +2,6 @@ import * as _canvas from '@napi-rs/canvas'
 import axios from "axios";
 
 
-import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
 const pluginConfig = {
   name: "colongpp",

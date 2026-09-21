@@ -71,13 +71,11 @@ function generateWaveform(audioBuf, samples = 64) {
 async function handler(m, { sock }) {
   const raw = m.text?.trim() || "";
   let chId = config?.saluran?.id;
-  let chName = config?.saluran?.name || config?.bot?.name || "Bot";
   let q = raw;
 
   const idchMatch = raw.match(/--idch\s+(\S+)/);
   if (idchMatch) {
     chId = idchMatch[1];
-    chName = chId;
     q = raw.replace(/--idch\s+\S+/, "").trim();
   }
 

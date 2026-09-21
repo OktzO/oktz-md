@@ -42,7 +42,6 @@ async function handler(m, { sock }) {
     }
 
     const product = products[idx]
-    const typeIcon = product.type === 'fisik' ? '📦' : '🔑'
 
     if (product.type === 'fisik') {
         return m.reply(

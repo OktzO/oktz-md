@@ -1,5 +1,4 @@
 import { getAllPlugins } from '../../src/lib/ourin-plugins.js'
-import config from '../../config.js'
 import te from '../../src/lib/ourin-error.js'
 
 const pluginConfig = {

@@ -1,5 +1,4 @@
 import crypto from "crypto";
-import te from "../../src/lib/ourin-error.js";
 
 const pluginConfig = {
   name: "videotranscribe",

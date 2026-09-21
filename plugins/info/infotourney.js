@@ -1,7 +1,6 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 import * as timeHelper from "../../src/lib/ourin-time.js";
-import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
 const pluginConfig = {
   name: "infotourney",
@@ -73,9 +72,6 @@ async function handler(m, { sock }) {
       await m.react("❌");
       return m.reply("❌ Tidak ada turnamen yang ditemukan");
     }
-
-    const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-    const saluranName = config.saluran?.name || config.bot?.name || "Bot";
 
     let text = `🏆 *ɪɴꜰᴏ ᴛᴜʀɴᴀᴍᴇɴ ᴍᴏʙɪʟᴇ ʟᴇɢᴇɴᴅs*\n\n`;
     text += `> 5 Turnamen Terbaru\n\n`;

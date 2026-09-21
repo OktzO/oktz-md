@@ -145,7 +145,6 @@ async function handler(m) {
     const bar = powerBar(myPower, enemyPower)
     const winnerClan = isWin ? myClan : enemyClan
     const winnerE = isWin ? myE : enE
-    const r = isWin ? myR : myR
 
     let txt = `⚔️ *WAR RESULT*\n\n`
     txt += `${myE} *${myClan.name}*  vs  *${enemyClan.name}* ${enE}\n`

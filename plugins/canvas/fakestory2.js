@@ -1,5 +1,4 @@
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
-import config from "../../config.js";
 import fs from 'fs'
 import * as _canvas from '@napi-rs/canvas'
 

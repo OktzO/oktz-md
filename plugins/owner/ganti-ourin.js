@@ -1,5 +1,3 @@
-import fs from 'fs'
-import path from 'path'
 import te from '../../src/lib/ourin-error.js'
 import { updateAssetUrl } from '../../src/lib/ourin-uploader.js'
 const pluginConfig = {

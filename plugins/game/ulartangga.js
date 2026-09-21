@@ -69,7 +69,6 @@ async function sendUT(sock, jid, text, title, body, mentions, options) {
 }
 
 async function handler(m, { sock }) {
-  const db = getDatabase();
   const args = m.args || [];
   const action = args[0]?.toLowerCase();
   const ut = global.ulartanggaGames;

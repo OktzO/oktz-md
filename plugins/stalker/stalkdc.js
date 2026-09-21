@@ -64,7 +64,7 @@ function extractRresp(body) {
   try {
     const arr = JSON.parse(cleaned);
     if (Array.isArray(arr) && arr[0] === 'rresp' && typeof arr[1] === 'string') return arr[1];
-  } catch (_) {}
+  } catch (e) {}
   const m = cleaned.match(/"rresp","([^"]+)"/);
   return m ? m[1] : null;
 }

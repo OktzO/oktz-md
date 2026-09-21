@@ -1,4 +1,3 @@
-import config from "../../config.js";
 const pluginConfig = {
   name: "mulaiabsen",
   alias: ["startabsen", "bukaabsen", "openabsen"],
@@ -38,9 +37,6 @@ async function handler(m, { sock }) {
     createdAt: new Date().toISOString(),
     peserta: [],
   };
-
-  const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-  const saluranName = config.saluran?.name || config.bot?.name || "Bot";
 
   await m.reply(
     `📋 *ABSEN UDAH JALAN NIHH*\n\n` +

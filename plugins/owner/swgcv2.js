@@ -130,16 +130,6 @@ async function handler(m, { sock, db }) {
       const syntheticRawMsg = buildSyntheticSwGcRawMessage(sock, targetGroupId, mediaMessage, messageId);
       await handleAntiSwGc(syntheticRawMsg, sock, db);
 
-      const mediaType = pendingData.rawContent.text
-        ? "Teks"
-        : pendingData.rawContent.image
-          ? "Gambar"
-          : pendingData.rawContent.video
-            ? "Video"
-            : pendingData.rawContent.audio
-              ? "Audio"
-              : "Media";
-
       const successMsg = `✅ Berhasil up sw (V2) ke grup ${groupName}`;
 
       await m.reply(successMsg);
@@ -285,9 +275,8 @@ async function handler(m, { sock, db }) {
             ? "Audio"
             : "Media";
 
-    let thumbnail = null;
     try {
-      thumbnail = getAssetBuffer("ourin2");
+      getAssetBuffer("ourin2");
     } catch (e) { }
 
     await sock.sendMessage(m.chat, {

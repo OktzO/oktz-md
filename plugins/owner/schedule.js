@@ -281,7 +281,7 @@ function buildTaskPayload(id, parsed, extra = {}) {
   };
 }
 
-function buildHelpText(m) {
+function buildHelpText(_) {
   return `📅 *SCHEDULE PLANNER*
 
 Fitur ini buat bikin jadwal atau reminder bebas.

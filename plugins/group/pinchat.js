@@ -53,10 +53,6 @@ async function handler(m, { sock, args }) {
             time: duration
         });
         
-        const durationText = duration >= 86400 
-            ? `${Math.floor(duration / 86400)} hari` 
-            : `${Math.floor(duration / 3600)} jam`;
-        
         const successMsg = `✅ Success pin pesan ini`;
         await m.reply(successMsg, { mentions: [m.sender] })
         

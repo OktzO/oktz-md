@@ -1,5 +1,4 @@
 import { getDatabase } from "../../src/lib/ourin-database.js";
-import { addExpWithLevelCheck } from "../../src/lib/ourin-level.js";
 
 const pluginConfig = {
   name: "pet",

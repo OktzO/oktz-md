@@ -61,7 +61,7 @@ async function handler(m, { sock }) {
   }
 
   const expGain = Math.floor(Math.random() * 500) + 100;
-  const levelResult = await addExpWithLevelCheck(sock, m, db, user, expGain);
+  await addExpWithLevelCheck(sock, m, db, user, expGain);
 
   db.save();
 

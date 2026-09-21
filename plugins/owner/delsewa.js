@@ -37,7 +37,7 @@ async function handler(m, { sock }) {
     db.db.write();
   }
 
-  let groupId = null;
+  let groupId;
   let groupName = null;
 
   if (!input) {

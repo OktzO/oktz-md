@@ -1,6 +1,4 @@
 import config from "../../config.js";
-import path from "path";
-import fs from "fs";
 import fetch from "node-fetch";
 const pluginConfig = {
   name: "donasi",
@@ -20,7 +18,6 @@ const pluginConfig = {
 
 async function handler(m, { sock }) {
   const botName = config.bot?.name || "Bot";
-  const ownerName = config.owner?.name || "Owner";
   const saluranId = config.saluran?.id || "120363400911374213@newsletter";
   const saluranName = config.saluran?.name || botName;
 

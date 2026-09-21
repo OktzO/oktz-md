@@ -1,5 +1,3 @@
-import fs from "fs";
-import path from "path";
 import { getDatabase } from "../../src/lib/ourin-database.js";
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import {
@@ -62,7 +60,7 @@ function getRegistrationRewards() {
 }
 
 async function getRegistrationImage() {
-  const { getCachedThumb } = await import("../../src/lib/ourin-serialize.js");
+  await import("../../src/lib/ourin-serialize.js");
   for (const key of REGISTRATION_IMAGE_CANDIDATES) {
     const buf = getAssetBuffer(key);
     if (buf) return buf;
@@ -143,19 +141,6 @@ function createRegistrationSession(jid, chatJid) {
 
   global.registrationSessions[sessionKey] = session;
   return session;
-}
-
-function getQuotedMessageId(m) {
-  return m.quoted?.id || m.quoted?.stanzaId || m.quoted?.key?.id || null;
-}
-
-function isReplyToSessionPrompt(m, session) {
-  const quotedId = getQuotedMessageId(m);
-  if (!session || m.chat !== session.chatJid || !m.quoted) return false;
-  if (quotedId && session.promptId && quotedId === session.promptId)
-    return true;
-  if (m.quoted?.key?.fromMe) return true;
-  return false;
 }
 
 async function sendRegistrationPrompt(sock, m, text, options = {}) {
