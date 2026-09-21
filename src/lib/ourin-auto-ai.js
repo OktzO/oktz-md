@@ -210,6 +210,13 @@ function saveToHistory(autoai, senderNumber, role, content) {
       if ((sess.lastActive || 0) < cutoff) delete autoai.sessions[num];
     }
   }
+  if (Object.keys(autoai.sessions).length > 250) {
+    const excess = Object.keys(autoai.sessions).length - 250;
+    Object.entries(autoai.sessions)
+      .sort((a, b) => (a[1].lastActive || 0) - (b[1].lastActive || 0))
+      .slice(0, excess)
+      .forEach(([num]) => delete autoai.sessions[num]);
+  }
 }
 
 function normalizeStructuredResponse(text) {
@@ -1177,4 +1184,4 @@ function clearUserSession(chatId, senderNumber) {
   return true;
 }
 
-export { handleAutoAI, isAutoAIEnabled, getAutoAICharacter, clearUserSession };
+export { handleAutoAI, isAutoAIEnabled, getAutoAICharacter, clearUserSession, saveToHistory };

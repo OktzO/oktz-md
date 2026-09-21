@@ -4,6 +4,14 @@ import { getTursoClient } from './ourin-turso.js';
 const keysCache = new Map();
 const KEYS_CACHE_CAP = 1000;
 
+function trimLocalCache(local, cap) {
+  if (local.size <= cap) return;
+  const excess = local.size - cap;
+  for (let i = 0; i < excess; i++) {
+    local.delete(local.keys().next().value);
+  }
+}
+
 async function loadState(scope) {
   try {
   const client = getTursoClient();
@@ -39,6 +47,7 @@ async function loadState(scope) {
           for (const row of rs.rows) {
             local.set(row.id, JSON.parse(row.data, BufferJSON.reviver));
           }
+          trimLocalCache(local, KEYS_CACHE_CAP);
         }
         const result = {};
         for (const id of ids) {
@@ -57,10 +66,7 @@ async function loadState(scope) {
             const local = keysCache.get(cacheKey);
             local.delete(id);
             local.set(id, value);
-            if (local.size > KEYS_CACHE_CAP) {
-              const first = local.keys().next().value;
-              local.delete(first);
-            }
+            trimLocalCache(local, KEYS_CACHE_CAP);
             statements.push({
               sql: 'INSERT INTO session_keys (scope, category, id, data, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(scope, category, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at',
               args: [scope, type, id, JSON.stringify(value, BufferJSON.replacer), Date.now()],
@@ -134,4 +140,4 @@ async function useTursoAuthState(scope = 'main') {
   };
 }
 
-export { useTursoAuthState, loadState, saveCreds, deleteTursoSession };
+export { useTursoAuthState, loadState, saveCreds, deleteTursoSession, trimLocalCache };
