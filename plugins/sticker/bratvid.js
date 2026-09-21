@@ -4,15 +4,20 @@ import fs from 'fs'
 import path from 'path'
 import os from 'os'
 import { ensureFfmpegOnPath } from '../../src/lib/ourin-ffmpeg.js'
+import { bratvidRssBlocked } from '../../src/lib/ourin-bratvid-gate.js'
 
 // RAM: brat-canvas/video mem-parse ~80MB emoji JSON saat import (+200MB RSS).
-// Lazy-load hanya saat command dijalankan.
+// Lazy-load hanya saat command dijalankan, setelah gate RSS lolos.
 let _bratVid = null
 async function getBratVid() {
     if (!_bratVid) {
         _bratVid = (await import('brat-canvas/video')).bratVid
     }
     return _bratVid
+}
+
+function isBratVidLoaded() {
+    return _bratVid !== null
 }
 
 const pluginConfig = {
@@ -35,6 +40,11 @@ async function handler(m, { sock }) {
     const text = m.args.join(' ')
     if (!text) {
         return m.reply(`🎬 *ʙʀᴀᴛ ᴀɴɪᴍᴀᴛᴇᴅ*\n\n> Masukkan teks\n\n\`Contoh: ${m.prefix}bratvid Hai semua\``)
+    }
+
+    const lowRam = bratvidRssBlocked()
+    if (lowRam) {
+        return m.reply(lowRam)
     }
     
     m.react('🕕')
@@ -62,4 +72,4 @@ async function handler(m, { sock }) {
     }
 }
 
-export { pluginConfig as config, handler }
+export { pluginConfig as config, handler, isBratVidLoaded }
