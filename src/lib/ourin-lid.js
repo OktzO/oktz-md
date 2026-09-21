@@ -530,6 +530,7 @@ function cacheLidJid(lid, jid) {
   if (isLid(jid) || isLidConverted(jid)) return;
   lidCache.set(lid, jid);
   markDirty();
+  trimLidCache();
 }
 
 async function resolveFromSock(jid, sock) {

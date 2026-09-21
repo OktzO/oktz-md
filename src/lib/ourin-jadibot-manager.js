@@ -18,6 +18,11 @@ const jadibotSessions = new Map();
 const reconnectAttempts = new Map();
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_INTERVAL = 5000;
+const GROUP_META_CACHE_CAP = 200;
+
+function evictOldestOverCap(map, cap) {
+  while (map.size > cap) map.delete(map.keys().next().value);
+}
 
 function ensureJadibotAuthFolder() {
   if (!fs.existsSync(JADIBOT_AUTH_FOLDER)) {
@@ -412,6 +417,7 @@ async function startJadibot(sock, m, userJid, usePairing = true) {
       try {
         const fresh = await childSock.groupMetadata(jid);
         groupMetadataCache.set(jid, fresh);
+        evictOldestOverCap(groupMetadataCache, GROUP_META_CACHE_CAP);
         return fresh;
       } catch {
         return undefined;
@@ -921,4 +927,6 @@ export {
   getJadibotStatus,
   isSocketAlive,
   safeSend,
+  evictOldestOverCap,
+  GROUP_META_CACHE_CAP,
 };
