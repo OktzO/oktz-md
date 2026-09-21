@@ -189,11 +189,60 @@ async function createStickerFromVideo(videoBuffer, options = {}) {
 function addExifToWebpFallback(webpBuffer, options = {}) {
     const exif = createExif(options);
     const hasExif = webpBuffer.indexOf(Buffer.from('EXIF')) !== -1;
+
+    const extended = ensureExtendedContainer(webpBuffer);
     
     if (hasExif) {
-        return replaceExifInWebp(webpBuffer, exif);
+        return replaceExifInWebp(extended, exif);
     }
-    return appendExifToWebp(webpBuffer, exif);
+    return appendExifToWebp(extended, exif);
+}
+
+// WhatsApp menolak webp kontainer basic (VP8/VP8L) yang diberi chunk metadata:
+// per spec WebP, EXIF/ICCP/XMP butuh file extended (wajib ada VP8X). Sharp
+// menghasilkan static basic, sedangkan ffmpeg-anim (bratvid2) menghasilkan
+// extended — itulah beda bratimg (blank) vs bratvid2 (normal) di WhatsApp.
+function ensureExtendedContainer(webpBuffer) {
+    if (!isValidWebp(webpBuffer)) return webpBuffer;
+
+    // buang slack trailing (sharp kasih byte sisa di luar chunk terakhir;
+    // wa menolak "garbage bytes at end", github.com/WhatsApp/stickers#606)
+    let end = 12;
+    const riffSize = webpBuffer.readUInt32LE(4);
+    const limit = Math.min(12 + riffSize, webpBuffer.length);
+    while (end + 8 <= limit) {
+        const size = webpBuffer.readUInt32LE(end + 4);
+        if (end + 8 + size > limit) break;
+        end += 8 + size + (size % 2);
+    }
+    let clean = webpBuffer;
+    if (end < webpBuffer.length) {
+        clean = webpBuffer.slice(0, end);
+        clean.writeUInt32LE(end - 8, 4);
+    }
+
+    if (clean.indexOf(Buffer.from('VP8X')) !== -1) return clean;
+
+    const dims = getWebpDimensions(clean);
+    if (!dims) return clean;
+
+    const hasAlpha = clean.indexOf(Buffer.from('ALPH')) !== -1;
+    const hasAnim = clean.indexOf(Buffer.from('ANIM')) !== -1 || clean.indexOf(Buffer.from('ANMF')) !== -1;
+
+    // flags VP8X: bit1=alpha, bit2=EXIF, bit4=animation
+    const flags = 0x04 | (hasAlpha ? 0x02 : 0) | (hasAnim ? 0x10 : 0);
+    const canvasW = Buffer.alloc(3);
+    canvasW.writeUIntLE(Math.max(1, dims.width - 1), 0, 3);
+    const canvasH = Buffer.alloc(3);
+    canvasH.writeUIntLE(Math.max(1, dims.height - 1), 0, 3);
+
+    const vp8xPayload = Buffer.concat([Buffer.from([flags]), Buffer.alloc(3), canvasW, canvasH]);
+    const vp8xSize = Buffer.alloc(4);
+    vp8xSize.writeUInt32LE(vp8xPayload.length);
+    const vp8xChunk = Buffer.concat([Buffer.from('VP8X'), vp8xSize, vp8xPayload]);
+
+    // VP8X wajib diposisikan tepat setelah signature 'WEBP'.
+    return Buffer.concat([clean.slice(0, 12), vp8xChunk, clean.slice(12)]);
 }
 
 function replaceExifInWebp(webpBuffer, newExif) {
