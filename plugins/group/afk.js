@@ -3,6 +3,18 @@ import { formatAfkDuration } from '../../src/lib/ourin-middleware.js'
 const afkStorage = global.afkStorage || (global.afkStorage = new Map())
 const notifyThrottle = global.afkNotifyThrottle || (global.afkNotifyThrottle = new Map())
 const NOTIFY_TTL_MS = 60 * 60 * 1000
+const AFK_MAX = 5000
+const AFK_TTL_MS = 24 * 60 * 60 * 1000
+
+function sweepAfkStorage() {
+  if (afkStorage.size <= AFK_MAX) return
+  const cutoff = Date.now() - AFK_TTL_MS
+  for (const [jid, entry] of afkStorage) {
+    if (entry && typeof entry.since === 'number' && entry.since < cutoff) {
+      afkStorage.delete(jid)
+    }
+  }
+}
 
 const pluginConfig = {
     name: 'afk',
@@ -45,6 +57,7 @@ function setAfkUser(jid, reason, db) {
         db.setUser(jid, { afk: record })
     }
     afkStorage.set(jid, record)
+    sweepAfkStorage()
 }
 
 function removeAfkUser(jid, db) {
@@ -109,4 +122,4 @@ async function checkAfk(m, sock, db) {
     }
 }
 
-export { pluginConfig as config, handler, checkAfk, getAfkUser, setAfkUser, removeAfkUser, isUserAfk }
+export { pluginConfig as config, handler, checkAfk, getAfkUser, setAfkUser, removeAfkUser, isUserAfk, sweepAfkStorage }
