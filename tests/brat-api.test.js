@@ -1,6 +1,6 @@
 import { describe, it, mock, beforeEach, afterEach } from "node:test";
 import assert from "node:assert";
-import { generateBrat, parseBratArgs } from "../src/lib/ourin-brat.js";
+import { generateBrat, parseBratArgs, isBlankImage } from "../src/lib/ourin-brat.js";
 
 describe("brat API integration", () => {
   let originalFetch;
@@ -36,6 +36,14 @@ describe("brat API integration", () => {
     assert.ok(bufBlur.length > 0);
     // Blurred image may be smaller due to compression
     assert.ok(bufBlur.length !== bufNoBlur.length || bufBlur.length > 0);
+  });
+
+  it("regression: native render bukan blank & tanpa fallback brat-canvas", async () => {
+    const buf = await generateBrat({ text: "Halo ges apa kabar", theme: "white", blur: 0 });
+    assert.strictEqual(await isBlankImage(buf), false, "sticker terjual blank = bug");
+    const { default: sharp } = await import("sharp");
+    const meta = await sharp(buf).metadata();
+    assert.strictEqual(meta.width, 1000, "native canvas 1000x1000; 500x500 = fallback brat-canvas dipakai");
   });
 });
 

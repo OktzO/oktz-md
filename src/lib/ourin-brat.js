@@ -452,9 +452,13 @@ export async function generateBrat({ text = "Halo Guys Nama Saya", theme = "whit
 
   let buf = await canvas.encode("png");
   
-  if (isBlankImage(buf)) {
+  if (await isBlankImage(buf)) {
     console.warn("[generateBrat] Native canvas produced blank image, falling back to brat-canvas");
-    return generateBratWithBratCanvas({ text, theme, blur, bgColor, textColor });
+    const fallbackBuf = await generateBratWithBratCanvas({ text, theme, blur, bgColor, textColor });
+    if (await isBlankImage(fallbackBuf)) {
+      throw new Error("brat renderer failed: native + brat-canvas both blank");
+    }
+    return fallbackBuf;
   }
   
   if (blurAmount > 0) {
