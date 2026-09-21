@@ -1,5 +1,4 @@
 import { DeepSeekThinking } from "../../src/scraper/deepseek.js";
-import { saluranCtx } from "../../src/lib/ourin-context.js";
 import te from "../../src/lib/ourin-error.js";
 
 const pluginConfig = {

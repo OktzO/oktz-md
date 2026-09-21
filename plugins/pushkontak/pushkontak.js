@@ -46,16 +46,13 @@ if (!global.pushkontakSessions) global.pushkontakSessions = {};
 const SESSION_TIMEOUT = 300000;
 const SERIAL_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
-import axios from "axios";
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 
 let cachedThumb = null;
-let cachedDoc = null;
 try {
   if (getAssetBuffer("ourin")) {
     cachedThumb = getAssetBuffer("ourin");
   }
-  cachedDoc = fs.readFileSync("./package.json");
 } catch { }
 
 function serial(len) {

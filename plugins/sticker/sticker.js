@@ -3,7 +3,6 @@ import path from 'path'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
-import config from '../../config.js'
 import te from '../../src/lib/ourin-error.js'
 const execAsync = promisify(exec)
 const ffmpegPath = ffmpegInstaller.path

@@ -1,6 +1,4 @@
 import { getDatabase } from "../../src/lib/ourin-database.js";
-import te from "../../src/lib/ourin-error.js";
-import config from "../../config.js";
 
 const pluginConfig = {
   name: "selfthisgc",

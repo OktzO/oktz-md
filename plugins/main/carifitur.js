@@ -2,7 +2,6 @@ import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import { getCaseCommands } from "../../case/ourin.js";
 import fs from "fs";
 import path from "path";
-import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
 import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
@@ -204,8 +203,6 @@ async function handler(m, { sock }) {
         `🔍 *ʜᴀsɪʟ ᴘᴇɴᴄᴀʀɪᴀɴ*\n\n> Tidak ditemukan fitur dengan keyword \`${keyword}\``,
       );
     }
-    const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-    const saluranName = config.saluran?.name || config.bot?.name || "Bot";
     let text = `🔍 *ʜᴀsɪʟ ᴘᴇɴᴄᴀʀɪᴀɴ: "${keyword}"*\n`;
     text += `> Ditemukan *${matches.length}* fitur\n`;
     text += `> Pilih salah satu command di bawah:\n\n`;
@@ -225,7 +222,7 @@ async function handler(m, { sock }) {
     if (topMatches.length > 5) {
       text += `_+${topMatches.length - 5} hasil lainnya tersedia_`;
     }
-    const buttons = topMatches.slice(0, 10).map((p, i) => ({
+    const buttons = topMatches.slice(0, 10).map((p, _) => ({
       title: `${m.prefix}${p.name}`,
       description: `${p.category} • ${p.description.slice(0, 40)}`,
       id: `${m.prefix}${p.name}`,

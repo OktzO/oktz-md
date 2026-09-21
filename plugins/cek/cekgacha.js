@@ -18,7 +18,7 @@ async function handler(m) {
         const percent = Math.floor(Math.random() * 101)
     const mentioned = m.mentionedJid[0] || m.sender
                     
-    let desc = ''
+    let desc
     if (percent >= 90) desc = 'HOKI PARAH! SSR GUARANTEED! ✨💎'
     else if (percent >= 70) desc = 'Lucky! Pasti dapet SR keatas! 🍀'
     else if (percent >= 50) desc = 'Hoki-hoki dikit 😊'

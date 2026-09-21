@@ -49,7 +49,7 @@ async function handler(m, { sock }) {
   await new Promise((r) => setTimeout(r, 3000));
 
   user.koin = (user.koin || 0) + salary;
-  const levelResult = await addExpWithLevelCheck(sock, m, db, user, expGain);
+  await addExpWithLevelCheck(sock, m, db, user, expGain);
 
   db.save();
 

@@ -39,8 +39,6 @@ async function handler(m, { sock }) {
   // Evaluate fully:
   const finalResult = config.isBanned(target);
 
-  let dbStatus = db.setting("bannedUsers");
-
   await m.reply(`DEBUG BAN (${target})
 cleanNumber: ${cleanNumber}
 bannedList (config): ${JSON.stringify(bannedList)}

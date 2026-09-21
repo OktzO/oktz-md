@@ -46,7 +46,7 @@ async function handler(m, { sock }) {
   user.rpg.lastHourly = now;
   user.koin = (user.koin || 0) + moneyReward;
 
-  const levelResult = await addExpWithLevelCheck(sock, m, db, user, expReward);
+  await addExpWithLevelCheck(sock, m, db, user, expReward);
   db.save();
 
   await m.react("⏰");

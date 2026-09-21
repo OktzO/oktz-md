@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars -- exec: binding diekspos ke string kode (REPL owner) */
 import fs from 'fs'
 import path from 'path'
 import axios from 'axios'

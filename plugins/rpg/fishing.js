@@ -60,7 +60,7 @@ async function handler(m, { sock }) {
   user.inventory[caught.item] = (user.inventory[caught.item] || 0) + qty;
 
   const expReward = caught.exp;
-  const levelResult = await addExpWithLevelCheck(sock, m, db, user, expReward);
+  await addExpWithLevelCheck(sock, m, db, user, expReward);
 
   db.save();
 

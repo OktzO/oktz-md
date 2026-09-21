@@ -1,5 +1,3 @@
-import te from "../../src/lib/ourin-error.js";
-
 const config = {
   name: "remini",
   alias: ["hd", "enhance", "upscale"],

@@ -1,10 +1,8 @@
 import { createDecipheriv, randomUUID } from "crypto";
-import path from "path";
 import { spawn } from "child_process";
 import yts from "yt-search";
 import YTMusic from "ytmusic-api";
 import sharp from "sharp";
-import te from "../../src/lib/ourin-error.js";
 import { buildFfmpegCommand } from "../../src/lib/ourin-ffmpeg.js";
 
 /* =========================================================

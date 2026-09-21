@@ -31,8 +31,7 @@ async function handler(m, { sock }) {
         )
     }
 
-    const [prompt, styleInput] = input.split('|').map(s => s.trim())
-    const style = STYLES.includes(styleInput) ? styleInput : 'anime'
+    const [prompt] = input.split('|').map(s => s.trim())
 
     m.react('🕕')
 

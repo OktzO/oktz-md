@@ -12,7 +12,6 @@ import {
 import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
 const execAsync = promisify(exec);
-const NEOXR_APIKEY = config.APIkey?.neoxr || '';
 
 const pluginConfig = {
   name: "pinvid",
@@ -80,13 +79,6 @@ async function handler(m, { sock }) {
 
       try {
         const videoUrl = video.video_url;
-        const duration = video.duration
-          ? Math.round(video.duration / 1000)
-          : 0;
-        const durationStr =
-          duration > 0
-            ? `${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, "0")}`
-            : "-";
 
         let videoBuffer;
 

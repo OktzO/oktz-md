@@ -1,6 +1,5 @@
 import axios from "axios";
 import te from "../../src/lib/ourin-error.js";
-import { saluranCtx } from "../../src/lib/ourin-context.js";
 import { prepareWAMessageMedia, generateWAMessageFromContent } from "ourin";
 
 const nexrayTypes = [

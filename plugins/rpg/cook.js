@@ -55,7 +55,7 @@ async function handler(m, { sock }) {
   if (!cooked) {
     let txt = `Halo Chef! Mau masak apa hari ini? 🍳👨‍🍳\n\n`;
     txt += `Ini daftar resep yang bisa kamu bikin:\n\n`;
-    for (const [key, recipe] of Object.entries(RECIPES)) {
+for (const [, recipe] of Object.entries(RECIPES)) {
       txt += `*${recipe.name}*\n`;
       txt += `❤️ Heal: +${recipe.heal} HP\n`;
       txt += `📦 Bahan yang dibutuhin:\n`;

@@ -59,7 +59,6 @@ function handler(m, { sock }) {
     const db = getDatabase()
     const args = m.args || []
     let mode = (args[0] || '').toLowerCase()
-    const flags = args.slice(1).map(f => f.toLowerCase())
 
     const groupData = db.getGroup(m.chat) || {}
     const currentMode = groupData.botMode || 'all'

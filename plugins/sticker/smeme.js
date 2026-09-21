@@ -5,8 +5,6 @@ import axios from "axios";
 function getSharp() {
   return _sharp;
 }
-import fs from "fs";
-import path from "path";
 import { config } from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
 const pluginConfig = {

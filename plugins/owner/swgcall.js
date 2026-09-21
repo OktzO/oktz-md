@@ -28,7 +28,7 @@ async function sendGroupStatus(sock, jid, content) {
   return await sock.sendMessage(jid, { groupStatusMessage: content });
 }
 
-async function handler(m, { sock, db }) {
+async function handler(m, { sock }) {
   const args = m.args || [];
   const text = m.text || "";
 
@@ -204,9 +204,8 @@ async function handler(m, { sock, db }) {
               : "Audio"
             : "Unknown";
 
-    let thumbnail = null;
     try {
-      thumbnail = getAssetBuffer("ourin2");
+      getAssetBuffer("ourin2");
     } catch {}
 
     const estimatedTime = Math.ceil(groupList.length * 1.5);

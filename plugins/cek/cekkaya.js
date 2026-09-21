@@ -18,23 +18,17 @@ async function handler(m) {
         const percent = Math.floor(Math.random() * 101)
     const mentioned = m.mentionedJid[0] || m.sender
                     
-    let desc = ''
-    let emoji = ''
+    let desc
     if (percent >= 90) {
         desc = 'Sultan! Crazy rich! 💎'
-        emoji = '👑'
     } else if (percent >= 70) {
         desc = 'Tajir melintir! 💰'
-        emoji = '💎'
     } else if (percent >= 50) {
         desc = 'Lumayan berada 💵'
-        emoji = '💰'
     } else if (percent >= 30) {
         desc = 'Cukup lah buat hidup 😊'
-        emoji = '💵'
     } else {
         desc = 'Semangat nabung! 🙏'
-        emoji = '🪙'
     }
     
     let txt = mentioned === m.sender ? `Hai @${mentioned.split('@')[0]}

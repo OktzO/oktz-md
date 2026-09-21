@@ -61,7 +61,7 @@ async function handler(m, { args }) {
     
     if (bugInfo.details && bugInfo.details.length > 0) {
       text += `*📌 Detail:* \n`;
-      bugInfo.details.forEach((d, i) => {
+      bugInfo.details.forEach((d, _) => {
         text += `- ${d.type || d.description}\n`;
       });
     }

@@ -54,7 +54,6 @@ async function handler(m, { sock }) {
         const pushName = m.quoted?.pushName || m.pushName || 'Unknown'
         const now = Date.now()
         let newExpired
-        let message = ''
         if (existingIndex !== -1) {
             const currentExpired = db.data.partner[existingIndex].expired || now
             const baseTime = currentExpired > now ? currentExpired : now
@@ -62,7 +61,6 @@ async function handler(m, { sock }) {
             
             db.data.partner[existingIndex].expired = newExpired
             db.data.partner[existingIndex].name = pushName
-            message = `Partner diperpanjang`
         } else {
             newExpired = now + (days * 24 * 60 * 60 * 1000)
             db.data.partner.push({
@@ -71,7 +69,6 @@ async function handler(m, { sock }) {
                 name: pushName,
                 addedAt: now
             })
-            message = `Berhasil ditambahkan`
         }
 
         db.save()

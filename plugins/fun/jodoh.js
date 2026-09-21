@@ -17,7 +17,7 @@ const pluginConfig = {
   isEnabled: true,
 };
 
-let thumbFun = getAssetBuffer("ourin-games") || null;
+getAssetBuffer("ourin-games");
 
 const loveQuotes = [
   "Cinta sejati tidak pernah mengenal jarak 💕",
@@ -131,8 +131,8 @@ async function handler(m, { sock }) {
   const user1Data = allUsers[person1.replace(/@.+/g, "")];
   const user2Data = allUsers[person2.replace(/@.+/g, "")];
 
-  let label1 = "👨";
-  let label2 = "👩";
+  let label1;
+  let label2;
   let name1 = `@${person1.split("@")[0]}`;
   let name2 = `@${person2.split("@")[0]}`;
 

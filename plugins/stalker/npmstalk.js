@@ -59,7 +59,7 @@ async function handler(m, { sock }) {
             
         if (d.packages && d.packages.length > 0) {
             caption += `*Daftar Package:*\n`
-            d.packages.slice(0, 5).forEach((pkg, i) => {
+            d.packages.slice(0, 5).forEach((pkg) => {
                 caption += `> 📦 *${pkg.name}* (v${pkg.version})\n`
                 caption += `> 📉 ${shortNum(pkg.downloads_monthly)} dl/month\n`
                 caption += `> 📝 ${pkg.description}\n\n`

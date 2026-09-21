@@ -20,7 +20,7 @@ const pluginConfig = {
 };
 
 async function handler(m, { sock }) {
-  let media = null;
+  let media;
   const msgObj = m.quoted?.message ? m.quoted : m;
   const type = getContentType(msgObj.message);
 

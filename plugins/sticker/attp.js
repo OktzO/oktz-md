@@ -128,7 +128,7 @@ async function handler(m, { sock }) {
                 m.react('✅')
                 return
             }
-        } catch (e2) { }
+        } catch (e) { }
         m.react('☢')
         m.reply(te(m.prefix, m.command, m.pushName))
     }

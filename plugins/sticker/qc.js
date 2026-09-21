@@ -1,4 +1,4 @@
-import { createCanvas, loadImage } from "@napi-rs/canvas";
+import { createCanvas } from "@napi-rs/canvas";
 import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
 

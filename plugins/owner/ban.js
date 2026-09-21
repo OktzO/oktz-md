@@ -1,6 +1,6 @@
 import config from '../../config.js'
 import { getDatabase } from '../../src/lib/ourin-database.js'
-import { isLid, lidToJid, resolveAnyLidToJid } from '../../src/lib/ourin-lid.js'
+import { isLid, lidToJid } from '../../src/lib/ourin-lid.js'
 
 const pluginConfig = {
     name: 'ban',

@@ -215,7 +215,7 @@ async function uploadToUploadEe(buffer, filename) {
   const isImage = imageExts.includes(ext.toLowerCase());
   const category = isImage ? "cat_picture" : "cat_file";
 
-  const initRes = await fetch("https://www.upload.ee/?", {
+  await fetch("https://www.upload.ee/?", {
     headers: {
       "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Mobile Safari/537.36",
     },
@@ -345,7 +345,7 @@ async function uploadToUguu(buffer, filename) {
 }
 
 async function uploadTo8upload(buffer, filename) {
-  const initRes = await fetch("https://8upload.com/", {
+  await fetch("https://8upload.com/", {
     headers: {
       "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Mobile Safari/537.36",
     },

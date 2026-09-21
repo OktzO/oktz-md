@@ -36,7 +36,6 @@ async function handler(m, { sock }) {
   let txt = `📊 *TOTAL CHAT*\nBerikut ini adalah jumlah pesan yang dikirim oleh member di grup ini:\n\n`;
   for (let i = 0; i < sorted.length; i++) {
     const { jid, count } = sorted[i];
-    const name = group.chatStats[jid]?.name || jid.split("@")[0];
     const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : "▸";
     txt += `${medal} @${jid.split("@")[0]} — *${count.toLocaleString("id-ID")}* pesan\n`;
   }

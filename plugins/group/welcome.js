@@ -1,11 +1,7 @@
 import * as timeHelper from "../../src/lib/ourin-time.js";
 import config from "../../config.js";
 import { getDatabase } from "../../src/lib/ourin-database.js";
-import { createWideDiscordCard } from "../../src/lib/ourin-welcome-card.js";
 import { resolveAnyLidToJid } from "../../src/lib/ourin-lid.js";
-import path from "path";
-import fs from "fs";
-import axios from "axios";
 import te from "../../src/lib/ourin-error.js";
 import { saluranCtx } from "../../src/lib/ourin-context.js";
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
@@ -50,7 +46,6 @@ const pluginConfig = {
   energi: 0,
   isEnabled: true,
 };
-// eslint-disable-next-line require-await
 async function buildWelcomeMessage(
   participant,
   groupName,
@@ -98,7 +93,6 @@ Tanoshii jikan o issho ni sugoso ne~`,
   const header = headers[Math.floor(Math.random() * headers.length)];
   const username = participant?.split("@")[0] || "User";
   const now = new Date();
-  const dayId = timeHelper.formatPattern(now, "dddd");
   if (customMsg) {
     return resolvePlaceholders(
       customMsg,

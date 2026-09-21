@@ -1,7 +1,6 @@
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import axios from "axios";
 import config from "../../config.js";
-import fs from "fs";
 import te from "../../src/lib/ourin-error.js";
 const pluginConfig = {
   name: "apkmod",
@@ -49,9 +48,6 @@ async function handler(m, { sock }) {
     }
 
     const apps = data.data.slice(0, 15);
-
-    const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-    const saluranName = config.saluran?.name || config.bot?.name || "Bot";
 
     let caption = `📱 *Hasil pencarian dari ${text}*\n\n`;
 

@@ -1,6 +1,3 @@
-import config from '../../config.js'
-import path from 'path'
-import fs from 'fs'
 import te from '../../src/lib/ourin-error.js'
 const pluginConfig = {
     name: 'githubdl',
@@ -23,7 +20,7 @@ async function handler(m, { sock }) {
     let username, repo, branch
     
     if (args[0]?.includes('github.com')) {
-        const urlMatch = args[0].match(/github\.com\/([^\/]+)\/([^\/]+)/i)
+        const urlMatch = args[0].match(/github\.com\/([^/]+)\/([^/]+)/i)
         if (urlMatch) {
             username = urlMatch[1]
             repo = urlMatch[2].replace(/\.git$/, '')

@@ -1,6 +1,5 @@
-import config from '../../config.js'
 import te from '../../src/lib/ourin-error.js'
-import { addExifToWebp, isAnimatedWebp, DEFAULT_METADATA } from '../../src/lib/ourin-exif.js'
+import { addExifToWebp } from '../../src/lib/ourin-exif.js'
 
 const pluginConfig = {
     name: 'swm',
@@ -18,7 +17,7 @@ const pluginConfig = {
     isEnabled: true
 }
 
-async function handler(m, { sock, config: botConfig }) {
+async function handler(m, { sock, config: _ }) {
     const quoted = m.quoted
     
     if (!quoted) {

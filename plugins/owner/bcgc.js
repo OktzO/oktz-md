@@ -1,7 +1,6 @@
 import { getDatabase } from "../../src/lib/ourin-database.js";
 import { fetchGroupsSafe } from "../../src/lib/ourin-jpm-helper.js";
 import { saluranCtx } from "../../src/lib/ourin-context.js";
-import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
 
 const pluginConfig = {

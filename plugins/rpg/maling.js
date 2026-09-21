@@ -54,7 +54,7 @@ async function handler(m, { sock }) {
     }
   }
 
-  let txt = "";
+  let txt;
 
   if (outcome.success) {
     user.koin = (user.koin || 0) + outcome.money;

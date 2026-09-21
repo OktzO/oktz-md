@@ -1,7 +1,4 @@
 import config from '../../config.js'
-import path from 'path'
-import fs from 'fs'
-import { AIRich } from '../../src/lib/ourin-builder.js'
 const pluginConfig = {
     name: 'tqto',
     alias: ['thanksto', 'credits', 'kredit'],
@@ -19,10 +16,6 @@ const pluginConfig = {
 }
 
 async function handler(m, { sock }) {
-    const botName = config.bot?.name || 'Ourin-AI'
-    const version = config.bot?.version || '1.0.0'
-    const developer = config.bot?.developer || 'Lucky Archz'
-
     const credits = [
         { name: 'hyuuOkkotsuX', role: 'Lead Staff', icon: '👨‍💻' },
         { name: 'Zann', role: 'Creator', icon: '👨‍💻' },
@@ -87,9 +80,6 @@ async function handler(m, { sock }) {
         { name: 'Open Source Community', role: 'Libraries & Tools', icon: '🌐' },
 
     ]
-
-    const headers = ['No', 'Nama', 'Role / Tier']
-    const rows = credits.map((c, i) => [i + 1, c.name, c.role])
 
     await m.reply(`🍟 *Berikut ini adalah orang orang yang sudah berkontribusi di bot ${config.bot.name}*
         

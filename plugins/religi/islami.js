@@ -1,5 +1,4 @@
 import axios from 'axios'
-import config from '../../config.js'
 const pluginConfig = {
     name: 'islami',
     alias: [
@@ -18,12 +17,8 @@ const pluginConfig = {
 }
 
 async function fetchJson(url) {
-    try {
-        const response = await axios.get(url)
-        return response.data
-    } catch (e) {
-        throw e
-    }
+    const response = await axios.get(url)
+    return response.data
 }
 
 async function handler(m, { sock }) {
@@ -78,7 +73,7 @@ async function handler(m, { sock }) {
                 let response = await fetchJson(`https://api.siputzx.my.id/api/s/surah?no=${text}`)
                 let data = response.data
                 if (data && data.length > 0) {
-                    let surahText = data.map((ayat, index) =>
+                    let surahText = data.map((ayat, _) =>
                         `۝ Ayat ${ayat.no}:\n` +
                         `${ayat.arab}\n` +
                         `${ayat.latin}\n` +
@@ -142,7 +137,6 @@ async function handler(m, { sock }) {
                     return m.reply('❌ Terjadi kesalahan saat mengambil data.')
                 }
             }
-            break
         }
     } catch (e) {
         console.error('Religi Plugin Error:', e)

@@ -65,7 +65,7 @@ class TicTacToe {
 
   turn(player = 0, x = 0, y) {
     if (this.board === 511) return -3;
-    let pos = 0;
+    let pos;
     if (y == null) {
       if (x < 0 || x > 8) return -1;
       pos = 1 << x;
@@ -86,7 +86,7 @@ class TicTacToe {
     let y = parseInt(boardO.toString(2), 4) * 2;
     return [...(x + y).toString(4).padStart(9, "0")]
       .reverse()
-      .map((value, index) => (value == 1 ? "X" : value == 2 ? "O" : ++index));
+      .map((value, index) => (value == 1 ? "X" : value == 2 ? "O" : index + 1));
   }
 
   render() {
@@ -151,7 +151,6 @@ async function safeReact(m, emoji) {
   } catch (error) {}
 }
 async function handler(m, { sock }) {
-  const db = getDatabase();
   const args = m.args || [];
   const roomName = args.join(" ").trim();
 

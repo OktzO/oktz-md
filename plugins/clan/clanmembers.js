@@ -28,7 +28,7 @@ async function handler(m) {
     const emblem = clan.emblem || '🏰'
     const mentions = []
 
-    const memberLines = clan.members.map((jid, i) => {
+    const memberLines = clan.members.map((jid, _) => {
         const memberUser = db.getUser(jid)
         const isLeader = jid === clan.leader
         const level = memberUser?.rpg?.level || memberUser?.level || 1

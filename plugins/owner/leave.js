@@ -33,8 +33,8 @@ function extractInviteCode(text) {
 async function handler(m, { sock }) {
   const input = m.args.join(" ").trim();
 
-  let targetGroupJid = null;
-  let groupName = "";
+  let targetGroupJid;
+  let groupName;
 
   if (!input && m.isGroup) {
     targetGroupJid = m.chat;

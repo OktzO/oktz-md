@@ -317,7 +317,6 @@ async function handler(m, { sock, jadibotId, isJadibot }) {
       }
       db.save();
 
-      const displayName = customName || getOwnerName(targetNumber);
       await m.react("👑");
       return m.reply(
         `✅ Berhasil menambahkan *${targetNumber}* sebagai full owner${customName ? ` (${customName})` : ""}${roleChanged}`,

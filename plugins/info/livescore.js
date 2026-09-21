@@ -33,7 +33,7 @@ async function ambilLivescore(edisi = 'id') {
     if (!liveScores) throw new Error('Data liveScores kosong');
     return liveScores;
   } catch (error) {
-    throw new Error(error.message);
+    throw new Error(error.message, { cause: error });
   }
 }
 
@@ -66,7 +66,7 @@ function _rapikanPertandingan(dataMentah) {
   }));
 }
 
-async function handler(m, { text }) {
+async function handler(m) {
     try {
         await m.react('🕕');
         const data = await ambilLivescore('id');

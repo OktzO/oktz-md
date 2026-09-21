@@ -20,9 +20,8 @@ async function handler(m, { sock }) {
   const db = getDatabase();
   const cleanJid = m.sender.replace(/@.+/g, "");
 
-  let user = db.getUser(m.sender);
-  if (!user) {
-    user = db.setUser(m.sender, {});
+  if (!db.getUser(m.sender)) {
+    db.setUser(m.sender, {});
   }
 
   if (!db.db.data.users[cleanJid].rpg) {
@@ -40,7 +39,7 @@ async function handler(m, { sock }) {
   const amountStr = args[1];
 
   if (action === "deposit" || action === "depo") {
-    let amount = 0;
+    let amount;
     if (amountStr === "all") {
       amount = currentBalance;
     } else {
@@ -60,7 +59,7 @@ async function handler(m, { sock }) {
   }
 
   if (action === "withdraw" || action === "tarik") {
-    let amount = 0;
+    let amount;
     if (amountStr === "all") {
       amount = currentBank;
     } else {

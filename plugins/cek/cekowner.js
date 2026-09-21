@@ -18,8 +18,8 @@ const pluginConfig = {
 
 async function handler(m, { sock }) {
     const db = getDatabase()
-    let targetNumber = ''
-    let targetJid = ''
+    let targetNumber
+    let targetJid
 
     if (m.quoted) {
         targetNumber = m.quoted.sender?.replace(/[^0-9]/g, '') || ''

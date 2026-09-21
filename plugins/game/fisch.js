@@ -43,22 +43,7 @@ const encCost = (r) =>
 
 let thumbFish = getAssetBuffer("ourin-fishit") || null;
 
-function ctx(title, body) {
-  const sId = config.saluran?.id || "120363400911374213@newsletter";
-  const sName = config.saluran?.name || config.bot?.name || "Bot";
-  const c = {
-    forwardingScore: 9999,
-    isForwarded: true,
-    forwardedNewsletterMessageInfo: {
-      newsletterJid: sId,
-      newsletterName: sName,
-      serverMessageId: 127,
-    },
-  };
-  return c;
-}
-
-function send(sock, m, text, title, body) {
+function send(sock, m, text) {
   const msgId = sock.sendPreview(
     m.chat,
     {
@@ -301,7 +286,7 @@ async function handler(m, { sock }) {
     if (found.length === 0)
       return m.reply(`_Fish Book kosong!_ \`.fisht mancing\` _dulu_`);
     let txt = `*FISH BOOK* _(${found.length} spesies)_\n\n`;
-    for (const [k, isle] of Object.entries(islands)) {
+    for (const [, isle] of Object.entries(islands)) {
       const fl = isle.listFish.filter((f) => found.includes(f.name));
       if (fl.length > 0) {
         txt += `*${isle.name}*\n`;
@@ -372,7 +357,7 @@ async function handler(m, { sock }) {
 
   if (sub === "shop") {
     let txt = `*TOKO FISHING ROD*\n\n`;
-    for (const [k, rod] of Object.entries(fishingRod)) {
+    for (const [, rod] of Object.entries(fishingRod)) {
       if (rod.price > 0)
         txt += `*${rod.name}*\n   _${formatMoney(rod.price)}_\n   _Luck +${(rod.luck * 100).toFixed(0)}% | Speed +${(rod.speed * 100).toFixed(0)}% | Combo: ${rod.comboFish}_\n   _${rod.description}_\n\n`;
     }

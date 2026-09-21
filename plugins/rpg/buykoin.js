@@ -40,7 +40,7 @@ async function handler(m, { sock }) {
     return m.reply(txt);
   }
 
-  let koinAmount = 0;
+  let koinAmount;
   if (amountStr === "all" || amountStr === "max") {
     koinAmount = Math.floor((user.exp || 0) / EXP_PER_KOIN);
   } else {

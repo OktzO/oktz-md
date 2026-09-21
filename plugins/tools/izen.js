@@ -1,5 +1,4 @@
 import fetch from "node-fetch";
-import te from "../../src/lib/ourin-error.js";
 
 const pluginConfig = {
   name: "izen",

@@ -18,20 +18,6 @@ const pluginConfig = {
 
 if (!global.tembakSessions) global.tembakSessions = {};
 
-const SESSION_TIMEOUT = 3600000;
-const romanticQuotes = [
-  "Aku bukan pilot, tapi aku bisa buat hatimu terbang tinggi bersamaku 💕",
-  "Kamu tau kenapa aku suka hujan? Karena hujan itu seperti kamu, sejuk di hati 🌧️",
-  "Kamu adalah alasan kenapa aku senyum tanpa sebab 😊",
-  "Kalau kamu bintang, aku mau jadi langit yang selalu nemenin kamu ✨",
-  "Aku gak butuh GPS, karena hatiku udah nunjuk ke arahmu 💘",
-  "Kamu tau bedanya kamu sama kopi? Kopi bikin melek, kamu bikin aku nggak bisa tidur mikirin kamu ☕",
-  "Boleh pinjam hatimu? Janji bakal dijaga selamanya 💖",
-  "Kalau cinta itu adalah lagu, kamu adalah melodi terindahnya 🎵",
-  "Aku butuh 3 hal: Matahari, Bulan, dan Kamu. Matahari untuk siang, Bulan untuk malam, Kamu untuk selamanya 🌙",
-  "Kamu adalah puzzle terakhir yang kubutuhkan untuk melengkapi hidupku 🧩",
-];
-
 async function handler(m, { sock }) {
   const db = getDatabase();
   const args = m.args || [];
@@ -163,12 +149,12 @@ async function answerHandler(m, sock) {
   const db = getDatabase();
 
   const allSessions = Object.entries(global.tembakSessions || {}).filter(
-    ([key, val]) => val.target === m.sender && val.chat === m.chat,
+    ([_, val]) => val.target === m.sender && val.chat === m.chat,
   );
 
   if (allSessions.length === 0) return false;
 
-  const validSession = allSessions.find(([key, val]) => {
+  const validSession = allSessions.find(([_, val]) => {
     return Date.now() - val.timestamp < 3600000;
   });
 

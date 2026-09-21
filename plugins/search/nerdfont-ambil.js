@@ -43,7 +43,7 @@ async function nerdfonts() {
     });
     return result;
   } catch (error) {
-    throw new Error(error.message);
+    throw new Error(error.message, { cause: error });
   }
 }
 const pluginConfig = {
@@ -61,14 +61,6 @@ const pluginConfig = {
   energi: 0,
   isEnabled: true,
 };
-function formatNumber(num) {
-  const n = parseInt(num);
-  if (isNaN(n)) return num;
-  if (n >= 1000000000) return (n / 1000000000).toFixed(1) + "B";
-  if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
-  if (n >= 1000) return (n / 1000).toFixed(1) + "K";
-  return n.toString();
-}
 async function handler(m, { sock }) {
   const query = m.text?.trim()?.toLowerCase();
   if (!query)
@@ -76,7 +68,7 @@ async function handler(m, { sock }) {
   try {
     const res = await nerdfonts();
     const data = res.find(
-      (d, i) => d?.name.toLowerCase() === query.toLowerCase(),
+      (d, _) => d?.name.toLowerCase() === query.toLowerCase(),
     );
     if (!data) return m.reply(`❌ Font *${query}* tidak ditemukan`);
     sock.sendMessage(m.chat, {

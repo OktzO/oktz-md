@@ -1,5 +1,4 @@
 import { getDatabase } from '../../src/lib/ourin-database.js'
-import config from '../../config.js'
 const pluginConfig = {
     name: 'suitpvp',
     alias: ['suit', 'rps', 'janken'],
@@ -28,7 +27,6 @@ const EMOJI = {
 }
 
 async function handler(m, { sock }) {
-    const db = getDatabase()
     
     const existingRoom = Object.values(global.suitGames).find(
         room => [room.p, room.p2].includes(m.sender)

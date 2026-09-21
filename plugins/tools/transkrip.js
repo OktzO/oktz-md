@@ -83,7 +83,6 @@ async function handler(m, { sock }) {
             m.react('❌');
             return m.reply('❌ Tidak dapat mendeteksi suara. Pastikan audio jelas dan tidak terlalu pendek.');
         }
-        const duration = Math.ceil(buffer.length / 4000);
         await m.reply(
             `🎤 *ᴛʀᴀɴsᴋʀɪᴘ*\n\n` +
             `╭┈┈⬡「 📝 *ʜᴀsɪʟ* 」\n` +

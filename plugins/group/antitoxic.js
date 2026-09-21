@@ -59,7 +59,7 @@ function gpMsg(key, replacements = {}) {
     return text
 }
 
-async function handleToxicMessage(m, sock, db, toxicWord) {
+async function handleToxicMessage(m, sock, db, _) {
     const groupData = db.getGroup(m.chat) || {}
     const maxWarn = groupData.toxicMaxWarn || 3
     const method = groupData.toxicMethod || 'kick'

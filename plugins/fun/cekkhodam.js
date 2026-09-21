@@ -70,14 +70,11 @@ function getRandomKhodam() {
     return KHODAMS[idx]
 }
 async function handler(m, { sock }) {
-    let targetJid = m.sender
     let targetName = m.pushName || m.sender.split('@')[0]
     if (m.quoted) {
-        targetJid = m.quoted.sender
-        targetName = m.quoted.pushName || targetJid.split('@')[0]
+        targetName = m.quoted.pushName || m.quoted.sender.split('@')[0]
     } else if (m.mentionedJid?.[0]) {
-        targetJid = m.mentionedJid[0]
-        targetName = targetJid.split('@')[0]
+        targetName = m.mentionedJid[0].split('@')[0]
     } else if(m.text) {
         targetName = m.text
     }

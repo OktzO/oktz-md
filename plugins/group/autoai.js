@@ -227,9 +227,9 @@ async function handler(m) {
       const aiMode = aimodeMatch ? aimodeMatch[1].toLowerCase() : "assistant";
       const customLogic = logicMatch ? logicMatch[1].trim() : null;
 
-      let instruction = "";
-      let characterName = "Global";
-      let character = "global";
+      let instruction;
+      let characterName;
+      let character;
 
       if (charKey === "custom" && customLogic) {
         instruction = customLogic;

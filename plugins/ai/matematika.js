@@ -1,6 +1,5 @@
 import te from '../../src/lib/ourin-error.js'
 import axios from 'axios'
-import config from '../../config.js'
 
 const pluginConfig = {
     name: 'matematika',

@@ -51,7 +51,7 @@ async function handler(m, { sock }) {
     );
   }
 
-  let msg = "";
+  let msg;
 
   switch (itemKey) {
     case "potion":
@@ -105,7 +105,7 @@ async function handler(m, { sock }) {
         { type: "diamond", qty: [1, 2], icon: "💠" },
       ];
       const pick = rewards[Math.floor(Math.random() * rewards.length)];
-      let rewardMsg = "";
+      let rewardMsg;
       if (pick.type === "koin") {
         const amount =
           Math.floor(Math.random() * (pick.max - pick.min)) + pick.min;
@@ -159,7 +159,7 @@ async function handler(m, { sock }) {
         { type: "exp", min: 1000, max: 8000, icon: "✨" },
       ];
       const sPick = scrollRewards[Math.floor(Math.random() * scrollRewards.length)];
-      let sRewardMsg = "";
+      let sRewardMsg;
       if (sPick.type === "koin") {
         const amount = Math.floor(Math.random() * (sPick.max - sPick.min)) + sPick.min;
         user.koin = (user.koin || 0) + amount;
@@ -176,7 +176,7 @@ async function handler(m, { sock }) {
     case "common":
     case "uncommon":
     case "mythic":
-    case "legendary":
+    case "legendary": {
       user.inventory[itemKey]--;
       const rewardMoney =
         Math.floor(Math.random() * (itemKey === "legendary" ? 100000 : 10000)) +
@@ -194,6 +194,7 @@ async function handler(m, { sock }) {
         `> 💰 Money: +Rp ${rewardMoney.toLocaleString("id-ID")}\n` +
         `> 🚄 Exp: +${rewardExp}`;
       break;
+    }
 
     default:
       return m.reply(

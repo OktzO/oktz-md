@@ -1,8 +1,5 @@
 import config from "../../config.js";
 import axios from "axios";
-import fs from "fs";
-import path from "path";
-import te from "../../src/lib/ourin-error.js";
 const pluginConfig = {
   name: "get",
   alias: ["fetch", "http", "request", "curl"],
@@ -105,7 +102,7 @@ async function handler(m, { sock }) {
         `╭┈┈⬡「 📋 OPTIONS 」\n` +
         `┃ ◦ \`--method <GET|POST|PUT|PATCH|DELETE>\`\n` +
         `┃ ◦ \`--json <body>\` — JSON body\n` +
-        `┃ ◦ \`--header \"Key: Value\"\` — Custom header\n` +
+        `┃ ◦ \`--header "Key: Value"\` — Custom header\n` +
         `┃ ◦ \`--auth user:pass\` — Basic auth\n` +
         `┃ ◦ \`--verbose\` / \`-v\` — Show response headers\n` +
         `┃ ◦ \`--timeout <ms>\` — Request timeout\n` +
@@ -113,9 +110,9 @@ async function handler(m, { sock }) {
         `╰┈┈⬡\n\n` +
         `\`Examples:\`\n` +
         `> .get https://api.example.com\n` +
-        `> .get https://api.example.com --post --json {\"key\":\"val\"}\n` +
-        `> .get https://api.example.com --method PUT --json {\"id\":1}\n` +
-        `> .get https://api.example.com --header \"Authorization: Bearer token\"\n` +
+        `> .get https://api.example.com --post --json {"key":"val"}\n` +
+        `> .get https://api.example.com --method PUT --json {"id":1}\n` +
+        `> .get https://api.example.com --header "Authorization: Bearer token"\n` +
         `> .get https://api.example.com --auth user:pass -v`,
     );
   }
@@ -317,7 +314,6 @@ async function handler(m, { sock }) {
         try {
           const parsed = JSON.parse(buffer.toString());
           const pretty = JSON.stringify(parsed, null, 2);
-          const preview = pretty.slice(0, MAX_CHAT_LENGTH);
           const fileName = `response_${Date.now()}.json`;
           await sock.sendMessage(
             m.chat,

@@ -1,5 +1,4 @@
 import { getRandomItem } from '../../src/lib/ourin-game-data.js'
-import { fetchBuffer } from '../../src/lib/ourin-utils.js'
 const pluginConfig = {
     name: 'renungan',
     alias: ['motivasi', 'mutiara'],

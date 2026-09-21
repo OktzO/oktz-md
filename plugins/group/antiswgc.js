@@ -1,5 +1,3 @@
-import { getDatabase } from '../../src/lib/ourin-database.js'
-
 const pluginConfig = {
     name: 'antiswgc',
     alias: ['antiswgroup', 'antiswmentiongc', 'antiswtaggc'],

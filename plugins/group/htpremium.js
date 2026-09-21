@@ -23,7 +23,7 @@ async function handler(m, { sock }) {
         const participants = groupMeta.participants || []
         const mentions = getParticipantJids(participants)
         const quoted = m.quoted
-        const [cmd, text] = m.text?.split('|')
+        const [cmd, text] = (m.text || '').split('|')
         if (quoted) {
             const qMsg = quoted.message || {}
             const type = Object.keys(qMsg)[0]

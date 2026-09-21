@@ -1,5 +1,3 @@
-import axios from 'axios'
-import * as timeHelper from '../../src/lib/ourin-time.js'
 import te from '../../src/lib/ourin-error.js'
 const pluginConfig = {
   name: "getpaste",

@@ -46,14 +46,12 @@ async function handler(m, { sock }) {
     const streams = data.stream || [];
     const downloads = data.download || [];
 
-    let thumbBuffer = null;
     if (film.thumbnail) {
       try {
-        const thumbRes = await axios.get(film.thumbnail, {
+        await axios.get(film.thumbnail, {
           responseType: "arraybuffer",
           timeout: 10000,
         });
-        thumbBuffer = Buffer.from(thumbRes.data);
       } catch {}
     }
 
@@ -107,9 +105,6 @@ async function handler(m, { sock }) {
         }),
       });
     });
-
-    const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-    const saluranName = config.saluran?.name || config.bot?.name || "Bot";
 
     const msgContent = {
       text,

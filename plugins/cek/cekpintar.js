@@ -19,7 +19,7 @@ async function handler(m) {
 
         const iq = Math.floor(Math.random() * 100) + 70
     
-    let desc = ''
+    let desc
     if (iq >= 150) {
         desc = 'JENIUS! Einstein level! 🧠✨'
     } else if (iq >= 130) {

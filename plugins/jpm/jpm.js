@@ -18,8 +18,6 @@ import {
 import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
 import { saluranCtx } from "../../src/lib/ourin-context.js";
-import util from "util";
-import axios from "axios";
 import path from "path";
 import fs from "fs";
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
@@ -203,7 +201,7 @@ async function getTargetGroups(sock, db, blacklistKey = "jpmBlacklist") {
 async function sendInteractiveMessage(
   m,
   sock,
-  { title, body, footer, buttons },
+  { body, footer, buttons },
 ) {
   let headerMedia = null;
   if (cachedThumb) {
@@ -1037,7 +1035,7 @@ async function handleJpmUpdateWithContent(m, sock, db, input) {
   }
 }
 
-async function startAutoJpmSession(m, sock, db) {
+async function startAutoJpmSession(m, sock, _) {
   const session = jpmSessions[m.sender];
   const prefix = m.prefix;
   const hasContent = session?.text || session?.mediaBuffer;
@@ -1216,7 +1214,7 @@ async function completeAutoJpmSetup(m, sock, db, intervalStr) {
   );
 }
 
-async function handleAutoJpm(m, sock, db, input, fullInput) {
+async function handleAutoJpm(m, sock, db, input, _) {
   const prefix = m.prefix;
   if (!input) return startAutoJpmSession(m, sock, db);
 

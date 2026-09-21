@@ -1,5 +1,4 @@
 import { loadSent, saveSent, loadState, saveState, getOngoingAnimeList, startAutoCheck, stopAutoCheck, runCheck, isRunning } from '../../src/lib/ourin-auto-anime.js'
-import config from '../../config.js'
 import te from '../../src/lib/ourin-error.js'
 const pluginConfig = {
     name: 'autoanimewinbu',
@@ -106,7 +105,7 @@ async function handler(m, { sock, args }) {
                 await runCheck()
                 return m.reply('✅ Pengecekan selesai')
             } catch (e) {
-                m.reply(te(m.prefix, m.command, m.pushName))
+                return m.reply(te(m.prefix, m.command, m.pushName))
             }
         }
 
@@ -125,7 +124,7 @@ async function handler(m, { sock, args }) {
 
                 return sock.sendMessage(m.chat, { text: txt }, { quoted: m })
             } catch (e) {
-                m.reply(te(m.prefix, m.command, m.pushName))
+                return m.reply(te(m.prefix, m.command, m.pushName))
             }
         }
 

@@ -1,5 +1,4 @@
 import axios from "axios";
-import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
 
 const pluginConfig = {
@@ -55,9 +54,6 @@ async function handler(m, { sock }) {
 
   try {
     const imageBuffer = await ssweb(text, mode);
-
-    const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-    const saluranName = config.saluran?.name || config.bot?.name || "Bot";
 
     await sock.sendMedia(m.chat, imageBuffer, null, m, {
       type: "image",

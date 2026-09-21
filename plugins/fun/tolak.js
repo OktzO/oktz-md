@@ -16,17 +16,6 @@ const pluginConfig = {
   isEnabled: true,
 };
 
-const rejectionQuotes = [
-  "Sabar ya, yang lebih baik pasti datang! 🌟",
-  "Belum jodoh bukan berarti tidak ada jodoh 💪",
-  "Move on! Banyak ikan di laut! 🐟",
-  "Yang sabar ya, cinta sejati akan datang 💕",
-  "Jangan patah semangat, tetap semangat! 🔥",
-  "Penolakan adalah awal dari keberhasilan 💪",
-  "Masih banyak kesempatan di luar sana! ✨",
-  "Yakin masih ada yang lebih cocok buat kamu! 🌈",
-];
-
 async function handler(m, { sock }) {
   const db = getDatabase();
 
@@ -41,7 +30,7 @@ async function handler(m, { sock }) {
   if (!shooterJid) {
     const sessions = global.tembakSessions || {};
     const mySession = Object.entries(sessions).find(
-      ([key, val]) => val.target === m.sender && val.chat === m.chat,
+      ([_, val]) => val.target === m.sender && val.chat === m.chat,
     );
 
     if (mySession) {
@@ -96,9 +85,6 @@ async function handler(m, { sock }) {
   if (global.tembakSessions?.[sessionKey]) {
     delete global.tembakSessions[sessionKey];
   }
-
-  const quote =
-    rejectionQuotes[Math.floor(Math.random() * rejectionQuotes.length)];
 
   await m.react("💔");
   const ctx = saluranCtx();

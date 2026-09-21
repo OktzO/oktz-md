@@ -1,5 +1,3 @@
-import axios from 'axios'
-import { f } from '../../src/lib/ourin-http.js'
 import te from '../../src/lib/ourin-error.js'
 const pluginConfig = {
     name: 'balogo',

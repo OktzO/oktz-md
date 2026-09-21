@@ -1,6 +1,5 @@
 import { getDatabase } from '../../src/lib/ourin-database.js'
 import { getAssetBuffer } from '../../src/lib/ourin-asset-manager.js'
-import config from '../../config.js'
 const pluginConfig = {
     name: 'leaderboard',
     alias: [
@@ -76,7 +75,6 @@ async function handler(m, { sock }) {
     const senderJid = m.sender.replace('@s.whatsapp.net', '')
 
     if (type === 'overview') {
-        const totalUsers = users.length
         const maxBalUser = users.reduce((a, b) => a.koin > b.koin ? a : b, users[0])
         const maxExpUser = users.reduce((a, b) => a.exp > b.exp ? a : b, users[0])
         const maxEnergiUser = users.reduce((a, b) => a.energi > b.energi ? a : b, users[0])

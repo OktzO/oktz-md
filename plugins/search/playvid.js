@@ -48,7 +48,7 @@ async function getVideoDownloadUrl(url) {
   throw new Error(fallback?.mess || "Gagal mendapatkan video download URL");
 }
 
-async function handler(m, { sock, text }) {
+async function handler(m, { sock, _ }) {
   const query = m.text?.trim();
   if (!query) {
     return m.reply(`Halo *${m.pushName}* 👋\n\nUntuk mencari dan memutar video dari YouTube, silakan gunakan format:\n- \`${m.prefix}playvid <judul video>\`\n\nContoh:\n- \`${m.prefix}playvid windah basudara\``);

@@ -5,10 +5,9 @@ import crypto from 'crypto'
 import config from '../../config.js'
 import { isLid, lidToJid } from '../../src/lib/ourin-lid.js'
 import { checkPanelJeda, setPanelLastUsed } from '../../src/lib/ourin-panel-jeda.js'
-import { hasAccessToServer, getUserRole, VALID_SERVERS } from '../../src/lib/ourin-roles-cpanel.js'
+import { hasAccessToServer, getUserRole } from '../../src/lib/ourin-roles-cpanel.js'
 import { isGcSeller } from './gcseller.js'
 import * as timeHelper from '../../src/lib/ourin-time.js'
-import fs from 'fs'
 const RAM_OPTIONS = [
   "1gb",
   "2gb",

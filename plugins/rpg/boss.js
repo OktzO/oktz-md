@@ -163,7 +163,7 @@ async function handler(m, { sock }) {
 
   const isWin = bossHp <= 0;
 
-  let txt = ``;
+  let txt;
 
   if (isWin) {
     const expReward = boss.exp + Math.floor(Math.random() * 500);

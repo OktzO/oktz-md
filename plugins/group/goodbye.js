@@ -10,9 +10,6 @@ import config from "../../config.js";
 import { getDatabase } from "../../src/lib/ourin-database.js";
 import { saluranCtx } from "../../src/lib/ourin-context.js";
 import { createGoodbyeCard } from "../../src/lib/ourin-welcome-card.js";
-import { resolveAnyLidToJid } from "../../src/lib/ourin-lid.js";
-import path from "path";
-import fs from "fs";
 import te from "../../src/lib/ourin-error.js";
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import { prepareWAMessageMedia, generateWAMessageFromContent } from "ourin";
@@ -56,7 +53,6 @@ const pluginConfig = {
   energi: 0,
   isEnabled: true,
 };
-// eslint-disable-next-line require-await
 async function buildGoodbyeMessage(
   participant,
   groupName,
@@ -104,7 +100,6 @@ Doakan yang terbaik untuknya ya.`,
   const header = headers[Math.floor(Math.random() * headers.length)];
   const username = participant?.split("@")[0] || "User";
   const now = new Date();
-  const dayId = timeHelper.formatPattern(now, "dddd");
   if (customMsg) {
     return resolvePlaceholders(
       customMsg,
@@ -124,8 +119,6 @@ Doakan yang terbaik untuknya ya.`,
   msg += `> 👥 *Sisa Member* : ${memberCount}\n`;
   msg += `> 📅 *Tanggal* : ${timeHelper.formatPattern(now, "DD/MM/YYYY")}\n\n`;
   msg += `💌 *Pesan*\n> 「 ${quote} 」\n\n🌸 _Sampai jumpa lagi, tomodachi._ 🤍`;
-
-  return msg;
 
   return msg;
 }

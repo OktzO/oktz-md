@@ -22,12 +22,7 @@ async function handler(m, { sock }) {
   m.react("🎤");
 
   async function textToSpeech2(text) {
-    try {
-      const response = await ourinApi.nexray.geminiTts(text);
-      return response;
-    } catch (error) {
-      throw error;
-    }
+    return ourinApi.nexray.geminiTts(text);
   }
 
   try {

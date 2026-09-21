@@ -1,6 +1,5 @@
 import axios from "axios";
 import yts from "yt-search";
-import config from "../../config.js";
 
 const pluginConfig = {
   name: "play",
@@ -21,7 +20,7 @@ function formatViews(n) {
   return n.toString();
 }
 
-async function handler(m, { sock, text }) {
+async function handler(m, { sock, _ }) {
   const query = m.text?.trim();
   if (!query)
     return m.reply(`🎵 *ᴘʟᴀʏ*\n\n> Contoh:\n\`${m.prefix}play komang\``);

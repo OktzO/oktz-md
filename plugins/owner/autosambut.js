@@ -36,7 +36,7 @@ function formatTime(ms) {
   return `${ms / 86400000} hari`;
 }
 
-async function handler(m, { sock, db }) {
+async function handler(m, { sock }) {
   const args = m.args || [];
   const action = args[0]?.toLowerCase();
   const isGlobal = args.includes("--global");

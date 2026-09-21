@@ -1,5 +1,4 @@
 import { getDatabase } from "../../src/lib/ourin-database.js";
-import * as timeHelper from "../../src/lib/ourin-time.js";
 import { saluranCtx } from "../../src/lib/ourin-context.js";
 const pluginConfig = {
   name: "terima",
@@ -17,17 +16,6 @@ const pluginConfig = {
   isEnabled: true,
 };
 
-const celebrationQuotes = [
-  "Semoga langgeng sampai ke pelaminan! 💍",
-  "Dari teman jadi cinta, indahnya! 💕",
-  "Love is in the air! 💖",
-  "Couple goals detected! 💑",
-  "Jangan lupa undang pas nikah ya! 💒",
-  "Selamat menempuh hidup berduaan! 🥰",
-  "Chemistry-nya kuat banget! 🔥",
-  "Match made in heaven! ✨",
-];
-
 async function handler(m, { sock }) {
   const db = getDatabase();
 
@@ -42,7 +30,7 @@ async function handler(m, { sock }) {
   if (!shooterJid) {
     const sessions = global.tembakSessions || {};
     const mySession = Object.entries(sessions).find(
-      ([key, val]) => val.target === m.sender && val.chat === m.chat,
+      ([_, val]) => val.target === m.sender && val.chat === m.chat,
     );
 
     if (mySession) {
@@ -99,10 +87,6 @@ async function handler(m, { sock }) {
   if (global.tembakSessions?.[sessionKey]) {
     delete global.tembakSessions[sessionKey];
   }
-
-  const quote =
-    celebrationQuotes[Math.floor(Math.random() * celebrationQuotes.length)];
-  const dateStr = timeHelper.formatFull("dddd, DD MMMM YYYY");
 
   await m.react("💕");
   const ctx = saluranCtx();

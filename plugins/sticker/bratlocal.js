@@ -182,7 +182,6 @@ function wrapParagraph(ctx, paragraph, maxWidth) {
 
     if (current) {
       lines.push(current);
-      current = "";
     }
 
     if (ctx.measureText(word).width <= maxWidth) {

@@ -1,7 +1,6 @@
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
 import axios from "axios";
 import config from "../../config.js";
-import fs from "fs";
 import { getDatabase } from "../../src/lib/ourin-database.js";
 import te from "../../src/lib/ourin-error.js";
 const pluginConfig = {
@@ -24,7 +23,6 @@ const NEOXR_APIKEY = config.APIkey?.neoxr || '';
 
 async function handler(m, { sock }) {
   const db = getDatabase();
-  const args = m.args || [];
   const text = m.text?.trim();
 
   if (!text) {
@@ -63,9 +61,6 @@ async function handler(m, { sock }) {
       timestamp: Date.now(),
     };
     db.save();
-
-    const saluranId = config.saluran?.id || "120363400911374213@newsletter";
-    const saluranName = config.saluran?.name || config.bot?.name || "Bot";
 
     let caption = `📱 Hasil dari pencarian apk mod *${text}*\n`;
     caption += `*${apps.length}* aplikasi ditemukan\n\n`;

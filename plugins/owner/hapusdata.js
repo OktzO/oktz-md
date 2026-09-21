@@ -47,7 +47,6 @@ async function handler(m, { sock }) {
     }
 
     const db = getDatabase()
-    const dbPath = db.dbPath
     const fileMap = [
         { key: 'users', label: '👥 Users' },
         { key: 'groups', label: '👥 Groups' },
