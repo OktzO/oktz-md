@@ -103,6 +103,14 @@ messageHandler(msg, sock)
 - **ourin-jadibot-database.js** — sub-bot session data
 - **lid-cache.json** — cache resolusi LID (location ID) → JID, mencegah re-resolve berulang
 
+#### LID (username) di user store
+
+- User dengan username WhatsApp (JID `...@lid`) **tidak disimpan sebagai nomor**. Key di store users memakai prefix `lid:`, mis. `lid:165648885899430`.
+- `getUser`/`setUser`/`deleteUser` LID-aware: `user.lid=<lid>`, `user.number=null`, `user.jid=null`. Tidak ada fabrikasi nomor `+44`/`+1` palsu untuk LID.
+- Deteksi LID via `isLidLikeJid()` (digit-only + `isLidConverted`) sehingga jid sintetik game (`husbu_*`, `waifu_*`) tidak salah klasifikasi.
+- `migrateLegacyUsers()` dijalankan saat boot satu kali: memindahkan key LID lama (nomor digit polos) ke `lid:<num>`, dan membersihkan record sintetik `husbu_KiseRyota`.
+- Render nama: `getName`/`getNameFromParticipants` return `"Unknown"` untuk LID yang tak ter-resolve — tidak menampilkan `+<number>` palsu.
+
 ### Turso Fallback
 - `flushAllToTurso()` — tulis semua key ke Turso; saat `batch()` gagal, fallback ke `execute()` sequential
 - Saat Turso down → `save()` return false dan tulis ke file lokal (tidak kehilangan data)
