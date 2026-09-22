@@ -32,6 +32,42 @@ describe("scheduler repeat expiresAt", () => {
   });
 });
 
+describe("scheduler reload predicate (shouldReloadTask)", () => {
+  let m;
+
+  before(async () => {
+    m = await import("../src/lib/ourin-scheduler.js");
+  });
+
+  const now = Date.now();
+  const future = new Date(now + 30 * 60 * 1000).toISOString();
+  const past = new Date(now - 30 * 60 * 1000).toISOString();
+
+  it("expired repeat with FUTURE nextRun is skipped on load", () => {
+    const task = { repeat: true, expiresAt: now - 1000, nextRun: future };
+    assert.equal(m.shouldReloadTask(task, now), false, "expired repeat must not re-arm even with future nextRun");
+  });
+
+  it("active repeat (future expiresAt) still loads", () => {
+    const task = { repeat: true, expiresAt: now + 60 * 60 * 1000, nextRun: future };
+    assert.equal(m.shouldReloadTask(task, now), true);
+  });
+
+  it("repeat without expiresAt loads forever (old path)", () => {
+    const task = { repeat: true, expiresAt: null, nextRun: past };
+    assert.equal(m.shouldReloadTask(task, now), true, "expiresAt null => never expires, nextRun irrelevant");
+    const taskUndefined = { repeat: true, nextRun: undefined };
+    assert.equal(m.shouldReloadTask(taskUndefined, now), true);
+  });
+
+  it("one-shot loads only if nextRun in future (old path)", () => {
+    const futureTask = { repeat: false, nextRun: future };
+    const pastTask = { repeat: false, nextRun: past };
+    assert.equal(m.shouldReloadTask(futureTask, now), true);
+    assert.equal(m.shouldReloadTask(pastTask, now), false);
+  });
+});
+
 describe("notifiedGroups age sweep (>60min)", () => {
   let m;
 
