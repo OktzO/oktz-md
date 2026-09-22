@@ -28,6 +28,7 @@ import { initSholatScheduler } from "./src/lib/ourin-sholat-scheduler.js";
 import { initNotifScheduler } from "./src/lib/ourin-notif-scheduler.js";
 import { initAutoJpmScheduler } from "./src/lib/ourin-auto-jpm.js";
 import { startMemoryMonitor } from "./src/lib/ourin-memory-monitor.js";
+import { evictOldestOverCap } from "./src/lib/ourin-cache-cap.js";
 import { startTempCleaner } from "./src/lib/ourin-temp-cleaner.js";
 import { startDailyPruner } from "./src/lib/ourin-data-pruner.js";
 import { preloadAssets } from "./src/lib/ourin-asset-manager.js";
@@ -93,6 +94,7 @@ const startTime = Date.now();
 let pluginWatcher = null;
 const reloadDebounce = new Map();
 const fileStatCache = new Map();
+const FILESTAT_CACHE_CAP = 800;
 
 function startDevWatcher(pluginsPath) {
   if (pluginWatcher) pluginWatcher.close();
@@ -134,6 +136,7 @@ function startDevWatcher(pluginsPath) {
             mtimeMs: stats.mtimeMs,
             size: stats.size,
           });
+          evictOldestOverCap(fileStatCache, FILESTAT_CACHE_CAP);
 
           const { hotReloadPlugin } =
             await import("./src/lib/ourin-plugins.js");
