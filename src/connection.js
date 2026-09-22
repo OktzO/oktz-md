@@ -32,7 +32,14 @@ const msgRetryCounterCache = new NodeCache({ stdTTL: 60, useClones: false, maxKe
 
 let lastMessageReceived = Date.now();
 let watchdogTimer = null;
-const _messagePool = new AsyncPool(8);
+const _messagePool = new AsyncPool(8, {
+  maxQueued: 64,
+  onDrop: (queued, max) =>
+    colors.logger.warn(
+      "Message",
+      `Message queue full (${queued}/${max}), dropped newest message`,
+    ),
+});
 const WATCHDOG_TIMEOUT = 120 * 60 * 1000;
 const WATCHDOG_CHECK_INTERVAL = 60 * 1000;
 
