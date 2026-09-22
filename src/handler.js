@@ -31,6 +31,7 @@ import {
   cacheParticipantLids,
   savePersistentCache,
   getLidCacheSize,
+  sweepGroupMetadataCache,
 } from "./lib/ourin-lid.js";
 import { hasActiveSession, getSession } from "./lib/ourin-game-data.js";
 import {
@@ -1901,6 +1902,7 @@ async function groupHandler(update, sock) {
       } else {
         groupMeta = await sock.groupMetadata(groupJid);
         if (global.groupMetadataCache) {
+          sweepGroupMetadataCache(global.groupMetadataCache);
           global.groupMetadataCache.set(groupJid, {
             data: groupMeta,
             timestamp: Date.now(),
