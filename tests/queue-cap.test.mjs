@@ -25,7 +25,7 @@ describe("AsyncPool queue cap (64, drop-newest)", () => {
     it("rejects newest past cap, warns, does not abort running handler", async () => {
       const dropped = [];
       const pool = new m.AsyncPool(1, {
-        maxQueued: 2,
+        maxQueued: 3,
         onDrop: (queued, max) => dropped.push({ queued, max }),
       });
 
@@ -39,18 +39,20 @@ describe("AsyncPool queue cap (64, drop-newest)", () => {
       });
       const queued = [pool.add(async () => {}), pool.add(async () => {})];
 
-      assert.equal(pool.size, 2, "queue holds 2 below cap");
+      assert.equal(pool.size, 2, "queue holds 2 below cap 3");
+      queued.push(pool.add(async () => {}));
+      assert.equal(pool.size, 3, "no drop at fill 2 → cap is 3, not 2");
 
       let dropErr = null;
       await pool.add(() => {}).catch((e) => (dropErr = e));
 
       assert.ok(dropErr instanceof Error, "add past cap rejects");
       assert.match(dropErr.message, /queue full/);
-      assert.match(dropErr.message, new RegExp(`\\b${2}\\b`), "message carries actual queued depth");
+      assert.match(dropErr.message, new RegExp(`\\b${3}\\b`), "message carries actual queued depth 3, not fill count 2");
       assert.equal(dropped.length, 1, "onDrop warn fired once");
-      assert.equal(dropped[0].queued, 2);
-      assert.equal(dropped[0].max, 2);
-      assert.equal(pool.size, 2, "queue still bounded at cap");
+      assert.equal(dropped[0].queued, 3, "onDrop depth");
+      assert.equal(dropped[0].max, 3, "onDrop max");
+      assert.equal(pool.size, 3, "queue still bounded at cap");
       assert.equal(runningResolved, false, "running handler untouched");
 
       releaseRunning();

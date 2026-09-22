@@ -1,5 +1,6 @@
 import { formatAfkDuration } from '../../src/lib/ourin-middleware.js'
 
+// ponytail: non-persistable jids (>15 digits / `120` prefix) lose AFK on memory sweep, no DB fallback — upgrade: persist to DB like persistable jids.
 const afkStorage = global.afkStorage || (global.afkStorage = new Map())
 const notifyThrottle = global.afkNotifyThrottle || (global.afkNotifyThrottle = new Map())
 const NOTIFY_TTL_MS = 60 * 60 * 1000
