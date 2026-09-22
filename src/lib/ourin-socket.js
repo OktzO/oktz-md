@@ -861,11 +861,15 @@ async function extendSocket(sock) {
         if (profile?.wid?.user) {
           const pn = profile.name || profile.pushname || profile.verifiedName;
           if (pn) {
-            if (sock.store?.contacts)
+            if (
+              sock.store?.contacts &&
+              Object.keys(sock.store.contacts).length < 500
+            ) {
               sock.store.contacts[id] = {
                 ...sock.store.contacts[id],
                 name: pn,
               };
+            }
             return pn;
           }
         }
