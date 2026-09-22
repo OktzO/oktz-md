@@ -20,7 +20,7 @@ export class AsyncPool {
     if (shouldDropNewest(this.queue.length, this.maxQueued)) {
       if (this.onDrop) this.onDrop(this.queue.length, this.maxQueued)
       return Promise.reject(
-        new Error(`AsyncPool queue full (${this.maxQueued}), dropped newest`)
+        new Error(`AsyncPool queue full (${this.queue.length}/${this.maxQueued}), dropped newest`)
       )
     }
     return new Promise((resolve, reject) => {
