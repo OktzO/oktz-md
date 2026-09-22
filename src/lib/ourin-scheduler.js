@@ -9,6 +9,18 @@ import config from "../../config.js";
 const scheduledTasks = new Map();
 const activeCronJobs = new Map();
 const TZ = "Asia/Jakarta";
+export const NOTIFIED_GROUPS_MAX_AGE_MS = 60 * 60 * 1000;
+
+export function isRepeatExpired(repeat, expiresAt, now = Date.now()) {
+  return !!(repeat && expiresAt != null && now >= expiresAt);
+}
+
+export function sweepNotifiedGroups(map, now = Date.now(), maxAgeMs = NOTIFIED_GROUPS_MAX_AGE_MS) {
+  const sweepBefore = now - maxAgeMs;
+  for (const [key, addedAt] of map) {
+    if (addedAt < sweepBefore) map.delete(key);
+  }
+}
 
 function getMsUntilTime(hour, minute = 0) {
   const nowMs = Date.now();
@@ -78,6 +90,7 @@ async function scheduleMessage(options, sock) {
     minute = 0,
     repeat = false,
     createdAt = null,
+    expiresAt = null,
     ...meta
   } = options;
 
@@ -95,6 +108,7 @@ async function scheduleMessage(options, sock) {
     minute,
     repeat,
     createdAt: createdAt || new Date().toISOString(),
+    expiresAt: expiresAt ?? null,
     nextRun: null,
     ...meta,
   };
@@ -117,6 +131,14 @@ async function scheduleMessage(options, sock) {
           job.stop();
           scheduledTasks.delete(id);
           activeCronJobs.delete(id);
+        } else if (isRepeatExpired(repeat, expiresAt)) {
+          job.stop();
+          scheduledTasks.delete(id);
+          activeCronJobs.delete(id);
+          logger.info(
+            "Scheduler",
+            `Scheduled message stopped (expiresAt): ${id}`,
+          );
         } else {
           task.nextRun = job.nextDate().toISO();
         }
@@ -183,7 +205,10 @@ function loadScheduledMessages(sock) {
     const db = getDatabase();
     const savedTasks = db.setting("scheduledMessages") || [];
     for (const task of savedTasks) {
-      if (task.repeat || new Date(task.nextRun) > new Date()) {
+      if (
+        (task.repeat && !isRepeatExpired(task.repeat, task.expiresAt)) ||
+        new Date(task.nextRun) > new Date()
+      ) {
         scheduleMessage(task, sock);
       }
     }
@@ -441,7 +466,7 @@ function initScheduler(config, sock = null) {
 }
 
 let groupScheduleSock = null;
-const notifiedGroups = new Set();
+const notifiedGroups = new Map(); // key -> addedAt (ms)
 
 async function startGroupScheduleChecker(sock) {
   if (activeCronJobs.has("groupSchedule")) {
@@ -481,7 +506,7 @@ async function startGroupScheduleChecker(sock) {
               await groupScheduleSock.sendMessage(groupId, {
                 text: `🔓 *ᴀᴜᴛᴏ ᴏᴘᴇɴ*\n\n> Grup dibuka otomatis sesuai jadwal.\n> Waktu: ${currentTime} WIB`,
               });
-              notifiedGroups.add(notifyKey);
+              notifiedGroups.set(notifyKey, Date.now());
               logger.success(
                 "GroupSchedule",
                 `Opened group ${groupId} at ${currentTime}`,
@@ -506,7 +531,7 @@ async function startGroupScheduleChecker(sock) {
                   `Failed to open ${groupId}: ${e.message}`,
                 );
               }
-              notifiedGroups.add(notifyKey);
+              notifiedGroups.set(notifyKey, Date.now());
             }
           }
 
@@ -519,7 +544,7 @@ async function startGroupScheduleChecker(sock) {
               await groupScheduleSock.sendMessage(groupId, {
                 text: `🔒 *ᴀᴜᴛᴏ ᴄʟᴏsᴇ*\n\n> Grup ditutup otomatis sesuai jadwal.\n> Waktu: ${currentTime} WIB`,
               });
-              notifiedGroups.add(notifyKey);
+              notifiedGroups.set(notifyKey, Date.now());
               logger.success(
                 "GroupSchedule",
                 `Closed group ${groupId} at ${currentTime}`,
@@ -544,17 +569,17 @@ async function startGroupScheduleChecker(sock) {
                   `Failed to close ${groupId}: ${e.message}`,
                 );
               }
-              notifiedGroups.add(notifyKey);
+              notifiedGroups.set(notifyKey, Date.now());
             }
-}
+          }
 
           // yield every 10 groups so event loop can breathe
           if (index % 10 === 9) await yieldToEventLoop();
         }
 
-        // Reset dedup set at the top of each hour (minute + second both 0).
-        const parts = formatNow("HH:mm:ss").split(":");
-        if (parts[2] === "00" && parts[1] === "00") notifiedGroups.clear();
+        // Sweep notifiedGroups entries older than 60 minutes so the map
+        // can't grow unboundedly (old per-hour clear missed on cron drift).
+        sweepNotifiedGroups(notifiedGroups);
       } catch (error) {
         logger.error("GroupSchedule", `Checker error: ${error.message}`);
       }
