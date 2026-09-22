@@ -3,10 +3,36 @@ import path from 'path'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
+import { downloadContentFromMessage } from 'ourin'
 import te from '../../src/lib/ourin-error.js'
 const execAsync = promisify(exec)
 const ffmpegPath = ffmpegInstaller.path
 const ffprobePath = ffmpegPath.replace('ffmpeg', 'ffprobe')
+
+// Ambil media (image/video) dari chat yang berdekatan dengan pesan yang
+// di-reply (anchor). WA multi-photo/video dikirim sebagai pesan terpisah
+// beruntun (± detik), jadi window kecil dua arah cukup untuk mengenalinya.
+export function pickAlbumMedia(chatMessages, { anchorTs, windowSec = 5, max = 10, mustInclude = [] }) {
+    const must = new Set(mustInclude)
+    const inWindow = []
+    const anchor = Number(anchorTs) || Date.now() / 1000
+    for (const rec of chatMessages.values()) {
+        if (!rec || !rec.message || rec.key?.fromMe) continue
+        const contentType = rec.message.imageMessage ? 'imageMessage' : rec.message.videoMessage ? 'videoMessage' : null
+        if (!contentType) continue
+        const ts = Number(rec.messageTimestamp)
+        const isMust = must.has(rec.key.id)
+        if (!isMust && !(Number.isFinite(ts) && Math.abs(ts - anchor) <= windowSec)) continue
+        inWindow.push({ id: rec.key.id, contentType, message: rec.message[contentType], ts })
+    }
+    inWindow.sort((a, b) => a.ts - b.ts)
+    let skipped = 0
+    if (inWindow.length > max) {
+        skipped = inWindow.length - max
+        inWindow.length = max
+    }
+    return { items: inWindow, skipped }
+}
 
 const pluginConfig = {
     name: 'sticker',
@@ -114,6 +140,31 @@ async function processVideo(inputPath, outputPath, options) {
     await execAsync(`"${ffmpegPath}" -i "${inputPath}" -vf "${filterStr}" -c:a copy -y "${outputPath}"`)
 }
 
+async function gatherAlbum(store, chat, quotedIds) {
+    if (!store?.messages) return null
+    const list = store.messages.get(chat)
+    if (!list) return null
+    const quoted = list.get(quotedIds[0])
+    if (!quoted?.message) return null
+    const anchorTs = quoted.messageTimestamp
+    const { items, skipped } = pickAlbumMedia(list, { anchorTs, windowSec: 5, max: 10, mustInclude: quotedIds })
+    if (items.length < 2) return null
+    const buffers = []
+    for (const it of items) {
+        try {
+            const mediaType = it.contentType.replace('Message', '')
+            const stream = await downloadContentFromMessage({ [it.contentType]: it.message }, mediaType)
+            const chunks = []
+            for await (const chunk of stream) chunks.push(chunk)
+            buffers.push(Buffer.concat(chunks))
+        } catch (e) {
+            console.error('[Sticker] Album item skipped:', it.id, e.message)
+        }
+    }
+    if (buffers.length < 2) return null
+    return { buffers, skipped }
+}
+
 async function handler(m, { sock, config: botConfig }) {
     const isImage = m.isImage || (m.quoted && m.quoted.type === 'imageMessage')
     const isVideo = m.isVideo || (m.quoted && m.quoted.type === 'videoMessage')
@@ -132,7 +183,9 @@ async function handler(m, { sock, config: botConfig }) {
             `> \`${m.prefix}s --crop\`\n` +
             `> \`${m.prefix}s --resize 256x256\`\n` +
             `> \`${m.prefix}s --circle\`\n` +
-            `> \`${m.prefix}s PackName Author\``
+            `> \`${m.prefix}s --rounded\`\n\n` +
+            `*ᴀʟʙᴜᴍ:*\n` +
+            `> Reply pesan foto/video yang banyak → semua jadi sticker dalam 1 pesan`
         )
         return
     }
@@ -140,6 +193,28 @@ async function handler(m, { sock, config: botConfig }) {
     await m.react('🕕')
     
     const options = parseOptions(m.args || [])
+    const hasProcessing = options.crop || options.resize || options.circle || options.rounded
+    const quotedIds = m.quoted?.key?.id ? [m.quoted.key.id] : []
+    
+    if (!hasProcessing && quotedIds.length && (m.quoted.isImage || m.quoted.isVideo)) {
+        const packname = options.packname || botConfig.sticker?.packname || botConfig.bot?.name || 'Ourin-AI'
+        const author = options.author || botConfig.sticker?.author || botConfig.owner?.name || 'Bot'
+        const album = await gatherAlbum(sock?.store, m.chat, quotedIds)
+        if (album && album.buffers.length >= 2) {
+            try {
+                await sock.sendStickerPack(m.chat, album.buffers, m, { name: packname, publisher: author })
+                if (album.skipped > 0) {
+                    await m.reply(`Sticker album selesai (${album.buffers.length}). ${album.skipped} media lainnya dilewati (maks 10).`)
+                }
+                await m.react('✅')
+                return
+            } catch (e) {
+                console.error('[Sticker] Album failed:', e.message)
+                await m.react('❌')
+                return
+            }
+        }
+    }
     
     try {
         let buffer
