@@ -23,6 +23,7 @@ import {
   resolveAnyLidToJid,
   resolveFromSock,
   isLidConverted,
+  sweepGroupMetadataCache,
 } from "./lib/ourin-lid.js";
 import { initAutoBackup } from "./lib/ourin-auto-backup.js";
 import { AsyncPool } from "./lib/ourin-async-pool.js";
@@ -895,12 +896,7 @@ async function startConnection(options = {}) {
         }
 
         const now = Date.now();
-        if (global.groupMetadataCache.size > 1000) {
-          for (const [k, v] of global.groupMetadataCache) {
-            if (now - v.timestamp > 10 * 60 * 1000)
-              global.groupMetadataCache.delete(k);
-          }
-        }
+        sweepGroupMetadataCache(global.groupMetadataCache, now);
 
         if (!global.groupMetadataCache.has(chatId)) {
           sock

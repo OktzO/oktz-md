@@ -28,6 +28,7 @@ import {
   cacheParticipantLids,
   cacheLidJid,
   resolveFromSock,
+  sweepGroupMetadataCache,
 } from "./ourin-lid.js";
 import util from "util";
 import axios from "axios";
@@ -834,6 +835,7 @@ async function serialize(sock, msg, store = {}) {
       if (!groupMetadata) {
         groupMetadata = await sock.groupMetadata(m.chat);
         if (groupMetadata && global.groupMetadataCache) {
+          sweepGroupMetadataCache(global.groupMetadataCache);
           global.groupMetadataCache.set(m.chat, {
             data: groupMetadata,
             timestamp: Date.now(),

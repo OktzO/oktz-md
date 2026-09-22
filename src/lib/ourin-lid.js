@@ -578,6 +578,22 @@ function getLidCacheSize() {
   return lidCache.size;
 }
 
+const GROUP_META_CACHE_MAX_SIZE = 800;
+const GROUP_META_CACHE_MAX_AGE_MS = 30 * 60 * 1000;
+
+function sweepGroupMetadataCache(cache, now = Date.now()) {
+  if (!cache || cache.size <= GROUP_META_CACHE_MAX_SIZE) return 0;
+  let dropped = 0;
+  for (const [k, v] of cache) {
+    const ts = v?.timestamp || v?._ts || 0;
+    if (now - ts > GROUP_META_CACHE_MAX_AGE_MS) {
+      cache.delete(k);
+      dropped++;
+    }
+  }
+  return dropped;
+}
+
 export {
   isLid,
   normalizeComparableJid,
@@ -602,4 +618,5 @@ export {
   resolveFromSock,
   getLidCacheSize,
   savePersistentCache,
+  sweepGroupMetadataCache,
 };
