@@ -13,16 +13,13 @@ import { logger } from "./ourin-logger.js";
 import { addJadibotOwner, unloadJadibotDb } from "./ourin-jadibot-database.js";
 import { extendSocket } from "./ourin-socket.js";
 import { getAssetBuffer } from "./ourin-asset-manager.js";
+import { evictOldestOverCap } from "./ourin-cache-cap.js";
 const JADIBOT_AUTH_FOLDER = path.join(process.cwd(), "session", "jadibot");
 const jadibotSessions = new Map();
 const reconnectAttempts = new Map();
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_INTERVAL = 5000;
 const GROUP_META_CACHE_CAP = 200;
-
-function evictOldestOverCap(map, cap) {
-  while (map.size > cap) map.delete(map.keys().next().value);
-}
 
 function ensureJadibotAuthFolder() {
   if (!fs.existsSync(JADIBOT_AUTH_FOLDER)) {
