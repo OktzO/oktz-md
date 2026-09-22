@@ -121,6 +121,18 @@ async function scheduleMessage(options, sock) {
   const job = new CronJob(
     `${minute} ${hour} * * *`,
     async () => {
+      // Expiry check BEFORE dispatch: an expired repeat must never
+      // deliver a final message, only stop + report.
+      if (isRepeatExpired(repeat, expiresAt)) {
+        job.stop();
+        scheduledTasks.delete(id);
+        activeCronJobs.delete(id);
+        logger.info(
+          "Scheduler",
+          `Scheduled message stopped (expiresAt): ${id}`,
+        );
+        return;
+      }
       try {
         await sock.sendMessage(jid, message);
         logger.success("Scheduler", `Scheduled message sent: ${id}`);
@@ -131,14 +143,6 @@ async function scheduleMessage(options, sock) {
           job.stop();
           scheduledTasks.delete(id);
           activeCronJobs.delete(id);
-        } else if (isRepeatExpired(repeat, expiresAt)) {
-          job.stop();
-          scheduledTasks.delete(id);
-          activeCronJobs.delete(id);
-          logger.info(
-            "Scheduler",
-            `Scheduled message stopped (expiresAt): ${id}`,
-          );
         } else {
           task.nextRun = job.nextDate().toISO();
         }
@@ -200,15 +204,19 @@ function saveScheduledMessages() {
   }
 }
 
+export function shouldReloadTask(task, now = Date.now()) {
+  // repeat branches on expiry only; one-shot branches on nextRun.
+  // repeat tanpa expiresAt = tak pernah expire (perilaku lama).
+  if (task.repeat) return !isRepeatExpired(task.repeat, task.expiresAt, now);
+  return new Date(task.nextRun) > new Date(now);
+}
+
 function loadScheduledMessages(sock) {
   try {
     const db = getDatabase();
     const savedTasks = db.setting("scheduledMessages") || [];
     for (const task of savedTasks) {
-      if (
-        (task.repeat && !isRepeatExpired(task.repeat, task.expiresAt)) ||
-        new Date(task.nextRun) > new Date()
-      ) {
+      if (shouldReloadTask(task)) {
         scheduleMessage(task, sock);
       }
     }
