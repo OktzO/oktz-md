@@ -270,7 +270,13 @@ async function handler(m, { sock, db }) {
   const pendTs = pendingSwgc.get(m.sender).timestamp;
   setTimeout(() => {
     if (pendingSwgc.get(m.sender)?.timestamp === pendTs) {
+      const stale = pendingSwgc.get(m.sender)?.tempFile;
       pendingSwgc.delete(m.sender);
+      if (stale && fs.existsSync(stale)) {
+        try {
+          fs.unlinkSync(stale);
+        } catch (e) {}
+      }
     }
   }, 10 * 60 * 1000);
 

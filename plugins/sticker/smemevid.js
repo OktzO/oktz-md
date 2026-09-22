@@ -39,6 +39,15 @@ async function handler(m, { sock }) {
 
     m.react('🕕')
 
+    const cleanupTemp = (...files) => {
+        for (const f of files) {
+            if (!f || !fs.existsSync(f)) continue
+            try { fs.unlinkSync(f) } catch (e) { }
+        }
+    }
+
+    let inputVideo, outputVideo, overlayImage
+
     try {
         let mediaBuffer
         if (m.quoted) {
@@ -53,9 +62,9 @@ async function handler(m, { sock }) {
         }
 
         const tempId = Date.now()
-        const inputVideo = path.join(os.tmpdir(), `vid-${tempId}.mp4`)
-        const outputVideo = path.join(os.tmpdir(), `vid-out-${tempId}.mp4`)
-        const overlayImage = path.join(os.tmpdir(), `overlay-${tempId}.png`)
+        inputVideo = path.join(os.tmpdir(), `vid-${tempId}.mp4`)
+        outputVideo = path.join(os.tmpdir(), `vid-out-${tempId}.mp4`)
+        overlayImage = path.join(os.tmpdir(), `overlay-${tempId}.png`)
 
         fs.writeFileSync(inputVideo, mediaBuffer)
 
@@ -135,13 +144,10 @@ async function handler(m, { sock }) {
 
         m.react('✅')
 
-        try {
-            fs.unlinkSync(inputVideo)
-            fs.unlinkSync(outputVideo)
-            fs.unlinkSync(overlayImage)
-        } catch (e) { }
+        cleanupTemp(inputVideo, outputVideo, overlayImage)
 
     } catch (error) {
+        cleanupTemp(inputVideo, outputVideo, overlayImage)
         m.react('☢')
         m.reply(`❌ *ɢᴀɢᴀʟ*\n\n> Terjadi kesalahan saat memproses video`)
     }

@@ -243,7 +243,13 @@ async function handler(m, { sock, db }) {
   const pendTs = pendingSwgcV2.get(m.sender).timestamp;
   setTimeout(() => {
     if (pendingSwgcV2.get(m.sender)?.timestamp === pendTs) {
+      const stale = pendingSwgcV2.get(m.sender)?.tempFile;
       pendingSwgcV2.delete(m.sender);
+      if (stale && fs.existsSync(stale)) {
+        try {
+          fs.unlinkSync(stale);
+        } catch (e) {}
+      }
     }
   }, 10 * 60 * 1000);
 
