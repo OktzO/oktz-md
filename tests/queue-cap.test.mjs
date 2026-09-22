@@ -46,6 +46,7 @@ describe("AsyncPool queue cap (64, drop-newest)", () => {
 
       assert.ok(dropErr instanceof Error, "add past cap rejects");
       assert.match(dropErr.message, /queue full/);
+      assert.match(dropErr.message, new RegExp(`\\b${2}\\b`), "message carries actual queued depth");
       assert.equal(dropped.length, 1, "onDrop warn fired once");
       assert.equal(dropped[0].queued, 2);
       assert.equal(dropped[0].max, 2);
