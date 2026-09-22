@@ -21,6 +21,7 @@ import fs from "fs";
 import path from "path";
 import { downloadMediaMessage, getContentType } from "ourin";
 import { addExifToWebp, DEFAULT_METADATA } from "./ourin-exif.js";
+import { STICKER_WEBP_VF } from "./ourin-ffmpeg.js";
 import {
   generateTableContent,
   generateTableContentV2,
@@ -164,7 +165,7 @@ function videoToWebp(buffer) {
         "-vcodec",
         "libwebp",
         "-vf",
-        "fps=12,scale='min(512,iw)':'min(512,ih)':force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000,setsar=1",
+        STICKER_WEBP_VF,
         "-loop",
         "0",
         "-preset",
