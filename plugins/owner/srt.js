@@ -26,6 +26,17 @@ if (!global.srtSession) {
 }
 
 const SHUFFLE_DIR = path.join(process.cwd(), 'assets', 'image', 'shuffle');
+const SRT_IDLE_TTL = 10 * 60 * 1000;
+
+function getSrtSession(chat) {
+    const session = global.srtSession?.[chat];
+    if (!session) return null;
+    if (Date.now() - (session.ts || 0) > SRT_IDLE_TTL) {
+        if (global.srtSession) delete global.srtSession[chat];
+        return null;
+    }
+    return session;
+}
 
 function countShuffleImages() {
     if (!fs.existsSync(SHUFFLE_DIR)) return 0;
@@ -51,12 +62,12 @@ async function handler(m, { sock, args }) {
             await m.reply('❌ *FITUR SRT BERHASIL DINONAKTIFKAN*\n\nPenggunaan *thumbnail* acak telah dimatikan. Semua balasan bot akan kembali menggunakan gambar *default* bawaan sistem.');
         } 
         else if (action === 'c' || action === 'capture') {
-            global.srtSession[m.chat] = { sender: m.sender, count: 0 };
+            global.srtSession[m.chat] = { sender: m.sender, count: 0, ts: Date.now() };
             const totalImages = countShuffleImages();
             await m.reply(`📸 *SESI TANGKAPAN GAMBAR DIMULAI*\n\nSilakan kirimkan gambar satu per satu secara terus menerus ke dalam obrolan ini. Bot akan membaca setiap gambar tersebut dan langsung menyimpannya secara otomatis ke dalam sistem *database shuffle*.\n\n- Total gambar tersimpan saat ini: *${totalImages}*\n- Jika semua gambar sudah selesai dikirimkan, hentikan sesi dengan perintah \`${m.prefix}srt d\`.`);
         } 
         else if (action === 'd' || action === 'done') {
-            if (!global.srtSession[m.chat] || global.srtSession[m.chat].sender !== m.sender) {
+            if (!getSrtSession(m.chat) || global.srtSession?.[m.chat]?.sender !== m.sender) {
                 return m.reply('❌ Kamu sedang tidak berada di dalam sesi penangkapan gambar aktif untuk saat ini.');
             }
             const count = global.srtSession[m.chat].count;
@@ -161,7 +172,7 @@ async function handler(m, { sock, args }) {
 
 async function srtAnswerHandler(m, sock) {
     if (!global.srtSession) return false;
-    const session = global.srtSession[m.chat];
+    const session = getSrtSession(m.chat);
     if (!session || session.sender !== m.sender) return false;
 
     if (m.isCommand) return false;
@@ -192,6 +203,7 @@ async function srtAnswerHandler(m, sock) {
                 const savePath = path.join(SHUFFLE_DIR, `srt_${hash}.jpeg`);
                 fs.writeFileSync(savePath, saved);
                 session.count++;
+                session.ts = Date.now();
                 await m.reply(`✅ *GAMBAR BERHASIL DISIMPAN*\n\nGambar telah diamankan ke dalam penyimpanan lokal bot.\n- Total gambar ditambahkan pada sesi ini: *${session.count}*`);
             }
         }
@@ -204,4 +216,4 @@ async function srtAnswerHandler(m, sock) {
     }
 }
 
-export { pluginConfig as config, handler, srtAnswerHandler };
+export { pluginConfig as config, handler, srtAnswerHandler, getSrtSession };
