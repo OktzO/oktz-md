@@ -1,6 +1,5 @@
 import crypto from "crypto";
 import archiver from "archiver";
-import { LRUCache } from "lru-cache";
 import {
   prepareWAMessageMedia,
   generateWAMessageFromContent,
@@ -45,6 +44,60 @@ function getTempDir() {
   const tmpDir = path.join(process.cwd(), "tmp");
   if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
   return tmpDir;
+}
+
+const STICKER_PACK_CAP_BYTES = 200 * 1024 * 1024;
+
+function packSizeBytes(data) {
+  const pack = data?.message?.stickerPackMessage;
+  let bytes = 0;
+  if (pack?.stickers)
+    for (const s of pack.stickers)
+      if (s?.sticker?.byteLength) bytes += s.sticker.byteLength;
+  if (pack?.cover?.sticker?.byteLength) bytes += pack.cover.sticker.byteLength;
+  return bytes || Buffer.byteLength(JSON.stringify(pack ?? data)) || 1;
+}
+
+function createStickerPackCache(capBytes = STICKER_PACK_CAP_BYTES) {
+  const map = new Map();
+  let totalBytes = 0;
+  const evictToUnderCap = (keepKey) => {
+    while (totalBytes > capBytes && map.size > 1) {
+      const oldest = map.keys().next().value;
+      if (oldest === undefined || oldest === keepKey) break;
+      totalBytes -= packSizeBytes(map.get(oldest));
+      map.delete(oldest);
+    }
+  };
+  const api = {
+    get: (k) => map.get(k),
+    has: (k) => map.has(k),
+    set: (k, v) => {
+      if (map.has(k)) totalBytes -= packSizeBytes(map.get(k));
+      totalBytes += packSizeBytes(v);
+      map.set(k, v);
+      evictToUnderCap(k);
+      return api;
+    },
+    delete: (k) => {
+      if (map.has(k)) {
+        totalBytes -= packSizeBytes(map.get(k));
+        map.delete(k);
+      }
+    },
+    clear: () => {
+      map.clear();
+      totalBytes = 0;
+    },
+    entries: () => map.entries(),
+    get size() {
+      return map.size;
+    },
+    get totalBytes() {
+      return totalBytes;
+    },
+  };
+  return api;
 }
 
 async function downloadBuffer(url) {
@@ -527,7 +580,7 @@ async function extendSocket(sock) {
   };
 
   if (!global.stickerPackCache)
-    global.stickerPackCache = new LRUCache({ max: 200, ttl: 6 * 60 * 60 * 1000 });
+    global.stickerPackCache = createStickerPackCache();
 
   sock.saveStickerPack = (packId, messageContent, packName = "Unknown") => {
     global.stickerPackCache.set(packId, {
@@ -1194,4 +1247,6 @@ export {
   videoToWebp,
   simpleImageToWebp,
   getTempDir,
+  createStickerPackCache,
+  packSizeBytes,
 };
