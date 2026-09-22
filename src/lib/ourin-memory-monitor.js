@@ -14,12 +14,32 @@ function formatMB(bytes) {
   return (bytes / 1024 / 1024).toFixed(1) + "MB";
 }
 
-// ponytail: tak ada restart path aman — index.js cuma gracefulShutdown
-// (save DB + process.exit) saat sinyal, connection.js cuma reconnect baileys.
-// Jadi RSS > limit 3 cek beruntun = warn owner via WA, restart manual.
+// ponytail: restart path memang ADA — plugins/owner/restart.js:59-73 spawn
+// detached `node ...execArgv index.js` baru process.exit(0). TAPI tak dipakai
+// otomatis: restart.js exit TANPA await db.save() (flush Turso yang awaited
+// cuma di gracefulShutdown SIGINT/SIGTERM; index.js:236-238 — tanpa await,
+// data Turso stale MENIMPA file lokal). Auto-restart di 550MB tanpa flush =
+// risiko data loss. Jadi warn-only. Upgrade path: gate auto-restart di balik
+// opt-in flag owner, wired ke restart path yang flush DB lebih dulu (belum
+// diimplement, di luar scope task ini).
 function evaluateOverLimit(rss) {
   overLimitStreak = rss > RSS_LIMIT ? overLimitStreak + 1 : 0;
   return overLimitStreak >= OVER_LIMIT_CHECKS;
+}
+
+// streak + latch: true HANYA saat 3 cek beruntun pertama melewati limit,
+// false setelahnya walau tetap over (anti re-warn tiap 2 menit). Drop di
+// bawah limit → reset, streak baru bisa warn lagi.
+function shouldWarnOverLimit(rss) {
+  if (evaluateOverLimit(rss)) {
+    if (!warnedOverLimit) {
+      warnedOverLimit = true;
+      return true;
+    }
+    return false;
+  }
+  warnedOverLimit = false;
+  return false;
 }
 
 async function notifyOwner(rss) {
@@ -56,17 +76,12 @@ function startMemoryMonitor() {
       }
     }
 
-    if (evaluateOverLimit(mem.rss)) {
-      if (!warnedOverLimit) {
-        warnedOverLimit = true;
-        logger.warn(
-          "memory",
-          `RSS ${formatMB(mem.rss)} melebihi ${formatMB(RSS_LIMIT)} — owner diberitahu`,
-        );
-        notifyOwner(mem.rss);
-      }
-    } else {
-      warnedOverLimit = false;
+    if (shouldWarnOverLimit(mem.rss)) {
+      logger.warn(
+        "memory",
+        `RSS ${formatMB(mem.rss)} melebihi ${formatMB(RSS_LIMIT)} — owner diberitahu`,
+      );
+      notifyOwner(mem.rss);
     }
 
     logger.system(
@@ -89,4 +104,9 @@ function stopMemoryMonitor() {
   }
 }
 
-export { startMemoryMonitor, stopMemoryMonitor, evaluateOverLimit };
+export {
+  startMemoryMonitor,
+  stopMemoryMonitor,
+  evaluateOverLimit,
+  shouldWarnOverLimit,
+};
