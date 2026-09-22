@@ -1,3 +1,5 @@
+import { pruneAbsensi } from "./absen.js";
+
 const pluginConfig = {
   name: "mulaiabsen",
   alias: ["startabsen", "bukaabsen", "openabsen"],
@@ -18,6 +20,7 @@ const pluginConfig = {
 if (!global.absensi) global.absensi = {};
 
 async function handler(m, { sock }) {
+  pruneAbsensi();
   const chatId = m.chat;
 
   if (global.absensi[chatId]) {

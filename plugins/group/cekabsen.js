@@ -1,4 +1,5 @@
 import * as timeHelper from "../../src/lib/ourin-time.js";
+import { pruneAbsensi } from "./absen.js";
 const pluginConfig = {
   name: "cekabsen",
   alias: ["listabsen", "daftarabsen", "lihathadir"],
@@ -16,6 +17,7 @@ const pluginConfig = {
 };
 if (!global.absensi) global.absensi = {};
 async function handler(m, { sock }) {
+  pruneAbsensi();
   const chatId = m.chat;
   if (!global.absensi[chatId]) {
     return m.reply(

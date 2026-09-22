@@ -72,6 +72,7 @@ function createStickerPackCache(capBytes = STICKER_PACK_CAP_BYTES) {
   const api = {
     get: (k) => map.get(k),
     has: (k) => map.has(k),
+    // ponytail: re-set of existing key keeps Map insertion order (no recency refresh); `delete`+`set` would restore it — evict-oldest sanctioned as-is.
     set: (k, v) => {
       if (map.has(k)) totalBytes -= packSizeBytes(map.get(k));
       totalBytes += packSizeBytes(v);
