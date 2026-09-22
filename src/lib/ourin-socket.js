@@ -946,6 +946,8 @@ async function extendSocket(sock) {
     } catch {}
     const number = id.replace(/@.+/g, "");
     if (number && number.length > 0) {
+      if (isLid(jid) || isLidConverted(jid))
+        return "Unknown" /* jangan fabrikasi nomor palsu untuk LID yang tak ter-resolve */;
       if (number.startsWith("62")) return "+62" + number.slice(2);
       return "+" + number;
     }
@@ -970,13 +972,15 @@ async function extendSocket(sock) {
       }
     }
     const number = resolvedJid.replace(/@.+/g, "");
+    if (isLid(jid) || isLidConverted(jid))
+      return "Unknown" /* jangan tampilkan nomor LID palsu */;
     if (number.startsWith("62")) return "0" + number.slice(2);
     return number || "Unknown";
   };
 
   sock.parseMention = (text = "") =>
     [...text.matchAll(/@([0-9]{5,16}|0)/g)].map(
-      (v) => v[1] + "@s.whatsapp.net",
+      (v) => getCachedJid(v[1] + "@lid") || v[1] + "@s.whatsapp.net",
     );
 
   sock.reply = (jid, text = "", quoted, options = {}) => {

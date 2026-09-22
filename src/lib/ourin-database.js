@@ -2,6 +2,15 @@ import fs from "fs";
 import path from "path";
 import config from "../../config.js";
 import { logger } from "./ourin-logger.js";
+import { isLid, isLidConverted } from "./ourin-lid.js";
+
+function isLidLikeJid(jid) {
+  if (!jid) return false;
+  if (isLid(jid)) return true;
+  if (!isLidConverted(jid)) return false;
+  const number = jid.replace("@s.whatsapp.net", "");
+  return /^\d+$/.test(number) && number.length >= 10;
+}
 import { createTursoClient, initTursoTables } from "./ourin-turso.js";
 const FLUSH_INTERVAL_MS = 30_000; // 5s → 30s: stringify penuh store per flush, cukup utk write-behind
 
@@ -174,6 +183,8 @@ class Database {
       this.db.write = () => this.flushAll();
       this.db.read = () => this.readAll();
 
+      this.migrateLegacyUsers();
+
       this.startFlushTimer();
       this.registerShutdownHooks();
 
@@ -332,8 +343,40 @@ class Database {
       sewa: this.stores.sewa.data,
       premium: this.stores.premium.data,
       owner: this.stores.owner.data,
+      partner: this.stores.partner?.data,
     };
     if (this.stores.partner) this.db.data.partner = this.stores.partner.data;
+  }
+
+  migrateLegacyUsers() {
+    const users = this.db.data.users;
+    if (!users) return 0;
+    let changed = 0;
+    const legacySynthetic = new Set(["husbu_KiseRyota"]);
+    for (const key of Object.keys(users)) {
+      if (legacySynthetic.has(key)) {
+        delete users[key];
+        changed++;
+        continue;
+      }
+      if (key.startsWith("lid:")) continue;
+      if (!/^\d{10,}$/.test(key)) continue;
+      if (!isLidConverted(key + "@s.whatsapp.net")) continue;
+      const user = users[key];
+      delete users[key];
+      if (!users[`lid:${key}`]) {
+        user.lid = key;
+        user.number = null;
+        user.jid = null;
+        users[`lid:${key}`] = user;
+        changed++;
+      }
+    }
+    if (changed > 0) {
+      this.markDirty("users");
+      logger.info("database", `migrasi legacy key users: ${changed} record`);
+    }
+    return changed;
   }
 
   async loadFromTurso() {
@@ -485,19 +528,23 @@ class Database {
 
   getUser(jid) {
     if (!jid) return null;
+    const isLidJid = isLidLikeJid(jid);
     const cleanJid = jid.replace(/@.+/g, "");
-    if (cleanJid.length > 15 || cleanJid.startsWith("120")) return null;
-    return this.db.data.users[cleanJid] || null;
+    if (!isLidJid && (cleanJid.length > 15 || cleanJid.startsWith("120"))) return null;
+    const key = isLidJid ? `lid:${cleanJid}` : cleanJid;
+    return this.db.data.users[key] || null;
   }
 
   setUser(jid, data = {}) {
     if (!jid) return null;
+    const isLidJid = isLidLikeJid(jid);
     const cleanJid = jid.replace(/@.+/g, "");
-    if (cleanJid.length > 15 || cleanJid.startsWith("120")) return null;
-    let existing = this.db.data.users[cleanJid];
+    if (!isLidJid && (cleanJid.length > 15 || cleanJid.startsWith("120"))) return null;
+    const key = isLidJid ? `lid:${cleanJid}` : cleanJid;
+    let existing = this.db.data.users[key];
     if (!existing) {
       existing = {};
-      this.db.data.users[cleanJid] = existing;
+      this.db.data.users[key] = existing;
     }
 
     const existingBalance =
@@ -512,9 +559,10 @@ class Database {
     for (const k of Object.keys(data)) {
       if (!USER_SET_OVERRIDDEN.has(k)) existing[k] = data[k];
     }
-    existing.jid = cleanJid;
+    existing.jid = isLidJid ? null : cleanJid;
+    existing.lid = isLidJid ? cleanJid : (existing.lid || null);
     existing.name = data.name || existing.name || "Unknown";
-    existing.number = cleanJid;
+    existing.number = isLidJid ? null : cleanJid;
     existing.energi = data.energi ?? existing.energi ?? existingLimit;
     existing.isPremium = data.isPremium ?? existing.isPremium ?? false;
     existing.isBanned = data.isBanned ?? existing.isBanned ?? false;
@@ -557,9 +605,11 @@ class Database {
 
   deleteUser(jid) {
     if (!jid) return false;
+    const isLidJid = isLidLikeJid(jid);
     const cleanJid = jid.replace(/@.+/g, "");
-    if (this.db.data.users[cleanJid]) {
-      delete this.db.data.users[cleanJid];
+    const key = isLidJid ? `lid:${cleanJid}` : cleanJid;
+    if (this.db.data.users[key]) {
+      delete this.db.data.users[key];
       this.markDirty("users");
       return true;
     }

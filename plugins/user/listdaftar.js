@@ -185,14 +185,16 @@ async function handler(m, { sock }) {
       user.lastRegisteredAt || user.registeredAt,
     );
     text += `${listNumber}. ${genderEmoji} *${user.regName || "Unknown"}*\n`;
-    text += `   > @${user.jid} | ${user.regAge || "?"} tahun | ${registeredAt}\n`;
+    text += `   > @${user.lid || user.jid} | ${user.regAge || "?"} tahun | ${registeredAt}\n`;
   });
 
   if (totalPages > 1) {
     text += `\n> Gunakan \`${m.prefix}listdaftar page ${page + 1 > totalPages ? totalPages : page + 1}\` untuk halaman lain`;
   }
 
-  const mentions = displayUsers.map((u) => u.jid + "@s.whatsapp.net");
+  const mentions = displayUsers.map((u) =>
+    u.lid ? u.lid + "@lid" : u.jid + "@s.whatsapp.net",
+  );
 
   await sock.sendMessage(
     m.chat,
