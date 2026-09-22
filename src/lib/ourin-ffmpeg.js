@@ -148,6 +148,12 @@ export function buildFfmpegCommand(args = [], binary = "ffmpeg") {
   return { command: bin, args };
 }
 
+// vf chain .s (video/gif -> sticker webp animasi). Input non-alpha (mp4
+// yuv420p, WA transcode gif->mp4) + pad color 0x00000000 default-nya hitam
+// pekat; format=rgba wajib sebelum pad biar alpha dibawa ke output.
+export const STICKER_WEBP_VF =
+  "fps=12,scale='min(512,iw)':'min(512,ih)':force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000,setsar=1";
+
 /* ================================================================
  * Bagian 2: Antrian eksekusi ffmpeg (implementasi asli, dipertahankan)
  * ================================================================ */
