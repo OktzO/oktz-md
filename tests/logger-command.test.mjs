@@ -33,7 +33,7 @@ describe("ourin-logger logCommand", () => {
     };
   });
 
-  it("menampilkan box command dengan nama user, tanpa nomor sender", () => {
+  it("menampilkan satu baris command dengan nama user, tanpa nomor sender", () => {
     const lines = logs(() =>
       mod.logCommand({
         prefix: ".",
@@ -43,8 +43,8 @@ describe("ourin-logger logCommand", () => {
         chatType: "private",
       }),
     );
-    assert.ok(lines.length > 1, "box multi-baris");
-    const joined = lines.join("\n");
+    assert.strictEqual(lines.length, 1, "satu baris saja");
+    const joined = lines[0];
     assert.ok(joined.includes(".ping"), `missing command: ${joined}`);
     assert.ok(joined.includes("Zann"), `missing name: ${joined}`);
     assert.ok(!joined.includes("6281234567890"), `number leaked: ${joined}`);
@@ -64,6 +64,7 @@ describe("ourin-logger logCommand", () => {
     assert.ok(!joined.includes("6281234567890"), `number leaked: ${joined}`);
     assert.ok(joined.includes(".menu"));
     assert.ok(joined.includes("Pengguna"));
+    assert.strictEqual(lines.length, 1);
   });
 
   it("menampilkan nama grup untuk chat grup", () => {
@@ -80,6 +81,7 @@ describe("ourin-logger logCommand", () => {
     const joined = lines.join("\n");
     assert.ok(joined.includes("Test Group"), `missing group: ${joined}`);
     assert.ok(!joined.includes("6281234567890"));
+    assert.strictEqual(lines.length, 1);
   });
 
   it("skip command kosong", () => {
