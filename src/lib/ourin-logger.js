@@ -153,24 +153,19 @@ async function playBootSequence(info = {}) {
 
 function logCommand(info = {}) {
   const {
-    prefix = ".", command, pushName, sender, chatType, groupName, messageType, device,
+    prefix = ".", command, pushName, sender, chatType, groupName, messageType,
   } = info;
   if (!command) return;
 
   const time = timeHelper.formatTime("HH:mm:ss");
   const location = chatType === "group" || chatType === "newsletter"
-    ? (groupName || "Group")
+    ? (groupName || "Grup")
     : "Private";
   const senderName = pushName || "Pengguna";
   const typeTag = messageType || "Command";
   const msg = `${prefix}${command}`;
 
-  console.log("");
-  console.log(`  ${cWhite("╭─")} ${chalk.bgWhiteBright(" Command dieksekusi ")} ${cGray("•")} ${chatType === "private" ? chalk.yellow("Private") : chalk.whiteBright("Dari Grup") + " " + chalk.bgCyanBright(location)}`);
-  console.log(`  ${cWhite("│")}  👤 ${chalk.greenBright(senderName)}`);
-  console.log(`  ${cWhite("│")}  📱 ${chalk.yellowBright(device || "Unknown")} ${chalk.red(`• ${time} • ${typeTag}`)}`);
-  console.log(`  ${cWhite("│")}  💬 ${chalk.whiteBright(msg)}`);
-  console.log(`  ${cWhite("╰─")}`);
+  console.log(`  ${makeTag("CMD")} ${cWhite(msg)} ${cGray("dari")} ${chalk.greenBright(senderName)} ${cGray("•")} ${chalk.yellow(location)} ${cGray(`• ${time} • ${typeTag}`)}`);
 }
 function logPlugin(name, category) {
   // Simple tree view for plugin

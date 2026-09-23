@@ -238,41 +238,11 @@ function printPluginTable(plugins) {
     grouped[cat]++;
   });
 
-  const sorted = Object.entries(grouped).sort((a, b) => b[1] - a[1]);
-  const catCount = sorted.length;
-  const TOP = 8;
-  const top = sorted.slice(0, TOP);
-  const rest = sorted.slice(TOP);
-  const restTotal = rest.reduce((s, [, c]) => s + c, 0);
+  const catCount = Object.keys(grouped).length;
 
-  const COL_W = 25;
-  const pad = (cat, count, index) => {
-    const label = String(cat).padEnd(12);
-    return `${theme.colorizeCategory(label, index)} ${theme.pill(String(count), "accent")}`.padEnd(
-      COL_W + 12,
-    );
-  };
-
-  console.log("");
   console.log(
     `  ${theme.pill("plugins", "primary")} ${theme.rainbow(String(plugins.length))} ${theme.dim("total")} ${theme.border("│")} ${chalk.whiteBright(`${catCount} kategori`)}`,
   );
-  console.log(`  ${theme.borderFx("─".repeat(58))}`);
-
-  for (let i = 0; i < top.length; i += 2) {
-    const left = pad(top[i][0], top[i][1], i);
-    const right =
-      i + 1 < top.length ? pad(top[i + 1][0], top[i + 1][1], i + 1) : "";
-    console.log(`  ${left}  ${theme.border("│")}  ${right}`);
-  }
-
-  if (rest.length > 0) {
-    console.log(
-      `  ${theme.dim(`+${rest.length} lainnya`.padEnd(14))}${theme.pill(String(restTotal), "system")}`,
-    );
-  }
-
-  console.log("");
 }
 
 /**
@@ -621,6 +591,7 @@ export {
   isPluginEnabled,
   hotReloadPlugin,
   unloadPlugin,
+  printPluginTable,
   pluginStore,
   defaultConfig,
   getAllCommandNames,
