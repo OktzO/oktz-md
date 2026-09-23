@@ -31,6 +31,7 @@ import { startMemoryMonitor } from "./src/lib/ourin-memory-monitor.js";
 import { evictOldestOverCap } from "./src/lib/ourin-cache-cap.js";
 import { startTempCleaner } from "./src/lib/ourin-temp-cleaner.js";
 import { startDailyPruner } from "./src/lib/ourin-data-pruner.js";
+import { initAutoClearScheduler } from "./src/lib/ourin-chat-cleaner.js";
 import { preloadAssets } from "./src/lib/ourin-asset-manager.js";
 import {
   logger,
@@ -393,6 +394,7 @@ async function main() {
         initAutoJpmScheduler(sock);
         initSholatScheduler(sock);
         initNotifScheduler(sock);
+        initAutoClearScheduler(sock);
 
         try {
           const { getAllJadibotSessions, isJadibotActive, restartJadibotSession } =
