@@ -20,6 +20,11 @@ const config = {
   session: {
     pairingNumber: "6285143885645", // Nomor WA yang akan di-pair, ini penting
     usePairingCode: true, // true = Pairing Code, false = QR Code
+    pairingRateLimitCooldownMs: 60 * 60e3, // tunggu 1 jam bila WhatsApp rate-limit pairing (rate-overlimit)
+    pairingFallbackToQr: true, // kalau pairing code kena rate-limit, otomatis tampilkan QR
+    qrDir: "qr", // folder penyimpanan file QR (di dalam storage/)
+    qrPngWidth: 320, // lebar PNG QR, makin kecil makin padat
+    qrMaxPrints: 5, // batas cetak QR di terminal, biar tidak memenuhi layar
   },
 
   fake_call: {

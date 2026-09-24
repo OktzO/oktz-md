@@ -103,29 +103,48 @@ async function loadState(scope) {
   }
 }
 
+// Turso tidak punya mutex bawaan: dua UPSERT yang tumpang tindih bisa selesai
+// terbalik, dan UPSERT yang masih in-flight bisa	create ulang creds yang
+// baru saja dihapus. Serialisasi per-scope + delete menunggu antrean selesai.
+const scopeQueues = new Map();
+
+function enqueue(scope, task) {
+  const prev = scopeQueues.get(scope) || Promise.resolve();
+  const next = prev.then(task, task).catch(() => {});
+  scopeQueues.set(scope, next);
+  return next;
+}
+
 async function saveCreds(scope, creds) {
-  try {
-    const client = getTursoClient();
-    if (!client) return;
-    await client.execute({
-      sql: 'INSERT INTO session_creds (scope, creds, updated_at) VALUES (?, ?, ?) ON CONFLICT(scope) DO UPDATE SET creds = excluded.creds, updated_at = excluded.updated_at',
-      args: [scope, JSON.stringify(creds, BufferJSON.replacer), Date.now()],
-    });
-  } catch (e) {
-    console.warn('[turso-session] save failed:', e.message);
-  }
+  const snapshot = JSON.stringify(creds, BufferJSON.replacer);
+  return enqueue(scope, async () => {
+    try {
+      const client = getTursoClient();
+      if (!client) return;
+      await client.execute({
+        sql: 'INSERT INTO session_creds (scope, creds, updated_at) VALUES (?, ?, ?) ON CONFLICT(scope) DO UPDATE SET creds = excluded.creds, updated_at = excluded.updated_at',
+        args: [scope, snapshot, Date.now()],
+      });
+    } catch (e) {
+      console.warn('[turso-session] save failed:', e.message);
+    }
+  });
 }
 
 async function deleteTursoSession(scope) {
-  const client = getTursoClient();
   for (const k of keysCache.keys()) {
     if (k.startsWith(scope + ':')) keysCache.delete(k);
   }
-  if (!client) return;
-  try {
-    await client.execute({ sql: 'DELETE FROM session_creds WHERE scope = ?', args: [scope] });
-    await client.execute({ sql: 'DELETE FROM session_keys WHERE scope = ?', args: [scope] });
-  } catch (e) { console.warn('[turso-session] delete failed:', e.message); }
+  // tunggu antrean write scope ini selesai dulu, kalau tidak UPSERT yang
+  // masih in-flight bisa create ulang creds yang baru saja dihapus
+  return enqueue(scope, async () => {
+    const client = getTursoClient();
+    if (!client) return;
+    try {
+      await client.execute({ sql: 'DELETE FROM session_creds WHERE scope = ?', args: [scope] });
+      await client.execute({ sql: 'DELETE FROM session_keys WHERE scope = ?', args: [scope] });
+    } catch (e) { console.warn('[turso-session] delete failed:', e.message); }
+  });
 }
 
 async function useTursoAuthState(scope = 'main') {
