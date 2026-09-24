@@ -27,12 +27,39 @@ import {
 } from "./lib/ourin-lid.js";
 import { initAutoBackup } from "./lib/ourin-auto-backup.js";
 import { AsyncPool } from "./lib/ourin-async-pool.js";
+import {
+  classifyClose,
+  clearPairingPending,
+  getCooldownRemainingMs,
+  isPairingPending,
+  isRateLimitError,
+  markPairingPending,
+  normalizePairingNumber,
+  resetPairingCreds,
+  writeCooldown,
+} from "./lib/ourin-pairing-state.js";
+import { resolveWaVersion } from "./lib/ourin-wa-version.js";
+import {
+  buildQrFilePath,
+  canRenderMore,
+  pruneOldQrFiles,
+  shouldRenderQr,
+  shouldUseQrFallback,
+} from "./lib/ourin-qr-fallback.js";
 const groupCache = new NodeCache({ stdTTL: 5 * 60, useClones: false, maxKeys: 500 });
 const processedMessages = new NodeCache({ stdTTL: 30, useClones: false, maxKeys: 5000 });
 const msgRetryCounterCache = new NodeCache({ stdTTL: 60, useClones: false, maxKeys: 2000 });
 
 let lastMessageReceived = Date.now();
 let watchdogTimer = null;
+const PAIRING_RATE_LIMIT_COOLDOWN_MS = config.session?.pairingRateLimitCooldownMs ?? 60 * 60e3;
+const QR_DIR = path.join(
+  process.cwd(),
+  "storage",
+  config.session?.qrDir || "qr",
+);
+const QR_PNG_WIDTH = config.session?.qrPngWidth ?? 320;
+const QR_MAX_PRINTS = config.session?.qrMaxPrints ?? 5;
 const _messagePool = new AsyncPool(8, {
   maxQueued: 64,
   onDrop: (queued, max) =>
@@ -109,7 +136,6 @@ function scheduleReconnect(delay, options) {
     reconnectTimer = null;
     try {
       await startConnection(options);
-      connectionState.reconnectAttempts = 0;
     } catch (error) {
       connectionState.reconnectAttempts++;
       colors.logger.error(
@@ -297,6 +323,45 @@ function askQuestion(question) {
   });
 }
 
+// waitForSocketOpen() di library tidak punya timeout sendiri, jadi tanpa
+// penjaga bisa menggantung selamanya dan membekukan alur pairing. Timer di sini
+// sengaja tidak di-unref dan selalu di-clear, supaya tidak menahan proses.
+function waitSocketOpen(sock, timeoutMs) {
+  let timer;
+  const guard = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error("waitForSocketOpen timeout")),
+      timeoutMs,
+    );
+  });
+  return Promise.race([sock.waitForSocketOpen(), guard]).finally(() => {
+    clearTimeout(timer);
+  });
+}
+
+// QR disimpan sebagai PNG supaya bisa dibuka di HP atau dikirim ke orang lain
+// yang harus scan. errorCorrectionLevel "L" = redundansi paling rendah, jadi
+// QR paling padat untuk payload yang sama.
+async function writeQrPng(qr) {
+  const dir = QR_DIR;
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const file = buildQrFilePath(dir);
+    const { default: qrcode } = await import("qrcode");
+    const buffer = await qrcode.toBuffer(qr, {
+      type: "png",
+      width: QR_PNG_WIDTH,
+      margin: 1,
+      errorCorrectionLevel: "L",
+    });
+    fs.writeFileSync(file, buffer);
+    pruneOldQrFiles(dir, 3);
+    return file;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Memulai koneksi WhatsApp
  * @param {Object} options - Opsi koneksi
@@ -313,23 +378,20 @@ function askQuestion(question) {
  */
 // Fetch versi WA di-cache 6 jam + fallback: gagal HTTP saat boot/reconnect
 // tidak boleh merobohkan proses (dulu reject → main().catch → exit(1)).
+// Kedua helper library tidak pernah throw, jadi logika ada di
+// lib/ourin-wa-version.js dan ditutup test.
 let _waVersionCache = null;
+
 async function getWaVersion() {
-  if (_waVersionCache && Date.now() - _waVersionCache.t < 6 * 3600e3) {
-    return _waVersionCache.v;
-  }
-  let v;
-  try {
-    v = (await fetchLatestBaileysVersion()).version;
-  } catch {
-    try {
-      v = (await fetchLatestWaWebVersion()).version;
-    } catch {
-      v = _waVersionCache?.v; // pakai terakhir yang diketahui; undefined → default library
-    }
-  }
-  if (v) _waVersionCache = { v, t: Date.now() };
-  return v;
+  const { version, isLatest } = await resolveWaVersion({
+    fetchers: [
+      () => fetchLatestWaWebVersion(),
+      () => fetchLatestBaileysVersion(),
+    ],
+    cache: _waVersionCache,
+  });
+  if (isLatest) _waVersionCache = { v: version, t: Date.now() };
+  return version;
 }
 
 async function startConnection(options = {}) {
@@ -352,6 +414,11 @@ async function startConnection(options = {}) {
     "storage",
     config.session?.folderName || "session",
   );
+
+  // cooldown disimpan di storage/, BUKAN di dalam folder sesi — kalau di dalam,
+  // sesi yang di-purge (rename ke .broken-*) akan membawa marker cooldownnya,
+  // jadi purge justru jadi cara绕过 cooldown
+  const storageRoot = path.dirname(sessionPath);
 
   const TURSO_ENABLED = config.turso?.enabled && config.turso?.url;
   let state, saveCreds;
@@ -388,6 +455,9 @@ async function startConnection(options = {}) {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, logger),
     },
+    // elemen ke-3 ("22.0.0") tidak pernah dikirim server: pairing cuma pakai
+    // browser[0] (OS) + browser[1] (nama browser) — lihat
+    // Utils/companion-reg-client-utils.js getCompanionWebClientType
     browser: ["Ubuntu", "Chrome", "22.0.0"],
     syncFullHistory: false,
     markOnlineOnConnect: false,
@@ -421,28 +491,91 @@ async function startConnection(options = {}) {
   connectionState.sock = sock;
   extendSocket(sock);
 
+  // liveness watchdog: tiap frame masuk dari server (keep-alive pong,
+  // presence, dll) = koneksi hidup. Tanpa ini bot sepi pesan > 120 menit
+  // bakal di-restart sendiri padahal koneksi sehat → "putus" palsu.
+  try {
+    const touch = () => { lastMessageReceived = Date.now(); };
+    sock.ws?.on?.("frame", touch);
+    sock.ws?.on?.("pong", touch);
+  } catch { }
+
   // Move pairing code logic to connection.update handler
   // so WebSocket is connected before requestPairingCode sends IQ
   sock.ev.on("creds.update", saveCreds);
 
   let pairingRequested = false;
+  // QR接管 aktif kalau pairing code kena rate-limit. Library tetap mengirim
+  // data QR di mode pairing, jadi fallback cukup merender — tanpa socket baru.
+  let qrFallbackActive = false;
+  let lastRenderedQr = null;
+  let qrPrintCount = 0;
 
   sock.ev.on("connection.update", async (u) => {
     const { connection: c, lastDisconnect: d, qr: q } = u;
 
-    if (q && !usePairingCode) {
-      colors.logger.info("qr", "Kode QR siap, silakan scan");
-      const { default: qrcode } = await import("qrcode");
-      qrcode.toString(q, { type: "terminal", small: true }, (err, qrText) => {
-        if (!err) console.log(qrText);
-      });
+    const qrMode = shouldUseQrFallback({
+      usePairingCode,
+      fallbackEnabled: config.session?.pairingFallbackToQr !== false,
+      rateLimited: qrFallbackActive,
+    });
+
+    if (q && qrMode) {
+      if (shouldRenderQr({ qr: q, lastRendered: lastRenderedQr }) &&
+        canRenderMore({ renderedCount: qrPrintCount, maxPrints: QR_MAX_PRINTS })) {
+        lastRenderedQr = q;
+        qrPrintCount++;
+        try {
+          const { default: qrcode } = await import("qrcode");
+          const text = await qrcode.toString(q, { type: "terminal", small: true });
+          console.log("");
+          console.log(
+            colors.createBanner(
+              [
+                "",
+                "   SCAN QR DARI WHATSAPP   ",
+                "",
+                "  WhatsApp > Linked Devices > Link a Device  ",
+                "",
+              ],
+              "cyan",
+            ),
+          );
+          console.log(text);
+          const file = await writeQrPng(q);
+          if (file) console.log(`  QR tersimpan: ${file}`);
+          console.log("");
+        } catch (e) {
+          colors.logger.error("qr", `gagal render QR: ${e.message}`);
+        }
+      }
     }
 
     // QR event juga fire di pairing mode — itu sinyal socket siap auth.
     // Device unregistered → connection 'open' TIDAK akan pernah fire.
     // Jadi pairing code WAJIB dipicu oleh qr, bukan connection open.
-    if (q && usePairingCode && !sock.authState.creds.registered && !pairingRequested) {
-      pairingRequested = true;
+    if (q && usePairingCode && !qrFallbackActive && !sock.authState.creds.registered && !pairingRequested) {
+      const cooldownMs = getCooldownRemainingMs(storageRoot);
+      if (cooldownMs > 0) {
+        const waitMin = Math.ceil(cooldownMs / 60e3);
+        if (config.session?.pairingFallbackToQr !== false) {
+          // cooldown hanya berlaku untuk pairing code; QR tidak kena limit
+          // yang sama, jadi langsung pindah supaya user tetap bisa konek
+          qrFallbackActive = true;
+          lastRenderedQr = null;
+          colors.logger.warn(
+            "pairing",
+            `cooldown pairing ${waitMin} menit — beralih ke QR code`,
+          );
+        } else {
+          colors.logger.warn(
+            "pairing",
+            `lewat rate-limit, cooldown ${waitMin} menit lagi (restart bot tidak mempercepat)`,
+          );
+        }
+        return;
+      }
+
       let phoneNumber = pairingNumber;
 
       if (!phoneNumber || phoneNumber === "") {
@@ -456,9 +589,41 @@ async function startConnection(options = {}) {
         );
       }
 
-      phoneNumber = phoneNumber.replace(/[^0-9]/g, "");
+      phoneNumber = normalizePairingNumber(phoneNumber);
+      if (!phoneNumber) {
+        colors.logger.error(
+          "pairing",
+          "nomor tidak valid — isi session.pairingNumber di config.js (digit saja, contoh 6281234567890)",
+        );
+        return;
+      }
+
+      // pastikan WS beneran open sebelum kirim IQ link_code_companion_reg —
+      // race saat handshake belum kelar bikin "Connection Closed" (428)
+      try {
+        if (!sock.ws?.isOpen) await waitSocketOpen(sock, 20000);
+        await new Promise((r) => setTimeout(r, 1000));
+      } catch (e) {
+        colors.logger.error(
+          "pairing",
+          `socket drop sebelum pairing: ${e.message}`,
+        );
+        return;
+      }
+
+      // jeda di atas membuka jendela baru socket bisa tutup — cek ulang
+      if (!sock.ws?.isOpen) {
+        colors.logger.error("pairing", "socket tertutup saat jeda pairing");
+        return;
+      }
 
       colors.logger.info("pairing", `meminta kode untuk ${phoneNumber}`);
+
+      // tandai pairing berjalan SEBELUM request: requestPairingCode menulis
+      // creds.me provisional lalu bisa gagal, dan 401 afterwards harus
+      // diartikan sebagai "pairing terputus", bukan "logout sah"
+      markPairingPending(sock.authState.creds);
+      pairingRequested = true;
 
       try {
         const code = await sock.requestPairingCode(phoneNumber, "OKTZZLAH");
@@ -481,6 +646,43 @@ async function startConnection(options = {}) {
         console.log("");
       } catch (error) {
         colors.logger.error("pairing", `gagal: ${error.message}`);
+
+        // library sudah menaruh creds.me + creds.pairingCode sebelum IQ dikirim
+        // dan TIDAK rollback sendiri. Kalau dibiarkan, socket berikutnya baca
+        // creds.me → pilih login node untuk perangkat yang belum terdaftar.
+        resetPairingCreds(sock.authState.creds);
+        await saveCreds().catch(() => { });
+
+        if (isRateLimitError(error)) {
+          writeCooldown(
+            storageRoot,
+            Date.now() + PAIRING_RATE_LIMIT_COOLDOWN_MS,
+          );
+          const fallbackAllowed = config.session?.pairingFallbackToQr !== false;
+          if (fallbackAllowed) {
+            // pairing code kena limit → serahkan ke QR pada socket yang sama.
+            // creds pairing sudah di-reset di atas, jadi tidak ada 401-loop.
+            qrFallbackActive = true;
+            lastRenderedQr = null;
+            colors.logger.warn(
+              "pairing",
+              "kode ditolak WhatsApp: rate-overlimit. Beralih ke QR code — scan dari WhatsApp > Linked Devices.",
+            );
+          } else {
+            colors.logger.warn(
+              "pairing",
+              "kode ditolak WhatsApp: rate-overlimit. Menunggu cooldown sebelum coba lagi (fallback QR dimatikan).",
+            );
+          }
+        } else {
+          colors.logger.warn(
+            "pairing",
+            "gagal minta kode, akan coba lagi di siklus QR berikutnya",
+          );
+        }
+        // baik rate-limit maupun error transien: re-arm agar QR berikutnya
+        // masuk lagi ke cek cooldown. Kalau dibiarkan true, proses ini tidak
+        // akan pernah mencoba lagi walau cooldown sudah lewat.
         pairingRequested = false;
       }
     }
@@ -523,28 +725,57 @@ async function startConnection(options = {}) {
 
       const statusMsg = STATUS_MESSAGES[sc] || `❔ Unknown (kode: ${sc})`;
       colors.logger.warn("whatsapp", `terputus — ${statusMsg}`);
-      if (sc === DisconnectReason.loggedOut || sc === 401) {
+
+      // rate-overlimit juga bisa datang lewat stream error, bukan cuma dari
+      // requestPairingCode — catat cooldown supaya request berikutnya ditunda
+      if (isRateLimitError(d?.error)) {
+        writeCooldown(storageRoot, Date.now() + PAIRING_RATE_LIMIT_COOLDOWN_MS);
+        colors.logger.warn(
+          "whatsapp",
+          "WhatsApp rate-limit koneksi — cooldown pairing diaktifkan",
+        );
+      }
+
+      const action = classifyClose(sc, sock.authState?.creds);
+      if (action !== "reconnect") {
         connectionState.reconnectAttempts++;
         const m = config.session?.maxReconnectAttempts || 5;
         if (connectionState.reconnectAttempts <= m) {
+          if (action === "reset-pairing") {
+            // 401 saat pairingPending = library kirim login node untuk
+            // perangkat yang belum terdaftar, lalu WA menolak. Reset cukup
+            // creds pairing; JANGAN hapus folder sesi karena itu bikin
+            // identitas baru tiap siklus dan memicu rate-overlimit.
+            colors.logger.warn(
+              "whatsapp",
+              `pairing belum kelar — reset creds, pairing ulang otomatis (${connectionState.reconnectAttempts}/${m})`,
+            );
+            resetPairingCreds(sock.authState?.creds);
+            // tunggu write selesai: kalau reconnect duluan, load creds bisa
+            // dapat `me` lama dan pilih login node lagi
+            await saveCreds().catch((e) => {
+              colors.logger.error(
+                "whatsapp",
+                `gagal simpan reset pairing: ${e.message}`,
+              );
+            });
+            scheduleReconnect(
+              config.session?.reconnectInterval || 15e3,
+              options,
+            );
+            return;
+          }
           colors.logger.error(
             "whatsapp",
             `sesi habis — hapus sesi (${connectionState.reconnectAttempts}/${m}), pairing baru otomatis`,
           );
           try {
-            const sessionPath = path.join(
-              process.cwd(),
-              "storage",
-              config.session?.folderName || "session",
-            );
             if (fs.existsSync(sessionPath)) {
               // rename, jangan rm — 401 transien masih bisa dipulihkan manual
               // dari backup; rm langsung = sesi hilang permanen
-              const parent = path.dirname(sessionPath);
-              const base = path.basename(sessionPath);
-              for (const f of fs.readdirSync(parent)) {
-                if (f.startsWith(`${base}.broken-`)) {
-                  try { fs.rmSync(path.join(parent, f), { recursive: true, force: true }); } catch { }
+              for (const f of fs.readdirSync(storageRoot)) {
+                if (f.startsWith(`${path.basename(sessionPath)}.broken-`)) {
+                  try { fs.rmSync(path.join(storageRoot, f), { recursive: true, force: true }); } catch { }
                 }
               }
               fs.renameSync(
@@ -616,6 +847,12 @@ async function startConnection(options = {}) {
       connectionState.isReady = true;
       connectionState.reconnectAttempts = 0;
       connectionState.connectedAt = new Date();
+
+      // auth lolos: pairingSukses, marker tidak boleh ikut terpersist
+      if (isPairingPending(sock.authState?.creds)) {
+        clearPairingPending(sock.authState?.creds);
+        await saveCreds().catch(() => { });
+      }
 
       try {
         await sock.uploadPreKeys();
