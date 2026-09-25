@@ -5,6 +5,15 @@ import path from "node:path";
 const ROOT = process.cwd();
 const SCAN_DIRS = ["src", "plugins", "tests", "data", "case"];
 const SCAN_EXT = new Set([".js", ".mjs", ".cjs"]);
+const GUARD_EXCLUDES = [
+  ":(exclude)docs/**",
+  ":(exclude)README.md",
+  ":(exclude).opencode/**",
+  ":(exclude).superpowers/**",
+  ":(exclude)node_modules/**",
+  ":(exclude)native/**",
+  ":(exclude)src/data/family100.json",
+];
 
 const libFiles = execSync('git ls-files "src/lib/*.js"', { encoding: "utf8" })
   .trim()
@@ -46,6 +55,28 @@ function collectScanFiles() {
 }
 
 const dryRun = process.argv.includes("--dry-run");
+
+function assertNoRenamedBasenames() {
+  if (dryRun || map.size === 0) return;
+  const patterns = `${[...map.keys()].join("\n")}\n`;
+  let output;
+  try {
+    output = execFileSync(
+      "git",
+      ["grep", "-I", "-n", "-F", "-f", "-", "--", ".", ...GUARD_EXCLUDES],
+      { cwd: ROOT, input: patterns, encoding: "utf8" },
+    );
+  } catch (error) {
+    if (error.status === 1) return;
+    throw error;
+  }
+  const remaining = output.trim();
+  if (remaining) {
+    console.error(`sisa referensi basename rename:\n${remaining}`);
+    process.exit(1);
+  }
+}
+
 let moved = 0;
 let rewritten = 0;
 for (const [oldBase, newBase] of map) {
@@ -74,4 +105,5 @@ for (const file of files) {
     rewritten += 1;
   }
 }
+assertNoRenamedBasenames();
 console.log(`renamed: ${moved}, rewrite import: ${rewritten} file`);
