@@ -54,7 +54,8 @@ async function f(url, responseType = "json", method = "GET", headers = {}, body 
         await response.body.dump()
         return null
     } catch (error) {
-        if (controller.signal.aborted) return null
+        const reason = controller.signal.aborted ? "timeout" : (error?.message || error)
+        console.error(`[http] request gagal: ${method} ${url} — ${reason}`)
         return null
     } finally {
         clearTimeout(timeoutId)
