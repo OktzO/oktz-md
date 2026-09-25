@@ -51,7 +51,7 @@ const pluginConfig = {
     category: 'ephoto',
     description: 'Buat efek text keren dengan berbagai style',
     usage: '.<effect> <text>',
-    example: '.glitchtext Ourin-AI',
+    example: '.glitchtext Foto-AI',
     isOwner: false,
     isPremium: false,
     isGroup: false,
