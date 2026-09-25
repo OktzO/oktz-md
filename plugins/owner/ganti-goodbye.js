@@ -2,7 +2,7 @@ import te from '../../src/lib/error.js'
 import { updateAssetUrl } from '../../src/lib/uploader.js'
 const pluginConfig = {
     name: 'ganti-goodbye.jpg',
-    alias: ['gantigoodbye', 'setgoodbye'],
+    alias: ['gantigoodbye', 'setfotogoodbye'],
     category: 'owner',
     description: 'Ganti gambar goodbye.jpg (thumbnail goodbye)',
     usage: '.ganti-goodbye.jpg (reply/kirim gambar)',
