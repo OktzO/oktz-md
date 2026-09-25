@@ -93,127 +93,195 @@ function read(file) {
   return fs.readFileSync(path.join(ROOT, file), "utf8");
 }
 
-function stripComments(source) {
-  let output = "";
-  let state = "code";
-  for (let index = 0; index < source.length; index += 1) {
-    const character = source[index];
-    const next = source[index + 1];
-    if (state === "code") {
-      if (character === "/" && next === "/") {
-        output += "  ";
-        index += 1;
-        state = "line";
-      } else if (character === "/" && next === "*") {
-        output += "  ";
-        index += 1;
-        state = "block";
-      } else {
-        output += character;
-        if (character === "\"" || character === "'" || character === "`") {
-          state = character;
-        }
-      }
-    } else if (state === "line") {
-      if (character === "\n" || character === "\r") {
-        output += character;
-        state = "code";
-      } else {
-        output += " ";
-      }
-    } else if (state === "block") {
-      if (character === "*" && next === "/") {
-        output += "  ";
-        index += 1;
-        state = "code";
-      } else if (character === "\n" || character === "\r") {
-        output += character;
-      } else {
-        output += " ";
-      }
-    } else {
-      output += character;
-      if (character === "\\" && next !== undefined) {
-        output += next;
-        index += 1;
-      } else if (character === state) {
-        state = "code";
-      }
-    }
-  }
-  return output;
-}
+const REGEX_PREFIX_KEYWORDS = new Set([
+  "return",
+  "typeof",
+  "case",
+  "in",
+  "of",
+  "new",
+  "delete",
+  "void",
+  "instanceof",
+  "do",
+  "else",
+  "yield",
+  "await",
+  "throw",
+  "default",
+  "extends",
+]);
 
-function skipTrivia(source, index) {
-  while (index < source.length) {
-    if (/\s/u.test(source[index])) {
-      index += 1;
-    } else if (source.startsWith("//", index)) {
-      const end = source.indexOf("\n", index + 2);
-      index = end === -1 ? source.length : end;
-    } else if (source.startsWith("/*", index)) {
-      const end = source.indexOf("*/", index + 2);
-      index = end === -1 ? source.length : end + 2;
-    } else {
-      break;
-    }
-  }
-  return index;
-}
-
-function readQuotedSpecifier(source, index) {
-  const quote = source[index];
-  let value = "";
-  for (let cursor = index + 1; cursor < source.length; cursor += 1) {
-    const character = source[cursor];
-    if (character === "\\") {
-      value += source[cursor + 1] ?? "";
-      cursor += 1;
-    } else if (character === quote) {
-      return { value, end: cursor + 1 };
-    } else {
-      value += character;
-    }
-  }
-  return null;
-}
-
-function isWordCharacter(character) {
+function isIdentifierCharacter(character) {
   return character !== undefined && /[A-Za-z0-9_$]/.test(character);
 }
 
-function importSpecifiers(source) {
-  const code = stripComments(source);
-  const matches = [];
-  for (let index = 0; index < code.length;) {
-    const character = code[index];
-    if (character === "\"" || character === "'" || character === "`") {
-      const quoted = readQuotedSpecifier(code, index);
-      index = quoted ? quoted.end : index + 1;
-      continue;
-    }
-    if (!isWordCharacter(character)) {
+function scanJavaScriptTokens(source) {
+  const tokens = [];
+  let index = 0;
+  let lastToken = null;
+
+  function addToken(type, value) {
+    const token = { type, value };
+    tokens.push(token);
+    lastToken = token;
+  }
+
+  function rememberValue() {
+    lastToken = { type: "value", value: "" };
+  }
+
+  function skipLineComment() {
+    index += 2;
+    while (index < source.length && source[index] !== "\n" && source[index] !== "\r") {
       index += 1;
-      continue;
     }
-    let end = index + 1;
-    while (end < code.length && isWordCharacter(code[end])) end += 1;
-    const word = code.slice(index, end);
-    if (word === "import" || word === "from") {
-      let cursor = skipTrivia(code, end);
-      if (word === "import" && code[cursor] === "(") {
-        cursor = skipTrivia(code, cursor + 1);
+  }
+
+  function skipBlockComment() {
+    index += 2;
+    while (index < source.length) {
+      if (source[index] === "*" && source[index + 1] === "/") {
+        index += 2;
+        return;
       }
-      if (code[cursor] === "\"" || code[cursor] === "'") {
-        const specifier = readQuotedSpecifier(code, cursor);
-        if (specifier) {
-          matches.push(specifier.value);
-          index = specifier.end;
-          continue;
-        }
+      index += 1;
+    }
+  }
+
+  function scanQuotedString(quote) {
+    index += 1;
+    let value = "";
+    while (index < source.length) {
+      const character = source[index];
+      if (character === "\\") {
+        value += source[index + 1] ?? "";
+        index += 2;
+      } else if (character === quote) {
+        index += 1;
+        addToken("string", value);
+        return;
+      } else {
+        value += character;
+        index += 1;
       }
     }
-    index = end;
+    addToken("string", value);
+  }
+
+  function canStartRegex() {
+    if (!lastToken) return true;
+    if (lastToken.type === "identifier") return REGEX_PREFIX_KEYWORDS.has(lastToken.value);
+    if (lastToken.type === "value") return false;
+    return ![")", "]", "}"].includes(lastToken.value);
+  }
+
+  function scanRegexLiteral() {
+    const start = index;
+    index += 1;
+    let inCharacterClass = false;
+    while (index < source.length) {
+      const character = source[index];
+      if (character === "\\") {
+        index += 2;
+        continue;
+      }
+      if (character === "\n" || character === "\r") break;
+      if (character === "[") {
+        inCharacterClass = true;
+      } else if (character === "]") {
+        inCharacterClass = false;
+      } else if (character === "/" && !inCharacterClass) {
+        index += 1;
+        while (index < source.length && isIdentifierCharacter(source[index])) index += 1;
+        rememberValue();
+        return true;
+      }
+      index += 1;
+    }
+    index = start;
+    return false;
+  }
+
+  function scanTemplate() {
+    index += 1;
+    while (index < source.length) {
+      const character = source[index];
+      if (character === "\\") {
+        index += 2;
+        continue;
+      }
+      if (character === "`") {
+        index += 1;
+        rememberValue();
+        return;
+      }
+      if (character === "$" && source[index + 1] === "{") {
+        index += 2;
+        scanCode("}");
+        if (source[index] === "}") index += 1;
+        continue;
+      }
+      index += 1;
+    }
+    rememberValue();
+  }
+
+  function scanCode(endCharacter = null) {
+    let braceDepth = 0;
+    while (index < source.length) {
+      const character = source[index];
+      const next = source[index + 1];
+      if (endCharacter === "}" && character === "}" && braceDepth === 0) return;
+      if (/\s/u.test(character)) {
+        index += 1;
+        continue;
+      }
+      if (character === "/" && next === "/") {
+        skipLineComment();
+        continue;
+      }
+      if (character === "/" && next === "*") {
+        skipBlockComment();
+        continue;
+      }
+      if (character === "\"" || character === "'") {
+        scanQuotedString(character);
+        continue;
+      }
+      if (character === "`") {
+        scanTemplate();
+        continue;
+      }
+      if (character === "/" && canStartRegex() && scanRegexLiteral()) continue;
+      if (isIdentifierCharacter(character)) {
+        const start = index;
+        index += 1;
+        while (index < source.length && isIdentifierCharacter(source[index])) index += 1;
+        addToken("identifier", source.slice(start, index));
+        continue;
+      }
+      if (character === "{") braceDepth += 1;
+      if (character === "}" && braceDepth > 0) braceDepth -= 1;
+      addToken("punctuation", character);
+      index += 1;
+    }
+  }
+
+  scanCode();
+  return tokens;
+}
+
+function importSpecifiers(source) {
+  const tokens = scanJavaScriptTokens(source);
+  const matches = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token.type !== "identifier") continue;
+    if (token.value !== "import" && token.value !== "from") continue;
+    let next = index + 1;
+    if (token.value === "import" && tokens[next]?.value === "(") next += 1;
+    if (tokens[next]?.type === "string") matches.push(tokens[next].value);
   }
   return matches;
 }
