@@ -115,13 +115,13 @@ const config = {
   },
 
   sticker: {
-    packname: "𝗢𝗨𝗥𝗜𝗡 𝗗𝗘𝗟𝗨𝗫𝗘", // Nama pack sticker
+    packname: "𝗙𝗢𝗧𝗢 𝗗𝗘𝗟𝗨𝗫𝗘", // Nama pack sticker
     author: "Zann", // Author sticker
   },
 
   saluran: {
     id: "120363400911374213@newsletter", // ID saluran (contoh: 120363xxx@newsletter)                          // ID saluran (contoh: 120363xxx@newsletter)
-    name: "Join saluran resmi ourin", // Nama saluran
+    name: "Join saluran resmi Oktz", // Nama saluran
     link: "https://whatsapp.com/channel/0029VbB37bgBfxoAmAlsgE0t", // Link saluran
   },
 

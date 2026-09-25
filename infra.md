@@ -1,4 +1,4 @@
-# Infra — Ourin-MD v3.3.1
+# Infra — foto-md v3.3.1
 
 Dokumentasi teknis internal: arsitektur, alur eksekusi, routing, plugin system, database, session, security, dan library. Untuk panduan pengguna lihat `README.md`.
 
@@ -7,7 +7,7 @@ Dokumentasi teknis internal: arsitektur, alur eksekusi, routing, plugin system, 
 ```
 index.js                  → entry point, init semua subsystem
 config.js                 → config tunggal + helper functions (isOwner, isPremium, dll)
-case/ourin.js             → case-based command handler (minor, ~5 built-in commands)
+case/foto.js             → case-based command handler (minor, ~5 built-in commands)
 src/connection.js         → WhatsApp WebSocket connection (Baileys)
 src/handler.js            → message router (pusat routing, ~2200 baris)
 src/lib/*                 → 71 library modules
@@ -16,7 +16,7 @@ src/tiktok/*              → 8 JSON data feed asupan TikTok
 plugins/<kategori>/*.js   → 827 plugin files (34 kategori)
 assets/                   → media assets (images, fonts, audio, video)
 database/                 → runtime data files (JSON, lowdb, lid-cache)
-tests/                    → node:test (14 suite) + fixtures tests/OURIN/
+tests/                    → node:test (14 suite) + fixtures tests/foto/
 infra.md                  → dokumentasi ini
 ```
 
@@ -50,7 +50,7 @@ infra.md                  → dokumentasi ini
 messageHandler(msg, sock)
   ├── serialize()          → raw WA msg → object `m` (command, args, body, dll)
   ├── filter spam/rate-limit (globalRateLimiter + spamDelayTracker)
-  ├── case handler (case/ourin.js) — built-in commands
+  ├── case handler (case/foto.js) — built-in commands
   ├── if handled? → done
   ├── group protection (antilink, antitoxic, antidocument, antisticker, dll)
   ├── game answer handler (sulap, tictactoe, suitpvp, ulartangga, family100, dll)
@@ -92,7 +92,7 @@ messageHandler(msg, sock)
 
 ## Dual Routing
 
-1. **Case** — `case/ourin.js`: switch-case sederhana, built-in, di-handle duluan di `messageHandler()`. Hanya ~5 command (ping, latency, listcase, listplugin).
+1. **Case** — `case/foto.js`: switch-case sederhana, built-in, di-handle duluan di `messageHandler()`. Hanya ~5 command (ping, latency, listcase, listplugin).
 2. **Plugin** — mayoritas command: lookup by name di `pluginStore`, eksekusi `handler()`. ~827 plugin.
 
 ## Database (`src/lib/database.js`)
@@ -118,7 +118,7 @@ messageHandler(msg, sock)
 
 ## Session & Auth (`src/connection.js`)
 
-- WhatsApp Multi-Device protocol via `ourin-baileys`
+- WhatsApp Multi-Device protocol via `foto-baileys`
 - Auth state: Turso (libsql) atau file-based
 - Pairing code atau QR code
 - Auto-reconnect dengan exponential backoff
@@ -140,7 +140,7 @@ messageHandler(msg, sock)
 
 | Library | Fungsi |
 |---------|--------|
-| `ourin-baileys` | WhatsApp MD protocol (fork of @whiskeysockets/baileys) |
+| `foto-baileys` | WhatsApp MD protocol (fork of @whiskeysockets/baileys) |
 | `lowdb` | JSON file database |
 | `@libsql/client` | Turso/libsql edge database |
 | `@napi-rs/canvas` | Canvas rendering (welcome card, dll) |
@@ -222,7 +222,7 @@ plugins/download/tiktokdl2.js (tt2 — savett)
 
 ## Case Commands
 
-Built-in di `case/ourin.js`:
+Built-in di `case/foto.js`:
 - `cping`, `cspeed`, `clatency` — ping/latency
 - `listallcase`, `lcase`, `caselist`, `allcase` — daftar case
 - `listallplugin`, `lplugin`, `pluginlist`, `allplugin` — daftar plugin
@@ -246,7 +246,7 @@ Built-in di `case/ourin.js`:
 - `lid-resolve.test.mjs` — LID→JID resolution + fallback
 - `logger-command.test.mjs` — log command tanpa nomor user
 - `memory-leaks.test.mjs` — cron job leak, cache cap (antispam, waifupool pages)
-- `tests/OURIN/` — fixture: full copy struktur bot + database sampel untuk integration test
+- `tests/foto/` — fixture: full copy struktur bot + database sampel untuk integration test
 
 ## Troubleshooting Umum
 
