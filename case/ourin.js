@@ -1,11 +1,11 @@
 import { performance } from "perf_hooks";
-import { getDatabase } from "../src/lib/ourin-database.js";
+import { getDatabase } from "../src/lib/database.js";
 import {
   getAllPlugins,
   getCommandsByCategory,
   getCategories,
   pluginStore,
-} from "../src/lib/ourin-plugins.js";
+} from "../src/lib/plugins.js";
 import config from "../config.js";
 
 function toSmallCaps(text) {

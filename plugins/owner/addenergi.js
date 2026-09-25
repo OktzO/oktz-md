@@ -1,5 +1,5 @@
 import config from '../../config.js'
-import { getDatabase } from '../../src/lib/ourin-database.js'
+import { getDatabase } from '../../src/lib/database.js'
 const pluginConfig = {
     name: 'addenergi',
     alias: ['tambahenergi', 'giveenergi', 'addenergy'],

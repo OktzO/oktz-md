@@ -1,4 +1,4 @@
-import { getRandomItem } from '../../src/lib/ourin-game-data.js'
+import { getRandomItem } from '../../src/lib/game-data.js'
 const pluginConfig = {
     name: 'bucin',
     alias: ['gombal', 'love', 'romantis'],

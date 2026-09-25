@@ -1,8 +1,8 @@
-import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
+import { getAssetBuffer } from "../../src/lib/asset-manager.js";
 import * as _canvas from '@napi-rs/canvas';
 import axios from "axios";
 
-import te from "../../src/lib/ourin-error.js";
+import te from "../../src/lib/error.js";
 
 const pluginConfig = {
   name: "fakedev7",

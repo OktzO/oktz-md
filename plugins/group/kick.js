@@ -2,8 +2,8 @@ import {
   findParticipantByNumber,
   isSameParticipant,
   isSameGroupMember,
-} from '../../src/lib/ourin-lid.js'
-import te from '../../src/lib/ourin-error.js'
+} from '../../src/lib/lid.js'
+import te from '../../src/lib/error.js'
 const pluginConfig = {
     name: 'kick',
     alias: ['remove', 'tendang'],

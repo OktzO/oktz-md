@@ -1,8 +1,8 @@
 import fs from "fs";
 import path from "path";
-import { getDatabase } from "../../src/lib/ourin-database.js";
+import { getDatabase } from "../../src/lib/database.js";
 import { getOwnerName } from "../../config.js";
-import te from "../../src/lib/ourin-error.js";
+import te from "../../src/lib/error.js";
 const pluginConfig = {
   name: "ganti-namaowner",
   alias: ["setnamaowner", "setnameowner", "setownername"],

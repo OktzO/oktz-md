@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import te from '../../src/lib/ourin-error.js'
+import te from '../../src/lib/error.js'
 const pluginConfig = {
     name: 'ganti-namabot',
     alias: ['setnamabot', 'gantibot'],

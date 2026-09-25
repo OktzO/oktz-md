@@ -1,6 +1,6 @@
-import { ocr } from "../../src/lib/ourin-native-loader.js";
-import te from "../../src/lib/ourin-error.js";
-import { sendToolsPreview } from "../../src/lib/ourin-context.js";
+import { ocr } from "../../src/lib/native-loader.js";
+import te from "../../src/lib/error.js";
+import { sendToolsPreview } from "../../src/lib/context.js";
 
 const pluginConfig = {
   name: "ocr",

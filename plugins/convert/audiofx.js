@@ -1,7 +1,7 @@
-import { queueFFmpeg } from '../../src/lib/ourin-ffmpeg.js'
+import { queueFFmpeg } from '../../src/lib/ffmpeg.js'
 import fs from 'fs'
 import path from 'path'
-import te from '../../src/lib/ourin-error.js'
+import te from '../../src/lib/error.js'
 const EFFECTS = {
     bass:      { emoji: '🔊', filter: 'bass=g=20:f=110:w=0.6', desc: 'Bass boost' },
     blown:     { emoji: '💥', filter: 'acrusher=level_in=4:level_out=5:bits=8:mode=log:aa=1', desc: 'Distortion' },

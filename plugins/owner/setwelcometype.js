@@ -1,4 +1,4 @@
-import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
+import { getAssetBuffer } from "../../src/lib/asset-manager.js";
 const pluginConfig = {
   name: "setwelcometype",
   alias: ["welcometype", "welcomevariant", "welcomestyle"],

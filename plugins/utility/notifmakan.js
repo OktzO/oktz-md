@@ -1,4 +1,4 @@
-import { setNotifMakan, toggleNotif, getNotif, parseJadwal } from '../../src/lib/ourin-notif-scheduler.js'
+import { setNotifMakan, toggleNotif, getNotif, parseJadwal } from '../../src/lib/notif-scheduler.js'
 
 const pluginConfig = {
     name: 'notifmakan',

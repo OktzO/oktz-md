@@ -1,4 +1,4 @@
-import { getDatabase } from "../../src/lib/ourin-database.js";
+import { getDatabase } from "../../src/lib/database.js";
 const pluginConfig = {
   name: "meditation",
   alias: ["rest", "istirahat", "tidur", "sleep"],

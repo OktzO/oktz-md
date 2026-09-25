@@ -1,6 +1,6 @@
 import config from '../../config.js';
-import { updateAssetUrl } from '../../src/lib/ourin-uploader.js';
-import te from '../../src/lib/ourin-error.js';
+import { updateAssetUrl } from '../../src/lib/uploader.js';
+import te from '../../src/lib/error.js';
 
 const pluginConfig = {
     name: 'ganti-asset',

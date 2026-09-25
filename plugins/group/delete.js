@@ -1,4 +1,4 @@
-import { isSameGroupMember } from '../../src/lib/ourin-lid.js'
+import { isSameGroupMember } from '../../src/lib/lid.js'
 const pluginConfig = {
     name: 'delete',
     alias: ['del', 'hapus', 'd'],

@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert";
 import {
   rollHusbu, applyAction, rollEvent, getDailyMood, albumStats, DOWRY,
-} from "../src/lib/ourin-husbu.js";
+} from "../src/lib/husbu.js";
 
 function mulberry32(seed) {
   let a = seed >>> 0;

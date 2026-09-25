@@ -1,5 +1,5 @@
-import { getParticipantJid } from '../../src/lib/ourin-lid.js'
-import te from '../../src/lib/ourin-error.js'
+import { getParticipantJid } from '../../src/lib/lid.js'
+import te from '../../src/lib/error.js'
 const pluginConfig = {
     name: 'listadmin',
     alias: ['admins', 'adminlist'],

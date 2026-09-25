@@ -3,7 +3,7 @@ import {
   heapSnapshotEligibility,
   HEAP_SNAP_RSS_CEILING,
   HEAP_SNAP_PROJECTED_CEILING,
-} from "../../src/lib/ourin-profiler.js";
+} from "../../src/lib/profiler.js";
 
 const pluginConfig = {
   name: "heapsnap",

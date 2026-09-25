@@ -1,7 +1,7 @@
-import { getDatabase } from "../../src/lib/ourin-database.js";
-import { fetchGroupsSafe } from "../../src/lib/ourin-jpm-helper.js";
-import { saluranCtx } from "../../src/lib/ourin-context.js";
-import te from "../../src/lib/ourin-error.js";
+import { getDatabase } from "../../src/lib/database.js";
+import { fetchGroupsSafe } from "../../src/lib/jpm-helper.js";
+import { saluranCtx } from "../../src/lib/context.js";
+import te from "../../src/lib/error.js";
 
 const pluginConfig = {
   name: "bcgc",

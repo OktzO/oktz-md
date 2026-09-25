@@ -1,7 +1,7 @@
 import {
   isAutoClearEnabled,
   setAutoClearEnabled,
-} from "../../src/lib/ourin-chat-cleaner.js";
+} from "../../src/lib/chat-cleaner.js";
 
 const pluginConfig = {
   name: ["autoclear"],

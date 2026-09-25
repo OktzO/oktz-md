@@ -2,7 +2,7 @@ import sharp from "sharp";
 import config from "../../config.js";
 import axios from "axios";
 import { generateWAMessageFromContent, prepareWAMessageMedia, proto } from "onigis";
-import te from "../../src/lib/ourin-error.js";
+import te from "../../src/lib/error.js";
 
 const pluginConfig = {
   name: "cekidgc",

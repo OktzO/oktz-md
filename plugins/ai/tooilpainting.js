@@ -1,5 +1,5 @@
 import { live3d } from '../../src/scraper/seaart.js'
-import te from '../../src/lib/ourin-error.js'
+import te from '../../src/lib/error.js'
 const pluginConfig = {
     name: 'tooilpainting',
     alias: ['oilpainting', 'tooil', 'oil'],

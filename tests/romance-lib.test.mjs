@@ -4,7 +4,7 @@ import assert from "node:assert";
 import {
   diminish, fatigueMult, neglectDecay, angerEffMood, angerUpdate,
   applyNeglect, finalGain, getDailyMood, moodLabel, DOWRY, ANGER_THRESHOLD,
-} from "../src/lib/ourin-romance.js";
+} from "../src/lib/romance.js";
 
 describe("Romance shared engine", () => {
   it("diminish: gain mengecil seiring naiknya affection", () => {

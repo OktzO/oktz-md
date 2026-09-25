@@ -1,4 +1,4 @@
-import { getDatabase } from "../../src/lib/ourin-database.js";
+import { getDatabase } from "../../src/lib/database.js";
 import ms from "ms";
 const pluginConfig = {
   name: "akses",

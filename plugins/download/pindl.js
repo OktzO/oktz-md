@@ -1,9 +1,9 @@
 import fs from "fs";
 import axios from "axios";
 import path from "path";
-import { queueFFmpeg } from "./../../src/lib/ourin-ffmpeg.js";
-import { f } from "../../src/lib/ourin-http.js";
-import te from "../../src/lib/ourin-error.js";
+import { queueFFmpeg } from "./../../src/lib/ffmpeg.js";
+import { f } from "../../src/lib/http.js";
+import te from "../../src/lib/error.js";
 const pluginConfig = {
   name: "pindl",
   alias: ["pinterestdl", "pindownload", "pintdl"],

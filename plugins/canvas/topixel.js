@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { downloadMediaMessage, getContentType } from "onigis";
-import te from "../../src/lib/ourin-error.js";
+import te from "../../src/lib/error.js";
 
 const pluginConfig = {
   name: "topixel",

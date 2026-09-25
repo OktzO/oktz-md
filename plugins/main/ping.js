@@ -1,7 +1,7 @@
 import { createCanvas } from "@napi-rs/canvas"
 import { performance } from "perf_hooks"
 import os from "os"
-import te from "../../src/lib/ourin-error.js"
+import te from "../../src/lib/error.js"
 
 const pluginConfig = {
   name: "ping",

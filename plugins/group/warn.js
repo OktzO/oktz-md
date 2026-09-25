@@ -1,9 +1,9 @@
-import { getDatabase } from '../../src/lib/ourin-database.js'
+import { getDatabase } from '../../src/lib/database.js'
 import {
   findParticipantByNumber,
   isSameParticipant,
-} from '../../src/lib/ourin-lid.js'
-import te from '../../src/lib/ourin-error.js'
+} from '../../src/lib/lid.js'
+import te from '../../src/lib/error.js'
 const pluginConfig = {
     name: 'warn',
     alias: ['warning', 'peringatan'],

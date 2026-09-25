@@ -1,4 +1,4 @@
-import { getDatabase } from "../../src/lib/ourin-database.js";
+import { getDatabase } from "../../src/lib/database.js";
 import {
   getOrCreateFischUser,
   getRandomFish,
@@ -11,7 +11,7 @@ import {
   JACKPOT_POOLS,
   doJackpotPull,
   applyJackpotReward,
-} from "../../src/lib/ourin-fisch.js";
+} from "../../src/lib/fisch.js";
 import {
   islands,
   travelRequirements,
@@ -24,8 +24,8 @@ import {
   TOKEN_SHOP,
   GACHA_COST_COINS,
   GACHA_PITY_LIMIT,
-} from "../../src/lib/ourin-fisch-data.js";
-import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
+} from "../../src/lib/fisch-data.js";
+import { getAssetBuffer } from "../../src/lib/asset-manager.js";
 import config from "../../config.js";
 
 const FC = 15;

@@ -8,7 +8,7 @@ const PN_CLEAN = '6285608953677@s.whatsapp.net';
 
 let moduleCache = null;
 async function loadLid() {
-  if (!moduleCache) moduleCache = await import('../src/lib/ourin-lid.js');
+  if (!moduleCache) moduleCache = await import('../src/lib/lid.js');
   return moduleCache;
 }
 

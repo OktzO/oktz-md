@@ -1,4 +1,4 @@
-import te from '../../src/lib/ourin-error.js'
+import te from '../../src/lib/error.js'
 // RAM: ssh2 +15MB — lazy-load hanya saat command SSH dijalankan.
 async function getSshClient() {
     return (await import('ssh2')).Client

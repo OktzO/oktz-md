@@ -1,8 +1,8 @@
 import fs from "fs";
 import path from "path";
 import { pathToFileURL } from "url";
-import { hotReloadPlugin } from "../../src/lib/ourin-plugins.js";
-import te from "../../src/lib/ourin-error.js";
+import { hotReloadPlugin } from "../../src/lib/plugins.js";
+import te from "../../src/lib/error.js";
 
 const pluginConfig = {
   name: "gantiscraper",

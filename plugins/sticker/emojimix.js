@@ -1,6 +1,6 @@
 import config from '../../config.js'
-import { f } from './../../src/lib/ourin-http.js'
-import te from '../../src/lib/ourin-error.js'
+import { f } from './../../src/lib/http.js'
+import te from '../../src/lib/error.js'
 import { createCanvas } from '@napi-rs/canvas'
 
 const pluginConfig = {

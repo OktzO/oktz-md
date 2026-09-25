@@ -4,8 +4,8 @@
 //    dibagi ourin-brat & bratvid2 (lama: dua objek 27MB module singleton).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { loadEmojiMap } from "../src/lib/ourin-emoji-map.js";
-import { loadBratEmojiMap } from "../src/lib/ourin-brat.js";
+import { loadEmojiMap } from "../src/lib/emoji-map.js";
+import { loadBratEmojiMap } from "../src/lib/brat.js";
 import { loadEmojiMap as vidLoadEmojiMap, getEmojiImage, emojiImageCache } from "../plugins/sticker/bratvid2.js";
 
 // Ambil satu emoji nyata dari map (key hex -> emoji) biar tak nembak key ajaib.
@@ -31,7 +31,7 @@ test("emoji-apple.json: satu parse, satu objek dibagi ourin-brat & bratvid2", as
 });
 
 test("emoji-apple.json: JSON.parse jalan sekali per proses", async () => {
-  const mod = await import("../src/lib/ourin-emoji-map.js");
+  const mod = await import("../src/lib/emoji-map.js");
   await loadEmojiMap();
   assert.strictEqual(
     mod.emojiMapParseCount,

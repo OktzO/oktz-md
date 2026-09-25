@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { adminFlagsFor } from '../src/lib/ourin-serialize.js';
+import { adminFlagsFor } from '../src/lib/serialize.js';
 
 const BOT_PN = '628999888777:12@s.whatsapp.net';
 const BOT_LID = '9900011122233344@lid';

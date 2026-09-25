@@ -24,7 +24,7 @@ describe("printPluginTable minimal", () => {
     origLog = console.log;
     console.log = () => {};
     try {
-      mod = await import("../src/lib/ourin-plugins.js");
+      mod = await import("../src/lib/plugins.js");
     } finally {
       console.log = origLog;
     }
@@ -61,7 +61,7 @@ describe("ourin-logger logCommand minimal", () => {
     const origLog = console.log;
     console.log = () => {};
     try {
-      mod = await import("../src/lib/ourin-logger.js");
+      mod = await import("../src/lib/logger.js");
     } finally {
       console.log = origLog;
     }

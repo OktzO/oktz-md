@@ -1,5 +1,5 @@
-import { getAllPlugins } from '../../src/lib/ourin-plugins.js'
-import te from '../../src/lib/ourin-error.js'
+import { getAllPlugins } from '../../src/lib/plugins.js'
+import te from '../../src/lib/error.js'
 
 const pluginConfig = {
     name: 'totalfitur',

@@ -1,4 +1,4 @@
-import { getDatabase } from "../../src/lib/ourin-database.js";
+import { getDatabase } from "../../src/lib/database.js";
 import {
   getOrCreateMCUser,
   getRandomOre,
@@ -16,7 +16,7 @@ import {
   getAvailableMobs,
   healPlayer,
   JACKPOT_POOLS,
-} from "../../src/lib/ourin-minecraft.js";
+} from "../../src/lib/minecraft.js";
 import {
   biomes,
   travelRequirements,
@@ -30,8 +30,8 @@ import {
   GACHA_COST_COINS,
   GACHA_PITY_LIMIT,
   CRAFT_RECIPES,
-} from "../../src/lib/ourin-minecraft-data.js";
-import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
+} from "../../src/lib/minecraft-data.js";
+import { getAssetBuffer } from "../../src/lib/asset-manager.js";
 import config from "../../config.js";
 
 const MC = 15;

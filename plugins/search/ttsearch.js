@@ -4,7 +4,7 @@ import {
   generateWAMessageFromContent,
   jidNormalizedUser,
 } from "onigis";
-import te from "../../src/lib/ourin-error.js";
+import te from "../../src/lib/error.js";
 import { tiktokSearchVideo } from "../../src/scraper/tiktoksearch.js";
 const pluginConfig = {
   name: "ttsearch",

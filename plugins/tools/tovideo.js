@@ -1,7 +1,7 @@
 import sharp from 'sharp'
 import fs from 'fs'
 import path from 'path'
-import te from '../../src/lib/ourin-error.js'
+import te from '../../src/lib/error.js'
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
 import ffmpeg from 'fluent-ffmpeg'
 ffmpeg.setFfmpegPath(ffmpegInstaller.path)

@@ -1,6 +1,6 @@
-import { getDatabase } from "../../src/lib/ourin-database.js";
-import { addExpWithLevelCheck } from "../../src/lib/ourin-level.js";
-import te from "../../src/lib/ourin-error.js";
+import { getDatabase } from "../../src/lib/database.js";
+import { addExpWithLevelCheck } from "../../src/lib/level.js";
+import te from "../../src/lib/error.js";
 
 const pluginConfig = {
     name: "dungeon",

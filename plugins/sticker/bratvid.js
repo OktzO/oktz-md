@@ -1,10 +1,10 @@
 import config from '../../config.js'
-import te from '../../src/lib/ourin-error.js'
+import te from '../../src/lib/error.js'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
-import { ensureFfmpegOnPath } from '../../src/lib/ourin-ffmpeg.js'
-import { bratvidRssBlocked } from '../../src/lib/ourin-bratvid-gate.js'
+import { ensureFfmpegOnPath } from '../../src/lib/ffmpeg.js'
+import { bratvidRssBlocked } from '../../src/lib/bratvid-gate.js'
 
 // RAM: brat-canvas/video mem-parse ~80MB emoji JSON saat import (+200MB RSS).
 // Lazy-load hanya saat command dijalankan, setelah gate RSS lolos.

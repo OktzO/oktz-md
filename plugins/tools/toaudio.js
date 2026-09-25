@@ -1,4 +1,4 @@
-import { queueFFmpeg } from '../../src/lib/ourin-ffmpeg.js'
+import { queueFFmpeg } from '../../src/lib/ffmpeg.js'
 import fs from 'fs'
 import path from 'path'
 const pluginConfig = {

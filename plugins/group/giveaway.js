@@ -1,8 +1,8 @@
 import config from "../../config.js";
-import * as timeHelper from "../../src/lib/ourin-time.js";
+import * as timeHelper from "../../src/lib/time.js";
 import { CronJob } from "cron";
-import { getDatabase } from "../../src/lib/ourin-database.js";
-import { fetchGroupsSafe } from "../../src/lib/ourin-jpm-helper.js";
+import { getDatabase } from "../../src/lib/database.js";
+import { fetchGroupsSafe } from "../../src/lib/jpm-helper.js";
 
 function generateGiveawayId() {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -371,7 +371,7 @@ function startGiveawayChecker(sock, db) {
     "* * * * *",
     async () => {
       try {
-        const currentDb = _giveawayDb || (await import("../../src/lib/ourin-database.js")).getDatabase();
+        const currentDb = _giveawayDb || (await import("../../src/lib/database.js")).getDatabase();
         const currentSock = _giveawaySock || (await import("../../src/connection.js")).getSocket();
         if (!currentSock) return;
 

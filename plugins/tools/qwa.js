@@ -1,6 +1,6 @@
 import axios from 'axios'
-import { uploadImage } from '../../src/lib/ourin-uploader.js'
-import { serialize } from '../../src/lib/ourin-serialize.js'
+import { uploadImage } from '../../src/lib/uploader.js'
+import { serialize } from '../../src/lib/serialize.js'
 import { parsePhoneNumber } from 'awesome-phonenumber'
 
 const pluginConfig = {

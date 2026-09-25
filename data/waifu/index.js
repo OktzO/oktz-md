@@ -1,6 +1,6 @@
 // data/waifu/index.js
 // Loader pool waifu: merge file franchise, validasi entry, dedupe nama, hitung bobot tier.
-import { logger } from "../../src/lib/ourin-logger.js";
+import { logger } from "../../src/lib/logger.js";
 import { waifus as naruto } from "./naruto.js";
 import { waifus as onePiece } from "./one-piece.js";
 import { waifus as bleach } from "./bleach.js";

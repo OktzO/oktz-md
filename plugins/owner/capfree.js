@@ -1,5 +1,5 @@
-import { getPlugin } from "../../src/lib/ourin-plugins.js";
-import { getDatabase } from "../../src/lib/ourin-database.js";
+import { getPlugin } from "../../src/lib/plugins.js";
+import { getDatabase } from "../../src/lib/database.js";
 
 const config = {
   name: "capfree",

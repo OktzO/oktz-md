@@ -3,12 +3,12 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert";
 
-describe("Scheduler CronJob leak (ourin-scheduler.js initScheduler)", () => {
+describe("Scheduler CronJob leak (scheduler.js initScheduler)", () => {
   let mod, config;
 
   before(async () => {
     config = (await import("../config.js")).default;
-    mod = await import("../src/lib/ourin-scheduler.js");
+    mod = await import("../src/lib/scheduler.js");
   });
 
   after(() => {

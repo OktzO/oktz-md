@@ -1,12 +1,12 @@
 import axios from "axios";
-import * as timeHelper from "../../src/lib/ourin-time.js";
+import * as timeHelper from "../../src/lib/time.js";
 import {
   searchKota,
   getTodaySchedule,
   extractPrayerTimes,
-} from "../../src/lib/ourin-sholat-api.js";
-import te from "../../src/lib/ourin-error.js";
-import { saluranCtx } from "../../src/lib/ourin-context.js";
+} from "../../src/lib/sholat-api.js";
+import te from "../../src/lib/error.js";
+import { saluranCtx } from "../../src/lib/context.js";
 const pluginConfig = {
   name: "jadwalsholat",
   alias: ["sholat", "prayertime", "jadwalsolat", "waktusolat", "waktusholat"],

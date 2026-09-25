@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { handleAntilinkGc, handleAntilinkAll } from '../src/lib/ourin-group-protection.js';
+import { handleAntilinkGc, handleAntilinkAll } from '../src/lib/group-protection.js';
 
 const CHAT = '120363@g.us';
 const BOT_ID = '628999888777:12@s.whatsapp.net';

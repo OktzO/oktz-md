@@ -1,10 +1,10 @@
 import axios from 'axios'
 import crypto from 'crypto'
 import config from '../../config.js'
-import { isLid, lidToJid } from '../../src/lib/ourin-lid.js'
-import { hasFullAccess, getUserRole, VALID_SERVERS } from '../../src/lib/ourin-roles-cpanel.js'
-import * as timeHelper from '../../src/lib/ourin-time.js'
-import te from '../../src/lib/ourin-error.js'
+import { isLid, lidToJid } from '../../src/lib/lid.js'
+import { hasFullAccess, getUserRole, VALID_SERVERS } from '../../src/lib/roles-cpanel.js'
+import * as timeHelper from '../../src/lib/time.js'
+import te from '../../src/lib/error.js'
 const allCommands = VALID_SERVERS.map((v) => `cadmin${v}`);
 const allAliases = VALID_SERVERS.map((v) => `createadmin${v}`);
 

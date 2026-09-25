@@ -1,5 +1,5 @@
-import { getDatabase } from '../../src/lib/ourin-database.js'
-import { calculateLevel, getRole, checkAndNotifyLevelUp } from './../../src/lib/ourin-level.js'
+import { getDatabase } from '../../src/lib/database.js'
+import { calculateLevel, getRole, checkAndNotifyLevelUp } from './../../src/lib/level.js'
 
 const pluginConfig = {
     name: 'addlevel',

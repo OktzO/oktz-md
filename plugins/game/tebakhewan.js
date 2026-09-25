@@ -1,4 +1,4 @@
-import { games } from '../../src/lib/ourin-games.js'
+import { games } from '../../src/lib/games.js'
 
 games.register('tebakhewan', {
     alias: ['th', 'guessanimal'],

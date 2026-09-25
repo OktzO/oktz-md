@@ -1,5 +1,5 @@
-import * as timeHelper from '../../src/lib/ourin-time.js'
-import { getDatabase } from '../../src/lib/ourin-database.js'
+import * as timeHelper from '../../src/lib/time.js'
+import { getDatabase } from '../../src/lib/database.js'
 const pluginConfig = {
     name: 'botafk',
     alias: ['afkbot', 'afkmode'],

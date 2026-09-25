@@ -1,4 +1,4 @@
-import * as timeHelper from "../../src/lib/ourin-time.js";
+import * as timeHelper from "../../src/lib/time.js";
 import { pruneAbsensi } from "./absen.js";
 const pluginConfig = {
   name: "cekabsen",

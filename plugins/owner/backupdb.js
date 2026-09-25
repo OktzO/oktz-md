@@ -1,4 +1,4 @@
-import { sendStoreBackup, SCHEMA_VERSION } from '../../src/lib/ourin-store-backup.js'
+import { sendStoreBackup, SCHEMA_VERSION } from '../../src/lib/store-backup.js'
 const pluginConfig = {
     name: 'backupdb',
     alias: ['dbbackup', 'backupstore', 'storebackup'],

@@ -4,7 +4,7 @@ import { exec } from 'child_process'
 import { promisify } from 'util'
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
 import { downloadContentFromMessage } from 'onigis'
-import te from '../../src/lib/ourin-error.js'
+import te from '../../src/lib/error.js'
 const execAsync = promisify(exec)
 const ffmpegPath = ffmpegInstaller.path
 const ffprobePath = ffmpegPath.replace('ffmpeg', 'ffprobe')

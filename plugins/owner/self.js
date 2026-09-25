@@ -3,8 +3,8 @@ import config from '../../config.js'
  * @file plugins/owner/self.js
  * @description Plugin untuk mengaktifkan mode self (hanya owner & bot)
  */
-import { getDatabase } from '../../src/lib/ourin-database.js'
-import te from '../../src/lib/ourin-error.js'
+import { getDatabase } from '../../src/lib/database.js'
+import te from '../../src/lib/error.js'
 const pluginConfig = {
     name: 'self',
     alias: ['selfmode', 'private-mode'],

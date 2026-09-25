@@ -1,6 +1,6 @@
 import gemini from '../../src/scraper/gemini.js';
-import { AIRich } from '../../src/lib/ourin-builder.js';
-import te from '../../src/lib/ourin-error.js';
+import { AIRich } from '../../src/lib/builder.js';
+import te from '../../src/lib/error.js';
 
 const pluginConfig = {
     name: 'ai',

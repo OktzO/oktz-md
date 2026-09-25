@@ -1,0 +1,1258 @@
+import crypto from "crypto";
+import archiver from "archiver";
+import {
+  prepareWAMessageMedia,
+  generateWAMessageFromContent,
+  generateWAMessage,
+  generateMessageID,
+  generateMessageIDV2,
+  proto,
+  areJidsSameUser,
+  generateForwardMessageContent,
+} from "onigis";
+import {
+  isLid,
+  isLidConverted,
+  resolveAnyLidToJid,
+  getCachedJid,
+} from "./lid.js";
+
+import fs from "fs";
+import path from "path";
+import { downloadMediaMessage, getContentType } from "onigis";
+import { addExifToWebp, DEFAULT_METADATA } from "./exif.js";
+import { STICKER_WEBP_VF } from "./ffmpeg.js";
+import {
+  generateTableContent,
+  generateTableContentV2,
+  generateListContent,
+  generateCodeBlockContent,
+  generateCodeBlockContentV2,
+  generateLinkContentV2,
+} from "./rich-messages.js";
+import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
+import ffmpeg from "fluent-ffmpeg";
+ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+import { config } from "./../../config.js";
+import mime from "mime-types";
+import sharp from "sharp";
+import {
+  getProfilePicture,
+  getProfileBuffer,
+} from "./profile-picture.js";
+
+function getTempDir() {
+  const tmpDir = path.join(process.cwd(), "tmp");
+  if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+  return tmpDir;
+}
+
+const STICKER_PACK_CAP_BYTES = 200 * 1024 * 1024;
+
+function packSizeBytes(data) {
+  const pack = data?.message?.stickerPackMessage;
+  let bytes = 0;
+  if (pack?.stickers)
+    for (const s of pack.stickers)
+      if (s?.sticker?.byteLength) bytes += s.sticker.byteLength;
+  if (pack?.cover?.sticker?.byteLength) bytes += pack.cover.sticker.byteLength;
+  return bytes || Buffer.byteLength(JSON.stringify(pack ?? data)) || 1;
+}
+
+function createStickerPackCache(capBytes = STICKER_PACK_CAP_BYTES) {
+  const map = new Map();
+  let totalBytes = 0;
+  const evictToUnderCap = (keepKey) => {
+    while (totalBytes > capBytes && map.size > 1) {
+      const oldest = map.keys().next().value;
+      if (oldest === undefined || oldest === keepKey) break;
+      totalBytes -= packSizeBytes(map.get(oldest));
+      map.delete(oldest);
+    }
+  };
+  const api = {
+    get: (k) => map.get(k),
+    has: (k) => map.has(k),
+    // ponytail: re-set of existing key keeps Map insertion order (no recency refresh); `delete`+`set` would restore it — evict-oldest sanctioned as-is.
+    set: (k, v) => {
+      if (map.has(k)) totalBytes -= packSizeBytes(map.get(k));
+      totalBytes += packSizeBytes(v);
+      map.set(k, v);
+      evictToUnderCap(k);
+      return api;
+    },
+    delete: (k) => {
+      if (map.has(k)) {
+        totalBytes -= packSizeBytes(map.get(k));
+        map.delete(k);
+      }
+    },
+    clear: () => {
+      map.clear();
+      totalBytes = 0;
+    },
+    entries: () => map.entries(),
+    get size() {
+      return map.size;
+    },
+    get totalBytes() {
+      return totalBytes;
+    },
+  };
+  return api;
+}
+
+async function downloadBuffer(url) {
+  const { httpAxios } = await import("./http.js");
+  const response = await httpAxios.get(url, {
+    responseType: "arraybuffer",
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    },
+  });
+  return Buffer.from(response.data);
+}
+
+async function resolveInput(input) {
+  if (Buffer.isBuffer(input)) return input;
+  if (typeof input === "string") {
+    if (/^https?:\/\//.test(input)) return await downloadBuffer(input);
+    if (fs.existsSync(input)) return fs.readFileSync(input);
+  }
+  throw new Error("Invalid input: expected Buffer, URL string, or file path");
+}
+
+async function imageToWebp(buffer) {
+  try {
+    return await sharp(buffer)
+      .resize(512, 512, {
+        fit: "contain",
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
+      .webp({ quality: 80 })
+      .toBuffer();
+  } catch (error) {
+    throw new Error("Failed to convert image to webp: " + error.message);
+  }
+}
+
+function videoToWebp(buffer) {
+  return new Promise((resolve, reject) => {
+    const tmpDir = getTempDir();
+    const isGif = buffer.slice(0, 4).toString("hex") === "47494638";
+    const ext = isGif ? "gif" : "mp4";
+    const inputPath = path.join(tmpDir, `input_${Date.now()}.${ext}`);
+    const outputPath = path.join(tmpDir, `output_${Date.now()}.webp`);
+    if (!buffer || buffer.length < 1000)
+      return reject(new Error("Invalid video buffer"));
+    fs.writeFileSync(inputPath, buffer);
+    const cleanup = () => {
+      try {
+        if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+      } catch {}
+      try {
+        if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+      } catch {}
+    };
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error("Video conversion timeout"));
+    }, 60000);
+    ffmpeg(inputPath)
+      .inputOptions(["-y", "-t", "6"])
+      .outputOptions([
+        "-vcodec",
+        "libwebp",
+        "-vf",
+        STICKER_WEBP_VF,
+        "-loop",
+        "0",
+        "-preset",
+        "default",
+        "-an",
+        "-vsync",
+        "0",
+        "-q:v",
+        "50",
+      ])
+      .toFormat("webp")
+      .on("end", () => {
+        clearTimeout(timeout);
+        try {
+          if (
+            !fs.existsSync(outputPath) ||
+            fs.statSync(outputPath).size < 100
+          ) {
+            cleanup();
+            return reject(new Error("Output file is empty or invalid"));
+          }
+          const webpBuffer = fs.readFileSync(outputPath);
+          cleanup();
+          resolve(webpBuffer);
+        } catch (err) {
+          cleanup();
+          reject(err);
+        }
+      })
+      .on("error", (err) => {
+        clearTimeout(timeout);
+        cleanup();
+        reject(new Error("FFmpeg error: " + err.message));
+      })
+      .save(outputPath);
+  });
+}
+
+async function simpleImageToWebp(buffer) {
+  const tmpDir = getTempDir();
+  const inputPath = path.join(tmpDir, `img_${Date.now()}.png`);
+  const outputPath = path.join(tmpDir, `sticker_${Date.now()}.webp`);
+  fs.writeFileSync(inputPath, buffer);
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+      if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+    };
+    // guard: ffmpeg hang = promise tak pernah settle + 2 temp file + proses leak
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      try { command.kill("SIGKILL"); } catch { }
+      reject(new Error("simpleImageToWebp timeout"));
+    }, 60000);
+    const command = ffmpeg(inputPath)
+      .outputOptions([
+        "-vcodec",
+        "libwebp",
+        "-vf",
+        "scale='min(512,iw)':'min(512,ih)':force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000",
+        "-loop",
+        "0",
+        "-preset",
+        "default",
+        "-an",
+        "-vsync",
+        "0",
+      ])
+      .toFormat("webp")
+      .on("end", () => {
+        try {
+          const webpBuffer = fs.readFileSync(outputPath);
+          cleanup();
+          if (!settled) {
+            settled = true;
+            clearTimeout(timer);
+            resolve(webpBuffer);
+          }
+        } catch (err) {
+          if (!settled) {
+            settled = true;
+            clearTimeout(timer);
+            reject(err);
+          }
+        }
+      })
+      .on("error", (err) => {
+        cleanup();
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          reject(err);
+        }
+      })
+      .save(outputPath);
+  });
+}
+
+async function extendSocket(sock) {
+  const _originalSendMessage = sock.sendMessage.bind(sock);
+
+  // Kirim kartu tombol interaktif. Pola yang terbukti jalan di onigis
+  // (dipakai jpm.js): viewOnceMessage wrapper + proto.fromObject ->
+  // generateWAMessageFromContent -> relayMessage + node <biz> native_flow.
+  // CATATAN: sendMessage TIDAK mentransform content interactiveMessage —
+  // lewat sendMessage tombolnya hilang diam-diam.
+  const sendInteractiveCard = async (
+    jid,
+    { body, footer, header = {}, buttons = [], contextInfo },
+    options = {},
+  ) => {
+    const interactive = proto.Message.InteractiveMessage.fromObject({
+      body: proto.Message.InteractiveMessage.Body.fromObject({
+        text: body ?? "",
+      }),
+      ...(footer
+        ? {
+            footer: proto.Message.InteractiveMessage.Footer.fromObject({
+              text: footer,
+            }),
+          }
+        : {}),
+      header: proto.Message.InteractiveMessage.Header.fromObject({
+        hasMediaAttachment: false,
+        ...header,
+      }),
+      nativeFlowMessage:
+        proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
+          buttons,
+        }),
+      ...(contextInfo ? { contextInfo } : {}),
+    });
+
+    const msg = generateWAMessageFromContent(
+      jid,
+      {
+        viewOnceMessage: {
+          message: {
+            messageContextInfo: {
+              deviceListMetadata: {},
+              deviceListMetadataVersion: 2,
+            },
+            interactiveMessage: interactive,
+          },
+        },
+      },
+      { ...options },
+    );
+
+    await sock.relayMessage(jid, msg.message, {
+      messageId: msg.key.id,
+      additionalNodes: [
+        {
+          tag: "biz",
+          attrs: {},
+          content: [
+            {
+              tag: "interactive",
+              attrs: { type: "native_flow", v: "1" },
+              content: [
+                { tag: "native_flow", attrs: { v: "9", name: "mixed" } },
+              ],
+            },
+          ],
+        },
+      ],
+      ...options,
+    });
+    return msg;
+  };
+
+  // Normalisasi tombol legacy: `interactiveButtons` bukan field proto valid
+  // di onigis — hilang saat encode (tombol tak muncul). Alihkan ke kartu
+  // interaktif via sendInteractiveCard. Support kombinasi
+  // text/footer/header/contextInfo/media seperti pola plugin lama.
+  const normalizeLegacyButtons = async (jid, content, options) => {
+    if (!content || !Array.isArray(content.interactiveButtons)) return null;
+
+    const {
+      interactiveButtons,
+      text,
+      caption,
+      footer,
+      header,
+      contextInfo,
+      image,
+      video,
+      document,
+      mimetype,
+      fileName,
+    } = content;
+
+    const cardHeader = {};
+    if (typeof header === "string") cardHeader.title = header;
+
+    const mediaPayload = image
+      ? { image }
+      : video
+        ? { video }
+        : document
+          ? { document: { ...document, ...(fileName ? { fileName } : {}) } }
+          : null;
+
+    if (mediaPayload) {
+      try {
+        const media = await prepareWAMessageMedia(mediaPayload, {
+          upload: sock.waUploadToServer,
+        });
+        const mediaKey = image
+          ? "imageMessage"
+          : video
+            ? "videoMessage"
+            : "documentMessage";
+        if (media[mediaKey]) {
+          cardHeader.hasMediaAttachment = true;
+          cardHeader[mediaKey] = media[mediaKey];
+        }
+      } catch {
+        // media gagal upload — kartu tetap terkirim tanpa header media
+      }
+    }
+
+    await sendInteractiveCard(
+      jid,
+      {
+        body: text ?? caption ?? "",
+        footer,
+        header: cardHeader,
+        buttons: interactiveButtons,
+        contextInfo,
+      },
+      options,
+    );
+    return { sent: true };
+  };
+
+  sock.sendMessage = async (jid, content, options) => {
+    const legacy = await normalizeLegacyButtons(jid, content, options);
+    if (legacy) return legacy;
+    try {
+      return await _originalSendMessage(jid, content, options);
+    } catch (err) {
+      const isPrivate =
+        jid &&
+        !jid.endsWith("@g.us") &&
+        !jid.endsWith("@broadcast") &&
+        !jid.endsWith("@newsletter");
+      const isSessionError =
+        err?.message?.includes("encrypt") ||
+        err?.message?.includes("session") ||
+        err?.message?.includes("pkmsg") ||
+        err?.message?.includes("No Signal") ||
+        err?.output?.statusCode === 500;
+
+      if (isPrivate && isSessionError) {
+        try {
+          if (sock.assertSessions) {
+            await sock.assertSessions([jid], true);
+          }
+          if (sock.uploadPreKeys) {
+            await sock.uploadPreKeys(5);
+          }
+          return await _originalSendMessage(jid, content, options);
+        } catch {
+          throw err;
+        }
+      }
+      throw err;
+    }
+  };
+
+  sock.sendImageAsSticker = async (jid, input, m, options = {}) => {
+    const buffer = await resolveInput(input);
+    const isWebp = buffer.slice(0, 4).toString("hex") === "52494646";
+    let webpBuffer;
+    
+    if (isWebp) {
+      webpBuffer = buffer;
+    } else {
+      try {
+        webpBuffer = await sharp(buffer)
+          .resize(512, 512, {
+            fit: "contain",
+            background: { r: 0, g: 0, b: 0, alpha: 0 },
+          })
+          .webp({ quality: 80 })
+          .toBuffer();
+      } catch (err) {
+        throw new Error("Failed to convert image: " + err.message);
+      }
+    }
+    try {
+      webpBuffer = await addExifToWebp(webpBuffer, {
+        packname: options.packname ?? DEFAULT_METADATA.packname,
+        author: options.author ?? DEFAULT_METADATA.author,
+        emojis: options.emojis || DEFAULT_METADATA.emojis,
+      });
+    } catch (e) {
+      console.log("[Sticker] EXIF error:", e.message);
+    }
+    return sock.sendMessage(
+      jid,
+      {
+        sticker: webpBuffer,
+        contextInfo: { isForwarded: true, forwardingScore: 1, premium: 1 },
+      },
+      { quoted: m },
+    );
+  };
+
+  sock.sendVideoAsSticker = async (jid, input, m, options = {}) => {
+    const buffer = await resolveInput(input);
+    const isWebp = buffer.slice(0, 4).toString("hex") === "52494646";
+    let webpBuffer;
+    
+    if (isWebp) {
+      webpBuffer = buffer;
+    } else {
+      webpBuffer = await videoToWebp(buffer);
+    }
+    try {
+      webpBuffer = await addExifToWebp(webpBuffer, {
+        packname: options.packname ?? DEFAULT_METADATA.packname,
+        author: options.author ?? DEFAULT_METADATA.author,
+        emojis: options.emojis || DEFAULT_METADATA.emojis,
+      });
+    } catch (e) {
+      console.log("[Sticker] EXIF error:", e.message);
+    }
+    return sock.sendMessage(
+      jid,
+      {
+        sticker: webpBuffer,
+        contextInfo: { isForwarded: true, forwardingScore: 999 },
+      },
+      { quoted: m },
+    );
+  };
+
+  sock.sendStickerPack = async (jid, stickers, m, options = {}) => {
+    if (!stickers || !stickers.length) throw new Error("No stickers provided");
+
+    const packname = options.name ?? options.packname ?? "Sticker Pack";
+    const publisher = options.publisher ?? options.author ?? "Bot";
+    const packDescription = options.description || "";
+    const stickerPackId = options.id || crypto.randomUUID();
+    const emojis = options.emojis || ["\uD83C\uDFA8"];
+
+    const stickerList = [];
+    let coverBuffer = null;
+
+    for (let i = 0; i < stickers.length; i++) {
+      try {
+        let stickerBuffer = stickers[i];
+        if (typeof stickerBuffer === "string") {
+          if (stickerBuffer.startsWith("http"))
+            stickerBuffer = await downloadBuffer(stickerBuffer);
+          else if (fs.existsSync(stickerBuffer))
+            stickerBuffer = fs.readFileSync(stickerBuffer);
+        }
+        if (!Buffer.isBuffer(stickerBuffer) || stickerBuffer.length < 100)
+          continue;
+
+        const isGif = stickerBuffer.slice(0, 4).toString("hex") === "47494638";
+        const isWebp = stickerBuffer.slice(0, 4).toString("hex") === "52494646";
+        const isPng =
+          stickerBuffer.slice(0, 8).toString("hex") === "89504e470d0a1a0a";
+        const isJpeg = stickerBuffer.slice(0, 2).toString("hex") === "ffd8";
+
+        let webpBuffer;
+        if (isGif) webpBuffer = await videoToWebp(stickerBuffer);
+        else if (isWebp) webpBuffer = stickerBuffer;
+        else if (isPng || isJpeg) webpBuffer = await imageToWebp(stickerBuffer);
+        else {
+          try {
+            webpBuffer = await imageToWebp(stickerBuffer);
+          } catch {
+            webpBuffer = await videoToWebp(stickerBuffer);
+          }
+        }
+
+        if (!coverBuffer) coverBuffer = webpBuffer;
+
+        stickerList.push({
+          sticker: webpBuffer,
+          emojis,
+          accessibilityLabel: "",
+        });
+      } catch (e) {
+        console.log(`[StickerPack] Failed sticker ${i + 1}:`, e.message);
+      }
+    }
+
+    if (stickerList.length === 0)
+      throw new Error("No stickers could be prepared");
+
+    return sock.sendMessage(
+      jid,
+      {
+        stickerPack: {
+          packId: stickerPackId,
+          name: packname,
+          publisher,
+          description: packDescription,
+          cover: coverBuffer,
+          stickers: stickerList,
+        },
+      },
+      m ? { quoted: m } : {},
+    );
+  };
+
+  if (!global.stickerPackCache)
+    global.stickerPackCache = createStickerPackCache();
+
+  sock.saveStickerPack = (packId, messageContent, packName = "Unknown") => {
+    global.stickerPackCache.set(packId, {
+      message: messageContent,
+      name: packName,
+      savedAt: Date.now(),
+    });
+  };
+  sock.getSavedPacks = () => {
+    const packs = [];
+    for (const [id, data] of global.stickerPackCache.entries())
+      packs.push({ id, name: data.name, savedAt: data.savedAt });
+    return packs;
+  };
+
+  sock.forwardStickerPack = async (jid, packIdOrMessage, m) => {
+    let messageContent;
+    if (typeof packIdOrMessage === "string") {
+      const cached = global.stickerPackCache.get(packIdOrMessage);
+      if (!cached)
+        throw new Error(`Sticker pack "${packIdOrMessage}" not found`);
+      messageContent = cached.message;
+    } else if (packIdOrMessage?.stickerPackMessage)
+      messageContent = packIdOrMessage;
+    else throw new Error("Invalid sticker pack message format");
+    const message = generateWAMessageFromContent(jid, messageContent, {
+      quoted: m,
+      userJid: sock.user?.id,
+      messageId: crypto.randomBytes(8).toString("hex").toUpperCase(),
+    });
+    await sock.relayMessage(jid, message.message, {
+      messageId: message.key.id,
+    });
+    return message;
+  };
+
+  sock.sendFile = async (jid, input, options = {}) => {
+    let buffer;
+    let filename = options.filename || "file";
+    let mimetype = options.mimetype;
+    if (Buffer.isBuffer(input)) {
+      buffer = input;
+    } else if (typeof input === "string") {
+      if (/^https?:\/\//.test(input)) {
+        buffer = await downloadBuffer(input);
+        filename =
+          options.filename || path.basename(new URL(input).pathname) || "file";
+      } else if (fs.existsSync(input)) {
+        buffer = fs.readFileSync(input);
+        filename = options.filename || path.basename(input);
+      } else throw new Error("Invalid input");
+    } else throw new Error("Invalid input type");
+    if (!mimetype) {
+      const ext = path.extname(filename).toLowerCase();
+      const mt = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".mp4": "video/mp4",
+        ".mp3": "audio/mpeg",
+        ".ogg": "audio/ogg",
+        ".pdf": "application/pdf",
+        ".zip": "application/zip",
+      };
+      mimetype = mt[ext] || "application/octet-stream";
+    }
+    let mc = {};
+    if (mimetype.startsWith("image/")) {
+      mc.image = buffer;
+      if (options.caption) mc.caption = options.caption;
+    } else if (mimetype.startsWith("video/")) {
+      mc.video = buffer;
+      mc.mimetype = mimetype;
+      if (options.caption) mc.caption = options.caption;
+    } else if (mimetype.startsWith("audio/")) {
+      mc.audio = buffer;
+      mc.mimetype = mimetype;
+      mc.ptt = options.ptt || false;
+    } else {
+      mc.document = buffer;
+      mc.mimetype = mimetype;
+      mc.fileName = filename;
+      if (options.caption) mc.caption = options.caption;
+    }
+    return sock.sendMessage(jid, mc, { quoted: options.quoted });
+  };
+
+  sock.sendMedia = async function (
+    jid,
+    source,
+    caption = "",
+    quoted,
+    options = {},
+  ) {
+    function isUrlObject(v) {
+      return (
+        v &&
+        typeof v === "object" &&
+        !Buffer.isBuffer(v) &&
+        typeof v.url === "string"
+      );
+    }
+    if (
+      source &&
+      typeof source === "object" &&
+      (source.image || source.video || source.audio || source.document)
+    )
+      return this.sendMessage(jid, source, options);
+    let data = source;
+    let mimeType = options.mimetype || "application/octet-stream";
+    let fileName = options.fileName || "file";
+    if (Buffer.isBuffer(source)) {
+    } else if (typeof source === "string" && /^https?:\/\//.test(source))
+      data = { url: source };
+    else if (typeof source === "string" && fs.existsSync(source)) {
+      mimeType = mime.lookup(source) || "application/octet-stream";
+      fileName = path.basename(source);
+      data = fs.readFileSync(source);
+    } else if (isUrlObject(source)) data = { url: source.url };
+    else
+      throw new Error(
+        "Source harus berupa Buffer, URL string, path file, object { url }, atau payload media",
+      );
+    const mediaType = options.type || options.mediaType;
+    const captionField = caption != null ? { caption } : {};
+    let payload = {};
+    if (mediaType === "image")
+      payload = { image: data, ...captionField, ...options };
+    else if (mediaType === "video")
+      payload = { video: data, ...captionField, ...options };
+    else if (mediaType === "audio") {
+      const audioMime =
+        mimeType && mimeType !== "application/octet-stream"
+          ? mimeType
+          : "audio/mpeg";
+      payload = {
+        audio: data,
+        mimetype: audioMime,
+        ptt: options.ptt || false,
+        ...options,
+      };
+    } else
+      payload = {
+        document: data,
+        mimetype: mimeType || "application/octet-stream",
+        fileName,
+        ...captionField,
+        ...options,
+      };
+    delete payload.type;
+    delete payload.mediaType;
+    return sock.sendMessage(jid, payload, { quoted });
+  };
+
+  sock.sendButton = async function (
+    jid,
+    source,
+    text = null,
+    quoted,
+    options = {},
+  ) {
+    // Root cause tombol hilang: dulu pakai msg.interactiveButtons — bukan
+    // field proto valid, hilang saat encode. Sekarang lewat sendInteractiveCard
+    // (viewOnceMessage + relayMessage + node biz) — pola yang terbukti jalan.
+    const mediaType = options.type || options.mediaType || "image";
+    const cardHeader = {};
+
+    if (source) {
+      let data = source;
+      if (typeof source === "string" && /^https?:\/\//.test(source))
+        data = { url: source };
+      else if (typeof source === "string" && fs.existsSync(source))
+        data = fs.readFileSync(source);
+
+      if (data) {
+        try {
+          const media = await prepareWAMessageMedia(
+            mediaType === "video"
+              ? { video: data }
+              : mediaType === "document"
+                ? { document: data, mimetype: options.mimetype }
+                : { image: data },
+            { upload: sock.waUploadToServer },
+          );
+          const mediaKey =
+            mediaType === "video"
+              ? "videoMessage"
+              : mediaType === "document"
+                ? "documentMessage"
+                : "imageMessage";
+          if (media[mediaKey]) {
+            cardHeader.hasMediaAttachment = true;
+            cardHeader[mediaKey] = media[mediaKey];
+          }
+        } catch {
+          // media gagal upload — kartu tetap terkirim tanpa header media
+        }
+      }
+    }
+
+    return sendInteractiveCard(
+      jid,
+      {
+        body: text ?? "",
+        footer: options.footer || config.bot?.name || "Bot",
+        header: { ...cardHeader, ...(options.header || {}) },
+        buttons: options.buttons || [],
+        contextInfo: options.contextInfo,
+      },
+      { quoted, ...(options.contextInfo ? {} : {}) },
+    );
+  };
+
+  const _originalProfilePictureUrl = sock.profilePictureUrl.bind(sock);
+  sock.profilePictureUrl = async function (jid) {
+    return await getProfilePicture(
+      { profilePictureUrl: _originalProfilePictureUrl },
+      jid,
+    );
+  };
+  sock.profileBuffer = async function (jid) {
+    return await getProfileBuffer(
+      { profilePictureUrl: _originalProfilePictureUrl },
+      jid,
+    );
+  };
+  sock.sendText = async function (jid, text, quoted, options = {}) {
+    return await sock.sendMessage(jid, { text, ...options }, { quoted });
+  };
+
+  sock.sendContact = async (jid, contacts, options = {}) => {
+    const contactArray = Array.isArray(contacts) ? contacts : [contacts];
+    const vcards = contactArray.map((c) => {
+      const name = c.name || "Unknown";
+      const number = c.number?.replace(/[^0-9]/g, "") || "";
+      const org = c.org || "";
+      let vcard = `BEGIN:VCARD\nVERSION:3.0\nFN:${name}\n`;
+      if (org) vcard += `ORG:${org}\n`;
+      vcard += `TEL;type=CELL;type=VOICE;waid=${number}:+${number}\nEND:VCARD`;
+      return { vcard };
+    });
+    const displayName =
+      contactArray.length === 1
+        ? contactArray[0].name || "Contact"
+        : `${contactArray.length} Contacts`;
+    return sock.sendMessage(
+      jid,
+      { contacts: { displayName, contacts: vcards } },
+      { quoted: options.quoted },
+    );
+  };
+
+  sock.downloadAndSaveMediaMessage = async (msg, savePath = null) => {
+    const message = msg.message || msg;
+    const type = getContentType(message);
+    if (!type) throw new Error("No media found in message");
+    const buffer = await downloadMediaMessage(
+      { message },
+      "buffer",
+      {},
+      { logger: console, reuploadRequest: sock.updateMediaMessage },
+    );
+    let savedPath = null;
+    if (savePath) {
+      const dir = path.dirname(savePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(savePath, buffer);
+      savedPath = savePath;
+    }
+    return { buffer, path: savedPath, type };
+  };
+
+  sock.getName = async (jid, groupJid = null) => {
+    if (!jid) return "Unknown";
+    let id = jid;
+    if (isLid(jid) || isLidConverted(jid)) {
+      const cached = getCachedJid(jid);
+      if (cached) id = cached;
+      else if (groupJid) {
+        try {
+          const gm = await sock.groupMetadata(groupJid);
+          id = resolveAnyLidToJid(jid, gm.participants || []);
+        } catch {
+          id = jid.replace("@lid", "@s.whatsapp.net");
+        }
+      } else id = jid.replace("@lid", "@s.whatsapp.net");
+    }
+    if (id.endsWith("@g.us")) {
+      try {
+        let v = sock.store?.contacts?.[id] || {};
+        if (!(v.name || v.subject))
+          v = await sock.groupMetadata(id).catch(() => ({}));
+        return v.name || v.subject || id.split("@")[0];
+      } catch {
+        return id.split("@")[0];
+      }
+    }
+    if (id === "0@s.whatsapp.net") return "WhatsApp";
+    const botId = sock.user?.id?.split(":")[0] + "@s.whatsapp.net";
+    if (id === botId)
+      return sock.user?.name || sock.user?.verifiedName || "Bot";
+    let v = sock.store?.contacts?.[id] || {};
+    if (v.name) return v.name;
+    if (v.notify) return v.notify;
+    if (v.pushName) return v.pushName;
+    if (v.verifiedName) return v.verifiedName;
+    if (v.subject) return v.subject;
+    if (groupJid) {
+      try {
+        const gm = await sock.groupMetadata(groupJid);
+        const tn = id.replace(/[^0-9]/g, "");
+        const p = gm.participants?.find(
+          (pt) => (pt.jid || pt.id || "").replace(/[^0-9]/g, "") === tn,
+        );
+        if (p) {
+          const pj = p.jid || p.id || "";
+          if (sock.store?.contacts?.[pj]) {
+            const ct = sock.store.contacts[pj];
+            if (ct.name) return ct.name;
+            if (ct.notify) return ct.notify;
+            if (ct.pushName) return ct.pushName;
+          }
+        }
+      } catch {}
+    }
+    try {
+      if (sock.getBusinessProfile) {
+        const profile = await sock.getBusinessProfile(id).catch(() => null);
+        if (profile?.wid?.user) {
+          const pn = profile.name || profile.pushname || profile.verifiedName;
+          if (pn) {
+            if (
+              sock.store?.contacts &&
+              Object.keys(sock.store.contacts).length < 500
+            ) {
+              sock.store.contacts[id] = {
+                ...sock.store.contacts[id],
+                name: pn,
+              };
+            }
+            return pn;
+          }
+        }
+      }
+    } catch {}
+    try {
+      if (sock.onWhatsApp) {
+        const [result] = await sock.onWhatsApp(id).catch(() => []);
+        if (
+          result?.exists &&
+          result?.jid &&
+          sock.store?.contacts?.[result.jid]
+        ) {
+          const ct = sock.store.contacts[result.jid];
+          if (ct.name) return ct.name;
+          if (ct.notify) return ct.notify;
+        }
+      }
+    } catch {}
+    const number = id.replace(/@.+/g, "");
+    if (number && number.length > 0) {
+      if (isLid(jid) || isLidConverted(jid))
+        return "Unknown" /* jangan fabrikasi nomor palsu untuk LID yang tak ter-resolve */;
+      if (number.startsWith("62")) return "+62" + number.slice(2);
+      return "+" + number;
+    }
+    return "Unknown";
+  };
+
+  sock.getNameFromParticipants = (jid, participants = []) => {
+    if (!jid) return "Unknown";
+    let resolvedJid = jid;
+    if (isLid(jid) || isLidConverted(jid))
+      resolvedJid = resolveAnyLidToJid(jid, participants);
+    const targetNum = resolvedJid.replace(/[^0-9]/g, "");
+    const participant = participants.find(
+      (p) => (p.jid || p.id || "").replace(/[^0-9]/g, "") === targetNum,
+    );
+    if (participant) {
+      const pJid = participant.jid || participant.id || "";
+      if (sock.store?.contacts?.[pJid]) {
+        const c = sock.store.contacts[pJid];
+        if (c.name) return c.name;
+        if (c.notify) return c.notify;
+      }
+    }
+    const number = resolvedJid.replace(/@.+/g, "");
+    if (isLid(jid) || isLidConverted(jid))
+      return "Unknown" /* jangan tampilkan nomor LID palsu */;
+    if (number.startsWith("62")) return "0" + number.slice(2);
+    return number || "Unknown";
+  };
+
+  sock.parseMention = (text = "") =>
+    [...text.matchAll(/@([0-9]{5,16}|0)/g)].map(
+      (v) => getCachedJid(v[1] + "@lid") || v[1] + "@s.whatsapp.net",
+    );
+
+  sock.reply = (jid, text = "", quoted, options = {}) => {
+    return Buffer.isBuffer(text)
+      ? sock.sendMessage(jid, { document: text, ...options }, { quoted })
+      : sock.sendMessage(
+          jid,
+          { ...options, text, mentions: sock.parseMention(text) },
+          { quoted },
+        );
+  };
+
+  sock.cMod = async (
+    jid,
+    message,
+    text = "",
+    sender = sock.user?.id,
+    options = {},
+  ) => {
+    if (options.mentions && !Array.isArray(options.mentions))
+      options.mentions = [options.mentions];
+    let copy = message.toJSON
+      ? message.toJSON()
+      : JSON.parse(JSON.stringify(message));
+    delete copy.message?.messageContextInfo;
+    delete copy.message?.senderKeyDistributionMessage;
+    let mtype = Object.keys(copy.message || {})[0];
+    let msg = copy.message;
+    let content = msg?.[mtype];
+    if (typeof content === "string") msg[mtype] = text || content;
+    else if (content?.caption) content.caption = text || content.caption;
+    else if (content?.text) content.text = text || content.text;
+    if (typeof content !== "string" && content) {
+      msg[mtype] = { ...content, ...options };
+      msg[mtype].contextInfo = {
+        ...(content.contextInfo || {}),
+        mentionedJid:
+          options.mentions || content.contextInfo?.mentionedJid || [],
+      };
+    }
+    if (copy.participant)
+      sender = copy.participant = sender || copy.participant;
+    else if (copy.key?.participant)
+      sender = copy.key.participant = sender || copy.key.participant;
+    if (copy.key?.remoteJid?.includes("@s.whatsapp.net"))
+      sender = sender || copy.key.remoteJid;
+    else if (copy.key?.remoteJid?.includes("@broadcast"))
+      sender = sender || copy.key.remoteJid;
+    copy.key.remoteJid = jid;
+    copy.key.fromMe = areJidsSameUser(sender, sock.user?.id) || false;
+    return proto.WebMessageInfo.create(copy);
+  };
+
+  sock.cMods = (
+    jid,
+    message,
+    text = "",
+    sender = sock.user?.id,
+    options = {},
+  ) => {
+    let copy = message.toJSON
+      ? message.toJSON()
+      : JSON.parse(JSON.stringify(message));
+    let mtype = Object.keys(copy.message || {})[0];
+    let msg = copy.message;
+    let content = msg?.[mtype];
+    if (typeof content === "string") msg[mtype] = text || content;
+    else if (content?.caption) content.caption = text || content.caption;
+    else if (content?.text) content.text = text || content.text;
+    if (typeof content !== "string" && content)
+      msg[mtype] = { ...content, ...options };
+    if (copy.participant)
+      sender = copy.participant = sender || copy.participant;
+    else if (copy.key?.participant)
+      sender = copy.key.participant = sender || copy.key.participant;
+    if (copy.key?.remoteJid?.includes("@s.whatsapp.net"))
+      sender = sender || copy.key.remoteJid;
+    else if (copy.key?.remoteJid?.includes("@broadcast"))
+      sender = sender || copy.key.remoteJid;
+    copy.key.remoteJid = jid;
+    copy.key.fromMe = areJidsSameUser(sender, sock.user?.id) || false;
+    return proto.WebMessageInfo.create(copy);
+  };
+
+  sock.copyNForward = async (
+    jid,
+    message,
+    forwardingScore = true,
+    options = {},
+  ) => {
+    let m = generateForwardMessageContent(message, !!forwardingScore);
+    let mtype = Object.keys(m)[0];
+    if (
+      forwardingScore &&
+      typeof forwardingScore === "number" &&
+      forwardingScore > 1
+    ) {
+      m[mtype].contextInfo = m[mtype].contextInfo || {};
+      m[mtype].contextInfo.forwardingScore =
+        (m[mtype].contextInfo.forwardingScore || 0) + forwardingScore;
+    }
+    if (options.quoted) {
+      m[mtype].contextInfo = m[mtype].contextInfo || {};
+      m[mtype].contextInfo.quotedMessage = options.quoted.message;
+      m[mtype].contextInfo.stanzaId = options.quoted.key?.id;
+      m[mtype].contextInfo.participant =
+        options.quoted.key?.participant || options.quoted.key?.remoteJid;
+      m[mtype].contextInfo.remoteJid = options.quoted.key?.remoteJid;
+    }
+    m = generateWAMessageFromContent(jid, m, {
+      ...options,
+      userJid: sock.user?.id,
+    });
+    await sock.relayMessage(jid, m.message, {
+      messageId: m.key.id,
+      additionalAttributes: { ...options },
+    });
+    return m;
+  };
+
+  sock.fakeReply = async (
+    jid,
+    text = "",
+    fakeJid = sock.user?.id,
+    fakeText = "",
+    fakeGroupJid,
+    options = {},
+  ) => {
+    return sock.reply(jid, text, {
+      key: {
+        fromMe: areJidsSameUser(fakeJid, sock.user?.id),
+        participant: fakeJid,
+        ...(fakeGroupJid ? { remoteJid: fakeGroupJid } : {}),
+      },
+      message: { conversation: fakeText },
+      ...options,
+    });
+  };
+
+  sock.sendPreview = async (jid, preview, options = {}) => {
+    const extContent = {
+      text: preview.caption || preview.text || "",
+      matchedText: preview.matchedText || preview.url || "",
+      previewType: preview.previewType ?? 0,
+    };
+    if (preview.title) extContent.title = preview.title;
+    if (preview.description) extContent.description = preview.description;
+    if (preview.inviteLinkGroupTypeV2)
+      extContent.inviteLinkGroupTypeV2 = preview.inviteLinkGroupTypeV2;
+    if (preview.image) {
+      let imgBuf = preview.image;
+      if (typeof imgBuf === "string" && imgBuf.startsWith("http")) {
+        try {
+          const resp = await fetch(imgBuf);
+          imgBuf = Buffer.from(await resp.arrayBuffer());
+        } catch {}
+      }
+      if (Buffer.isBuffer(imgBuf)) {
+        try {
+          const { imageMessage } = await prepareWAMessageMedia(
+            { image: imgBuf },
+            { upload: sock.waUploadToServer, mediaTypeOverride: "thumbnail-link" },
+          );
+          if (imageMessage) {
+            extContent.jpegThumbnail = imageMessage.jpegThumbnail;
+            if (imageMessage.directPath) extContent.thumbnailDirectPath = imageMessage.directPath;
+            if (imageMessage.mediaKey) extContent.mediaKey = imageMessage.mediaKey;
+            if (imageMessage.mediaKeyTimestamp) extContent.mediaKeyTimestamp = imageMessage.mediaKeyTimestamp;
+            if (imageMessage.fileSha256) extContent.thumbnailSha256 = imageMessage.fileSha256;
+            if (imageMessage.fileEncSha256) extContent.thumbnailEncSha256 = imageMessage.fileEncSha256;
+            if (imageMessage.width) extContent.thumbnailWidth = imageMessage.width;
+            if (imageMessage.height) extContent.thumbnailHeight = imageMessage.height;
+          }
+        } catch {
+          extContent.jpegThumbnail = imgBuf;
+        }
+      } else {
+        extContent.jpegThumbnail = imgBuf;
+      }
+    } else if (preview.jpegThumbnail) {
+      extContent.jpegThumbnail = preview.jpegThumbnail;
+    }
+    if (preview.thumbnailHeight) extContent.thumbnailHeight = preview.thumbnailHeight;
+    if (preview.thumbnailWidth) extContent.thumbnailWidth = preview.thumbnailWidth;
+    if (options.quoted) {
+      const participant = options.quoted.key.fromMe
+        ? sock.user?.id
+        : options.quoted.participant || options.quoted.key.participant || options.quoted.key.remoteJid;
+      extContent.contextInfo = {
+        stanzaId: options.quoted.key.id,
+        participant,
+        quotedMessage: options.quoted.message,
+      };
+    }
+    if (options.contextInfo) {
+      extContent.contextInfo = {
+        ...extContent.contextInfo,
+        ...options.contextInfo,
+      };
+    }
+    const message = generateWAMessageFromContent(jid, { extendedTextMessage: extContent }, {
+      userJid: sock.user?.id,
+    });
+    await sock.relayMessage(jid, message.message, {
+      messageId: message.key.id,
+    });
+    return message.key.id;
+  };
+
+  sock.sendCodeBlock = async (jid, code, quoted, options = {}) => {
+    const { message, messageId } = generateCodeBlockContent(code, quoted, options);
+    await sock.relayMessage(jid, message, { messageId });
+    return { message, messageId };
+  };
+
+  sock.sendCodeBlockV2 = async (jid, code, quoted, options = {}) => {
+    const { message, messageId } = generateCodeBlockContentV2(code, quoted, options);
+    await sock.relayMessage(jid, message, { messageId });
+    return { message, messageId };
+  };
+
+  sock.sendLinkV2 = async (jid, text, links, quoted, options = {}) => {
+    const { message, messageId } = generateLinkContentV2(text, links, quoted, options);
+    await sock.relayMessage(jid, message, { messageId });
+    return { message, messageId };
+  };
+
+  sock.sendList = async (jid, title, items, quoted, options = {}) => {
+    const { message, messageId } = generateListContent(title, items, quoted, options);
+    await sock.relayMessage(jid, message, { messageId });
+    return { message, messageId };
+  };
+
+  sock.sendTable = async (jid, title, headers, rows, quoted, options = {}) => {
+    const { message, messageId } = generateTableContent(title, headers, rows, quoted, options);
+    await sock.relayMessage(jid, message, { messageId });
+    return { message, messageId };
+  };
+
+  sock.sendTableV2 = async (jid, table, quoted, options = {}) => {
+    const { message, messageId } = generateTableContentV2(table, quoted, options);
+    await sock.relayMessage(jid, message, { messageId });
+    return { message, messageId };
+  };
+
+  sock.cekIDSaluran = async (url) => {
+    let channelId;
+    if (url.includes("whatsapp.com/channel/")) {
+      channelId = url.split("whatsapp.com/channel/")[1].split("/")[0];
+    } else if (url.includes("wa.me/channel/")) {
+      channelId = url.split("wa.me/channel/")[1].split("/")[0];
+    } else {
+      channelId = url;
+    }
+    try {
+      const metadata = await sock.newsletterMetadata("INVITE", channelId);
+      return metadata;
+    } catch {
+      return { id: channelId };
+    }
+  };
+
+  return sock;
+}
+
+export {
+  extendSocket,
+  downloadBuffer,
+  imageToWebp,
+  videoToWebp,
+  simpleImageToWebp,
+  getTempDir,
+  createStickerPackCache,
+  packSizeBytes,
+};

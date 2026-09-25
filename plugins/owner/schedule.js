@@ -1,4 +1,4 @@
-import te from "../../src/lib/ourin-error.js";
+import te from "../../src/lib/error.js";
 /**
  * @file plugins/owner/schedule.js
  * @description Command untuk mengelola scheduled messages
@@ -13,7 +13,7 @@ import {
   getSchedulerStatus,
   formatTimeRemaining,
   getMsUntilTime,
-} from "../../src/lib/ourin-scheduler.js";
+} from "../../src/lib/scheduler.js";
 /**
  * Konfigurasi plugin
  */

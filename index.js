@@ -15,24 +15,24 @@ import {
   groupSettingsHandler,
   handleAntiRemoveFromUpsert,
 } from "./src/handler.js";
-import { loadPlugins, pluginStore } from "./src/lib/ourin-plugins.js";
-import { initDatabase, getDatabase } from "./src/lib/ourin-database.js";
+import { loadPlugins, pluginStore } from "./src/lib/plugins.js";
+import { initDatabase, getDatabase } from "./src/lib/database.js";
 import {
   initScheduler,
   loadScheduledMessages,
   startGroupScheduleChecker,
   startSewaChecker,
-} from "./src/lib/ourin-scheduler.js";
-import { handleAntiTagSW } from "./src/lib/ourin-group-protection.js";
-import { initSholatScheduler } from "./src/lib/ourin-sholat-scheduler.js";
-import { initNotifScheduler } from "./src/lib/ourin-notif-scheduler.js";
-import { initAutoJpmScheduler } from "./src/lib/ourin-auto-jpm.js";
-import { startMemoryMonitor } from "./src/lib/ourin-memory-monitor.js";
-import { evictOldestOverCap } from "./src/lib/ourin-cache-cap.js";
-import { startTempCleaner } from "./src/lib/ourin-temp-cleaner.js";
-import { startDailyPruner } from "./src/lib/ourin-data-pruner.js";
-import { initAutoClearScheduler } from "./src/lib/ourin-chat-cleaner.js";
-import { preloadAssets } from "./src/lib/ourin-asset-manager.js";
+} from "./src/lib/scheduler.js";
+import { handleAntiTagSW } from "./src/lib/group-protection.js";
+import { initSholatScheduler } from "./src/lib/sholat-scheduler.js";
+import { initNotifScheduler } from "./src/lib/notif-scheduler.js";
+import { initAutoJpmScheduler } from "./src/lib/auto-jpm.js";
+import { startMemoryMonitor } from "./src/lib/memory-monitor.js";
+import { evictOldestOverCap } from "./src/lib/cache-cap.js";
+import { startTempCleaner } from "./src/lib/temp-cleaner.js";
+import { startDailyPruner } from "./src/lib/data-pruner.js";
+import { initAutoClearScheduler } from "./src/lib/chat-cleaner.js";
+import { preloadAssets } from "./src/lib/asset-manager.js";
 import {
   logger,
   c,
@@ -41,9 +41,9 @@ import {
   logConnection,
   logErrorBox,
   divider,
-} from "./src/lib/ourin-logger.js";
+} from "./src/lib/logger.js";
 
-await import("./src/lib/ourin-agent.js")
+await import("./src/lib/agent.js")
   .then((m) => m.initializeAgent())
   .catch(() => { });
 
@@ -118,7 +118,7 @@ function startDevWatcher(pluginsPath) {
         if (!fs.existsSync(fullPath)) {
           fileStatCache.delete(fullPath);
           const pluginName = path.basename(filename, ".js");
-          const { unloadPlugin } = await import("./src/lib/ourin-plugins.js");
+          const { unloadPlugin } = await import("./src/lib/plugins.js");
           const result = unloadPlugin(pluginName);
           if (result.success) logger.warn("plugin", `removed ${filename}`);
           return;
@@ -140,7 +140,7 @@ function startDevWatcher(pluginsPath) {
           evictOldestOverCap(fileStatCache, FILESTAT_CACHE_CAP);
 
           const { hotReloadPlugin } =
-            await import("./src/lib/ourin-plugins.js");
+            await import("./src/lib/plugins.js");
           const result = await hotReloadPlugin(fullPath);
           if (!result.success) {
             logger.error(
@@ -398,7 +398,7 @@ async function main() {
 
         try {
           const { getAllJadibotSessions, isJadibotActive, restartJadibotSession } =
-            await import("./src/lib/ourin-jadibot-manager.js");
+            await import("./src/lib/jadibot-manager.js");
           const sessions = getAllJadibotSessions().filter(
             (s) => !isJadibotActive(s.jid),
           );

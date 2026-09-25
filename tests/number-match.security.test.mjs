@@ -107,7 +107,7 @@ describe("ourin-premium-db — matchJid strict equality", () => {
     // (dengan DB_PATH frozen ke cwd asli), jadi paksa instance baru
     // yang membaca cwd temp.
     premiumDb = await import(
-      `../src/lib/ourin-premium-db.js?fixture=${Date.now()}`
+      `../src/lib/premium-db.js?fixture=${Date.now()}`
     );
   });
 

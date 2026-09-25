@@ -1,11 +1,11 @@
-import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
+import { getAssetBuffer } from "../../src/lib/asset-manager.js";
 import { fileTypeFromBuffer } from "file-type";
 import fs from "fs";
 import path from "path";
 import { config } from "../../config.js";
-import te from "../../src/lib/ourin-error.js";
-import { handleAntiSwGc } from "../../src/lib/ourin-group-protection.js";
-import { saluranCtx } from "../../src/lib/ourin-context.js";
+import te from "../../src/lib/error.js";
+import { handleAntiSwGc } from "../../src/lib/group-protection.js";
+import { saluranCtx } from "../../src/lib/context.js";
 const botConfig = config;
 
 function buildSyntheticSwGcRawMessage(sock, remoteJid, content, messageId) {

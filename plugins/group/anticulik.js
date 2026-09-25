@@ -1,6 +1,6 @@
-import { getDatabase } from "../../src/lib/ourin-database.js";
-import { saluranCtx } from "../../src/lib/ourin-context.js";
-import { isSameParticipant } from "../../src/lib/ourin-lid.js";
+import { getDatabase } from "../../src/lib/database.js";
+import { saluranCtx } from "../../src/lib/context.js";
+import { isSameParticipant } from "../../src/lib/lid.js";
 
 const pluginConfig = {
   name: "anticulik",

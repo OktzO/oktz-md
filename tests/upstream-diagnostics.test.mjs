@@ -69,7 +69,7 @@ describe("upstream failure diagnostics", () => {
   });
 
   it("permintaan http yang gagal dicatat, bukan diam-diam jadi null", async () => {
-    const { f } = await import("../src/lib/ourin-http.js");
+    const { f } = await import("../src/lib/http.js");
     const cap = captureConsoleError();
     let result;
     try {

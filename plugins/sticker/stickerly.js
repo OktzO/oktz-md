@@ -1,7 +1,7 @@
 import axios from "axios";
 import config from "../../config.js";
-import te from "../../src/lib/ourin-error.js";
-import { getDatabase } from "../../src/lib/ourin-database.js";
+import te from "../../src/lib/error.js";
+import { getDatabase } from "../../src/lib/database.js";
 
 const pluginConfig = {
     name: "stickerly",

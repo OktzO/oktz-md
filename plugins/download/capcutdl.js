@@ -1,5 +1,5 @@
 import { capcut } from 'btch-downloader'
-import te from '../../src/lib/ourin-error.js'
+import te from '../../src/lib/error.js'
 const pluginConfig = {
     name: 'capcutdl',
     alias: ['ccdl', 'capcut', 'cc'],

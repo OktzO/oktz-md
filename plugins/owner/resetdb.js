@@ -1,8 +1,8 @@
 import fs from 'fs'
 import path from 'path'
 import config from '../../config.js'
-import { getDatabase } from '../../src/lib/ourin-database.js'
-import te from '../../src/lib/ourin-error.js'
+import { getDatabase } from '../../src/lib/database.js'
+import te from '../../src/lib/error.js'
 const pluginConfig = {
     name: 'resetdb',
     alias: ['cleardb', 'wipedb'],

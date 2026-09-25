@@ -1,5 +1,5 @@
-import { getDatabase } from "../../src/lib/ourin-database.js";
-import { albumStats } from "../../src/lib/ourin-waifu.js";
+import { getDatabase } from "../../src/lib/database.js";
+import { albumStats } from "../../src/lib/waifu.js";
 
 const pluginConfig = {
   name: ["waifualbum", "albumwaifu"],

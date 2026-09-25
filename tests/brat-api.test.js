@@ -1,6 +1,6 @@
 import { describe, it, mock, beforeEach, afterEach } from "node:test";
 import assert from "node:assert";
-import { generateBrat, parseBratArgs, isBlankImage } from "../src/lib/ourin-brat.js";
+import { generateBrat, parseBratArgs, isBlankImage } from "../src/lib/brat.js";
 
 describe("brat API integration", () => {
   let originalFetch;
@@ -66,7 +66,7 @@ describe("fetchBratFromAPI (to be implemented)", () => {
       arrayBuffer: async () => arrayBuffer,
     });
 
-    const { fetchBratFromAPI } = await import("../src/lib/ourin-brat.js");
+    const { fetchBratFromAPI } = await import("../src/lib/brat.js");
     const buf = await fetchBratFromAPI("test text");
     assert.ok(Buffer.isBuffer(buf));
     assert.strictEqual(buf[0], 0x89);
@@ -78,7 +78,7 @@ describe("fetchBratFromAPI (to be implemented)", () => {
       status: 500,
     });
 
-    const { fetchBratFromAPI } = await import("../src/lib/ourin-brat.js");
+    const { fetchBratFromAPI } = await import("../src/lib/brat.js");
     await assert.rejects(() => fetchBratFromAPI("test text"), /HTTP 500/);
   });
 
@@ -87,7 +87,7 @@ describe("fetchBratFromAPI (to be implemented)", () => {
       throw new Error("network error");
     };
 
-    const { fetchBratFromAPI } = await import("../src/lib/ourin-brat.js");
+    const { fetchBratFromAPI } = await import("../src/lib/brat.js");
     await assert.rejects(() => fetchBratFromAPI("test text"), /network error/);
   });
 
@@ -96,7 +96,7 @@ describe("fetchBratFromAPI (to be implemented)", () => {
       await new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 100));
     };
 
-    const { fetchBratFromAPI } = await import("../src/lib/ourin-brat.js");
+    const { fetchBratFromAPI } = await import("../src/lib/brat.js");
     await assert.rejects(() => fetchBratFromAPI("test text"), /timeout/);
   });
 });

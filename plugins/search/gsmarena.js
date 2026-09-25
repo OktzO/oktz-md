@@ -1,4 +1,4 @@
-import te from "../../src/lib/ourin-error.js";
+import te from "../../src/lib/error.js";
 
 // RAM: gsmarena-api +14MB — lazy-load hanya saat command dijalankan.
 let _gsmarena = null;

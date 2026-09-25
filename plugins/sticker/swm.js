@@ -1,5 +1,5 @@
-import te from '../../src/lib/ourin-error.js'
-import { addExifToWebp } from '../../src/lib/ourin-exif.js'
+import te from '../../src/lib/error.js'
+import { addExifToWebp } from '../../src/lib/exif.js'
 
 const pluginConfig = {
     name: 'swm',

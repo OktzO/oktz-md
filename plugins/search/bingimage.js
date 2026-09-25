@@ -1,7 +1,7 @@
 import axios from "axios";
 import config from "../../config.js";
-import te from "../../src/lib/ourin-error.js";
-import ourinApi from "../../src/lib/ourin-apimanager.js";
+import te from "../../src/lib/error.js";
+import ourinApi from "../../src/lib/apimanager.js";
 const pluginConfig = {
   name: "bingimage",
   alias: ["imagesearch", "carigambar", "bingimg"],

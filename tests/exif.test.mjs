@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { addExifToWebp } from "../src/lib/ourin-exif.js";
+import { addExifToWebp } from "../src/lib/exif.js";
 
 function chunkIds(buf) {
   const ids = [];
@@ -54,7 +54,7 @@ describe("addExifToWebp — WhatsApp-safe extended container", () => {
 
   it("output masih valid & EXIF terbaca", async () => {
     const { default: sharp } = await import("sharp");
-    const { readExifFromWebp } = await import("../src/lib/ourin-exif.js");
+    const { readExifFromWebp } = await import("../src/lib/exif.js");
     const buf = await sharp({ create: { width: 512, height: 512, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 255 } } })
       .webp({ quality: 80 })
       .toBuffer();

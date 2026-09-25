@@ -1,4 +1,4 @@
-import { getAllPlugins } from '../../src/lib/ourin-plugins.js'
+import { getAllPlugins } from '../../src/lib/plugins.js'
 import config from '../../config.js'
 const pluginConfig = {
     name: 'benefitpremium',

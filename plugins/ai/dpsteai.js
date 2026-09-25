@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import https from 'https';
-import te from '../../src/lib/ourin-error.js';
+import te from '../../src/lib/error.js';
 
 const SESSION_FILE = path.join(process.cwd(), 'database', 'ai_chat', 'dpsteaai.json');
 const BASE_HOST = 'dipastebin.web.id';

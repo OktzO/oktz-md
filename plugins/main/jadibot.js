@@ -1,4 +1,4 @@
-import { startJadibot, isJadibotActive } from '../../src/lib/ourin-jadibot-manager.js'
+import { startJadibot, isJadibotActive } from '../../src/lib/jadibot-manager.js'
 
 const pluginConfig = {
     name: 'jadibot',

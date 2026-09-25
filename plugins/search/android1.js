@@ -1,8 +1,8 @@
-import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
+import { getAssetBuffer } from "../../src/lib/asset-manager.js";
 import axios from "axios";
 import config from "../../config.js";
-import { getDatabase } from "../../src/lib/ourin-database.js";
-import te from "../../src/lib/ourin-error.js";
+import { getDatabase } from "../../src/lib/database.js";
+import te from "../../src/lib/error.js";
 const pluginConfig = {
   name: "android1",
   alias: ["an1"],

@@ -1,11 +1,11 @@
-import { getDatabase } from "../../src/lib/ourin-database.js";
-import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
+import { getDatabase } from "../../src/lib/database.js";
+import { getAssetBuffer } from "../../src/lib/asset-manager.js";
 import {
   getCachedJid,
   isLid,
   isLidConverted,
   lidToJid,
-} from "../../src/lib/ourin-lid.js";
+} from "../../src/lib/lid.js";
 import config from "../../config.js";
 
 const pluginConfig = {
@@ -60,7 +60,7 @@ function getRegistrationRewards() {
 }
 
 async function getRegistrationImage() {
-  await import("../../src/lib/ourin-serialize.js");
+  await import("../../src/lib/serialize.js");
   for (const key of REGISTRATION_IMAGE_CANDIDATES) {
     const buf = getAssetBuffer(key);
     if (buf) return buf;

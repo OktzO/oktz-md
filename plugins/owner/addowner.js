@@ -1,10 +1,10 @@
 import config, { getOwnerName } from "../../config.js";
-import { getDatabase } from "../../src/lib/ourin-database.js";
+import { getDatabase } from "../../src/lib/database.js";
 import {
   addJadibotOwner,
   removeJadibotOwner,
   getJadibotOwners,
-} from "../../src/lib/ourin-jadibot-database.js";
+} from "../../src/lib/jadibot-database.js";
 import fs from "fs";
 import path from "path";
 import {
@@ -12,7 +12,7 @@ import {
   lidToJid,
   resolveAnyLidToJid,
   isLidConverted,
-} from "../../src/lib/ourin-lid.js";
+} from "../../src/lib/lid.js";
 import { getGroupMode } from "../group/botmode.js";
 const pluginConfig = {
   name: "addowner",

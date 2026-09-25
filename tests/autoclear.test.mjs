@@ -1,13 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
-import { Database } from "../src/lib/ourin-database.js";
+import { Database } from "../src/lib/database.js";
 import {
   collectClearTargets,
   isClearcableJid,
   isAutoClearEnabled,
   setAutoClearEnabled,
-} from "../src/lib/ourin-chat-cleaner.js";
+} from "../src/lib/chat-cleaner.js";
 
 function makeDb(dbPath) {
   fs.rmSync(dbPath, { recursive: true, force: true });

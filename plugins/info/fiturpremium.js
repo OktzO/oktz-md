@@ -1,5 +1,5 @@
-import { getAllPlugins } from "../../src/lib/ourin-plugins.js";
-import { getDatabase } from "../../src/lib/ourin-database.js";
+import { getAllPlugins } from "../../src/lib/plugins.js";
+import { getDatabase } from "../../src/lib/database.js";
 
 const config = {
   name: "fiturpremium",

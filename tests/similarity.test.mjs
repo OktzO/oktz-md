@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { findSimilarCommands } from '../src/lib/ourin-similarity.js';
+import { findSimilarCommands } from '../src/lib/similarity.js';
 
 const COMMANDS = [
   'menu', 'help', 'ping', 'sticker', 'calculator',

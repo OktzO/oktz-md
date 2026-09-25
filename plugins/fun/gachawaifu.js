@@ -1,10 +1,10 @@
 import axios from "axios";
-import { getDatabase } from "../../src/lib/ourin-database.js";
-import te from "../../src/lib/ourin-error.js";
+import { getDatabase } from "../../src/lib/database.js";
+import te from "../../src/lib/error.js";
 import { prepareWAMessageMedia, generateWAMessageFromContent } from "onigis";
-import { addExpWithLevelCheck } from "../../src/lib/ourin-level.js";
-import { rollWaifu, applyAction, rollEvent, getDailyMood, DOWRY } from "../../src/lib/ourin-waifu.js";
-import { angerEffMood, angerUpdate, applyNeglect, finalGain } from "../../src/lib/ourin-romance.js";
+import { addExpWithLevelCheck } from "../../src/lib/level.js";
+import { rollWaifu, applyAction, rollEvent, getDailyMood, DOWRY } from "../../src/lib/waifu.js";
+import { angerEffMood, angerUpdate, applyNeglect, finalGain } from "../../src/lib/romance.js";
 
 const pluginConfig = {
   name: ["gachawaifu", "waifuaction", "tinggalinwaifu", "waifuku", "istriku"],

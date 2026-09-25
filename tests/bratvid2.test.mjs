@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import { writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getFfmpegPath } from '../src/lib/ourin-ffmpeg.js';
+import { getFfmpegPath } from '../src/lib/ffmpeg.js';
 import { generateBratVideo } from '../plugins/sticker/bratvid2.js';
 
 const execFileAsync = promisify(execFile);

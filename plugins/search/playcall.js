@@ -3,7 +3,7 @@ import yts from "yt-search";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import te from "../../src/lib/ourin-error.js";
+import te from "../../src/lib/error.js";
 import ytdl from "../../src/scraper/ytdl.js";
 
 const pluginConfig = {

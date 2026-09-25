@@ -4,14 +4,14 @@ import {
   isLid,
   isLidConverted,
   lidToJid,
-} from "../../src/lib/ourin-lid.js";
-import * as timeHelper from "../../src/lib/ourin-time.js";
+} from "../../src/lib/lid.js";
+import * as timeHelper from "../../src/lib/time.js";
 import config from "../../config.js";
-import { getDatabase } from "../../src/lib/ourin-database.js";
-import { saluranCtx } from "../../src/lib/ourin-context.js";
-import { createGoodbyeCard } from "../../src/lib/ourin-welcome-card.js";
-import te from "../../src/lib/ourin-error.js";
-import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
+import { getDatabase } from "../../src/lib/database.js";
+import { saluranCtx } from "../../src/lib/context.js";
+import { createGoodbyeCard } from "../../src/lib/welcome-card.js";
+import te from "../../src/lib/error.js";
+import { getAssetBuffer } from "../../src/lib/asset-manager.js";
 import { prepareWAMessageMedia, generateWAMessageFromContent } from "onigis";
 function resolvePlaceholders(
   template,

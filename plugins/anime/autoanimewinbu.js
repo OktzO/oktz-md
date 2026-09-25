@@ -1,5 +1,5 @@
-import { loadSent, saveSent, loadState, saveState, getOngoingAnimeList, startAutoCheck, stopAutoCheck, runCheck, isRunning } from '../../src/lib/ourin-auto-anime.js'
-import te from '../../src/lib/ourin-error.js'
+import { loadSent, saveSent, loadState, saveState, getOngoingAnimeList, startAutoCheck, stopAutoCheck, runCheck, isRunning } from '../../src/lib/auto-anime.js'
+import te from '../../src/lib/error.js'
 const pluginConfig = {
     name: 'autoanimewinbu',
     alias: ['aaw', 'autoanime'],

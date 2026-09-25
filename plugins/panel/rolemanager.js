@@ -1,5 +1,5 @@
-import { isLid, lidToJid } from '../../src/lib/ourin-lid.js'
-import { addRole, removeRole, listByRole, canManageRole, getUserRole, VALID_SERVERS } from '../../src/lib/ourin-roles-cpanel.js'
+import { isLid, lidToJid } from '../../src/lib/lid.js'
+import { addRole, removeRole, listByRole, canManageRole, getUserRole, VALID_SERVERS } from '../../src/lib/roles-cpanel.js'
 const ROLES = ['owner', 'ceo', 'reseller']
 const allCommands = []
 

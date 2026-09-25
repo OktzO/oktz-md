@@ -1,5 +1,5 @@
 import { createCanvas, GlobalFonts } from "@napi-rs/canvas";
-import te from "../../src/lib/ourin-error.js";
+import te from "../../src/lib/error.js";
 import axios from "axios";
 import config from "../../config.js";
 

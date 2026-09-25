@@ -1,6 +1,6 @@
-import { getDatabase } from '../../src/lib/ourin-database.js'
+import { getDatabase } from '../../src/lib/database.js'
 import config from '../../config.js'
-import * as timeHelper from '../../src/lib/ourin-time.js'
+import * as timeHelper from '../../src/lib/time.js'
 const pluginConfig = {
     name: 'intro',
     alias: ['perkenalan', 'selamatdatang'],
