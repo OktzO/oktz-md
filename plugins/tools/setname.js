@@ -4,7 +4,7 @@ const pluginConfig = {
     category: 'tools',
     description: 'Mengubah nama profil bot',
     usage: '.setname <nama baru>',
-    example: '.setname Ourin-AI',
+    example: '.setname Foto-AI',
     isOwner: true,
     isPremium: false,
     isGroup: false,
