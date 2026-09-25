@@ -4,7 +4,7 @@ const pluginConfig = {
     name: 'ganti-ourin-games.jpg',
     alias: ['gantigames', 'setouringames'],
     category: 'owner',
-    description: 'Ganti gambar ourin-games.jpg (thumbnail games)',
+    description: 'Ganti gambar games.jpg (thumbnail games)',
     usage: '.ganti-ourin-games.jpg (reply/kirim gambar)',
     example: '.ganti-ourin-games.jpg',
     isOwner: true,
