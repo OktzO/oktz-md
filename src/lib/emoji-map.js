@@ -4,8 +4,8 @@ import path from "path";
 // emoji-apple.json (~27MB) parse SEKALI per proses. Dulu brat.js dan
 // bratvid2.js masing-masing readFileSync+JSON.parse -> dua objek 27MB hidup
 // bareng di module singleton. Shared module ini nyimpan satu instans; semua
-// consumer (ourin-brat, bratvid2) dapat referensi sama. Download divalidasi +
-// self-heal (port dari ourin-brat); gagal -> fallback {} (emoji digambar via
+// consumer (brat, bratvid2) dapat referensi sama. Download divalidasi +
+// self-heal (port dari brat); gagal -> fallback {} (emoji digambar via
 // fillText, teks tetap jalan).
 // ponytail: plugins/canvas/iqcpink.js masih download+parse sendiri (3rd copy)
 // — pindahkan ke loader ini kalau plugin itu mau di-opt.

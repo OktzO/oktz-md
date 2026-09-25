@@ -212,7 +212,7 @@ async function extractNumber(jid) {
 
 /**
  * Resolve LID atau LID-converted JID ke JID asli menggunakan group metadata
- * Participant structure dari ourin (groups.js):
+ * Participant structure dari library (groups.js):
  * - id: phone_number atau jid (tergantung addressingMode)
  * - lid: LID format
  * - admin: type admin
@@ -487,7 +487,7 @@ function findParticipantByNumber(participants, targetJid) {
   const targetNumber = targetJid.replace(/@.*$/, "");
 
   for (const p of participants) {
-    // phoneNumber wajib dicek: di grup addressing_mode=lid ourin mengirim
+    // phoneNumber wajib dicek: di grup addressing_mode=lid library mengirim
     // { id: LID, phoneNumber: PN }, jadi tanpa itu bot/user tidak pernah ketemu.
     const pId = (p.id || "").replace(/@.*$/, "");
     const pJid = (p.jid || "").replace(/@.*$/, "");

@@ -57,10 +57,10 @@ const CHARACTERS = {
   },
 };
 
-async function UnlimitedAI(prompt, character = "ourin-ai") {
+async function UnlimitedAI(prompt, character = "ai-assistant") {
   const chatId = crypto.randomUUID();
   const deviceId = crypto.randomUUID();
-  const char = CHARACTERS[character] || CHARACTERS["ourin-ai"];
+  const char = CHARACTERS[character] || CHARACTERS["ai-assistant"];
 
   const systemPrompt = `${char.prompt}\n\nPertanyaan user: ${prompt}`;
 

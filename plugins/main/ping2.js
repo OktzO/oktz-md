@@ -133,7 +133,7 @@ async function handler(m, { sock }) {
             tableData,
             m,
             {
-                headerText: `${config.bot?.name || 'Ourin-AI'} *STATUS*\n\n- 🎄 Dibawah ini adalah statistik bot kita`,
+                headerText: `${config.bot?.name || 'Foto-AI'} *STATUS*\n\n- 🎄 Dibawah ini adalah statistik bot kita`,
                 footer: '🍃 Realtime Monitoring'
             }
         )

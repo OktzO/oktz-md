@@ -11,7 +11,7 @@
  * JANGAN HAPUS/GANTI CREDITS & THANKS TO
  * JANGAN DIJUAL YA MEK
  * 
- * Saluran Resmi Ourin:
+ * Saluran Resmi Foto:
  * https://whatsapp.com/channel/0029VbB37bgBfxoAmAlsgE0t 
  */
 

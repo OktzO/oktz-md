@@ -89,7 +89,7 @@ function invalidatePrefixCache() {
 /**
  * Semua varian nomor identitas satu participant.
  *
- * Root cause bug ".del: sudah admin tapi ditolak": ourin mengembalikan
+ * Root cause bug ".del: sudah admin tapi ditolak": library mengembalikan
  * participant dalam DUA bentuk berbeda tergantung addressing_mode grup:
  *   - grup PN  : { id: PN, lid: LID }
  *   - grup LID : { id: LID, phoneNumber: PN }   <- `lid` TIDAK ada
@@ -624,7 +624,7 @@ function createContextInfo(jid, text, title = "", body = "", thumbnail = null) {
       conversation: text,
     };
     contextInfo.participant = jid;
-    contextInfo.stanzaId = "OURINAI" + Date.now();
+    contextInfo.stanzaId = "FOTOAI" + Date.now();
   }
 
   return contextInfo;

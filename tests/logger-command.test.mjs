@@ -7,7 +7,7 @@ import assert from "node:assert";
 
 const SENDER = "6281234567890@s.whatsapp.net";
 
-describe("ourin-logger logCommand", () => {
+describe("logger logCommand", () => {
   let mod;
   let logs;
 

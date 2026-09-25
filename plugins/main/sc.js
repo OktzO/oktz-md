@@ -26,7 +26,7 @@ const REPO_URL = "https://github.com/OktzO/oktz-md";
 async function handler(m, { sock }) {
     // Kartu tombol harus dikirim sebagai interactiveMessage + nativeFlowMessage
     // via relayMessage (pola yang terbukti dirender WhatsApp — key
-    // `interactiveButtons` pada sendMessage TIDAK didukung lib ourin/onigis
+    // `interactiveButtons` pada sendMessage TIDAK didukung lib onigis/onigis
     // dan di-drop/throw diam-diam).
     const msg = generateWAMessageFromContent(
         m.chat,

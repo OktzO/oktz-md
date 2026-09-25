@@ -68,7 +68,7 @@ import { getActiveJadibots } from "./lib/jadibot-manager.js";
 import { handleCommand as handleCaseCommand } from "../case/foto.js";
 import { RateLimiterMemory } from "rate-limiter-flexible";
 
-import { games as ourinGames } from "./lib/games.js";
+import { games as fotoGames } from "./lib/games.js";
 import fs from "fs";
 import path from "path";
 import { exec } from "child_process";
@@ -239,7 +239,7 @@ try {
     .checkStickerCommand;
 } catch { }
 try {
-  handleStickerReply = (await import("./lib/ourin-sticker-reply.js"))
+  handleStickerReply = (await import("./lib/sticker-reply.js"))
     .handleStickerReply;
 } catch { }
 try {

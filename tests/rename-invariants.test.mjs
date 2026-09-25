@@ -259,6 +259,8 @@ function relativeImportCandidates(file, specifier) {
 
 function stripWhitelistedOurin(line) {
   return line
+    .replace(/(^|[^a-z0-9.-])api\.ourin\.my\.id(?=$|[^a-z0-9.-])/gi, "$1")
+    .replace(/(^|[^a-z0-9.-])ourin\.my\.id(?=$|[^a-z0-9.-])/gi, "$1")
     .replace(/ourin-native/gi, "")
     .replace(/ourin_native(?:\.[a-z0-9_-]+)*/gi, "")
     .replace(/native[\\/][^\s"'`)]*ourin[^\s"'`)]*/gi, "")

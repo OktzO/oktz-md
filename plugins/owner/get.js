@@ -202,7 +202,7 @@ async function handler(m, { sock }) {
       validateStatus: () => true,
       responseType: "arraybuffer",
       headers: {
-        "User-Agent": "Ourin-Bot/2.0",
+        "User-Agent": "Foto-Bot/2.0",
         Accept: "*/*",
         ...(jsonBody ? { "Content-Type": "application/json" } : {}),
         ...customHeaders,

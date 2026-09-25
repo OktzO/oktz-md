@@ -54,7 +54,7 @@ function pick(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-class OurinGames {
+class FotoGames {
   constructor() {
     this.registry = new Map();
   }
@@ -327,6 +327,6 @@ class OurinGames {
   }
 }
 
-const games = new OurinGames();
+const games = new FotoGames();
 
-export { OurinGames, games };
+export { FotoGames, games };

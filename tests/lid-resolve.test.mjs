@@ -12,7 +12,7 @@ async function loadLid() {
   return moduleCache;
 }
 
-describe('ourin-lid resolveFromSock', () => {
+describe('lid resolveFromSock', () => {
   it('returns PN from signalRepository for @lid jid', async () => {
     const mod = await loadLid();
     const sock = {

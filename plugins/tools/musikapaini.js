@@ -3,7 +3,7 @@ import FormData from "form-data";
 import config from "../../config.js";
 import { downloadMediaMessage } from "onigis";
 import te from "../../src/lib/error.js";
-import ourinApi from "../../src/lib/apimanager.js";
+import fotoApi from "../../src/lib/apimanager.js";
 import { saluranCtx } from "../../src/lib/context.js";
 
 const pluginConfig = {
@@ -87,7 +87,7 @@ async function handler(m, { sock }) {
 
     await m.reply("🔍 *ᴍᴇɴɢɪᴅᴇɴᴛɪꜰɪᴋᴀsɪ...*\n\n> Mencari info lagu...");
 
-    const data = await ourinApi.neoxr.whatMusic(
+    const data = await fotoApi.neoxr.whatMusic(
       {
         url: audioUrl,
         apikey: config.APIkey?.neoxr || '',
