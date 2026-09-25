@@ -3,7 +3,7 @@ import {
   stopCpuProfile,
   isCpuProfiling,
   CPU_MAX_DURATION_MS,
-} from "../../src/lib/ourin-profiler.js";
+} from "../../src/lib/profiler.js";
 
 const pluginConfig = {
   name: "cpuprofile",
@@ -67,7 +67,7 @@ async function handler(m, { sock }) {
         `Gunakan *${m.prefix}cpuprofile start [menit]* untuk memulai.`,
       );
     }
-    const { cpu } = (await import("../../src/lib/ourin-profiler.js")).profilerStatus();
+    const { cpu } = (await import("../../src/lib/profiler.js")).profilerStatus();
     const mem = process.memoryUsage();
     return m.reply(
       `📊 *Status Profiler*\n\nCPU: 🟢 Aktif\n` +

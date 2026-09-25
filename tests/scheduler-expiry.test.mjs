@@ -5,7 +5,7 @@ describe("scheduler repeat expiresAt", () => {
   let m;
 
   before(async () => {
-    m = await import("../src/lib/ourin-scheduler.js");
+    m = await import("../src/lib/scheduler.js");
   });
 
   const now = Date.now();
@@ -36,7 +36,7 @@ describe("scheduler reload predicate (shouldReloadTask)", () => {
   let m;
 
   before(async () => {
-    m = await import("../src/lib/ourin-scheduler.js");
+    m = await import("../src/lib/scheduler.js");
   });
 
   const now = Date.now();
@@ -72,7 +72,7 @@ describe("notifiedGroups age sweep (>60min)", () => {
   let m;
 
   before(async () => {
-    m = await import("../src/lib/ourin-scheduler.js");
+    m = await import("../src/lib/scheduler.js");
   });
 
   const now = Date.now();

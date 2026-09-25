@@ -1,4 +1,4 @@
-import { getDatabase } from '../../src/lib/ourin-database.js'
+import { getDatabase } from '../../src/lib/database.js'
 const pluginConfig = {
     name: 'clanleaderboard',
     alias: ['clanlb', 'topclan', 'guildrank'],

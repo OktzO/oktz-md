@@ -1,9 +1,9 @@
-import { getDatabase } from "../../src/lib/ourin-database.js";
+import { getDatabase } from "../../src/lib/database.js";
 import {
   findParticipantByNumber,
   getParticipantJid,
   isSameParticipant,
-} from "../../src/lib/ourin-lid.js";
+} from "../../src/lib/lid.js";
 import config from "../../config.js";
 const pluginConfig = {
   name: ["antibot", "botdetect"],

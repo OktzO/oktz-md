@@ -1,7 +1,7 @@
-import { getFullSchedulerStatus } from '../../src/lib/ourin-scheduler.js'
-import { getDatabase } from '../../src/lib/ourin-database.js'
-import { getTodaySchedule, extractPrayerTimes } from '../../src/lib/ourin-sholat-api.js'
-import te from '../../src/lib/ourin-error.js'
+import { getFullSchedulerStatus } from '../../src/lib/scheduler.js'
+import { getDatabase } from '../../src/lib/database.js'
+import { getTodaySchedule, extractPrayerTimes } from '../../src/lib/sholat-api.js'
+import te from '../../src/lib/error.js'
 const pluginConfig = {
     name: 'cekschedule',
     alias: ['cekscheduler', 'schedulerstatus', 'schedstatus'],

@@ -13,7 +13,7 @@ describe("memory monitor sustained over-limit + warn latch (M-j)", () => {
   let mod;
 
   before(async () => {
-    mod = await import("../src/lib/ourin-memory-monitor.js");
+    mod = await import("../src/lib/memory-monitor.js");
   });
 
   it("evaluateOverLimit flags after 3 consecutive checks, resets on drop", () => {
@@ -73,11 +73,11 @@ describe("srt session idle TTL 10 menit (plugins/owner/srt.js)", () => {
 
 describe("watcher fileStat cache cap 800 (FIFO)", () => {
   before(async () => {
-    await import("../src/lib/ourin-cache-cap.js");
+    await import("../src/lib/cache-cap.js");
   });
 
   it("evicts oldest past 800", async () => {
-    const { evictOldestOverCap } = await import("../src/lib/ourin-cache-cap.js");
+    const { evictOldestOverCap } = await import("../src/lib/cache-cap.js");
     const map = new Map();
     for (let i = 0; i < 820; i++) map.set("plugin_" + i, { mtimeMs: i, size: 1 });
     evictOldestOverCap(map, 800);
@@ -88,7 +88,7 @@ describe("watcher fileStat cache cap 800 (FIFO)", () => {
   });
 
   it("does nothing under cap", async () => {
-    const { evictOldestOverCap } = await import("../src/lib/ourin-cache-cap.js");
+    const { evictOldestOverCap } = await import("../src/lib/cache-cap.js");
     const map = new Map([["a", 1], ["b", 2]]);
     evictOldestOverCap(map, 800);
     assert.equal(map.size, 2);

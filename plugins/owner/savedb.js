@@ -1,8 +1,8 @@
-import * as timeHelper from '../../src/lib/ourin-time.js'
+import * as timeHelper from '../../src/lib/time.js'
 import fs from 'fs'
 import path from 'path'
 import config from '../../config.js'
-import te from '../../src/lib/ourin-error.js'
+import te from '../../src/lib/error.js'
 const pluginConfig = {
     name: 'savedb',
     alias: ['backupdb', 'downloaddb', 'getdb'],

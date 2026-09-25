@@ -1,6 +1,6 @@
-import { getDatabase } from "../../src/lib/ourin-database.js";
-import { addExpWithLevelCheck } from "../../src/lib/ourin-level.js";
-import { sendRpgPreview } from "../../src/lib/ourin-context.js";
+import { getDatabase } from "../../src/lib/database.js";
+import { addExpWithLevelCheck } from "../../src/lib/level.js";
+import { sendRpgPreview } from "../../src/lib/context.js";
 
 const pluginConfig = {
   name: "rob",

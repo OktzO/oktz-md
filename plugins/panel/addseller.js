@@ -1,7 +1,7 @@
 import config from '../../config.js'
 import fs from 'fs'
 import path from 'path'
-import { isLid, lidToJid } from '../../src/lib/ourin-lid.js'
+import { isLid, lidToJid } from '../../src/lib/lid.js'
 const pluginConfig = {
     name: 'addseller',
     alias: ['addreseller', 'delseller', 'delreseller', 'listseller', 'listreseller'],

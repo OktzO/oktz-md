@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
-import { Database } from "../src/lib/ourin-database.js";
+import { Database } from "../src/lib/database.js";
 
 function makeDb(dbPath) {
   fs.rmSync(dbPath, { recursive: true, force: true });

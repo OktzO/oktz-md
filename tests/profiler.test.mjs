@@ -11,7 +11,7 @@ import {
   heapSnapshotEligibility,
   isCpuProfiling,
   OUT_DIR,
-} from "../src/lib/ourin-profiler.js";
+} from "../src/lib/profiler.js";
 
 const writtenFiles = [];
 

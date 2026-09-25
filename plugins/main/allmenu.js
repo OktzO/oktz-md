@@ -4,17 +4,17 @@ import config from "../../config.js";
 import axios from "axios";
 import {
   getTimeGreeting,
-} from "../../src/lib/ourin-formatter.js";
+} from "../../src/lib/formatter.js";
 import fs from "fs"
 import {
   getCommandsByCategory,
   getCategories,
   getPlugin,
-} from "../../src/lib/ourin-plugins.js";
+} from "../../src/lib/plugins.js";
 import { getCasesByCategory, getCaseCount } from "../../case/ourin.js";
-import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
-import { getFfmpegPath } from "../../src/lib/ourin-ffmpeg.js";
-import { wrapInteractive } from "../../src/lib/ourin-rich-messages.js";
+import { getAssetBuffer } from "../../src/lib/asset-manager.js";
+import { getFfmpegPath } from "../../src/lib/ffmpeg.js";
+import { wrapInteractive } from "../../src/lib/rich-messages.js";
 
 let _sharp;
 async function getSharp() {

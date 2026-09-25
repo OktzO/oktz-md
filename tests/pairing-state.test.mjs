@@ -8,7 +8,7 @@ describe("pairing state", () => {
   let m;
 
   before(async () => {
-    m = await import("../src/lib/ourin-pairing-state.js");
+    m = await import("../src/lib/pairing-state.js");
   });
 
   describe("pairing pending marker", () => {

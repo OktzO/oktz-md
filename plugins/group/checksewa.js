@@ -1,5 +1,5 @@
-import { getDatabase } from '../../src/lib/ourin-database.js'
-import * as timeHelper from '../../src/lib/ourin-time.js'
+import { getDatabase } from '../../src/lib/database.js'
+import * as timeHelper from '../../src/lib/time.js'
 const pluginConfig = {
     name: 'checksewa',
     alias: ['ceksewa', 'sisasewa'],

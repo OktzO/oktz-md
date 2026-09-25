@@ -1,5 +1,5 @@
 import { fileTypeFromBuffer } from "file-type";
-import te from "../../src/lib/ourin-error.js";
+import te from "../../src/lib/error.js";
 import { generateWAMessage } from "onigis";
 
 function buildSyntheticSwGcRawMessage(sock, remoteJid, innerMessage, messageId) {

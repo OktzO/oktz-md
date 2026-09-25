@@ -1,7 +1,7 @@
 import axios from "axios";
 import FormData from "form-data";
 import config from "../../config.js";
-import te from "../../src/lib/ourin-error.js";
+import te from "../../src/lib/error.js";
 import _sharp from 'sharp';
 
 const pluginConfig = {

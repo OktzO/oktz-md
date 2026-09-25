@@ -1,5 +1,5 @@
 import axios from 'axios'
-import te from '../../src/lib/ourin-error.js'
+import te from '../../src/lib/error.js'
 import config from '../../config.js'
 const CUKI_APIKEY = config.APIkey?.cuki || ""
 const pluginConfig = {

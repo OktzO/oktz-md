@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createCanvas, GlobalFonts } from "@napi-rs/canvas";
 
-const loader = await import("../src/lib/ourin-native-loader.js");
+const loader = await import("../src/lib/native-loader.js");
 
 function renderTextPng() {
   GlobalFonts.register(readFileSync("assets/fonts/Levelup.ttf"), "testfont");

@@ -1,5 +1,5 @@
-import { getDatabase } from "../../src/lib/ourin-database.js";
-import { albumStats } from "../../src/lib/ourin-husbu.js";
+import { getDatabase } from "../../src/lib/database.js";
+import { albumStats } from "../../src/lib/husbu.js";
 
 const pluginConfig = {
   name: ["husbualbum", "albumhusbu"],

@@ -1,5 +1,5 @@
-import { getDatabase } from "../../src/lib/ourin-database.js";
-import { getTimeGreeting } from "../../src/lib/ourin-formatter.js";
+import { getDatabase } from "../../src/lib/database.js";
+import { getTimeGreeting } from "../../src/lib/formatter.js";
 const pluginConfig = {
   name: "daily",
   alias: ["claim", "harian", "bonus"],

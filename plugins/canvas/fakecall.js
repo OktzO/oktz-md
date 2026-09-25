@@ -1,6 +1,6 @@
 import axios from 'axios'
 import FormData from 'form-data'
-import te from '../../src/lib/ourin-error.js'
+import te from '../../src/lib/error.js'
 
 const pluginConfig = {
     name: ['fakecall', 'fakecall-android', 'fakecall-ios'],

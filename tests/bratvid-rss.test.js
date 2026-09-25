@@ -3,7 +3,7 @@ import assert from "node:assert";
 import {
   bratvidRssBlocked,
   BRATVID_RSS_LIMIT,
-} from "../src/lib/ourin-bratvid-gate.js";
+} from "../src/lib/bratvid-gate.js";
 
 const MB = 1024 * 1024;
 

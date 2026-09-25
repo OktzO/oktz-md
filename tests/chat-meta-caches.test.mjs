@@ -1,11 +1,11 @@
 import { describe, it, before, beforeEach } from "node:test";
 import assert from "node:assert";
-import { sweepGroupMetadataCache } from "../src/lib/ourin-lid.js";
+import { sweepGroupMetadataCache } from "../src/lib/lid.js";
 import {
   createStickerPackCache,
   packSizeBytes,
   extendSocket,
-} from "../src/lib/ourin-socket.js";
+} from "../src/lib/socket.js";
 
 const AGE_30M = 30 * 60 * 1000;
 

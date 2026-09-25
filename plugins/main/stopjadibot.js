@@ -1,4 +1,4 @@
-import { stopJadibot, isJadibotActive, getJadibotStatus } from '../../src/lib/ourin-jadibot-manager.js'
+import { stopJadibot, isJadibotActive, getJadibotStatus } from '../../src/lib/jadibot-manager.js'
 
 const pluginConfig = {
     name: 'stopjadibot',

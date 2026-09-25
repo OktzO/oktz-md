@@ -1,7 +1,7 @@
 import axios from 'axios'
 import config from '../../config.js'
-import { hasFullAccess, getUserRole, VALID_SERVERS } from '../../src/lib/ourin-roles-cpanel.js'
-import te from '../../src/lib/ourin-error.js'
+import { hasFullAccess, getUserRole, VALID_SERVERS } from '../../src/lib/roles-cpanel.js'
+import te from '../../src/lib/error.js'
 const allCommands = [...VALID_SERVERS.map(v => `listserver${v}`), 'listserver']
 const allAliases = VALID_SERVERS.map(v => `servers${v}`)
 

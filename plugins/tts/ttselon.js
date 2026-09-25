@@ -2,9 +2,9 @@ import axios from "axios";
 import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
-import te from "../../src/lib/ourin-error.js";
-import { saluranCtx } from "../../src/lib/ourin-context.js";
-import { getFfmpegPath } from "../../src/lib/ourin-ffmpeg.js";
+import te from "../../src/lib/error.js";
+import { saluranCtx } from "../../src/lib/context.js";
+import { getFfmpegPath } from "../../src/lib/ffmpeg.js";
 const pluginConfig = {
   name: "ttselon",
   alias: ["elontts", "ttselonmusk"],

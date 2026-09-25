@@ -1,27 +1,27 @@
 import config from "../config.js";
 import { isSelf } from "../config.js";
 import { generateWAMessageFromContent, prepareWAMessageMedia } from "onigis";
-import { serialize, getCachedThumb, getCachedSharpThumb } from "./lib/ourin-serialize.js";
-import { saluranCtx } from "./lib/ourin-context.js";
+import { serialize, getCachedThumb, getCachedSharpThumb } from "./lib/serialize.js";
+import { saluranCtx } from "./lib/context.js";
 import {
   getPlugin,
   getPluginCount,
   getAllPlugins,
   pluginStore,
   getAllCommandNames,
-} from "./lib/ourin-plugins.js";
+} from "./lib/plugins.js";
 import {
   findSimilarCommands,
   formatSuggestionMessage,
-} from "./lib/ourin-similarity.js";
-import { getDatabase } from "./lib/ourin-database.js";
+} from "./lib/similarity.js";
+import { getDatabase } from "./lib/database.js";
 import {
   formatUptime,
   createWaitMessage,
   createErrorMessage,
-} from "./lib/ourin-formatter.js";
+} from "./lib/formatter.js";
 import { getUptime } from "./connection.js";
-import { logger, logCommand, c } from "./lib/ourin-logger.js";
+import { logger, logCommand, c } from "./lib/logger.js";
 import {
   isLid,
   isLidConverted,
@@ -32,14 +32,14 @@ import {
   savePersistentCache,
   getLidCacheSize,
   sweepGroupMetadataCache,
-} from "./lib/ourin-lid.js";
-import { hasActiveSession, getSession } from "./lib/ourin-game-data.js";
+} from "./lib/lid.js";
+import { hasActiveSession, getSession } from "./lib/game-data.js";
 import {
   levenshtein,
   formatAfkDuration,
   checkPermission,
   checkMode,
-} from "./lib/ourin-middleware.js";
+} from "./lib/middleware.js";
 import {
   handleAntilink,
   handleAntiJudol,
@@ -52,28 +52,28 @@ import {
   handleAntilinkAll,
   handleAntiHidetag,
   handleAntiSwGc,
-} from "./lib/ourin-group-protection.js";
+} from "./lib/group-protection.js";
 import {
   debounceMessage,
   getCachedUser,
   getCachedGroup,
   getCachedSetting,
-} from "./lib/ourin-performance.js";
+} from "./lib/performance.js";
 import {
   isJadibotOwner,
   isJadibotPremium,
   loadJadibotDb,
-} from "./lib/ourin-jadibot-database.js";
-import { getActiveJadibots } from "./lib/ourin-jadibot-manager.js";
+} from "./lib/jadibot-database.js";
+import { getActiveJadibots } from "./lib/jadibot-manager.js";
 import { handleCommand as handleCaseCommand } from "../case/ourin.js";
 import { RateLimiterMemory } from "rate-limiter-flexible";
 
-import { games as ourinGames } from "./lib/ourin-games.js";
+import { games as ourinGames } from "./lib/games.js";
 import fs from "fs";
 import path from "path";
 import { exec } from "child_process";
 import axios from "axios";
-import * as timeHelper from "./lib/ourin-time.js";
+import * as timeHelper from "./lib/time.js";
 import sharp from "sharp";
 const safe = (fn) => {
   try {
@@ -125,7 +125,7 @@ try {
   FormData = (await import("form-data")).default || (await import("form-data"));
 } catch { }
 try {
-  levelHelper = await import("./lib/ourin-level.js");
+  levelHelper = await import("./lib/level.js");
 } catch { }
 try {
   handleBuyerDone = (await import("../plugins/store/done.js")).handleBuyerDone;
@@ -228,14 +228,14 @@ try {
   sulapPlugin = await import("../plugins/fun/sulap.js");
 } catch { }
 try {
-  handleAutoAI = (await import("./lib/ourin-auto-ai.js")).handleAutoAI;
+  handleAutoAI = (await import("./lib/auto-ai.js")).handleAutoAI;
 } catch { }
 try {
-  handleAutoDownload = (await import("./lib/ourin-auto-download.js"))
+  handleAutoDownload = (await import("./lib/auto-download.js"))
     .handleAutoDownload;
 } catch { }
 try {
-  checkStickerCommand = (await import("./lib/ourin-sticker-command.js"))
+  checkStickerCommand = (await import("./lib/sticker-command.js"))
     .checkStickerCommand;
 } catch { }
 try {
@@ -1002,7 +1002,7 @@ async function messageHandler(msg, sock, options = {}) {
                 const commandArgs = words.slice(1).join(" ");
                 m.body = `${prefix}${bestMatch}${commandArgs ? " " + commandArgs : ""}`;
                 const { parseCommand } =
-                  await import("./lib/ourin-serialize.js");
+                  await import("./lib/serialize.js");
                 const parsed = parseCommand(m.body, prefix);
                 m.isCommand = parsed.isCommand;
                 m.command = parsed.command;
@@ -1082,7 +1082,7 @@ async function messageHandler(msg, sock, options = {}) {
           const { promisify } = await import('util')
           const { generateWAMessage, getBuffer, generateWAMessageFromContent, proto, generateMessageID } = await import('onigis')
           const { exec: childExec } = await import('child_process')
-          const { VERSION, Button, ButtonV2, Carousel, AIRich, } = await import('./lib/ourin-builder.js')
+          const { VERSION, Button, ButtonV2, Carousel, AIRich, } = await import('./lib/builder.js')
           const exec = promisify(childExec)
           
           ${code}
@@ -1377,7 +1377,7 @@ async function messageHandler(msg, sock, options = {}) {
           if (stickerCmd) {
             const prefix = m.prefix || config.command?.prefix || ".";
             m.body = `${prefix}${stickerCmd}`;
-            const { parseCommand } = await import("./lib/ourin-serialize.js");
+            const { parseCommand } = await import("./lib/serialize.js");
             const parsed = parseCommand(m.body, prefix);
             m.isCommand = parsed.isCommand;
             m.command = parsed.command;
@@ -1804,7 +1804,7 @@ async function messageHandler(msg, sock, options = {}) {
     await plugin.handler(m, context);
 
     if (["fun", "game"].includes(plugin.config.category)) {
-      const { jealousyCheckAll } = await import("./lib/ourin-romance.js");
+      const { jealousyCheckAll } = await import("./lib/romance.js");
       await jealousyCheckAll({ m, sock, db, command: m.command }).catch(() => {});
     }
 

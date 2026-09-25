@@ -4,7 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import { exec } from 'child_process'
 import config from '../../config.js'
-import te from '../../src/lib/ourin-error.js'
+import te from '../../src/lib/error.js'
 const pluginConfig = {
     name: 'transkrip',
     alias: ['stt', 'speechtotext', 'transcribe'],

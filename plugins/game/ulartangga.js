@@ -1,12 +1,12 @@
-import { getDatabase } from "../../src/lib/ourin-database.js";
+import { getDatabase } from "../../src/lib/database.js";
 import {
   drawBoard,
   getRandomMap,
   DICE_STICKERS,
-} from "../../src/lib/ourin-game-ulartangga.js";
-import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
+} from "../../src/lib/game-ulartangga.js";
+import { getAssetBuffer } from "../../src/lib/asset-manager.js";
 import config from "../../config.js";
-import te from "../../src/lib/ourin-error.js";
+import te from "../../src/lib/error.js";
 const pluginConfig = {
   name: "ulartangga",
   alias: ["ut", "snakeladder", "sl"],

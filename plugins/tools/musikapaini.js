@@ -2,9 +2,9 @@ import axios from "axios";
 import FormData from "form-data";
 import config from "../../config.js";
 import { downloadMediaMessage } from "onigis";
-import te from "../../src/lib/ourin-error.js";
-import ourinApi from "../../src/lib/ourin-apimanager.js";
-import { saluranCtx } from "../../src/lib/ourin-context.js";
+import te from "../../src/lib/error.js";
+import ourinApi from "../../src/lib/apimanager.js";
+import { saluranCtx } from "../../src/lib/context.js";
 
 const pluginConfig = {
   name: "musikapaini",

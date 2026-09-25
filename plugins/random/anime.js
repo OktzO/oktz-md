@@ -1,5 +1,5 @@
 import axios from "axios";
-import te from "../../src/lib/ourin-error.js";
+import te from "../../src/lib/error.js";
 import { prepareWAMessageMedia, generateWAMessageFromContent } from "onigis";
 
 const nexrayTypes = [

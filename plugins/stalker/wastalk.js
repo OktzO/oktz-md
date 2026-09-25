@@ -1,4 +1,4 @@
-import * as timeHelper from '../../src/lib/ourin-time.js'
+import * as timeHelper from '../../src/lib/time.js'
 import PhoneNum from 'awesome-phonenumber'
 const pluginConfig = {
     name: 'wastalk',

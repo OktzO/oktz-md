@@ -1,9 +1,9 @@
-import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
+import { getAssetBuffer } from "../../src/lib/asset-manager.js";
 import axios from "axios";
 
 
-import { uploadTo0x0 } from "../../src/lib/ourin-tmpfiles.js";
-import te from "../../src/lib/ourin-error.js";
+import { uploadTo0x0 } from "../../src/lib/tmpfiles.js";
+import te from "../../src/lib/error.js";
 const pluginConfig = {
   name: "fakeml",
   alias: ["mlbbfake", "mlcard", "mlfake"],

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import config from '../../config.js';
-import te from '../../src/lib/ourin-error.js';
-import { uploadImage } from '../../src/lib/ourin-uploader.js';
+import te from '../../src/lib/error.js';
+import { uploadImage } from '../../src/lib/uploader.js';
 import { downloadMediaMessage, getContentType } from 'onigis';
 
 const pluginConfig = {

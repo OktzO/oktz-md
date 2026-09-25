@@ -1,9 +1,9 @@
 import fs from "fs";
 import path from "path";
 import cekfemboy from "../../src/scraper/lufemboy.js";
-import { queueFFmpeg } from "../../src/lib/ourin-ffmpeg.js";
-import { fetchBuffer } from "../../src/lib/ourin-utils.js";
-import te from "../../src/lib/ourin-error.js";
+import { queueFFmpeg } from "../../src/lib/ffmpeg.js";
+import { fetchBuffer } from "../../src/lib/utils.js";
+import te from "../../src/lib/error.js";
 const pluginConfig = {
   name: "cekfemboy",
   alias: ["femboy"],

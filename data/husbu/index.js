@@ -1,6 +1,6 @@
 // data/husbu/index.js
 // Loader pool husbu: merge file franchise, validasi entry, dedupe nama, hitung bobot tier.
-import { logger } from "../../src/lib/ourin-logger.js";
+import { logger } from "../../src/lib/logger.js";
 import { husbus as naruto } from "./naruto.js";
 import { husbus as onePiece } from "./one-piece.js";
 import { husbus as bleach } from "./bleach.js";

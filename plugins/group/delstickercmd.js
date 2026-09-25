@@ -1,4 +1,4 @@
-import { getQuotedStickerHash, deleteStickerCommand, listStickerCommands, findByCommand } from '../../src/lib/ourin-sticker-command.js'
+import { getQuotedStickerHash, deleteStickerCommand, listStickerCommands, findByCommand } from '../../src/lib/sticker-command.js'
 const pluginConfig = {
     name: 'delstickercmd',
     alias: ['delcmdsticker', 'removesticker', 'unsticker'],

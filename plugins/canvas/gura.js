@@ -2,7 +2,7 @@ import FormData from "form-data";
 import fetch from "node-fetch";
 import mime from "mime-types";
 import { downloadMediaMessage, getContentType } from "onigis";
-import te from "../../src/lib/ourin-error.js";
+import te from "../../src/lib/error.js";
 
 const pluginConfig = {
   name: "gura",

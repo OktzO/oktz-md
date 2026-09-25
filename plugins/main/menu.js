@@ -7,17 +7,17 @@ import config from "../../config.js";
 import {
   formatUptime,
   getTimeGreeting,
-} from "../../src/lib/ourin-formatter.js";
+} from "../../src/lib/formatter.js";
 import {
   getCommandsByCategory,
   getCategories,
-} from "../../src/lib/ourin-plugins.js";
-import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
+} from "../../src/lib/plugins.js";
+import { getAssetBuffer } from "../../src/lib/asset-manager.js";
 import fs from "fs";
 import path from "path";
 import axios from "axios";
 import sharp from "sharp";
-import { wrapInteractive } from "../../src/lib/ourin-rich-messages.js";
+import { wrapInteractive } from "../../src/lib/rich-messages.js";
 
 const pluginConfig = {
   name: "menu",
@@ -181,7 +181,7 @@ async function buildMenuText(
   _ = false,
 ) {
   const prefix = botConfig.command?.prefix || ".";
-  const timeHelper = await import("../../src/lib/ourin-time.js");
+  const timeHelper = await import("../../src/lib/time.js");
   const timeStr = timeHelper.formatTime("HH:mm");
   const categories = getCategories();
   const commandsByCategory = getCommandsByCategory();
@@ -1144,7 +1144,7 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
         case7Text += `╰╯`;
 
 
-        const { getAssetBuffer } = await import("../../src/lib/ourin-asset-manager.js");
+        const { getAssetBuffer } = await import("../../src/lib/asset-manager.js");
         const imageBuffer = await getAssetBuffer("ourin2");
         const sharp = (await import("sharp")).default;
         const stickerBuf = await sharp(imageBuffer).resize(512, 512).webp().toBuffer();
@@ -1286,7 +1286,7 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
         }
         case7Text = case7Text.trimEnd();
 
-        const { getAssetBuffer } = await import("../../src/lib/ourin-asset-manager.js");
+        const { getAssetBuffer } = await import("../../src/lib/asset-manager.js");
         const imageBuffer = await getAssetBuffer("ourin");
         const favB = await getAssetBuffer("ourin2");
         const sharp = (await import("sharp")).default;

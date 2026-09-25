@@ -1,6 +1,6 @@
 import yts from "yt-search";
 import { getYoutubeDirectUrl } from "../../src/scraper/youtube.js";
-import { AIRich } from "../../src/lib/ourin-builder.js";
+import { AIRich } from "../../src/lib/builder.js";
 import axios from "axios";
 
 const pluginConfig = {

@@ -1,5 +1,5 @@
 import { fbdown } from '../../src/scraper/fbdown.js'
-import te from '../../src/lib/ourin-error.js'
+import te from '../../src/lib/error.js'
 
 const pluginConfig = {
     name: 'facebookdl',

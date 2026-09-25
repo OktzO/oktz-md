@@ -3,8 +3,8 @@ import config from '../../config.js'
  * @file plugins/owner/public.js
  * @description Plugin untuk mengaktifkan mode public (semua bisa akses)
  */
-import { getDatabase } from '../../src/lib/ourin-database.js'
-import te from '../../src/lib/ourin-error.js'
+import { getDatabase } from '../../src/lib/database.js'
+import te from '../../src/lib/error.js'
 const pluginConfig = {
     name: 'public',
     alias: ['publicmode'],

@@ -3,7 +3,7 @@ import path from "path";
 import { mconverter } from "../../src/scraper/mconverter.js";
 import { downloadContentFromMessage } from "onigis";
 import config from "../../config.js";
-import te from "../../src/lib/ourin-error.js";
+import te from "../../src/lib/error.js";
 const pluginConfig = {
   name: "converter",
   alias: ["convert", "konversi"],

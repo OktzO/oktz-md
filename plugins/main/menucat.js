@@ -7,11 +7,11 @@ import sharp from "sharp";
 import { getCommandsByCategory,
   getCategories,
   getPlugin,
-} from "../../src/lib/ourin-plugins.js";
-import { getTimeGreeting } from "../../src/lib/ourin-formatter.js";
-import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
+} from "../../src/lib/plugins.js";
+import { getTimeGreeting } from "../../src/lib/formatter.js";
+import { getAssetBuffer } from "../../src/lib/asset-manager.js";
 import fs from "fs"
-import { wrapInteractive } from "../../src/lib/ourin-rich-messages.js";
+import { wrapInteractive } from "../../src/lib/rich-messages.js";
 
 const pluginConfig = {
   name: "menucat",

@@ -1,0 +1,938 @@
+import fs from "fs";
+import path from "path";
+import config from "../../config.js";
+import { logger } from "./logger.js";
+import { isLid, isLidConverted } from "./lid.js";
+
+function isLidLikeJid(jid) {
+  if (!jid) return false;
+  if (isLid(jid)) return true;
+  if (!isLidConverted(jid)) return false;
+  const number = jid.replace("@s.whatsapp.net", "");
+  return /^\d+$/.test(number) && number.length >= 10;
+}
+import { createTursoClient, initTursoTables } from "./turso.js";
+const FLUSH_INTERVAL_MS = 30_000; // 5s → 30s: stringify penuh store per flush, cukup utk write-behind
+
+const defaultUsers = {};
+const defaultGroups = {};
+const defaultSettings = { selfMode: false };
+const defaultStats = {};
+const defaultSewa = { enabled: false, groups: {} };
+
+const USER_SET_OVERRIDDEN = new Set([
+  "jid", "name", "number", "energi", "isPremium", "isBanned", "exp", "level",
+  "koin", "saldo", "unlockedFeatures", "registeredAt", "lastRegisteredAt",
+  "registrationCount", "hasClaimedRegisterReward", "unregisteredAt",
+  "lastSeen", "cooldowns", "clanId", "isRegistered", "regName", "regAge",
+  "regGender", "rpg", "inventory", "access",
+]);
+
+class CompactJSONFileSync {
+  constructor(filename) {
+    this.filename = filename;
+    this.tempFilename = path.join(
+      path.dirname(filename.toString()),
+      `.${path.basename(filename.toString())}.tmp`,
+    );
+  }
+  read() {
+    let content;
+    try {
+      content = fs.readFileSync(this.filename, "utf-8");
+    } catch (e) {
+      if (e.code === "ENOENT") return null;
+      throw e;
+    }
+    return JSON.parse(content);
+  }
+  write(obj) {
+    fs.writeFileSync(this.tempFilename, JSON.stringify(obj), "utf-8");
+    fs.renameSync(this.tempFilename, this.filename);
+  }
+}
+
+class Database {
+  constructor(dbPath) {
+    this.dbPath = dbPath;
+    this.stores = {};
+    this.dirty = {
+      users: false,
+      groups: false,
+      settings: false,
+      stats: false,
+      sewa: false,
+    };
+    this.db = {
+      data: {
+        users: {},
+        groups: {},
+        settings: {},
+        stats: {},
+        sewa: { enabled: false, groups: {} },
+      },
+    };
+    this.ready = false;
+    this.flushTimer = null;
+    this.tursoClient = null;
+    this.tursoEnabled = false;
+    this._tursoChain = Promise.resolve();
+    this.ensureDir();
+  }
+
+  ensureDir() {
+    if (!fs.existsSync(this.dbPath)) {
+      fs.mkdirSync(this.dbPath, { recursive: true });
+    }
+  }
+
+  migrateFromOldPath() {
+    const oldPath = path.join(process.cwd(), "src", "database");
+    if (oldPath === this.dbPath) return;
+    if (!fs.existsSync(oldPath)) return;
+
+    const oldFiles = fs.readdirSync(oldPath).filter((f) => f.endsWith(".json"));
+    if (oldFiles.length === 0) return;
+
+    const newFiles = fs.existsSync(this.dbPath)
+      ? fs.readdirSync(this.dbPath).filter((f) => f.endsWith(".json"))
+      : [];
+    if (newFiles.length > 0) return;
+
+    logger.info(
+      "database",
+      `migrasi ${oldFiles.length} file dari src/database ke ${path.relative(process.cwd(), this.dbPath)}/`,
+    );
+    this.ensureDir();
+
+    for (const file of oldFiles) {
+      const src = path.join(oldPath, file);
+      const dest = path.join(this.dbPath, file);
+      try {
+        fs.copyFileSync(src, dest);
+      } catch (e) {
+        logger.error("database", `gagal migrasi ${file}: ${e.message}`);
+      }
+    }
+    logger.success("database", "migrasi path selesai");
+  }
+
+  async init() {
+    try {
+      const { LowSync } = await import("lowdb");
+
+      this.migrateFromOldPath();
+      await this.migrateFromSingleFile();
+
+      const fileMap = {
+        users: { file: "users.json", defaults: defaultUsers },
+        groups: { file: "groups.json", defaults: defaultGroups },
+        settings: { file: "settings.json", defaults: defaultSettings },
+        stats: { file: "stats.json", defaults: defaultStats },
+        sewa: { file: "sewa.json", defaults: defaultSewa },
+        premium: { file: "premium.json", defaults: [] },
+        owner: { file: "owner.json", defaults: [] },
+        partner: { file: "partner.json", defaults: [] },
+      };
+
+      for (const [key, { file, defaults }] of Object.entries(fileMap)) {
+        const filePath = path.join(this.dbPath, file);
+        this.validateJsonFile(filePath, defaults, file);
+        const adapter = new CompactJSONFileSync(filePath);
+        const store = new LowSync(adapter, defaults);
+        store.read();
+        if (!store.data) store.data = defaults;
+        if (Array.isArray(defaults)) {
+          if (!Array.isArray(store.data)) store.data = defaults;
+        } else {
+          store.data = { ...defaults, ...store.data };
+        }
+
+        store.write();
+        this.stores[key] = store;
+      }
+
+      this.tursoClient = await createTursoClient(config.turso);
+      this.tursoEnabled = !!this.tursoClient;
+      if (this.tursoEnabled) {
+        try {
+          await initTursoTables(this.tursoClient);
+          const loaded = await this.loadFromTurso();
+          if (loaded) {
+            logger.info("database", "data dimuat dari Turso");
+          } else {
+            await this.flushAllToTurso();
+            logger.info("database", "seed data lokal ke Turso");
+          }
+        } catch (e) {
+          console.warn("[turso] init failed, falling back to files:", e.message);
+          this.tursoEnabled = false;
+        }
+      }
+
+      this.db.data = {
+        users: this.stores.users.data,
+        groups: this.stores.groups.data,
+        settings: this.stores.settings.data,
+        stats: this.stores.stats.data,
+        sewa: this.stores.sewa.data,
+        premium: this.stores.premium.data,
+        owner: this.stores.owner.data,
+      };
+
+      this.db.write = () => this.flushAll();
+      this.db.read = () => this.readAll();
+
+      this.migrateLegacyUsers();
+
+      this.startFlushTimer();
+      this.registerShutdownHooks();
+
+      const currentDefault = config.energi?.default ?? 25;
+      const currentPremium = config.energi?.premium ?? 100;
+      const lastDefault = this.db.data.settings._lastEnergiDefault;
+      const lastPremium = this.db.data.settings._lastEnergiPremium;
+
+      if (lastDefault !== currentDefault || lastPremium !== currentPremium) {
+        const users = this.db.data.users;
+        let synced = 0;
+        for (const jid in users) {
+          const u = users[jid];
+          if (u.energi === -1) continue;
+          if (u.isPremium) {
+            u.energi = currentPremium;
+          } else {
+            u.energi = currentDefault;
+          }
+          synced++;
+        }
+        this.db.data.settings._lastEnergiDefault = currentDefault;
+        this.db.data.settings._lastEnergiPremium = currentPremium;
+        this.markDirty("users");
+        this.markDirty("settings");
+        if (synced > 0) {
+          logger.info(
+            "database",
+            `energi sync ${synced} user di-update (default: ${currentDefault}, premium: ${currentPremium})`,
+          );
+        }
+      }
+
+      this.ready = true;
+      logger.success(
+        "database",
+        "Database siap dipakai (autosave 15s write-behind)",
+      );
+      return this;
+    } catch (error) {
+      logger.error("database", `gagal inisialisasi: ${error.message}`);
+      this.db = {
+        data: {
+          users: {},
+          groups: {},
+          settings: { selfMode: false },
+          stats: {},
+          sewa: { enabled: false, groups: {} },
+        },
+        write: () => { },
+        read: () => { },
+      };
+      this.ready = true;
+      return this;
+    }
+  }
+
+  startFlushTimer() {
+    if (this.flushTimer) clearInterval(this.flushTimer);
+    // Floor 15s: syncInterval 5s men-stringify seluruh store tiap 5 detik
+    // (write amplification → GC pressure + latency spike per pesan).
+    // 15s tetap aman untuk write-behind (shutdown hook flush sync).
+    const interval = Math.max(config.turso?.syncInterval || FLUSH_INTERVAL_MS, 15_000);
+    this.flushTimer = setInterval(() => this.flushDirty(), interval);
+    if (this.flushTimer.unref) this.flushTimer.unref();
+  }
+
+  registerShutdownHooks() {
+    const flush = () => {
+      try {
+        if (this.tursoEnabled) {
+          this.flushAllToTurso().catch(() => {});
+        }
+        this.flushSyncToFiles();
+      } catch { }
+    };
+    process.on("exit", flush);
+    process.on("beforeExit", flush);
+  }
+
+  markDirty(key) {
+    this.dirty[key] = true;
+  }
+
+  flushDirty() {
+    for (const key of Object.keys(this.dirty)) {
+      if (this.dirty[key] && this.stores[key]) {
+        this._asyncWrite(key).catch(() => { });
+      }
+    }
+  }
+
+  async _asyncWrite(key) {
+    if (!this.stores[key]) return;
+    if (this.tursoEnabled) {
+      try {
+        await this.writeToTurso(key);
+        this.dirty[key] = false;
+        return;
+      } catch (e) {
+        // fallback to file write
+      }
+    }
+    if (this._writing?.has(key)) {
+      this._pendingWrite?.add(key);
+      return;
+    }
+    if (!this._writing) this._writing = new Set();
+    if (!this._pendingWrite) this._pendingWrite = new Set();
+    this._writing.add(key);
+    try {
+      const filePath =
+        this.stores[key].adapter?.filename ||
+        path.join(this.dbPath, `${key}.json`);
+      const data = this.stores[key].data;
+      const json = JSON.stringify(data);
+      const temp = filePath + ".tmp";
+      await fs.promises.writeFile(temp, json, "utf-8");
+      await fs.promises.rename(temp, filePath);
+      this.dirty[key] = false;
+    } catch { }
+    this._writing.delete(key);
+    if (this._pendingWrite.has(key)) {
+      this._pendingWrite.delete(key);
+      this._asyncWrite(key).catch(() => { });
+    }
+  }
+
+  flushAll() {
+    if (this.tursoEnabled) {
+      this.flushAllToTurso().catch(() => {});
+      return;
+    }
+    for (const key of Object.keys(this.stores)) {
+      try {
+        this.stores[key].write();
+        this.dirty[key] = false;
+      } catch { }
+    }
+  }
+
+  readAll() {
+    for (const store of Object.values(this.stores)) {
+      try {
+        store.read();
+      } catch { }
+    }
+  }
+
+  refreshDbData() {
+    this.db.data = {
+      users: this.stores.users.data,
+      groups: this.stores.groups.data,
+      settings: this.stores.settings.data,
+      stats: this.stores.stats.data,
+      sewa: this.stores.sewa.data,
+      premium: this.stores.premium.data,
+      owner: this.stores.owner.data,
+      partner: this.stores.partner?.data,
+    };
+    if (this.stores.partner) this.db.data.partner = this.stores.partner.data;
+  }
+
+  migrateLegacyUsers() {
+    const users = this.db.data.users;
+    if (!users) return 0;
+    let changed = 0;
+    const legacySynthetic = new Set(["husbu_KiseRyota"]);
+    for (const key of Object.keys(users)) {
+      if (legacySynthetic.has(key)) {
+        delete users[key];
+        changed++;
+        continue;
+      }
+      if (key.startsWith("lid:")) continue;
+      if (!/^\d{10,}$/.test(key)) continue;
+      if (!isLidConverted(key + "@s.whatsapp.net")) continue;
+      const user = users[key];
+      delete users[key];
+      if (!users[`lid:${key}`]) {
+        user.lid = key;
+        user.number = null;
+        user.jid = null;
+        users[`lid:${key}`] = user;
+        changed++;
+      }
+    }
+    if (changed > 0) {
+      this.markDirty("users");
+      logger.info("database", `migrasi legacy key users: ${changed} record`);
+    }
+    return changed;
+  }
+
+  async loadFromTurso() {
+    const rs = await this.tursoClient.execute("SELECT key, data FROM stores");
+    if (!rs.rows || rs.rows.length === 0) return false;
+    for (const row of rs.rows) {
+      const key = row.key;
+      const data = JSON.parse(row.data);
+      if (!this.stores[key]) continue;
+      this.stores[key].data = data;
+    }
+    this.refreshDbData();
+    return true;
+  }
+
+  _tursoEnqueue(fn) {
+    const p = this._tursoChain.then(fn, fn);
+    this._tursoChain = p.catch(() => {});
+    return p;
+  }
+
+  writeToTurso(key, data) {
+    const payload = data !== undefined ? data : this.stores[key].data;
+    const now = Date.now();
+    const json = JSON.stringify(payload);
+    return this._tursoEnqueue(() =>
+      this.tursoClient.execute({
+        sql: "INSERT INTO stores (key, data, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at",
+        args: [key, json, now],
+      }),
+    );
+  }
+
+  async flushAllToTurso() {
+    const keys = Object.keys(this.stores);
+    const snapshots = {};
+    for (const key of keys) snapshots[key] = this.stores[key].data;
+    let ok = true;
+    for (const key of keys) {
+      try {
+        await this.writeToTurso(key, snapshots[key]);
+      } catch (e) {
+        console.warn(`[turso] write ${key} failed:`, e.message);
+        ok = false;
+      }
+    }
+    return ok;
+  }
+
+  flushSyncToFiles() {
+    for (const key of Object.keys(this.stores)) {
+      const store = this.stores[key];
+      if (!store) continue;
+      try {
+        const filePath =
+          store.adapter?.filename ||
+          path.join(this.dbPath, `${key}.json`);
+        const temp = filePath + ".tmp";
+        fs.writeFileSync(temp, JSON.stringify(store.data), "utf-8");
+        fs.renameSync(temp, filePath);
+        this.dirty[key] = false;
+      } catch { }
+    }
+  }
+
+  validateJsonFile(filePath, defaults, fileName) {
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf-8").trim();
+      if (!content || content === "" || content === "{}") {
+        fs.writeFileSync(filePath, JSON.stringify(defaults, null, 2), "utf-8");
+      } else {
+        try {
+          JSON.parse(content);
+        } catch {
+          const backup = path.join(
+            this.dbPath,
+            `${fileName}.corrupted.${Date.now()}.bak`,
+          );
+          fs.copyFileSync(filePath, backup);
+          fs.writeFileSync(
+            filePath,
+            JSON.stringify(defaults, null, 2),
+            "utf-8",
+          );
+          logger.warn(
+            "database",
+            `${fileName} rusak, backup disimpan: ${backup}`,
+          );
+        }
+      }
+    } else {
+      fs.writeFileSync(filePath, JSON.stringify(defaults, null, 2), "utf-8");
+    }
+  }
+
+  async migrateFromSingleFile() {
+    const oldFile = path.join(this.dbPath, "energis.json");
+    if (!fs.existsSync(oldFile)) return;
+
+    try {
+      const content = fs.readFileSync(oldFile, "utf-8").trim();
+      if (!content) return;
+      const data = JSON.parse(content);
+
+      const files = {
+        "users.json": data.users || {},
+        "groups.json": data.groups || {},
+        "settings.json": data.settings || { selfMode: false },
+        "stats.json": data.stats || {},
+        "sewa.json": data.sewa || { enabled: false, groups: {} },
+      };
+
+      for (const [file, fileData] of Object.entries(files)) {
+        const target = path.join(this.dbPath, file);
+        if (!fs.existsSync(target)) {
+          fs.writeFileSync(target, JSON.stringify(fileData, null, 2), "utf-8");
+        }
+      }
+
+      const backupPath = path.join(
+        this.dbPath,
+        `energis.json.migrated.${Date.now()}.bak`,
+      );
+      fs.renameSync(oldFile, backupPath);
+      logger.success(
+        "database",
+        `migrasi dari energis.json selesai, backup: ${path.basename(backupPath)}`,
+      );
+    } catch (e) {
+      logger.error("database", `gagal migrasi energis.json: ${e.message}`);
+    }
+  }
+
+  async save() {
+    if (this.tursoEnabled) {
+      const ok = await this.flushAllToTurso();
+      if (ok) return true;
+      this.flushSyncToFiles();
+      return false;
+    }
+    try {
+      this.flushAll();
+      return true;
+    } catch (error) {
+      logger.error("database", `gagal menyimpan: ${error.message}`);
+      return false;
+    }
+  }
+
+  getUser(jid) {
+    if (!jid) return null;
+    const isLidJid = isLidLikeJid(jid);
+    const cleanJid = jid.replace(/@.+/g, "");
+    if (!isLidJid && (cleanJid.length > 15 || cleanJid.startsWith("120"))) return null;
+    const key = isLidJid ? `lid:${cleanJid}` : cleanJid;
+    return this.db.data.users[key] || null;
+  }
+
+  setUser(jid, data = {}) {
+    if (!jid) return null;
+    const isLidJid = isLidLikeJid(jid);
+    const cleanJid = jid.replace(/@.+/g, "");
+    if (!isLidJid && (cleanJid.length > 15 || cleanJid.startsWith("120"))) return null;
+    const key = isLidJid ? `lid:${cleanJid}` : cleanJid;
+    let existing = this.db.data.users[key];
+    if (!existing) {
+      existing = {};
+      this.db.data.users[key] = existing;
+    }
+
+    const existingBalance =
+      existing.balance !== undefined ? existing.balance : 0;
+    if (existing.balance !== undefined) delete existing.balance;
+    const existingLimit =
+      existing.limit !== undefined
+        ? existing.limit
+        : config.energi?.default || 25;
+    if (existing.limit !== undefined) delete existing.limit;
+
+    for (const k of Object.keys(data)) {
+      if (!USER_SET_OVERRIDDEN.has(k)) existing[k] = data[k];
+    }
+    existing.jid = isLidJid ? null : cleanJid;
+    existing.lid = isLidJid ? cleanJid : (existing.lid || null);
+    existing.name = data.name || existing.name || "Unknown";
+    existing.number = isLidJid ? null : cleanJid;
+    existing.energi = data.energi ?? existing.energi ?? existingLimit;
+    existing.isPremium = data.isPremium ?? existing.isPremium ?? false;
+    existing.isBanned = data.isBanned ?? existing.isBanned ?? false;
+    existing.exp = data.exp ?? existing.exp ?? 0;
+    existing.level = data.level ?? existing.level ?? 1;
+    existing.koin = data.koin ?? existing.koin ?? existingBalance;
+    existing.saldo = data.saldo ?? existing.saldo ?? 0;
+    existing.unlockedFeatures =
+      data.unlockedFeatures ?? existing.unlockedFeatures ?? [];
+    existing.registeredAt = data.registeredAt ?? existing.registeredAt ?? null;
+    existing.lastRegisteredAt =
+      data.lastRegisteredAt ?? existing.lastRegisteredAt ?? null;
+    existing.registrationCount =
+      data.registrationCount ?? existing.registrationCount ?? 0;
+    existing.hasClaimedRegisterReward =
+      data.hasClaimedRegisterReward ??
+      existing.hasClaimedRegisterReward ??
+      false;
+    existing.unregisteredAt = data.unregisteredAt ?? existing.unregisteredAt ?? null;
+    existing.lastSeen = new Date().toISOString();
+    existing.cooldowns = data.cooldowns ?? existing.cooldowns ?? {};
+    existing.clanId = data.clanId ?? existing.clanId ?? null;
+    existing.isRegistered = data.isRegistered ?? existing.isRegistered ?? false;
+    existing.regName = data.regName ?? existing.regName ?? null;
+    existing.regAge = data.regAge ?? existing.regAge ?? null;
+    existing.regGender = data.regGender ?? existing.regGender ?? null;
+    existing.rpg =
+      data.rpg !== undefined && data.rpg !== existing.rpg
+        ? { ...(existing.rpg || {}), ...(data.rpg || {}) }
+        : existing.rpg || {};
+    existing.inventory =
+      data.inventory !== undefined && data.inventory !== existing.inventory
+        ? { ...(existing.inventory || {}), ...(data.inventory || {}) }
+        : existing.inventory || {};
+    existing.access = data.access || existing.access || [];
+
+    this.markDirty("users");
+    return existing;
+  }
+
+  deleteUser(jid) {
+    if (!jid) return false;
+    const isLidJid = isLidLikeJid(jid);
+    const cleanJid = jid.replace(/@.+/g, "");
+    const key = isLidJid ? `lid:${cleanJid}` : cleanJid;
+    if (this.db.data.users[key]) {
+      delete this.db.data.users[key];
+      this.markDirty("users");
+      return true;
+    }
+    return false;
+  }
+
+  getAllUsers() {
+    return this.db.data.users || {};
+  }
+
+  getUserCount() {
+    return Object.keys(this.db.data.users || {}).length;
+  }
+
+  updateEnergi(jid, amount) {
+    const user = this.getUser(jid) || this.setUser(jid);
+    if (!user) return 0;
+    if (user.energi === -1) return -1;
+
+    try {
+      const ownerEnergi = config.energi?.owner ?? -1;
+      const premiumEnergi = config.energi?.premium ?? -1;
+      const isOwnerUser = config.isOwner(jid);
+      const isPremiumUser = config.isPremium(jid);
+      if (isOwnerUser && ownerEnergi === -1) return -1;
+      if (isPremiumUser && premiumEnergi === -1) return -1;
+    } catch { }
+
+    user.energi = Math.max(0, (user.energi ?? 0) + amount);
+    this.setUser(jid, user);
+    return user.energi;
+  }
+
+  updateKoin(jid, amount) {
+    const user = this.getUser(jid) || this.setUser(jid);
+    if (!user) return 0;
+    if (user.koin === -1) return -1;
+    const MAX_KOIN = 9000000000000;
+    user.koin = Math.max(0, Math.min(MAX_KOIN, (user.koin ?? 0) + amount));
+    this.setUser(jid, user);
+    return user.koin;
+  }
+
+  updateSaldo(jid, amount) {
+    const user = this.getUser(jid) || this.setUser(jid);
+    if (!user) return 0;
+    user.saldo = Math.max(0, (user.saldo ?? 0) + amount);
+    this.setUser(jid, user);
+    return user.saldo;
+  }
+
+  updateExp(jid, amount) {
+    const user = this.getUser(jid) || this.setUser(jid);
+    if (!user) return 0;
+    if (user.exp === -1) return -1;
+    const MAX_EXP = 9000000000;
+    user.exp = Math.max(0, Math.min(MAX_EXP, (user.exp ?? 0) + amount));
+    this.setUser(jid, user);
+    return user.exp;
+  }
+
+  getTopUsers(field, limit = 10) {
+    const users = Object.values(this.db.data.users || {});
+    return users
+      .filter((u) => (u[field] || 0) > 0)
+      .sort((a, b) => (b[field] || 0) - (a[field] || 0))
+      .slice(0, limit);
+  }
+
+  checkCooldown(jid, command, seconds) {
+    let user = this.getUser(jid);
+    if (!user) {
+      this.setUser(jid);
+      user = this.getUser(jid);
+    }
+    if (!user) return false;
+    if (!user.cooldowns || typeof user.cooldowns !== "object") {
+      user.cooldowns = {};
+      this.setUser(jid, { cooldowns: {} });
+    }
+    const now = Date.now();
+    const cooldownEnd = user.cooldowns[command] || 0;
+    if (now < cooldownEnd) {
+      return Math.ceil((cooldownEnd - now) / 1000);
+    }
+    return false;
+  }
+
+  setCooldown(jid, command, seconds) {
+    let user = this.getUser(jid);
+    if (!user) user = this.setUser(jid, { cooldowns: {} });
+    if (!user) return;
+    if (!user.cooldowns || typeof user.cooldowns !== "object")
+      user.cooldowns = {};
+    user.cooldowns[command] = Date.now() + seconds * 1000;
+    this.setUser(jid, { cooldowns: user.cooldowns });
+  }
+
+  getGroup(jid) {
+    if (!jid) return null;
+    return this.db.data.groups[jid] || null;
+  }
+
+  setGroup(jid, data = {}) {
+    if (!jid) return null;
+    const existing = this.db.data.groups[jid] || {};
+
+    let cfg;
+    cfg = config;
+    const welcomeDefault = cfg.welcome?.defaultEnabled ?? false;
+    const goodbyeDefault = cfg.goodbye?.defaultEnabled ?? false;
+
+    this.db.data.groups[jid] = {
+      ...existing,
+      ...data,
+      jid,
+      name: data.name || existing.name || "Unknown Group",
+      welcome: data.welcome ?? existing.welcome ?? welcomeDefault,
+      leave: data.leave ?? existing.leave ?? goodbyeDefault,
+      goodbye: data.goodbye ?? existing.goodbye ?? goodbyeDefault,
+      antilink: data.antilink ?? existing.antilink ?? false,
+      antitoxic: data.antitoxic ?? existing.antitoxic ?? false,
+      mute: data.mute ?? existing.mute ?? false,
+      game: data.game ?? existing.game ?? true,
+      rpg: data.rpg ?? existing.rpg ?? true,
+      warnings: data.warnings ?? existing.warnings ?? [],
+      welcomeMsg: data.welcomeMsg ?? existing.welcomeMsg,
+      goodbyeMsg: data.goodbyeMsg ?? existing.goodbyeMsg,
+      intro: data.intro ?? existing.intro,
+      chat: existing.chat ?? {},
+    };
+
+    this.markDirty("groups");
+    return this.db.data.groups[jid];
+  }
+
+  getAllGroups() {
+    return this.db.data.groups || {};
+  }
+
+  setting(key, value = undefined) {
+    if (value !== undefined) {
+      this.db.data.settings[key] = value;
+      this.markDirty("settings");
+    }
+    return this.db.data.settings[key];
+  }
+
+  getSettings() {
+    return this.db.data.settings || {};
+  }
+
+  incrementStat(key, increment = 1) {
+    if (!this.db.data.stats[key]) this.db.data.stats[key] = 0;
+    this.db.data.stats[key] += increment;
+    this.markDirty("stats");
+    return this.db.data.stats[key];
+  }
+
+  getStats(key) {
+    if (key) return this.db.data.stats[key] || 0;
+    return this.db.data.stats || {};
+  }
+
+  resetAllEnergi(defaultEnergi = 25, premiumEnergi = -1) {
+    let count = 0;
+    for (const jid of Object.keys(this.db.data.users)) {
+      const user = this.db.data.users[jid];
+      user.energi = user.isPremium ? premiumEnergi : defaultEnergi;
+      count++;
+    }
+    this.markDirty("users");
+    return count;
+  }
+
+  resetToDefaults() {
+    this.flushAll();
+    if (this.tursoEnabled) {
+      this.flushAllToTurso().catch(() => {});
+    }
+
+    const backupDir = path.join(this.dbPath, "backups");
+    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    const backupFolder = path.join(backupDir, `pre-reset-${ts}`);
+    fs.mkdirSync(backupFolder, { recursive: true });
+
+    const fileMap = {
+      users: { file: "users.json", defaults: defaultUsers },
+      groups: { file: "groups.json", defaults: defaultGroups },
+      settings: { file: "settings.json", defaults: defaultSettings },
+      stats: { file: "stats.json", defaults: defaultStats },
+      sewa: { file: "sewa.json", defaults: defaultSewa },
+      premium: { file: "premium.json", defaults: [] },
+      owner: { file: "owner.json", defaults: [] },
+      partner: { file: "partner.json", defaults: [] },
+    };
+
+    let resetCount = 0;
+    for (const [key, { file, defaults }] of Object.entries(fileMap)) {
+      const filePath = path.join(this.dbPath, file);
+      if (!fs.existsSync(filePath)) continue;
+      try {
+        fs.copyFileSync(filePath, path.join(backupFolder, file));
+      } catch { }
+      try {
+        fs.writeFileSync(filePath, JSON.stringify(defaults, null, 2), "utf-8");
+        resetCount++;
+      } catch { }
+    }
+
+    for (const [key, { defaults }] of Object.entries(fileMap)) {
+      if (!this.stores[key]) continue;
+      this.stores[key].read();
+      if (!this.stores[key].data) this.stores[key].data = defaults;
+      if (Array.isArray(defaults)) {
+        if (!Array.isArray(this.stores[key].data))
+          this.stores[key].data = defaults;
+      } else {
+        this.stores[key].data = { ...defaults, ...this.stores[key].data };
+      }
+      this.stores[key].write();
+    }
+
+    this.db.data = {
+      users: this.stores.users.data,
+      groups: this.stores.groups.data,
+      settings: this.stores.settings.data,
+      stats: this.stores.stats.data,
+      sewa: this.stores.sewa.data,
+      premium: this.stores.premium.data,
+      owner: this.stores.owner.data,
+    };
+
+    if (this.stores.partner) {
+      this.db.data.partner = this.stores.partner.data;
+    }
+
+    this.dirty = {
+      users: false,
+      groups: false,
+      settings: false,
+      stats: false,
+      sewa: false,
+    };
+
+    return {
+      resetCount,
+      total: Object.keys(fileMap).length,
+      backupFolder: `backups/pre-reset-${ts}`,
+    };
+  }
+
+  backup() {
+    this.flushAll();
+    const backupDir = path.join(this.dbPath, "backups");
+    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    const combined = {
+      users: this.db.data.users,
+      groups: this.db.data.groups,
+      settings: this.db.data.settings,
+      stats: this.db.data.stats,
+      sewa: this.db.data.sewa,
+      premium: this.db.data.premium,
+      owner: this.db.data.owner,
+    };
+    const backupPath = path.join(backupDir, `backup-${ts}.json`);
+    fs.writeFileSync(backupPath, JSON.stringify(combined, null, 2), "utf-8");
+    return backupPath;
+  }
+  get users() {
+    return this.db.data.users;
+  }
+  get groups() {
+    return this.db.data.groups;
+  }
+  get settings() {
+    return this.db.data.settings;
+  }
+  get stats() {
+    return this.db.data.stats;
+  }
+  get sewa() {
+    return this.db.data.sewa;
+  }
+  get premium() {
+    return this.db.data.premium;
+  }
+  get owner() {
+    return this.db.data.owner;
+  }
+  get partner() {
+    return this.db.data.partner;
+  }
+
+  get data() {
+    return this.db.data;
+  }
+
+  set data(val) {
+    this.db.data = val;
+  }
+}
+
+let dbInstance = null;
+
+async function initDatabase(dbPath) {
+  if (!dbInstance) {
+    dbInstance = new Database(dbPath);
+    await dbInstance.init();
+  }
+  return dbInstance;
+}
+
+function getDatabase() {
+  if (!dbInstance) {
+    throw new Error(
+      "Database belum diinisialisasi. Panggil initDatabase terlebih dahulu.",
+    );
+  }
+  return dbInstance;
+}
+
+export { Database, initDatabase, getDatabase };

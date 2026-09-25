@@ -2,7 +2,7 @@ import config from "../../config.js"
 import {
   generateWAMessageFromContent,
 } from "onigis";
-import { wrapInteractive } from "../../src/lib/ourin-rich-messages.js";
+import { wrapInteractive } from "../../src/lib/rich-messages.js";
 
 const pluginConfig = {
     name: "sc",

@@ -22,7 +22,7 @@ describe('turso session buffer roundtrip', () => {
   });
 
   it('session module JSON.stringify uses BufferJSON replacer', async () => {
-    const { loadState, saveCreds } = await import('../src/lib/ourin-turso-session.js');
+    const { loadState, saveCreds } = await import('../src/lib/turso-session.js');
     assert.ok(typeof loadState === 'function');
     assert.ok(typeof saveCreds === 'function');
   });

@@ -1,9 +1,9 @@
 import _sharp from 'sharp'
 import axios from "axios";
 import config from "../../config.js";
-import te from "../../src/lib/ourin-error.js";
-import { f } from "../../src/lib/ourin-http.js";
-import { addExifToWebp } from "../../src/lib/ourin-exif.js";
+import te from "../../src/lib/error.js";
+import { f } from "../../src/lib/http.js";
+import { addExifToWebp } from "../../src/lib/exif.js";
 
 function getSharp() {
   return _sharp;

@@ -1,6 +1,6 @@
 import { createCanvas, loadImage, GlobalFonts } from "@napi-rs/canvas";
 import fetch from "node-fetch";
-import te from "../../src/lib/ourin-error.js";
+import te from "../../src/lib/error.js";
 import config from "../../config.js";
 import axios from "axios";
 

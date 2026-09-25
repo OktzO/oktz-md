@@ -2,8 +2,8 @@ import os from 'os'
 import { performance } from 'perf_hooks'
 import { execSync } from 'child_process'
 import config from '../../config.js'
-import { getDatabase } from '../../src/lib/ourin-database.js'
-import te from '../../src/lib/ourin-error.js'
+import { getDatabase } from '../../src/lib/database.js'
+import te from '../../src/lib/error.js'
 
 const pluginConfig = {
     name: 'ping2',

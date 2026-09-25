@@ -5,7 +5,7 @@ describe("AsyncPool queue cap (64, drop-newest)", () => {
   let m;
 
   before(async () => {
-    m = await import("../src/lib/ourin-async-pool.js");
+    m = await import("../src/lib/async-pool.js");
   });
 
   describe("shouldDropNewest decision", () => {

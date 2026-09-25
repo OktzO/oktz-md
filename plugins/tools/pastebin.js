@@ -1,6 +1,6 @@
 import axios from "axios";
-import te from "../../src/lib/ourin-error.js";
-import { sendToolsPreview } from "../../src/lib/ourin-context.js";
+import te from "../../src/lib/error.js";
+import { sendToolsPreview } from "../../src/lib/context.js";
 const pluginConfig = {
   name: "pastebin",
   alias: ["paste", "pb"],

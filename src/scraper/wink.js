@@ -1,5 +1,5 @@
 import axios from "axios";
-import { httpAxios } from "../lib/ourin-http.js";
+import { httpAxios } from "../lib/http.js";
 import FormData from "form-data";
 import crypto from "node:crypto";
 import fs from "node:fs";

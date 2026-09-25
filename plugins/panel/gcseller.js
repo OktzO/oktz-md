@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import config from '../../config.js'
-import { isLid, lidToJid } from '../../src/lib/ourin-lid.js'
+import { isLid, lidToJid } from '../../src/lib/lid.js'
 const CPANEL_DIR = path.join(process.cwd(), 'database', 'cpanel')
 const VALID_SERVERS = ['v1', 'v2', 'v3', 'v4', 'v5']
 

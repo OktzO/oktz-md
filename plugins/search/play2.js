@@ -3,7 +3,7 @@ import { spawn } from "child_process";
 import yts from "yt-search";
 import YTMusic from "ytmusic-api";
 import sharp from "sharp";
-import { buildFfmpegCommand } from "../../src/lib/ourin-ffmpeg.js";
+import { buildFfmpegCommand } from "../../src/lib/ffmpeg.js";
 
 /* =========================================================
  * CONFIG

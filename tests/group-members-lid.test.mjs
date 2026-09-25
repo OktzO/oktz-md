@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { findParticipantByNumber } from '../src/lib/ourin-lid.js';
+import { findParticipantByNumber } from '../src/lib/lid.js';
 import { handler as promote } from '../plugins/group/promote.js';
 import { handler as demote } from '../plugins/group/demote.js';
 import { handler as kick } from '../plugins/group/kick.js';

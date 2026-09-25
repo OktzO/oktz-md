@@ -1,7 +1,7 @@
 import { createCanvas } from '@napi-rs/canvas'
-import { addExifToWebp } from '../../src/lib/ourin-exif.js'
+import { addExifToWebp } from '../../src/lib/exif.js'
 import config from '../../config.js'
-import te from '../../src/lib/ourin-error.js'
+import te from '../../src/lib/error.js'
 
 const pluginConfig = {
   name: 'attp2',

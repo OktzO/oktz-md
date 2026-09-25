@@ -1,6 +1,6 @@
 import config from "../../config.js"
-import { getDatabase } from "../../src/lib/ourin-database.js"
-import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js"
+import { getDatabase } from "../../src/lib/database.js"
+import { getAssetBuffer } from "../../src/lib/asset-manager.js"
 
 const pluginConfig = {
     name: "rules",

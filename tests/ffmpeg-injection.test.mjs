@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { queueFFmpeg } from '../src/lib/ourin-ffmpeg.js';
+import { queueFFmpeg } from '../src/lib/ffmpeg.js';
 
 const marker = join(tmpdir(), `ourin-ffmpeg-pwned-${process.pid}`);
 

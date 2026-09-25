@@ -1,9 +1,9 @@
-import { getDatabase } from '../../src/lib/ourin-database.js'
+import { getDatabase } from '../../src/lib/database.js'
 import {
   isLid,
   lidToJid,
   findParticipantByNumber,
-} from '../../src/lib/ourin-lid.js'
+} from '../../src/lib/lid.js'
 
 const pluginConfig = {
     name: 'mutemember',

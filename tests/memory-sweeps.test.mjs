@@ -94,7 +94,7 @@ process.stdout.write(JSON.stringify({
       const { stdout } = await execFileAsync(
         process.execPath,
         ["--input-type=module", "-e", script],
-        { env: { ...process.env, LID_MOD: path.join(ROOT, "src/lib/ourin-lid.js") }, cwd: tmp },
+        { env: { ...process.env, LID_MOD: path.join(ROOT, "src/lib/lid.js") }, cwd: tmp },
       );
       const out = JSON.parse(stdout.trim().split("\n").pop());
       assert.equal(out.size, 10000, "lid cache pinned at 10k");
@@ -108,7 +108,7 @@ process.stdout.write(JSON.stringify({
 
 describe("turso keys local cache cap 1000 (FIFO)", () => {
   it("trimLocalCache evicts oldest past the cap on load path", async () => {
-    const mod = await import("../src/lib/ourin-turso-session.js");
+    const mod = await import("../src/lib/turso-session.js");
     const local = new Map();
     for (let i = 0; i < 1200; i++) local.set("id_" + i, { v: i });
     mod.trimLocalCache(local, 1000);
@@ -119,7 +119,7 @@ describe("turso keys local cache cap 1000 (FIFO)", () => {
   });
 
   it("does nothing under cap", async () => {
-    const mod = await import("../src/lib/ourin-turso-session.js");
+    const mod = await import("../src/lib/turso-session.js");
     const local = new Map([["a", 1], ["b", 2]]);
     mod.trimLocalCache(local, 1000);
     assert.equal(local.size, 2);
@@ -128,7 +128,7 @@ describe("turso keys local cache cap 1000 (FIFO)", () => {
 
 describe("jadibot per-session group metadata cache cap 200", () => {
   it("evictOldestOverCap drops oldest beyond the 200 cap", async () => {
-    const mod = await import("../src/lib/ourin-jadibot-manager.js");
+    const mod = await import("../src/lib/jadibot-manager.js");
     assert.equal(mod.GROUP_META_CACHE_CAP, 200, "cap value fixed at 200");
     const map = new Map();
     for (let i = 0; i < 210; i++) map.set("jid_" + i, { participants: [] });
@@ -142,7 +142,7 @@ describe("jadibot per-session group metadata cache cap 200", () => {
 
 describe("auto-ai session prune (idle 24h + size cap 250)", () => {
   it("size cap 250 drops oldest when all sessions active", async () => {
-    const mod = await import("../src/lib/ourin-auto-ai.js");
+    const mod = await import("../src/lib/auto-ai.js");
     const autoai = { sessions: {} };
     const now = Date.now();
     for (let i = 0; i < 260; i++) {
@@ -158,7 +158,7 @@ describe("auto-ai session prune (idle 24h + size cap 250)", () => {
   });
 
   it("idle 24h prune runs first and preserves active sessions", async () => {
-    const mod = await import("../src/lib/ourin-auto-ai.js");
+    const mod = await import("../src/lib/auto-ai.js");
     const autoai = { sessions: {} };
     const now = Date.now();
     for (let i = 0; i < 260; i++) {

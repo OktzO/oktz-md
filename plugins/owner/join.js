@@ -1,4 +1,4 @@
-import { saluranCtx } from "../../src/lib/ourin-context.js";
+import { saluranCtx } from "../../src/lib/context.js";
 
 const pluginConfig = {
   name: "join",

@@ -2,9 +2,9 @@ import {
   isToxic,
   DEFAULT_TOXIC_WORDS,
 } from "./antitoxic.js";
-import { getDatabase } from "../../src/lib/ourin-database.js";
-import te from "../../src/lib/ourin-error.js";
-import { saluranCtx } from "../../src/lib/ourin-context.js";
+import { getDatabase } from "../../src/lib/database.js";
+import te from "../../src/lib/error.js";
+import { saluranCtx } from "../../src/lib/context.js";
 const pluginConfig = {
   name: "notifgantitag",
   alias: ["notiflabel", "notiftag", "labeltag"],

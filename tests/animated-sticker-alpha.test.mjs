@@ -17,7 +17,7 @@ function run(cmd) {
 // Bug: pad color 0x00000000 pada input non-alpha (mp4/yuv420p) jadi HITAM
 // padat, bukan transparan — video mengecil dengan background hitam.
 // Fix: format=rgba sebelum pad agar alpha ikut dipertahankan.
-import { STICKER_WEBP_VF } from "../src/lib/ourin-ffmpeg.js";
+import { STICKER_WEBP_VF } from "../src/lib/ffmpeg.js";
 
 let webpPath;
 

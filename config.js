@@ -1,5 +1,5 @@
-import { getDatabase } from "./src/lib/ourin-database.js";
-import * as ownerPremiumDb from "./src/lib/ourin-premium-db.js";
+import { getDatabase } from "./src/lib/database.js";
+import * as ownerPremiumDb from "./src/lib/premium-db.js";
 
 // Load .env sekali di sini (Node native, tanpa dotenv).
 // Gagal diam jika file tidak ada — semua nilai fallback ke "".

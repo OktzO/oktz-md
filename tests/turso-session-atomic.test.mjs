@@ -2,7 +2,7 @@ import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
 
 async function setupTurso() {
-  const tursoModule = await import('../src/lib/ourin-turso.js');
+  const tursoModule = await import('../src/lib/turso.js');
   const client = await tursoModule.createTursoClient({ enabled: true, url: 'file::memory:' });
   await tursoModule.initTursoTables(client);
   return { client, tursoModule };
@@ -13,7 +13,7 @@ describe('turso session keys.set atomic writes', () => {
     const { client } = await setupTurso();
     const batchSpy = mock.method(client, 'batch');
 
-    const { loadState } = await import('../src/lib/ourin-turso-session.js');
+    const { loadState } = await import('../src/lib/turso-session.js');
     const state = await loadState('main');
 
     await state.keys.set({
@@ -47,7 +47,7 @@ describe('turso session keys.set atomic writes', () => {
     const originalBatch = client.batch;
     client.batch = async () => { throw new Error('batch not supported'); };
 
-    const { loadState } = await import('../src/lib/ourin-turso-session.js');
+    const { loadState } = await import('../src/lib/turso-session.js');
     const state = await loadState('main');
 
     await state.keys.set({
@@ -63,7 +63,7 @@ describe('turso session keys.set atomic writes', () => {
 
   it('deleteTursoSession clears cached keys for every category of the scope', async () => {
     const { client } = await setupTurso();
-    const { loadState, deleteTursoSession } = await import('../src/lib/ourin-turso-session.js');
+    const { loadState, deleteTursoSession } = await import('../src/lib/turso-session.js');
 
     const scope = 'clear-cache-test';
     const state = await loadState(scope);

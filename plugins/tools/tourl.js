@@ -3,7 +3,7 @@ import fetch from "node-fetch";
 import mime from "mime-types";
 import { fileTypeFromBuffer } from "file-type";
 import { downloadMediaMessage, getContentType, generateWAMessageFromContent, proto, generateWAMessage } from "onigis";
-import te from "../../src/lib/ourin-error.js";
+import te from "../../src/lib/error.js";
 import uploadImage from "../../src/scraper/imgdrop.js";
 import config from "../../config.js";
 

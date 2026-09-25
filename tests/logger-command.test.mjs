@@ -16,7 +16,7 @@ describe("ourin-logger logCommand", () => {
     const captured = [];
     console.log = (...a) => captured.push(a.map(String).join(" "));
     try {
-      mod = await import("../src/lib/ourin-logger.js");
+      mod = await import("../src/lib/logger.js");
     } finally {
       console.log = origLog;
     }

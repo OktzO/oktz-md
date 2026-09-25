@@ -1,6 +1,6 @@
-import { generateBrat, parseBratArgs } from '../../src/lib/ourin-brat.js'
+import { generateBrat, parseBratArgs } from '../../src/lib/brat.js'
 import config from '../../config.js'
-import te from '../../src/lib/ourin-error.js'
+import te from '../../src/lib/error.js'
 
 const pluginConfig = {
     name: 'bratanime',

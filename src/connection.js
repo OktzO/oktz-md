@@ -13,8 +13,8 @@ import path from "path";
 import readline from "readline";
 import NodeCache from "node-cache";
 import config, { isOwner as isOwners, setBotNumber } from "../config.js";
-import * as colors from "./lib/ourin-logger.js";
-import { extendSocket } from "./lib/ourin-socket.js";
+import * as colors from "./lib/logger.js";
+import { extendSocket } from "./lib/socket.js";
 import {
   isLid,
   lidToJid,
@@ -24,9 +24,9 @@ import {
   resolveFromSock,
   isLidConverted,
   sweepGroupMetadataCache,
-} from "./lib/ourin-lid.js";
-import { initAutoBackup } from "./lib/ourin-auto-backup.js";
-import { AsyncPool } from "./lib/ourin-async-pool.js";
+} from "./lib/lid.js";
+import { initAutoBackup } from "./lib/auto-backup.js";
+import { AsyncPool } from "./lib/async-pool.js";
 import {
   classifyClose,
   clearPairingPending,
@@ -37,15 +37,15 @@ import {
   normalizePairingNumber,
   resetPairingCreds,
   writeCooldown,
-} from "./lib/ourin-pairing-state.js";
-import { resolveWaVersion } from "./lib/ourin-wa-version.js";
+} from "./lib/pairing-state.js";
+import { resolveWaVersion } from "./lib/wa-version.js";
 import {
   buildQrFilePath,
   canRenderMore,
   pruneOldQrFiles,
   shouldRenderQr,
   shouldUseQrFallback,
-} from "./lib/ourin-qr-fallback.js";
+} from "./lib/qr-fallback.js";
 const groupCache = new NodeCache({ stdTTL: 5 * 60, useClones: false, maxKeys: 500 });
 const processedMessages = new NodeCache({ stdTTL: 30, useClones: false, maxKeys: 5000 });
 const msgRetryCounterCache = new NodeCache({ stdTTL: 60, useClones: false, maxKeys: 2000 });
@@ -379,7 +379,7 @@ async function writeQrPng(qr) {
 // Fetch versi WA di-cache 6 jam + fallback: gagal HTTP saat boot/reconnect
 // tidak boleh merobohkan proses (dulu reject → main().catch → exit(1)).
 // Kedua helper library tidak pernah throw, jadi logika ada di
-// lib/ourin-wa-version.js dan ditutup test.
+// lib/wa-version.js dan ditutup test.
 let _waVersionCache = null;
 
 async function getWaVersion() {
@@ -423,7 +423,7 @@ async function startConnection(options = {}) {
   const TURSO_ENABLED = config.turso?.enabled && config.turso?.url;
   let state, saveCreds;
   if (TURSO_ENABLED) {
-    const { useTursoAuthState } = await import("./lib/ourin-turso-session.js");
+    const { useTursoAuthState } = await import("./lib/turso-session.js");
     const result = await useTursoAuthState("main");
     if (!result.state) {
       if (!fs.existsSync(sessionPath))
@@ -787,7 +787,7 @@ async function startConnection(options = {}) {
           if (TURSO_ENABLED) {
             try {
               const { deleteTursoSession } =
-                await import("./lib/ourin-turso-session.js");
+                await import("./lib/turso-session.js");
               await deleteTursoSession("main");
             } catch (e) {
               colors.logger.warn("whatsapp", `gagal hapus sesi turso: ${e.message}`);
@@ -873,7 +873,7 @@ async function startConnection(options = {}) {
       setTimeout(async () => {
         try {
           const { reloadAllPlugins: R, getPluginCount: G } =
-            await import("./lib/ourin-plugins.js");
+            await import("./lib/plugins.js");
           !G() && (await R());
         } catch { }
       }, 100);
@@ -915,14 +915,14 @@ async function startConnection(options = {}) {
       try {
         const { startGiveawayChecker } =
           await import("../plugins/group/giveaway.js");
-        const db = (await import("./lib/ourin-database.js")).getDatabase();
+        const db = (await import("./lib/database.js")).getDatabase();
         startGiveawayChecker(sock, db);
       } catch (e) {
         colors.logger.debug("giveaway", "skipped: " + e.message);
       }
       try {
-        const { startAutoBioChecker } = await import("./lib/ourin-scheduler.js");
-        const dbBio = (await import("./lib/ourin-database.js")).getDatabase();
+        const { startAutoBioChecker } = await import("./lib/scheduler.js");
+        const dbBio = (await import("./lib/database.js")).getDatabase();
         if (dbBio.setting("autobio_status")) startAutoBioChecker(sock);
       } catch (e) {
         colors.logger.debug("autobio", "skipped: " + e.message);
@@ -1025,7 +1025,7 @@ async function startConnection(options = {}) {
       });
       if (isBotAdded) {
         try {
-          const { getDatabase } = await import("./lib/ourin-database.js");
+          const { getDatabase } = await import("./lib/database.js");
           const db = getDatabase();
 
           try {
@@ -1302,9 +1302,9 @@ async function startConnection(options = {}) {
         const groupJid = msg.key.remoteJid;
 
         try {
-          const { getDatabase } = await import("./lib/ourin-database.js");
+          const { getDatabase } = await import("./lib/database.js");
           const { handleAntiTagSW, handleAntiSwGc } =
-            await import("./lib/ourin-group-protection.js");
+            await import("./lib/group-protection.js");
           const db = getDatabase();
           if (groupJid?.endsWith("@g.us")) {
             const antiTagHandled = await handleAntiTagSW(msg, currentSock, db);
@@ -1347,7 +1347,7 @@ async function startConnection(options = {}) {
             msg.key.participant = participant;
           }
 
-          const { getDatabase } = await import("./lib/ourin-database.js");
+          const { getDatabase } = await import("./lib/database.js");
           const db = getDatabase();
           const autoReadSW = db.setting("autoReadSW") || {};
           const autoReactSW = db.setting("autoReactSW") || {};
@@ -1436,10 +1436,10 @@ async function startConnection(options = {}) {
         const code = messageBody.slice(2).trim();
         if (code) {
           try {
-            const { serialize } = await import("./lib/ourin-serialize.js");
+            const { serialize } = await import("./lib/serialize.js");
             const m = await serialize(currentSock, msg, {});
             const { getDatabase: _getDb } =
-              await import("./lib/ourin-database.js");
+              await import("./lib/database.js");
             const db = _getDb();
             const sock = currentSock;
             const { default: sharp } = await import("sharp");
@@ -1539,7 +1539,7 @@ async function startConnection(options = {}) {
   });
 
   {
-    const { getDatabase: _getDb } = await import("./lib/ourin-database.js");
+    const { getDatabase: _getDb } = await import("./lib/database.js");
     const _db = _getDb();
     if (_db.setting("antiCall") ?? config.features?.antiCall) {
       sock.ev.on("call", async (calls) => {
@@ -1706,7 +1706,7 @@ async function logout() {
     }
 
     if (config.turso?.enabled && config.turso?.url) {
-      const { deleteTursoSession } = await import("./lib/ourin-turso-session.js");
+      const { deleteTursoSession } = await import("./lib/turso-session.js");
       await deleteTursoSession("main");
     }
 

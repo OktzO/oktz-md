@@ -1,7 +1,7 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 
-import te from "../../src/lib/ourin-error.js";
+import te from "../../src/lib/error.js";
 async function nerdfonts() {
   try {
     const { data } = await axios.get(

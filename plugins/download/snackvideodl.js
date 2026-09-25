@@ -1,5 +1,5 @@
 import { snackvideo } from 'btch-downloader'
-import te from '../../src/lib/ourin-error.js'
+import te from '../../src/lib/error.js'
 const pluginConfig = {
     name: 'snackvideodl',
     alias: ['svdl', 'snackvideo'],

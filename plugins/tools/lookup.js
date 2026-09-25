@@ -1,5 +1,5 @@
-import te from "../../src/lib/ourin-error.js";
-import { sendToolsPreview } from "../../src/lib/ourin-context.js";
+import te from "../../src/lib/error.js";
+import { sendToolsPreview } from "../../src/lib/context.js";
 const pluginConfig = {
   name: "lookup",
   alias: ["dnslookup", "dns", "whois"],

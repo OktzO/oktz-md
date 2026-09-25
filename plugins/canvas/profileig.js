@@ -1,6 +1,6 @@
 import axios from "axios";
-import te from "../../src/lib/ourin-error.js";
-import { uploadImage } from "../../src/lib/ourin-uploader.js";
+import te from "../../src/lib/error.js";
+import { uploadImage } from "../../src/lib/uploader.js";
 import { downloadMediaMessage } from "onigis";
 
 const pluginConfig = {

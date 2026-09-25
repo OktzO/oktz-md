@@ -1,5 +1,5 @@
 import config from "../../config.js";
-import te from "../../src/lib/ourin-error.js";
+import te from "../../src/lib/error.js";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -8,8 +8,8 @@ import { createCanvas, loadImage, GlobalFonts } from "@napi-rs/canvas";
 import {
   ensureFfmpegOnPath,
   buildFfmpegCommand,
-} from "../../src/lib/ourin-ffmpeg.js";
-import { loadEmojiMap } from "../../src/lib/ourin-emoji-map.js";
+} from "../../src/lib/ffmpeg.js";
+import { loadEmojiMap } from "../../src/lib/emoji-map.js";
 
 const FONT_URL =
   process.env.BRAT_FONT_URL ||

@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert";
 import {
   rollWaifu, applyAction, rollEvent, getDailyMood, jealousyCheck, albumStats, DOWRY,
-} from "../src/lib/ourin-waifu.js";
+} from "../src/lib/waifu.js";
 
 function mulberry32(seed) {
   let a = seed >>> 0;

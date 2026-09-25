@@ -1,4 +1,4 @@
-import { getActiveJadibots } from '../../src/lib/ourin-jadibot-manager.js'
+import { getActiveJadibots } from '../../src/lib/jadibot-manager.js'
 const pluginConfig = {
     name: 'listjadibotaktif',
     alias: ['jadibotaktif', 'activejadibots'],

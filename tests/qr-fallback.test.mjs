@@ -8,7 +8,7 @@ describe("qr fallback", () => {
   let m;
 
   before(async () => {
-    m = await import("../src/lib/ourin-qr-fallback.js");
+    m = await import("../src/lib/qr-fallback.js");
   });
 
   describe("shouldUseQrFallback", () => {

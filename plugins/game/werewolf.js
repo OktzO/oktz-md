@@ -1,4 +1,4 @@
-import { getDatabase } from "../../src/lib/ourin-database.js";
+import { getDatabase } from "../../src/lib/database.js";
 /**
  * 🐺 WEREWOLF GAME
  * Social deduction game for WhatsApp
@@ -7,8 +7,8 @@ import { getDatabase } from "../../src/lib/ourin-database.js";
  * Enhanced for OurinAI
  */
 import config from "../../config.js";
-import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
-import te from "../../src/lib/ourin-error.js";
+import { getAssetBuffer } from "../../src/lib/asset-manager.js";
+import te from "../../src/lib/error.js";
 const pluginConfig = {
   name: "werewolf",
   alias: ["ww", "wwgc"],

@@ -1,6 +1,6 @@
 import config from "../../config.js";
-import te from "../../src/lib/ourin-error.js";
-import { generateBrat, parseBratArgs } from "../../src/lib/ourin-brat.js";
+import te from "../../src/lib/error.js";
+import { generateBrat, parseBratArgs } from "../../src/lib/brat.js";
 
 const pluginConfig = {
   name: "bratgreen",

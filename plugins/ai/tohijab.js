@@ -1,6 +1,6 @@
-import { uploadImage } from '../../src/lib/ourin-uploader.js'
-import { f } from '../../src/lib/ourin-http.js'
-import te from '../../src/lib/ourin-error.js'
+import { uploadImage } from '../../src/lib/uploader.js'
+import { f } from '../../src/lib/http.js'
+import te from '../../src/lib/error.js'
 const pluginConfig = {
     name: 'tohijab',
     alias: ['hijab', 'hijabstyle', 'addhijab'],

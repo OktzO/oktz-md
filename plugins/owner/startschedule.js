@@ -1,7 +1,7 @@
-import { startSchedulerByName } from '../../src/lib/ourin-scheduler.js'
-import { initSholatScheduler } from '../../src/lib/ourin-sholat-scheduler.js'
-import { getDatabase } from '../../src/lib/ourin-database.js'
-import te from '../../src/lib/ourin-error.js'
+import { startSchedulerByName } from '../../src/lib/scheduler.js'
+import { initSholatScheduler } from '../../src/lib/sholat-scheduler.js'
+import { getDatabase } from '../../src/lib/database.js'
+import te from '../../src/lib/error.js'
 const pluginConfig = {
     name: 'startschedule',
     alias: ['startscheduler', 'schedstart', 'resumeschedule'],

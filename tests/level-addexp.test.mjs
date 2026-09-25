@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { addExpWithLevelCheck } from '../src/lib/ourin-level.js';
+import { addExpWithLevelCheck } from '../src/lib/level.js';
 
 const SENDER = '6281234567890@s.whatsapp.net';
 

@@ -6,9 +6,9 @@ import os from "os";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import fetch from "node-fetch";
-import te from "../../src/lib/ourin-error.js";
+import te from "../../src/lib/error.js";
 import config from "../../config.js";
-import { ensureFfmpegOnPath, getFfmpegPath } from "../../src/lib/ourin-ffmpeg.js";
+import { ensureFfmpegOnPath, getFfmpegPath } from "../../src/lib/ffmpeg.js";
 
 const execFileAsync = promisify(execFile);
 
