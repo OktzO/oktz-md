@@ -11,7 +11,7 @@ import {
   getCategories,
   getPlugin,
 } from "../../src/lib/plugins.js";
-import { getCasesByCategory, getCaseCount } from "../../case/ourin.js";
+import { getCasesByCategory, getCaseCount } from "../../case/foto.js";
 import { getAssetBuffer } from "../../src/lib/asset-manager.js";
 import { getFfmpegPath } from "../../src/lib/ffmpeg.js";
 import { wrapInteractive } from "../../src/lib/rich-messages.js";

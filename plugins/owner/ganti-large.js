@@ -2,12 +2,12 @@ import fs from 'fs'
 import path from 'path'
 import te from '../../src/lib/error.js'
 const pluginConfig = {
-    name: 'ourin-large',
-    alias: ['setourinlarge', 'gantiourinlarge'],
+    name: 'ganti-large.jpg',
+    alias: ['gantilarge', 'setlarge'],
     category: 'owner',
     description: 'Preset: Ganti gambar foto.jpeg, serta v7 hingga v11.jpeg sekaligus',
-    usage: '.ourin-large (reply/kirim gambar)',
-    example: '.ourin-large',
+    usage: '.ganti-large.jpg (reply/kirim gambar)',
+    example: '.ganti-large.jpg',
     isOwner: true,
     isPremium: false,
     isGroup: false,
@@ -21,7 +21,7 @@ async function handler(m, { sock }) {
     const isImage = m.isImage || (m.quoted && m.quoted.type === 'imageMessage')
     
     if (!isImage) {
-        return m.reply(`🖼️ *ᴏᴜʀɪɴ ʟᴀʀɢᴇ ᴘʀᴇsᴇᴛ*\n\n> Kirim/reply gambar untuk mengganti kumpulan foto besar (foto.jpeg, v8.jpeg, v10.jpeg) sekaligus.\n> Pastikan rasio gambar sesuai dengan yang diinginkan.`)
+        return m.reply(`🖼️ *ɢᴀɴᴛɪ ʟᴀʀɢᴇ.ᴊᴘɢ*\n\n> Kirim/reply gambar untuk mengganti kumpulan foto besar (foto.jpeg, v8.jpeg, v10.jpeg) sekaligus.\n> Pastikan rasio gambar sesuai dengan yang diinginkan.`)
     }
     
     await m.react('🕕')
@@ -56,7 +56,7 @@ async function handler(m, { sock }) {
         }
         
         await m.react('✅')
-        m.reply(`✅ *ʙᴇʀʜᴀsɪʟ*\n\n> Gambar bundle *ourin-large* berhasil diganti secara massal.\n> Mencakup: ${targetImages.join(', ')}\n> Restart bot jika gambar tidak langsung berubah.`)
+        m.reply(`✅ *ʙᴇʀʜᴀsɪʟ*\n\n> Gambar bundle *ganti-large.jpg* berhasil diganti secara massal.\n> Mencakup: ${targetImages.join(', ')}\n> Restart bot jika gambar tidak langsung berubah.`)
         
     } catch (error) {
         await m.react('☢')

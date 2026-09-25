@@ -1,12 +1,12 @@
 import te from '../../src/lib/error.js'
 import { updateAssetUrl } from '../../src/lib/uploader.js'
 const pluginConfig = {
-    name: 'ganti-ourin-promote.jpg',
-    alias: ['gantiourinpromote', 'setourinpromote'],
+    name: 'ganti-promote.jpg',
+    alias: ['gantipromote', 'setpromote'],
     category: 'owner',
     description: 'Ganti gambar promote.jpg',
-    usage: '.ganti-ourin-promote.jpg (reply/kirim gambar)',
-    example: '.ganti-ourin-promote.jpg',
+    usage: '.ganti-promote.jpg (reply/kirim gambar)',
+    example: '.ganti-promote.jpg',
     isOwner: true,
     isPremium: false,
     isGroup: false,
@@ -18,7 +18,7 @@ const pluginConfig = {
 
 async function handler(m, { sock }) {
     const isImage = m.isImage || (m.quoted && m.quoted.type === 'imageMessage')
-    if (!isImage) return m.reply(`🖼️ *ɢᴀɴᴛɪ OURIN-PROMOTE.JPG*\n\n> Kirim/reply gambar untuk mengganti\n> File: assets/image/promote.jpeg`)
+    if (!isImage) return m.reply(`🖼️ *ɢᴀɴᴛɪ ᴘʀᴏᴍᴏᴛᴇ.ᴊᴘɢ*\n\n> Kirim/reply gambar untuk mengganti\n> File: assets/image/promote.jpeg`)
     try {
         let buffer = m.quoted && m.quoted.isMedia ? await m.quoted.download() : await m.download()
         if (!buffer) return m.reply('❌ Gagal mendownload gambar')

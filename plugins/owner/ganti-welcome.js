@@ -1,12 +1,12 @@
 import te from '../../src/lib/error.js'
 import { updateAssetUrl } from '../../src/lib/uploader.js'
 const pluginConfig = {
-    name: 'ganti-ourin.jpg',
-    alias: ['gantiourin', 'setourin'],
+    name: 'ganti-welcome.jpg',
+    alias: ['gantiwelcome', 'setwelcome'],
     category: 'owner',
-    description: 'Ganti gambar foto.jpg (thumbnail menu)',
-    usage: '.ganti-ourin.jpg (reply/kirim gambar)',
-    example: '.ganti-ourin.jpg',
+    description: 'Ganti gambar welcome.jpg (thumbnail welcome)',
+    usage: '.ganti-welcome.jpg (reply/kirim gambar)',
+    example: '.ganti-welcome.jpg',
     isOwner: true,
     isPremium: false,
     isGroup: false,
@@ -20,7 +20,7 @@ async function handler(m, { sock }) {
     const isImage = m.isImage || (m.quoted && m.quoted.type === 'imageMessage')
     
     if (!isImage) {
-        return m.reply(`🖼️ *ɢᴀɴᴛɪ ᴏᴜʀɪɴ.ᴊᴘɢ*\n\n> Kirim/reply gambar untuk mengganti\n> File: assets/image/foto.jpeg`)
+        return m.reply(`🖼️ *ɢᴀɴᴛɪ ᴡᴇʟᴄᴏᴍᴇ.ᴊᴘɢ*\n\n> Kirim/reply gambar untuk mengganti\n> File: assets/image/welcome.jpeg`)
     }
     
     try {
@@ -37,8 +37,8 @@ async function handler(m, { sock }) {
         
         await m.reply(`⏳ Sedang mengupload gambar...`)
         try {
-            const newUrl = await updateAssetUrl('foto', buffer, 'foto.jpeg')
-            m.reply(`✅ *ʙᴇʀʜᴀsɪʟ*\n\n> Gambar foto.jpeg telah diganti ke URL baru:\n> ${newUrl}\n> Config telah diupdate secara realtime!`)
+            const newUrl = await updateAssetUrl('welcome', buffer, 'welcome.jpeg')
+            m.reply(`✅ *ʙᴇʀʜᴀsɪʟ*\n\n> Gambar welcome.jpeg telah diganti ke URL baru:\n> ${newUrl}\n> Config telah diupdate secara realtime!`)
         } catch (e) {
             m.reply(`❌ Gagal mengupload gambar: ${e.message}`)
         }

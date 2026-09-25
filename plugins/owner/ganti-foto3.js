@@ -1,12 +1,12 @@
 import te from '../../src/lib/error.js'
 import { updateAssetUrl } from '../../src/lib/uploader.js'
 const pluginConfig = {
-    name: 'ganti-ourin3.jpg',
-    alias: ['gantiourin3', 'setourin3'],
+    name: 'ganti-foto3.jpg',
+    alias: ['gantifoto3', 'setfoto3'],
     category: 'owner',
     description: 'Ganti gambar foto3.jpg',
-    usage: '.ganti-ourin3.jpg (reply/kirim gambar)',
-    example: '.ganti-ourin3.jpg',
+    usage: '.ganti-foto3.jpg (reply/kirim gambar)',
+    example: '.ganti-foto3.jpg',
     isOwner: true,
     isPremium: false,
     isGroup: false,
@@ -20,7 +20,7 @@ async function handler(m, { sock }) {
     const isImage = m.isImage || (m.quoted && m.quoted.type === 'imageMessage')
     
     if (!isImage) {
-        return m.reply(`🖼️ *ɢᴀɴᴛɪ ᴏᴜʀɪɴ3.ᴊᴘɢ*\n\n> Kirim/reply gambar untuk mengganti\n> File: assets/image/foto3.jpeg`)
+        return m.reply(`🖼️ *ɢᴀɴᴛɪ ꜰᴏᴛᴏ3.ᴊᴘɢ*\n\n> Kirim/reply gambar untuk mengganti\n> File: assets/image/foto3.jpeg`)
     }
     
     try {
