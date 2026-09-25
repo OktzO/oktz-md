@@ -14,8 +14,8 @@ let isSending = false;
 let cachedThumb = null;
 
 try {
-  if (!!getAssetBuffer("ourin2")) {
-    cachedThumb = getAssetBuffer("ourin2");
+  if (!!getAssetBuffer("foto2")) {
+    cachedThumb = getAssetBuffer("foto2");
   }
 } catch (e) {}
 

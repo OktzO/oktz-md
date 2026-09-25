@@ -17,7 +17,7 @@ const pluginConfig = {
   isEnabled: true,
 };
 
-getAssetBuffer("ourin-games");
+getAssetBuffer("games");
 
 const loveQuotes = [
   "Cinta sejati tidak pernah mengenal jarak 💕",

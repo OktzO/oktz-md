@@ -300,7 +300,7 @@ async function sendGoodbyeMessage(sock, groupJid, participant, groupMeta) {
       );
     } else if (goodbyeType === 6) {
       await sock.sendMessage(groupJid, {
-        video: getAssetBuffer("ourin-mp4") || { url: "https://files.catbox.moe/k28dhp.mp4" },
+        video: getAssetBuffer("mp4") || { url: "https://files.catbox.moe/k28dhp.mp4" },
         gifPlayback: true,
         caption: text,
         contextInfo: {

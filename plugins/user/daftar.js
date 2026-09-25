@@ -30,8 +30,8 @@ if (!global.registrationSessions) global.registrationSessions = {};
 const SESSION_TIMEOUT = 300000;
 const DEFAULT_REWARDS = { koin: 30000, energi: 300, exp: 300000 };
 const REGISTRATION_IMAGE_CANDIDATES = [
-  "ourin-daftar",
-  "ourin",
+  "daftar",
+  "foto",
 ];
 
 function getRegistrationContextInfo() {

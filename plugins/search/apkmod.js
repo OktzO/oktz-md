@@ -67,7 +67,7 @@ async function handler(m, { sock }) {
 
     await sock.sendButton(
       m.chat,
-      getAssetBuffer("ourin"),
+      getAssetBuffer("foto"),
       caption,
       m,
       {

@@ -4,7 +4,7 @@ const pluginConfig = {
     name: 'ganti-ourin.mp4',
     alias: ['gantiourinvideo', 'setourinvideo'],
     category: 'owner',
-    description: 'Ganti video ourin.mp4',
+    description: 'Ganti video foto.mp4',
     usage: '.ganti-ourin.mp4 (reply/kirim video)',
     example: '.ganti-ourin.mp4',
     isOwner: true,
@@ -20,7 +20,7 @@ async function handler(m, { sock }) {
     const isVideo = m.type === 'videoMessage' || (m.quoted && m.quoted.type === 'videoMessage')
     
     if (!isVideo) {
-        return m.reply(`🎬 *ɢᴀɴᴛɪ ᴏᴜʀɪɴ.ᴍᴘ4*\n\n> Kirim/reply video untuk mengganti\n> File: assets/video/ourin.mp4`)
+        return m.reply(`🎬 *ɢᴀɴᴛɪ ᴏᴜʀɪɴ.ᴍᴘ4*\n\n> Kirim/reply video untuk mengganti\n> File: assets/video/foto.mp4`)
     }
     
     try {
@@ -37,8 +37,8 @@ async function handler(m, { sock }) {
         
         await m.reply(`⏳ Sedang mengupload gambar...`)
         try {
-            const newUrl = await updateAssetUrl('ourin-mp4', buffer, 'ourin.mp4')
-            m.reply(`✅ *ʙᴇʀʜᴀsɪʟ*\n\n> File ourin.mp4 telah diganti ke URL baru:\n> ${newUrl}\n> Config telah diupdate secara realtime!`)
+            const newUrl = await updateAssetUrl('mp4', buffer, 'foto.mp4')
+            m.reply(`✅ *ʙᴇʀʜᴀsɪʟ*\n\n> File foto.mp4 telah diganti ke URL baru:\n> ${newUrl}\n> Config telah diupdate secara realtime!`)
         } catch (e) {
             m.reply(`❌ Gagal mengupload file: ${e.message}`)
         }

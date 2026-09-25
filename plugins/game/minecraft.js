@@ -47,7 +47,7 @@ const encCost = (r) =>
     secret: 6e10,
   })[r] || 60000;
 
-let thumbMC = getAssetBuffer("ourin-minecraft") || null;
+let thumbMC = getAssetBuffer("minecraft") || null;
 
 function send(sock, m, text) {
   const msgId = sock.sendPreview(

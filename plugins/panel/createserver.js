@@ -330,7 +330,7 @@ async function handler(m, { sock }) {
     detailTxt += `⚠️ Simpan data ini, jangan bagikan ke siapapun!`;
 
     const headerMedia = await prepareWAMessageMedia(
-      { image: getAssetBuffer("ourin-v8") },
+      { image: getAssetBuffer("v8") },
       { upload: sock.waUploadToServer }
     );
 

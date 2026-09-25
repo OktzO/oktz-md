@@ -64,7 +64,7 @@ async function handler(m, { sock }) {
         rulesText = buildDefaultRules(botName, m.prefix)
     }
 
-    const imageBuffer = getAssetBuffer("ourin-rules")
+    const imageBuffer = getAssetBuffer("rules")
 
     if (imageBuffer) {
         await sock.sendMessage(m.chat, {

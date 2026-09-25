@@ -282,7 +282,7 @@ async function handler(m, { sock, db }) {
             : "Media";
 
     try {
-      getAssetBuffer("ourin2");
+      getAssetBuffer("foto2");
     } catch (e) { }
 
     await sock.sendMessage(m.chat, {

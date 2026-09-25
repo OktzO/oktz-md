@@ -205,7 +205,7 @@ async function handler(m, { sock }) {
             : "Unknown";
 
     try {
-      getAssetBuffer("ourin2");
+      getAssetBuffer("foto2");
     } catch {}
 
     const estimatedTime = Math.ceil(groupList.length * 1.5);

@@ -318,7 +318,7 @@ let _smartTriggerThumb = undefined;
 async function getSmartTriggerThumb() {
   if (_smartTriggerThumb !== undefined) return _smartTriggerThumb;
   try {
-    const url = config.assets["ourin2"];
+    const url = config.assets["foto2"];
     if (url) {
       _smartTriggerThumb = fs.readFileSync(url)
     } else {
@@ -1531,7 +1531,7 @@ async function messageHandler(msg, sock, options = {}) {
                 url: config.info.website,
                 title: "Command not found",
                 description: `Suggestions Command | ${config.bot.name}`,
-                jpegThumbnail: await getCachedSharpThumb(config.assets["ourin2"], 300, 300),
+                jpegThumbnail: await getCachedSharpThumb(config.assets["foto2"], 300, 300),
                 previewType: 1,
               },
               { quoted: m }
@@ -1984,7 +1984,7 @@ async function groupHandler(update, sock) {
         promote: {
           notifKey: "notifPromote",
           imgKey: "_promoteImg",
-          imgPath: config.assets["ourin-promote"],
+          imgPath: config.assets["promote"],
           emoji: "🎉",
           label: "PROMOTE",
           text: (p, a) =>
@@ -1993,7 +1993,7 @@ async function groupHandler(update, sock) {
         demote: {
           notifKey: "notifDemote",
           imgKey: "_demoteImg",
-          imgPath: config.assets["ourin-demote"],
+          imgPath: config.assets["demote"],
           emoji: "📉",
           label: "DEMOTE",
           text: (p, a) =>

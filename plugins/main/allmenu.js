@@ -128,8 +128,8 @@ async function handler(m, { sock, config: botConfig, db }) {
   let imageBuffer = null;
   let thumbBuffer = null;
   try {
-    imageBuffer = getAssetBuffer("ourin");
-    thumbBuffer = getAssetBuffer("ourin2");
+    imageBuffer = getAssetBuffer("foto");
+    thumbBuffer = getAssetBuffer("foto2");
   } catch (e) { }
 
   const userLimit = (m.isPremium || m.isOwner) ? "∞ Unlimited" : (user?.limit || 0);
@@ -237,7 +237,7 @@ async function handler(m, { sock, config: botConfig, db }) {
         break;
       case 2: {
         const media = await prepareWAMessageMedia({
-          image: getAssetBuffer("ourin")
+          image: getAssetBuffer("foto")
         }, { upload: sock.waUploadToServer })
         await sock.relayMessage(
           m.chat,
@@ -311,12 +311,12 @@ async function handler(m, { sock, config: botConfig, db }) {
           }
         }
 
-        const thumbnail = await (await getSharp())(getAssetBuffer("ourin")).resize(300, 300).toBuffer()
+        const thumbnail = await (await getSharp())(getAssetBuffer("foto")).resize(300, 300).toBuffer()
         const qOrder = {
           key: { fromMe: false, participant: '0@s.whatsapp.net', remoteJid: m.sender },
           message: { locationMessage: { degreesLatitude: 0, degreesLongitude: 0, name: await weatherMenu(), jpegThumbnail: thumbnail } }
         }
-        const media4 = await prepareWAMessageMedia({ video: fs.readFileSync(config.assets["ourin-mp4"]), gifPlayback: true }, { upload: sock.waUploadToServer });
+        const media4 = await prepareWAMessageMedia({ video: fs.readFileSync(config.assets["mp4"]), gifPlayback: true }, { upload: sock.waUploadToServer });
         const msg4 = generateWAMessageFromContent(m.chat, wrapInteractive({
           messageContextInfo: {},
           interactiveMessage: {
@@ -376,7 +376,7 @@ async function handler(m, { sock, config: botConfig, db }) {
           }
         }
 
-        const thumbnail = await (await getSharp())(getAssetBuffer("ourin")).resize(300, 300).toBuffer()
+        const thumbnail = await (await getSharp())(getAssetBuffer("foto")).resize(300, 300).toBuffer()
 
         const msg6 = generateWAMessageFromContent(m.chat, wrapInteractive({
           messageContextInfo: {},
@@ -418,7 +418,7 @@ async function handler(m, { sock, config: botConfig, db }) {
     }
     const audioEnabled = db.setting("audioMenu") !== false;
     if (audioEnabled) {
-      const audioUrl = botConfig.assets["ourin-mp3"];
+      const audioUrl = botConfig.assets["mp3"];
       const audioVariant = db.setting("allmenuAudioStyle") || 1;
       try {
         const fs = (await import("fs")).default;
@@ -520,7 +520,7 @@ async function handler(m, { sock, config: botConfig, db }) {
               }
             };
             await sock.sendMessage(m.chat, {
-              audio: fs.readFileSync(config.assets["ourin-mp3"]),
+              audio: fs.readFileSync(config.assets["mp3"]),
               mimetype: "audio/mpeg",
               ptt: false,
             }, { quoted: qtext });
@@ -567,7 +567,7 @@ async function handler(m, { sock, config: botConfig, db }) {
               await sock.sendMessage(
                 m.chat,
                 {
-                  audio: fs.readFileSync(config.assets["ourin-mp3"]),
+                  audio: fs.readFileSync(config.assets["mp3"]),
                   mimetype: "audio/mpeg",
                 },
                 { quoted: ftroliQuoted },
@@ -576,7 +576,7 @@ async function handler(m, { sock, config: botConfig, db }) {
               await sock.sendMessage(
                 m.chat,
                 {
-                  audio: fs.readFileSync(config.assets["ourin-mp3"]),
+                  audio: fs.readFileSync(config.assets["mp3"]),
                   mimetype: "audio/mpeg",
                 },
                 { quoted: m },

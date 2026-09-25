@@ -107,7 +107,7 @@ class OurinGames {
               url: `${config.info.website}`,
               title: cfg.title,
               description: cfg.description,
-              jpegThumbnail: await sharp(fs.readFileSync(config.assets["ourin2"])).resize(300, 300).toBuffer(),
+              jpegThumbnail: await sharp(fs.readFileSync(config.assets["foto2"])).resize(300, 300).toBuffer(),
               previewType: 0,
             },
           );

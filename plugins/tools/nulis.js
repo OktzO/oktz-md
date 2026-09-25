@@ -18,7 +18,7 @@ const pluginConfig = {
   energi: 1,
   isEnabled: true,
 };
-getAssetBuffer("ourin-font");
+getAssetBuffer("font");
 let _fontRegistered = false;
 function wrapText(ctx, text, maxWidth) {
   const words = text.split(" ");
@@ -50,7 +50,7 @@ async function handler(m, { sock }) {
   if (text.length > 500) {
     return m.reply(`❌ *ᴛᴇᴋs ᴛᴇʀʟᴀʟᴜ ᴘᴀɴᴊᴀɴɢ*\n\n> Maksimal 500 karakter`);
   }
-  const inputUrl = getAssetBuffer("ourin-kertas");
+  const inputUrl = getAssetBuffer("kertas");
   if (!inputUrl) {
     return m.reply(
       `❌ *ᴛᴇᴍᴘʟᴀᴛᴇ ᴛɪᴅᴀᴋ ᴀᴅᴀ*\n\n> File template kertas tidak ditemukan di config.assets`,
@@ -62,7 +62,7 @@ async function handler(m, { sock }) {
     const { createCanvas, loadImage, GlobalFonts } = _canvas;
     if (!_fontRegistered) {
       try {
-        const fontBuf = getAssetBuffer("ourin-font");
+        const fontBuf = getAssetBuffer("font");
         if (fontBuf) {
           GlobalFonts.register(fontBuf, "Zahraaa");
         }
@@ -71,7 +71,7 @@ async function handler(m, { sock }) {
       }
       _fontRegistered = true;
     }
-    const bgBuf = getAssetBuffer("ourin-kertas");
+    const bgBuf = getAssetBuffer("kertas");
     const bgImage = await loadImage(bgBuf);
     const canvas = createCanvas(bgImage.width, bgImage.height);
     const ctx = canvas.getContext("2d");

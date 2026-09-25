@@ -4,7 +4,7 @@ const pluginConfig = {
     name: 'ganti-ourin.mp3',
     alias: ['gantiourinaudio', 'setourinaudio'],
     category: 'owner',
-    description: 'Ganti audio ourin.mp3',
+    description: 'Ganti audio foto.mp3',
     usage: '.ganti-ourin.mp3 (reply/kirim audio)',
     example: '.ganti-ourin.mp3',
     isOwner: true,
@@ -20,7 +20,7 @@ async function handler(m, { sock }) {
     const isAudio = m.type === 'audioMessage' || (m.quoted && m.quoted.type === 'audioMessage')
     
     if (!isAudio) {
-        return m.reply(`🎵 *ɢᴀɴᴛɪ ᴏᴜʀɪɴ.ᴍᴘ3*\n\n> Kirim/reply audio untuk mengganti\n> File: assets/audio/ourin.mp3`)
+        return m.reply(`🎵 *ɢᴀɴᴛɪ ᴏᴜʀɪɴ.ᴍᴘ3*\n\n> Kirim/reply audio untuk mengganti\n> File: assets/audio/foto.mp3`)
     }
     
     try {
@@ -37,8 +37,8 @@ async function handler(m, { sock }) {
         
         await m.reply(`⏳ Sedang mengupload gambar...`)
         try {
-            const newUrl = await updateAssetUrl('ourin-mp3', buffer, 'ourin.mp3')
-            m.reply(`✅ *ʙᴇʀʜᴀsɪʟ*\n\n> File ourin.mp3 telah diganti ke URL baru:\n> ${newUrl}\n> Config telah diupdate secara realtime!`)
+            const newUrl = await updateAssetUrl('mp3', buffer, 'foto.mp3')
+            m.reply(`✅ *ʙᴇʀʜᴀsɪʟ*\n\n> File foto.mp3 telah diganti ke URL baru:\n> ${newUrl}\n> Config telah diupdate secara realtime!`)
         } catch (e) {
             m.reply(`❌ Gagal mengupload file: ${e.message}`)
         }

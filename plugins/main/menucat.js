@@ -232,7 +232,7 @@ async function handler(m, { sock, db }) {
         case 2: {
           const media = await prepareWAMessageMedia(
             {
-              image: getAssetBuffer("ourin2"),
+              image: getAssetBuffer("foto2"),
             },
             { upload: sock.waUploadToServer },
           );
@@ -310,12 +310,12 @@ async function handler(m, { sock, db }) {
             }
           }
 
-          const thumbnail = await sharp(getAssetBuffer("ourin")).resize(300, 300).toBuffer()
+          const thumbnail = await sharp(getAssetBuffer("foto")).resize(300, 300).toBuffer()
           const qOrder = {
             key: { fromMe: false, participant: '0@s.whatsapp.net', remoteJid: m.sender },
             message: { locationMessage: { degreesLatitude: 0, degreesLongitude: 0, name: await weatherMenu(), jpegThumbnail: thumbnail } }
           }
-          const media4 = await prepareWAMessageMedia({ video: fs.readFileSync(config.assets["ourin-mp4"]), gifPlayback: true }, { upload: sock.waUploadToServer });
+          const media4 = await prepareWAMessageMedia({ video: fs.readFileSync(config.assets["mp4"]), gifPlayback: true }, { upload: sock.waUploadToServer });
           const msg4 = generateWAMessageFromContent(m.chat, wrapInteractive({
             viewOnceMessage: {
               message: {
@@ -413,7 +413,7 @@ async function handler(m, { sock, db }) {
       case 2: {
         const media = await prepareWAMessageMedia(
           {
-            image: getAssetBuffer("ourin2"),
+            image: getAssetBuffer("foto2"),
           },
           { upload: sock.waUploadToServer },
         );
@@ -498,12 +498,12 @@ async function handler(m, { sock, db }) {
           }
         }
 
-        const thumbnail = await sharp(getAssetBuffer("ourin")).resize(300, 300).toBuffer()
+        const thumbnail = await sharp(getAssetBuffer("foto")).resize(300, 300).toBuffer()
         const qOrder = {
           key: { fromMe: false, participant: '0@s.whatsapp.net', remoteJid: m.sender },
           message: { locationMessage: { degreesLatitude: 0, degreesLongitude: 0, name: await weatherMenu(), jpegThumbnail: thumbnail } }
         }
-        const media4 = await prepareWAMessageMedia({ video: fs.readFileSync(config.assets["ourin-mp4"]), gifPlayback: true }, { upload: sock.waUploadToServer });
+        const media4 = await prepareWAMessageMedia({ video: fs.readFileSync(config.assets["mp4"]), gifPlayback: true }, { upload: sock.waUploadToServer });
         const msg4 = generateWAMessageFromContent(m.chat, wrapInteractive({
           viewOnceMessage: {
             message: {
@@ -567,7 +567,7 @@ async function handler(m, { sock, db }) {
           }
         }
 
-        const thumbnail = await sharp(getAssetBuffer("ourin")).resize(300, 300).toBuffer()
+        const thumbnail = await sharp(getAssetBuffer("foto")).resize(300, 300).toBuffer()
 
         const msg6 = generateWAMessageFromContent(m.chat, wrapInteractive({
           viewOnceMessage: {

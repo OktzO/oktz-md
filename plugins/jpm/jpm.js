@@ -69,7 +69,7 @@ const jpmSessions = global.jpmSessions;
 
 let cachedThumb = null;
 try {
-  cachedThumb = getAssetBuffer("ourin2");
+  cachedThumb = getAssetBuffer("foto2");
 } catch {}
 
 function getVerifiedQuoted() {
