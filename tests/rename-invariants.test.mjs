@@ -115,6 +115,9 @@ const PARSE_OPTIONS = {
   comment: false,
   ecmaFeatures: { jsx: false },
 };
+const TEMPLATE_OURIN_IMPORT_PATTERN =
+  /\b(?:import\s*\(\s*(?:"ourin"|'ourin')|from\s+(?:"ourin"|'ourin'))/;
+const TEMPLATE_EXPRESSION_PLACEHOLDER = "__RENAME_INVARIANT_EXPR__";
 
 function importSourceValue(node) {
   if (!node || typeof node !== "object") return null;
@@ -162,17 +165,65 @@ function collectModuleSpecifiers(ast) {
   return matches;
 }
 
+function templateLiteralHasOurinImport(ast) {
+  const pending = [ast];
+  const seen = new WeakSet();
+  while (pending.length > 0) {
+    const node = pending.pop();
+    if (!node || typeof node !== "object" || seen.has(node)) continue;
+    seen.add(node);
+    if (node.type === "TemplateLiteral") {
+      const source = node.quasis
+        .map((quasi) => quasi.value.raw)
+        .join(TEMPLATE_EXPRESSION_PLACEHOLDER);
+      if (TEMPLATE_OURIN_IMPORT_PATTERN.test(source)) {
+        const candidates = [
+          source,
+          `async function __renameInvariantTemplate() {\n${source}\n}`,
+        ];
+        for (const candidate of candidates) {
+          try {
+            const parsed = parseSource(candidate);
+            if (collectModuleSpecifiers(parsed).includes("ourin")) return true;
+          } catch {
+            continue;
+          }
+        }
+      }
+    }
+    const children = [];
+    for (const value of Object.values(node)) {
+      if (Array.isArray(value)) {
+        for (const child of value) {
+          if (child && typeof child === "object") children.push(child);
+        }
+      } else if (value && typeof value === "object") {
+        children.push(value);
+      }
+    }
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      pending.push(children[index]);
+    }
+  }
+  return false;
+}
+
 function parseSource(source) {
   return espree.parse(source, PARSE_OPTIONS);
 }
 
 const MODULE_SPECIFIERS = new Map();
+const TEMPLATE_OURIN_IMPORT_FILES = new Set();
 const PARSE_ERRORS = [];
 if (espree) {
   for (const file of FILES) {
     try {
-      const ast = parseSource(read(file));
+      const source = read(file);
+      const ast = parseSource(source);
       MODULE_SPECIFIERS.set(file, collectModuleSpecifiers(ast));
+      if (templateLiteralHasOurinImport(ast)) {
+        TEMPLATE_OURIN_IMPORT_FILES.add(file);
+      }
     } catch (error) {
       PARSE_ERRORS.push({ file, error });
     }
@@ -252,7 +303,10 @@ describe("rename invariants", () => {
     const bad = [];
     for (const file of FILES) {
       if (file === TEST_FILE) continue;
-      if (importSpecifiers(file).some((specifier) => specifier === "ourin")) {
+      if (
+        importSpecifiers(file).some((specifier) => specifier === "ourin") ||
+        TEMPLATE_OURIN_IMPORT_FILES.has(file)
+      ) {
         bad.push(file);
       }
     }
