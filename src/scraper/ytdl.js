@@ -55,6 +55,16 @@ async function fallbackToMp3Buffer(url) {
   }
 }
 
+const CONVERT_FAILURE_MESSAGE = "Gagal mendapatkan data konversi.";
+
+export function describeConvertFailure(convert) {
+  const code = convert?.error;
+  if (code === undefined || code === null || code === 0 || code === "0") {
+    return CONVERT_FAILURE_MESSAGE;
+  }
+  return `${CONVERT_FAILURE_MESSAGE} (upstream error ${code})`;
+}
+
 async function ytdl(url, format = "mp3") {
   try {
     const videoId = extractVideoId(url);
@@ -104,7 +114,7 @@ async function ytdl(url, format = "mp3") {
     if (!convert?.progressURL || !convert?.downloadURL) {
       return {
         status: false,
-        mess: "Gagal mendapatkan data konversi.",
+        mess: describeConvertFailure(convert),
       };
     }
 

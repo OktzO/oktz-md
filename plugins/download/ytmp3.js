@@ -12,19 +12,27 @@ const pluginConfig = {
   isEnabled: true,
 };
 
-async function getAudioDownload(url) {
+export async function getAudioDownload(url, deps = {}) {
+  const httpGet =
+    deps.httpGet ??
+    ((u) => axios.get(u, { timeout: 60000 }).then((r) => r.data));
+  const fallbackFn = deps.ytdlFn ?? ytdl;
+
   try {
-    const { data } = await axios.get(
-      `https://my.izuka-api.xyz/api/downloader/ytmp3?url=${encodeURIComponent(url)}`, { timeout: 60000 }
+    const data = await httpGet(
+      `https://my.izuka-api.xyz/api/downloader/ytmp3?url=${encodeURIComponent(url)}`,
     );
     const download = data?.result?.download_url;
     const title = data?.result?.title;
     if (download) {
       return { download, title };
     }
-  } catch {}
+    console.error("[YTMP3 Izuka API Error] respons tanpa download_url");
+  } catch (e) {
+    console.error("[YTMP3 Izuka API Error]", e?.message || e);
+  }
 
-  const fallback = await ytdl(url, "mp3");
+  const fallback = await fallbackFn(url, "mp3");
   if (fallback?.status && fallback?.dl) {
     return { download: fallback.dl, title: fallback.title, isFallback: true };
   }
