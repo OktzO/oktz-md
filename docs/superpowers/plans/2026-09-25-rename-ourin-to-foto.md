@@ -423,9 +423,10 @@ for (const [oldB] of map) {
   oldTokens.add(oldB.replace(/\.[a-z0-9]+$/i, "")); // ourin-rpg
 }
 const targets = [];
+const SKIP_FILES = new Set(["package.json", "package-lock.json", "package-lock.yml"]);
 (function walk(d) {
   for (const e of fs.readdirSync(path.join(ROOT, d), { withFileTypes: true })) {
-    if (d === "node_modules" || d === ".git" || d === "docs" || d === "native") continue;
+    if (d === "node_modules" || d === ".git" || d === "docs" || d === "native" || d === ".superpowers") continue;
     const p = path.join(d, e.name);
     if (e.isDirectory()) walk(p);
     else if ([".js", ".mjs", ".cjs"].includes(path.extname(e.name))) targets.push(p);
@@ -433,6 +434,8 @@ const targets = [];
 })(".");
 let n = 0;
 for (const f of targets) {
+  // JANGAN sentuh manifest: stem-replace `"ourin"` akan merusak key dependency
+  if (SKIP_FILES.has(path.basename(f))) continue;
   const abs = path.join(ROOT, f);
   let s = fs.readFileSync(abs, "utf8");
   const before = s;
@@ -559,6 +562,62 @@ Jalankan boot smoke (`node index.js` singkat atau `npm test`); verifikasi tidak 
 ```bash
 git add -A
 git commit -m "refactor(plugin): rename ganti-ourin* + case/ourin.js, update reply text"
+```
+
+---
+
+### Task 5b: Sweep residual `ourin` (identifier internal, komentar, nama test)
+
+**Files:** `src/lib/apimanager.js`, `src/handler.js`, 6 plugin yang mengimpor `ourinApi`, `src/scraper/unlimitedai.js`, `src/lib/{serialize,lid,group-protection,emoji-map,exif,plugins,auto-backup}.js`, `plugins/main/{menu,allmenu,sc}.js`, `plugins/owner/getplugin.js`, `plugins/vps/createvps.js`, `plugins/{group/promote,group/demote}.js`, `tests/*.test.mjs` (nama/deskripsi test), `tests/rename-invariants.test.mjs` (whitelist)
+
+**Interfaces:**
+- Consumes: I5.
+- Produces: 0 kemunculan `ourin` di luar 3 whitelist.
+
+- [ ] **Step 1: Tambahkan whitelist ke I5**
+
+Whitelist ini **wajib** dan tidak boleh longgar:
+- `api.ourin.my.id` — API eksternal milik pihak ketiga, HIDUP (HTTP 200). `src/lib/apimanager.js:1014` `baseURL: "https://api.ourin.my.id"`. **TIDAK BOLEH diganti** — production break.
+- `ourin-native`, `ourin_native.*.node` — modul native (D5).
+- `Mourinho` di `src/data/family100.json` (D7).
+Tambahkan sebagai pola yang menghapus kemunculan spesifik tersebut sebelum memeriksa residual, seperti yang sudah dilakukan untuk `ourin-native`. JANGAN whitelist kata `ourin` secara umum.
+
+- [ ] **Step 2: Rename identifier internal**
+
+| Lama | Baru |
+|---|---|
+| `OurinApiManager` | `FotoApiManager` |
+| `OurinApiProvider` | `FotoApiProvider` |
+| `OurinMainApiProvider` | `FotoMainApiProvider` |
+| `OurinApiRequestOptions` | `FotoApiRequestOptions` |
+| `OurinApiAuthShape` | `FotoApiAuthShape` |
+| `OurinApiProviderShape` | `FotoApiProviderShape` |
+| `OurinApiMultipartFile` | `FotoApiMultipartFile` |
+| `ourinApi` (variabel, 6 file importer) | `fotoApi` |
+| `ourinGames` (alias di `src/handler.js:71`) | `fotoGames` |
+
+Termasuk semua JSDoc `@param {OurinApi...}` / `@typedef {Object} OurinApi...` / `@returns {OurinApi...}` di `apimanager.js`. JANGAN sentuh string `https://api.ourin.my.id`.
+
+- [ ] **Step 3: Bersihkan komentar & teks usang**
+
+`src/lib/serialize.js`, `lid.js`, `group-protection.js`, `emoji-map.js`, `exif.js`, `plugins.js` (komentar `loadPlugins('./ourin-plugins')` → `'./plugins'`), `plugins/main/menu.js:387` (`ourin-baileys` → `foto-baileys`), `allmenu.js:551` (`ourin-menu-v8`), `plugins/main/sc.js` & `plugins/owner/getplugin.js` (string `ourin/onigis`), `plugins/vps/createvps.js` (`ourin-bot`), `plugins/group/promote.js` & `demote.js` (komentar), `src/lib/auto-backup.js` (`.ourin-temp` → `.foto-temp`).
+
+- [ ] **Step 4: Bersihkan nama/deskripsi test**
+
+`tests/*.test.mjs` menyebut nama module lama di nama test & string sementara: `ourin-premium-db`, `ourin-logger`, `ourin-lid`, `ourin-brat`, `ourin-ffmpeg-tone-`, `ourin-ffmpeg-pwned-`, `ourin/lib/Socket/groups.js`. Ganti agar sesuai nama file saat ini. JANGAN ubah assertion/behavior test.
+
+- [ ] **Step 5: Run test — I5 harus PASS**
+
+Run: `node --test tests/rename-invariants.test.mjs`
+Expected: **I1–I5 semua PASS** (Task 5b menutup residual; Task 5 di bawah hanya 4 edge case yang sudah tercakup di sini).
+`npm test` harus 309 pass / 0 fail.
+
+- [ ] **Step 6: Commit**
+
+```bash
+npm run lint
+git add -A
+git commit -m "refactor(rename): sweep residual ourin identifiers, comments, test names"
 ```
 
 ---
