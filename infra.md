@@ -63,7 +63,7 @@ messageHandler(msg, sock)
   └── plugin.handler(m, { sock, store, config, plugins })
 ```
 
-## Plugin System (`src/lib/ourin-plugins.js`)
+## Plugin System (`src/lib/plugins.js`)
 
 - **PluginStore**: 3 Maps — `commands` (name→plugin), `aliases` (alias→name), `categories` (kategori→plugin[])
 - `loadPlugins(dir)` → scan subdirectory per kategori, `import()` tiap file `.js`, register
@@ -95,12 +95,12 @@ messageHandler(msg, sock)
 1. **Case** — `case/ourin.js`: switch-case sederhana, built-in, di-handle duluan di `messageHandler()`. Hanya ~5 command (ping, latency, listcase, listplugin).
 2. **Plugin** — mayoritas command: lookup by name di `pluginStore`, eksekusi `handler()`. ~827 plugin.
 
-## Database (`src/lib/ourin-database.js`)
+## Database (`src/lib/database.js`)
 
 - **lowdb** (JSON file) — data utama: users, groups, settings, premium, transaksi, game state
 - **Turso** (libsql) — session auth state (WhatsApp credentials), sync remote
-- **ourin-premium-db.js** — JSON file fallback untuk owner/premium/partner list
-- **ourin-jadibot-database.js** — sub-bot session data
+- **premium-db.js** — JSON file fallback untuk owner/premium/partner list
+- **jadibot-database.js** — sub-bot session data
 - **lid-cache.json** — cache resolusi LID (location ID) → JID, mencegah re-resolve berulang
 
 #### LID (username) di user store
@@ -122,7 +122,7 @@ messageHandler(msg, sock)
 - Auth state: Turso (libsql) atau file-based
 - Pairing code atau QR code
 - Auto-reconnect dengan exponential backoff
-- LID (Location ID) resolution: `src/lib/ourin-lid.js` — konversi `@lid` ↔ JID, fallback ke `@lid` bila tidak resolve
+- LID (Location ID) resolution: `src/lib/lid.js` — konversi `@lid` ↔ JID, fallback ke `@lid` bila tidak resolve
 
 ## Security
 

@@ -53,7 +53,7 @@ B. GAME GAMBAR (Image Based)
 Buat file \`plugins/game/tebakkucing.js\` lalu sertakan template kode ini:
 
 \`\`\`javascript
-import { games } from '../../src/lib/ourin-games.js'
+import { games } from '../../src/lib/games.js'
 
 // 1. REGISTRASI GAME KE ENGINE
 games.register('tebakkucing', {
@@ -97,7 +97,7 @@ export { pluginConfig as config, handler, answerHandler }
 -----------------------------------------------------------
 4. CARA ENGINE BEKERJA (Under The Hood)
 -----------------------------------------------------------
-1. Saat Load: \`ourin-plugins.js\` memuat \`tebakkucing.js\`.
+1. Saat Load: \`plugins.js\` memuat \`tebakkucing.js\`.
 2. Registrasi: Fungsi \`games.register\` menyimpan parameter config-mu ke dalam memori Registry sentral.
 3. Hooking: \`src/handler.js\` mendeteksi adanya eksport \`answerHandler\` lalu mencegat semua pesan text masuk untuk memvalidasi apakah user sedang dalam sesi 'tebakkucing' dan menjawab benar (menggunakan Levenshtein distance >= 85%).
 4. Reward: Diberikan secara otomatis menggunakan kalkulasi random dari \`getRandomReward()\` (EXP, Koin, Limit) + Level Up detector.
@@ -105,4 +105,4 @@ export { pluginConfig as config, handler, answerHandler }
 Tiga baris export di bawah sangat krusial, dilarang dihapus:
 **\`export { pluginConfig as config, handler, answerHandler }\`**
 
-Selesai! Tidak perlu mengedit \`ourin-games.js\` atau \`handler.js\` lagi setiap menambah game baru!
+Selesai! Tidak perlu mengedit \`games.js\` atau \`handler.js\` lagi setiap menambah game baru!
