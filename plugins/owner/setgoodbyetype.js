@@ -85,7 +85,7 @@ async function handler(m, { sock, db }) {
     `> Pilih tipe goodbye dari tombol di bawah 👇`;
   await sock.sendButton(
     m.chat,
-    getAssetBuffer("ourin"),
+    getAssetBuffer("foto"),
     bodyText,
     m,
     { buttons },

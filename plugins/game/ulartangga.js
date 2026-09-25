@@ -34,7 +34,7 @@ function uniqueMentions(mentions = []) {
   return [...new Set((mentions || []).filter(Boolean))];
 }
 
-let thumbUT = getAssetBuffer("ourin-games") || null;
+let thumbUT = getAssetBuffer("games") || null;
 
 function utCtx(mentions) {
   const saluranId = config.saluran?.id || "120363400911374213@newsletter";

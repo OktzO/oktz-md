@@ -41,7 +41,7 @@ const encCost = (r) =>
     secret: 5e10,
   })[r] || 50000;
 
-let thumbFish = getAssetBuffer("ourin-fishit") || null;
+let thumbFish = getAssetBuffer("fishit") || null;
 
 function send(sock, m, text) {
   const msgId = sock.sendPreview(

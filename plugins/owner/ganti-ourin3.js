@@ -4,7 +4,7 @@ const pluginConfig = {
     name: 'ganti-ourin3.jpg',
     alias: ['gantiourin3', 'setourin3'],
     category: 'owner',
-    description: 'Ganti gambar ourin3.jpg',
+    description: 'Ganti gambar foto3.jpg',
     usage: '.ganti-ourin3.jpg (reply/kirim gambar)',
     example: '.ganti-ourin3.jpg',
     isOwner: true,
@@ -20,7 +20,7 @@ async function handler(m, { sock }) {
     const isImage = m.isImage || (m.quoted && m.quoted.type === 'imageMessage')
     
     if (!isImage) {
-        return m.reply(`🖼️ *ɢᴀɴᴛɪ ᴏᴜʀɪɴ3.ᴊᴘɢ*\n\n> Kirim/reply gambar untuk mengganti\n> File: assets/image/ourin3.jpeg`)
+        return m.reply(`🖼️ *ɢᴀɴᴛɪ ᴏᴜʀɪɴ3.ᴊᴘɢ*\n\n> Kirim/reply gambar untuk mengganti\n> File: assets/image/foto3.jpeg`)
     }
     
     try {
@@ -37,8 +37,8 @@ async function handler(m, { sock }) {
         
         await m.reply(`⏳ Sedang mengupload gambar...`)
         try {
-            const newUrl = await updateAssetUrl('ourin3', buffer, 'ourin3.jpeg')
-            m.reply(`✅ *ʙᴇʀʜᴀsɪʟ*\n\n> Gambar ourin3.jpeg telah diganti ke URL baru:\n> ${newUrl}\n> Config telah diupdate secara realtime!`)
+            const newUrl = await updateAssetUrl('foto3', buffer, 'foto3.jpeg')
+            m.reply(`✅ *ʙᴇʀʜᴀsɪʟ*\n\n> Gambar foto3.jpeg telah diganti ke URL baru:\n> ${newUrl}\n> Config telah diupdate secara realtime!`)
         } catch (e) {
             m.reply(`❌ Gagal mengupload gambar: ${e.message}`)
         }

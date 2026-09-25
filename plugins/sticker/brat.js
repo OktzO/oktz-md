@@ -70,7 +70,7 @@ async function sendBratMenu(m, sock, text) {
   let media = null;
   try {
     media = await prepareWAMessageMedia(
-      { image: getAssetBuffer("ourin") },
+      { image: getAssetBuffer("foto") },
       { upload: sock.waUploadToServer },
     );
   } catch { }

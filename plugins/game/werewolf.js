@@ -27,10 +27,10 @@ const pluginConfig = {
 
 if (!global.werewolfGames) global.werewolfGames = {};
 
-let thumbWW = getAssetBuffer("ourin-games") || null;
-let thumbNight = getAssetBuffer("ourin") || null;
+let thumbWW = getAssetBuffer("games") || null;
+let thumbNight = getAssetBuffer("foto") || null;
 let thumbDay = thumbNight;
-let thumbWin = getAssetBuffer("ourin-winner") || null;
+let thumbWin = getAssetBuffer("winner") || null;
 
 const ROLES = {
   werewolf: {

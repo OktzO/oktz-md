@@ -55,7 +55,7 @@ async function handler(m, { sock }) {
     const customRules = groupData.groupRules
     const rulesText = customRules || DEFAULT_GROUP_RULES
 
-    const imageBuffer = getAssetBuffer("ourin-rules")
+    const imageBuffer = getAssetBuffer("rules")
 
     if (imageBuffer) {
         await sock.sendMessage(m.chat, {

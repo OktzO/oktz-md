@@ -175,7 +175,7 @@ export async function drawBrat({
 // Port dari plugin brattheme dengan perbaikan:
 // - FONT BLANK FIX: aset TTF/JSON divalidasi dulu (cek magic-byte/JSON) sebelum
 //   cache ke disk; cache korup self-heal; register gagal -> fallback ke font
-//   lokal repo (assets/ourin-font.ttf). Dulu: HTML dari proxy (HTTP 200) ke-cache
+//   lokal repo (assets/font.ttf). Dulu: HTML dari proxy (HTTP 200) ke-cache
 //   sebagai .ttf -> register gagal diam -> VPS tanpa font sistem = teks tak
 //   ter-render -> sticker putih polos "blank" tanpa error.
 // - JSON emoji besar hanya dimuat saat teks benar-benar ada emoji (hemat RAM).
@@ -232,7 +232,7 @@ async function loadBratFont() {
   if (!bratFontPromise) {
     bratFontPromise = (async () => {
       const remote = path.join(bratTmp(), "ARIALN.ttf");
-      const local = path.join(process.cwd(), "assets", "ourin-font.ttf");
+      const local = path.join(process.cwd(), "assets", "font.ttf");
       const candidates = [];
       try {
         if (!validCachedFile(remote, isTrueTypeBuffer)) {

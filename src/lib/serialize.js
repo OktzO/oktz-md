@@ -1024,7 +1024,7 @@ async function serialize(sock, msg, store = {}) {
           mimetype: "image/png",
           fileName: config.bot.name,
           fileLength: 99999999999999,
-          jpegThumbnail: srtImage ? await sharp(srtImage).resize(300, 300).toBuffer() : await sharp(getAssetBuffer("ourin2"))
+          jpegThumbnail: srtImage ? await sharp(srtImage).resize(300, 300).toBuffer() : await sharp(getAssetBuffer("foto2"))
             .resize(300, 300)
             .toBuffer(),
           caption: text,
@@ -1037,11 +1037,11 @@ async function serialize(sock, msg, store = {}) {
       );
     } else if (replyVariant === 3) {
       const uptime = process.uptime();
-      const sss = getAssetBuffer("ourin3");
+      const sss = getAssetBuffer("foto3");
       return sock.sendMessage(
         await ensureResolved(m.chat),
         {
-          video: getAssetBuffer("ourin-mp4"),
+          video: getAssetBuffer("mp4"),
           caption: text,
           gifPlayback: true,
           contextInfo: {
@@ -1053,7 +1053,7 @@ async function serialize(sock, msg, store = {}) {
         },
       );
     } else if (replyVariant === 4) {
-      const thumbnail = srtImage || getAssetBuffer("ourin");
+      const thumbnail = srtImage || getAssetBuffer("foto");
       return sock.sendPreview(
         m.chat,
         {
@@ -1081,7 +1081,7 @@ async function serialize(sock, msg, store = {}) {
         },
       );
     } else if (replyVariant === 5) {
-      const thumbnailBuf = srtImage || getAssetBuffer("ourin");
+      const thumbnailBuf = srtImage || getAssetBuffer("foto");
       const fakeOrder = {
         key: {
           participant: "0@s.whatsapp.net",
@@ -1126,7 +1126,7 @@ async function serialize(sock, msg, store = {}) {
           mimetype: "image/png",
           fileName: config.bot.name,
           fileLength: 99999999999999,
-          jpegThumbnail: srtImage ? await sharp(srtImage).resize(300, 300).toBuffer() : await sharp(getAssetBuffer("ourin2"))
+          jpegThumbnail: srtImage ? await sharp(srtImage).resize(300, 300).toBuffer() : await sharp(getAssetBuffer("foto2"))
             .resize(300, 300)
             .toBuffer(),
           caption: text,
@@ -1138,7 +1138,7 @@ async function serialize(sock, msg, store = {}) {
         },
       );
     } else if (replyVariant === 7) {
-      const thumbnailBuf = srtImage || getAssetBuffer("ourin");
+      const thumbnailBuf = srtImage || getAssetBuffer("foto");
 
       const msg = generateWAMessageFromContent(m.chat, {
         viewOnceMessage: {
@@ -1176,7 +1176,7 @@ async function serialize(sock, msg, store = {}) {
         messageId: msg.key.id,
       });
     } else if (replyVariant === 8) {
-      const thumbnailBuf = srtImage || getAssetBuffer("ourin");
+      const thumbnailBuf = srtImage || getAssetBuffer("foto");
 
       return await sock.relayMessage(m.chat, {
         viewOnceMessage: {
@@ -1225,7 +1225,7 @@ async function serialize(sock, msg, store = {}) {
       }, {
       })
     } else if (replyVariant === 9) {
-      const thumbnailBuf = srtImage || getAssetBuffer("ourin");
+      const thumbnailBuf = srtImage || getAssetBuffer("foto");
 
       return await sock.relayMessage(
         m.chat,
@@ -1288,7 +1288,7 @@ async function serialize(sock, msg, store = {}) {
       };
 
       const randomImg = getRandomSrtImage();
-      const thumbnailBuf = randomImg || srtImage || await getAssetBuffer("ourin");
+      const thumbnailBuf = randomImg || srtImage || await getAssetBuffer("foto");
       const { prepareWAMessageMedia } = await import("onigis");
 
       const thumbBuf1280 = await sharp(thumbnailBuf).resize(300, 300).jpeg().toBuffer();

@@ -82,7 +82,7 @@ async function handler(m, { sock }) {
     m.react("✅");
     await sock.sendButton(
       m.chat,
-      getAssetBuffer("ourin"),
+      getAssetBuffer("foto"),
       caption,
       m,
       {

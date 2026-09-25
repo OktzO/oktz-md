@@ -12,9 +12,9 @@ let rpgThumbBuffer = null;
 let winnerThumbBuffer = null;
 
 const keys = [
-  ["ourin-games", (buf) => { gameThumbBuffer = buf; }],
-  ["ourin-rpg", (buf) => { rpgThumbBuffer = buf; }],
-  ["ourin-winner", (buf) => { winnerThumbBuffer = buf; }],
+  ["games", (buf) => { gameThumbBuffer = buf; }],
+  ["rpg", (buf) => { rpgThumbBuffer = buf; }],
+  ["winner", (buf) => { winnerThumbBuffer = buf; }],
 ];
 for (const [key, setter] of keys) {
   const buf = getAssetBuffer(key);

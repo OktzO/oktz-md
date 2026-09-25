@@ -50,8 +50,8 @@ import { getAssetBuffer } from "../../src/lib/asset-manager.js";
 
 let cachedThumb = null;
 try {
-  if (getAssetBuffer("ourin")) {
-    cachedThumb = getAssetBuffer("ourin");
+  if (getAssetBuffer("foto")) {
+    cachedThumb = getAssetBuffer("foto");
   }
 } catch { }
 

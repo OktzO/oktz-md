@@ -88,7 +88,7 @@ async function handler(m, { sock }) {
         const overviewText = `🏆 *LEADERBOARD OVERVIEW* 🏆\n\n` +
             `_Pilih tombol di bawah untuk melihat ranking!_`
         try {
-            await sock.sendButton(m.chat, getAssetBuffer('ourin'), overviewText, m, {
+            await sock.sendButton(m.chat, getAssetBuffer('foto'), overviewText, m, {
                 buttons: [
                     {
                         name: 'quick_reply',

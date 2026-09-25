@@ -351,7 +351,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
   let imageBuffer = null;
 
   try {
-    imageBuffer = getAssetBuffer("ourin")
+    imageBuffer = getAssetBuffer("foto")
   } catch (e) {
     console.error("Gagal load assets:", e.message);
   }
@@ -374,7 +374,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
       case 1:
         if (imageBuffer) {
           await sock.sendMessage(m.chat, {
-            image: getAssetBuffer("ourin"),
+            image: getAssetBuffer("foto"),
             caption: ``,
             footer: `Hai @${m.pushName} 👋
             
@@ -461,7 +461,7 @@ Tekan tombol dibawah untuk info lebih lanjut dan untuk memilih kategori
           s += "╰─⬣\n\n"
         });
         const media = await prepareWAMessageMedia({
-          image: getAssetBuffer("ourin")
+          image: getAssetBuffer("foto")
         }, { upload: sock.waUploadToServer })
         const readmore = String.fromCharCode(8206).repeat(4001)
         // Kartu interactiveMessage wajib dibungkus wrapInteractive
@@ -649,7 +649,7 @@ Welcome to ${config.bot?.name}, Our bot will help you
 
         // Quoted kartu lokasi berisi cuaca (pola .allmenu variant 5):
         // tampil sebagai "preview" di atas kartu menu.
-        const weatherThumb = await sharp(getAssetBuffer("ourin"))
+        const weatherThumb = await sharp(getAssetBuffer("foto"))
           .resize(300, 300)
           .toBuffer()
           .catch(() => null);
@@ -678,7 +678,7 @@ Welcome to ${config.bot?.name}, Our bot will help you
       }
 
       case 4: {
-        const thumbnail = await sharp(getAssetBuffer("ourin")).resize(300, 300).toBuffer()
+        const thumbnail = await sharp(getAssetBuffer("foto")).resize(300, 300).toBuffer()
         const qvideo = {
           key: {
             fromMe: false,
@@ -695,7 +695,7 @@ Welcome to ${config.bot?.name}, Our bot will help you
           }
         }
         const media4 = await prepareWAMessageMedia({
-          video: fs.readFileSync(config.assets["ourin-mp4"]),
+          video: fs.readFileSync(config.assets["mp4"]),
           gifPlayback: true
         }, { upload: sock.waUploadToServer });
         let singlePush = categories.sorted.map(cat => {
@@ -840,7 +840,7 @@ Enjoy your use brother.`
             return "Cuaca tidak tersedia"
           }
         }
-        const thumbnail = await sharp(getAssetBuffer("ourin")).resize(300, 300).toBuffer()
+        const thumbnail = await sharp(getAssetBuffer("foto")).resize(300, 300).toBuffer()
         const qOrder = {
           key: {
             fromMe: false,
@@ -857,7 +857,7 @@ Enjoy your use brother.`
           }
         }
         const media4 = await prepareWAMessageMedia({
-          video: fs.readFileSync(config.assets["ourin-mp4"]),
+          video: fs.readFileSync(config.assets["mp4"]),
           gifPlayback: true
         }, { upload: sock.waUploadToServer });
         const msg4 = generateWAMessageFromContent(m.chat, wrapInteractive({
@@ -1010,7 +1010,7 @@ _i am an automated system (WhatsApp bot) that can help to do something search an
           topCmdText += `╭   • Belum ada command\n╰➤------------------------------\n`
         }
 
-        const thumbnail = await sharp(getAssetBuffer("ourin")).resize(300, 300).toBuffer()
+        const thumbnail = await sharp(getAssetBuffer("foto")).resize(300, 300).toBuffer()
         const msg6 = generateWAMessageFromContent(m.chat, wrapInteractive({
           messageContextInfo: {},
               interactiveMessage: {
@@ -1145,7 +1145,7 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
 
 
         const { getAssetBuffer } = await import("../../src/lib/asset-manager.js");
-        const imageBuffer = await getAssetBuffer("ourin2");
+        const imageBuffer = await getAssetBuffer("foto2");
         const sharp = (await import("sharp")).default;
         const stickerBuf = await sharp(imageBuffer).resize(512, 512).webp().toBuffer();
 
@@ -1168,11 +1168,11 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
 
         const { generateWAMessageFromContent } = await import("onigis");
         const menuMedia = await prepareWAMessageMedia({
-          image: await getAssetBuffer("ourin")
+          image: await getAssetBuffer("foto")
         }, { upload: sock.waUploadToServer });
 
         const videoLive = await prepareWAMessageMedia({
-          video: await getAssetBuffer("ourin-mp4")
+          video: await getAssetBuffer("mp4")
         }, { upload: sock.waUploadToServer });
 
         const msg = generateWAMessageFromContent(m.chat, wrapInteractive({
@@ -1287,8 +1287,8 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
         case7Text = case7Text.trimEnd();
 
         const { getAssetBuffer } = await import("../../src/lib/asset-manager.js");
-        const imageBuffer = await getAssetBuffer("ourin");
-        const favB = await getAssetBuffer("ourin2");
+        const imageBuffer = await getAssetBuffer("foto");
+        const favB = await getAssetBuffer("foto2");
         const sharp = (await import("sharp")).default;
         const thumbBuf = await sharp(imageBuffer).resize(1280, 720).jpeg().toBuffer();
         const favBuf = await sharp(favB).resize(512, 512).jpeg().toBuffer();

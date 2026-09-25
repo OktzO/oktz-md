@@ -18,14 +18,14 @@ const pluginConfig = {
 
 async function handler(m, { sock }) {
     const isImage = m.isImage || (m.quoted && m.quoted.type === 'imageMessage')
-    if (!isImage) return m.reply(`🖼️ *ɢᴀɴᴛɪ OURIN-DEMOTE.JPG*\n\n> Kirim/reply gambar untuk mengganti\n> File: assets/image/ourin-demote.jpeg`)
+    if (!isImage) return m.reply(`🖼️ *ɢᴀɴᴛɪ OURIN-DEMOTE.JPG*\n\n> Kirim/reply gambar untuk mengganti\n> File: assets/image/demote.jpeg`)
     try {
         let buffer = m.quoted && m.quoted.isMedia ? await m.quoted.download() : await m.download()
         if (!buffer) return m.reply('❌ Gagal mendownload gambar')
         await m.reply(`⏳ Sedang mengupload gambar...`)
         try {
-            const newUrl = await updateAssetUrl('ourin-demote', buffer, 'ourin-demote.jpeg')
-            m.reply(`✅ *ʙᴇʀʜᴀsɪʟ*\n\n> Gambar ourin-demote.jpeg telah diganti ke URL baru:\n> ${newUrl}\n> Config telah diupdate secara realtime!`)
+            const newUrl = await updateAssetUrl('demote', buffer, 'demote.jpeg')
+            m.reply(`✅ *ʙᴇʀʜᴀsɪʟ*\n\n> Gambar demote.jpeg telah diganti ke URL baru:\n> ${newUrl}\n> Config telah diupdate secara realtime!`)
         } catch (e) {
             m.reply(`❌ Gagal mengupload gambar: ${e.message}`)
         }
