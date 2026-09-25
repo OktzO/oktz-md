@@ -30,6 +30,10 @@ mekanisme prebuilt native.
 | D5 | **Native (`ourin-native`, `ourin_native.*.node`) TETAP** (opsi 8A) | `fetch-prebuilt.mjs` menarik dari GitHub Releases dengan sha256 di-pinning. Rename = 404 saat fresh deploy. |
 | D6 | Import rusak `ourin-sticker-reply.js` **tidak dihapus**, hanya di-rewrite | Sudah di-guard `try/catch`; menghapus = risiko perubahan perilaku. |
 | D7 | "Mourinho" di `family100.json` **tidak boleh** ikut berubah | False positive substring. |
+| D8 | **Scope extension disetujui**: sweep sisa identifier internal, komentar, dan nama test di luar edge case §6 — dikerjakan sebagai "Task 5b" | I5 menemukan 87 kemunculan di ±35 file, bukan hanya 4 item §6. Owner pilih sweep penuh; whitelist hanya 3 item sah (D5, D7, D10). |
+| D9 | Owner memilih stem brand untuk 2 string user-facing di `config.js` = **`Oktz`**, bukan `foto` (`sticker.packname`, `saluran.name`) | Kedua string = identitas produk & channel user, bukan sisa nama modul kode. `packname` juga homoglyph mathematical-bold (`𝗢𝗨𝗥𝗶𝗡`) sehingga tak terlihat oleh pencarian teks biasa. |
+| D10 | `https://api.ourin.my.id` (`src/lib/apimanager.js:1014`) **dipertahankan** | Endpoint API pihak ketiga yang hidup (HTTP 200). Mengubahnya = production break. Mengandung substring "ourin", bukan nama modul. |
+| D11 | Helper migrasi `scripts/rename-*.mjs` + `rewrite-alias.mjs` ditambahkan dan **sengaja** menyimpan nama lama sebagai peta rename | Sekali eksekusi, nama lama = data. Karena itu `scripts/` dikecualikan dari audit sisa nama. |
 
 ## 3. Scope
 
@@ -41,10 +45,14 @@ mekanisme prebuilt native.
 - Aset gambar/audio/video/font + kunci `config.assets` + semua call site `getAssetBuffer` / `config.assets[...]` / path `assets/...`
 - 17 file `plugins/owner/ganti-ourin*.js` + teks user-facing di dalamnya
 - `case/ourin.js` → `case/foto.js` + 5 import
+- Sweep sisa identifier internal, komentar, dan nama test di luar §6 (D8) — termasuk `example:` pada plugin di luar 17 `ganti-*`
+- 2 string branding user-facing di `config.js` → stem `Oktz` (D9)
+- `scripts/rename-*.mjs` + `scripts/rewrite-alias.mjs` — helper migrasi sekali pakai, map-driven (D11)
 - Edge case §6
 
 **Di luar (TIDAK boleh disentuh):**
-- `docs/`, `README.md`, `.opencode/`, `.superpowers/`, `.git/`
+- Laporan audit lama di `docs/**` (`memory-leak-audit.md`, `plugin-audit-2026-09-20.md`, `profiling-audit.md`, `profiling-harness.md`, `ram-safety-audit-2026-09-21.md`, `rust-migration-audit.md`) dan `README.md`. **Kecuali** `docs/superpowers/**` (spec + plan) dan `.superpowers/**` (ledger SDD): keduanya **dokumen kerja** yang dipelihara selama eksekusi, bukan artefak rename.
+- `.opencode/`, `.git/`
 - `native/` (Cargo.toml, `ourin_native.*.node`, `fetch-prebuilt.mjs`, `index.cjs`, `platforms/`)
 - `node_modules/` — KECUALI rename alias (§4.2)
 - `package.json` field `name` (tetap `oktz-md`), `version`, `description`
@@ -87,7 +95,9 @@ Teks balasan plugin yang menyebut nama file/kunci aset harus ikut diperbarui aga
 | `native/**` | D5 — binary + sha256 + GitHub Releases. |
 | Tag log `"ourin-native"` di `native-loader.js` | Mengacu modul native yang tetap `ourin-native`. |
 | `src/data/family100.json` (2×) | "Mourinho" (D7). |
-| `docs/`, `README.md`, `.opencode/`, `.superpowers/` | Di luar scope. |
+| `https://api.ourin.my.id` (`src/lib/apimanager.js:1014`) | D10 — endpoint API pihak ketiga yang hidup. |
+| `scripts/rename-assets.mjs`, `rename-lib.mjs`, `rename-lock.mjs`, `rewrite-alias.mjs` | D11 — nama lama adalah peta rename; di luar audit sisa nama. |
+| Laporan audit lama di `docs/**`, `README.md`, `.opencode/` | Di luar scope. `docs/superpowers/**` = dokumen kerja, lihat §3. |
 
 ## 6. Edge case (must-do)
 
