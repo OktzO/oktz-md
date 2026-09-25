@@ -2,7 +2,7 @@ import te from '../../src/lib/error.js'
 import { updateAssetUrl } from '../../src/lib/uploader.js'
 const pluginConfig = {
     name: 'ganti-rules.jpg',
-    alias: ['gantirules', 'setrules'],
+    alias: ['gantirules', 'setfotorules'],
     category: 'owner',
     description: 'Ganti gambar rules.jpg (thumbnail rules)',
     usage: '.ganti-rules.jpg (reply/kirim gambar)',
