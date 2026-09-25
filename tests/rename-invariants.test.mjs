@@ -14,9 +14,16 @@ try {
 if (espree && typeof espree.parse !== "function") {
   espreeLoadError = new Error("espree does not export parse");
 }
-const INVARIANT_OPTIONS = espreeLoadError
-  ? { skip: `espree dependency unavailable: ${espreeLoadError.message}` }
-  : {};
+const ESPEE_UNAVAILABLE_MESSAGE =
+  'espree tidak termuat → 5 invariant rename GAGAL (tidak dilewati): parser adalah syarat mutlak, ' +
+  'jadi safety net aktif tetapi hasilnya tidak bisa dipercaya. "espree" adalah devDependency yang ' +
+  'dideklarasikan di package.json, jadi instalasi node_modules tidak lengkap — jalankan ' +
+  '"npm install" (atau "npm ci") lalu ulangi "npm test". ' +
+  `Detail: ${espreeLoadError ? espreeLoadError.message : "espree tidak mengekspor parse"}`;
+
+function assertEspreeAvailable() {
+  if (espreeLoadError) throw new Error(ESPEE_UNAVAILABLE_MESSAGE);
+}
 
 const ROOT = process.cwd();
 const SCAN_DIRS = ["src", "plugins", "tests", "data", "case"];
@@ -272,7 +279,8 @@ function isWhitelisted(file) {
 }
 
 describe("rename invariants", () => {
-  it("I1: semua import relatif resolve ke file yang ada", INVARIANT_OPTIONS, () => {
+  it("I1: semua import relatif resolve ke file yang ada", () => {
+    assertEspreeAvailable();
     assert.deepStrictEqual(
       PARSE_ERRORS.map(parseErrorText),
       [],
@@ -292,7 +300,8 @@ describe("rename invariants", () => {
     assert.deepStrictEqual(bad, [], `import rusak:\n${bad.join("\n")}`);
   });
 
-  it("I2: tidak ada lagi src/lib/ourin-*.js", INVARIANT_OPTIONS, () => {
+  it("I2: tidak ada lagi src/lib/ourin-*.js", () => {
+    assertEspreeAvailable();
     const left = fs
       .readdirSync(path.join(ROOT, "src/lib"), { withFileTypes: true })
       .filter((entry) => entry.isFile() && entry.name.startsWith("ourin-"))
@@ -301,7 +310,8 @@ describe("rename invariants", () => {
     assert.deepStrictEqual(left, [], `masih ada: ${left.join(", ")}`);
   });
 
-  it("I3: tidak ada import dari specifier 'ourin'", INVARIANT_OPTIONS, () => {
+  it("I3: tidak ada import dari specifier 'ourin'", () => {
+    assertEspreeAvailable();
     const bad = [];
     for (const file of FILES) {
       if (file === TEST_FILE) continue;
@@ -315,7 +325,8 @@ describe("rename invariants", () => {
     assert.deepStrictEqual(bad, [], `masih import 'ourin': ${bad.join(", ")}`);
   });
 
-  it("I4: setiap kunci config.assets punya file aset yang ada", INVARIANT_OPTIONS, async () => {
+  it("I4: setiap kunci config.assets punya file aset yang ada", async () => {
+    assertEspreeAvailable();
     const config = (await import(pathToFileURL(path.join(ROOT, "config.js")).href)).default;
     const assets = config.assets ?? {};
     const actualKeys = Object.keys(assets);
@@ -338,7 +349,8 @@ describe("rename invariants", () => {
     assert.deepStrictEqual(missing, [], `aset hilang: ${missing.join("\n")}`);
   });
 
-  it("I5: tidak ada sisa referensi 'ourin' di luar whitelist", INVARIANT_OPTIONS, () => {
+  it("I5: tidak ada sisa referensi 'ourin' di luar whitelist", () => {
+    assertEspreeAvailable();
     const hits = [];
     for (const file of FILES) {
       if (file === TEST_FILE || isWhitelisted(file)) continue;
