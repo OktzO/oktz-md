@@ -132,8 +132,10 @@ function collectModuleSpecifiers(ast) {
     const value = importSourceValue(node);
     if (value !== null) matches.push(value);
   }
-  function visit(node) {
-    if (!node || typeof node !== "object" || seen.has(node)) return;
+  const pending = [ast];
+  while (pending.length > 0) {
+    const node = pending.pop();
+    if (!node || typeof node !== "object" || seen.has(node)) continue;
     seen.add(node);
     if (node.type === "ImportDeclaration") addSource(node.source);
     if (
@@ -143,15 +145,20 @@ function collectModuleSpecifiers(ast) {
       addSource(node.source);
     }
     if (node.type === "ImportExpression") addSource(node.source);
+    const children = [];
     for (const value of Object.values(node)) {
       if (Array.isArray(value)) {
-        for (const child of value) visit(child);
+        for (const child of value) {
+          if (child && typeof child === "object") children.push(child);
+        }
       } else if (value && typeof value === "object") {
-        visit(value);
+        children.push(value);
       }
     }
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      pending.push(children[index]);
+    }
   }
-  visit(ast);
   return matches;
 }
 
