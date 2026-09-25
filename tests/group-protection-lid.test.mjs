@@ -10,7 +10,7 @@ const MEMBER_PN = '6285551112223@s.whatsapp.net';
 const ADMIN_LID = '9911122233344455@lid';
 const ADMIN_PN = '6281234567890@s.whatsapp.net';
 
-// Bentuk participant ourin utk grup addressing_mode=lid (groups.js:338):
+// Bentuk participant onigis utk grup addressing_mode=lid (groups.js:338):
 // { id: LID, phoneNumber: PN } TANPA field `lid`.
 const participants = [
   { id: BOT_LID, phoneNumber: '628999888777@s.whatsapp.net', admin: 'superadmin' },

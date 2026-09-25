@@ -197,7 +197,7 @@ async function handler(m, { sock, config: botConfig }) {
     const quotedIds = m.quoted?.key?.id ? [m.quoted.key.id] : []
     
     if (!hasProcessing && quotedIds.length && (m.quoted.isImage || m.quoted.isVideo)) {
-        const packname = options.packname || botConfig.sticker?.packname || botConfig.bot?.name || 'Ourin-AI'
+        const packname = options.packname || botConfig.sticker?.packname || botConfig.bot?.name || 'Foto-AI'
         const author = options.author || botConfig.sticker?.author || botConfig.owner?.name || 'Bot'
         const album = await gatherAlbum(sock?.store, m.chat, quotedIds)
         if (album && album.buffers.length >= 2) {
@@ -254,7 +254,7 @@ async function handler(m, { sock, config: botConfig }) {
             if (fs.existsSync(tempVideo)) fs.unlinkSync(tempVideo)
         }
         
-        const packname = options.packname || botConfig.sticker?.packname || botConfig.bot?.name || 'Ourin-AI'
+        const packname = options.packname || botConfig.sticker?.packname || botConfig.bot?.name || 'Foto-AI'
         const author = options.author || botConfig.sticker?.author || botConfig.owner?.name || 'Bot'
         
         const hasProcessing = options.crop || options.resize || options.circle || options.rounded

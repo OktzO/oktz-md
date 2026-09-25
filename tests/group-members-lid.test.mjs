@@ -10,7 +10,7 @@ const TARGET_LID = '99777888999000111@lid';
 const TARGET_PN = '6285551112223@s.whatsapp.net';
 const SENDER_PN = '6281234567890@s.whatsapp.net';
 
-// Bentuk participant ourin utk grup addressing_mode=lid: { id: LID, phoneNumber: PN }
+// Bentuk participant onigis utk grup addressing_mode=lid: { id: LID, phoneNumber: PN }
 const LIDSHAPE_ADMIN_LID = '9922233344455566@lid';
 const LIDSHAPE_ADMIN_PN = '6284445556667@s.whatsapp.net';
 const lidGroup = [
@@ -46,7 +46,7 @@ function makeM(over = {}) {
 	};
 }
 
-test('findParticipantByNumber: LID shape ourin dikenali dari PN maupun LID', () => {
+test('findParticipantByNumber: LID shape onigis dikenali dari PN maupun LID', () => {
 	assert.equal(findParticipantByNumber(lidGroup, TARGET_PN)?.id, TARGET_LID);
 	assert.equal(findParticipantByNumber(lidGroup, TARGET_LID)?.id, TARGET_LID);
 	assert.equal(findParticipantByNumber(lidGroup, '6285551112223@s.whatsapp.net')?.admin, undefined);

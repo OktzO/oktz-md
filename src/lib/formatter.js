@@ -221,7 +221,7 @@ function createBodyLine(text, prefix = CHARS.vertical, bullet = CHARS.bullet) {
  * @param {string} value - Nilai
  * @returns {string} Formatted line dengan arrow
  * @example
- * createArrowLine('Nama', 'Ourin-AI'); // "│ ➣ Nama: Ourin-AI"
+ * createArrowLine('Nama', 'Foto-AI'); // "│ ➣ Nama: Foto-AI"
  */
 function createArrowLine(label, value) {
   return `${CHARS.vertical} ${CHARS.arrow} ${label}: ${value}`;

@@ -82,7 +82,7 @@ describe("isSelf — strict matching", () => {
   });
 });
 
-describe("ourin-premium-db — matchJid strict equality", () => {
+describe("premium-db — matchJid strict equality", () => {
   let tmpDir;
   let originalCwd;
   let premiumDb;

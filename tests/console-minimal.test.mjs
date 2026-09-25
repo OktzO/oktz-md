@@ -54,7 +54,7 @@ describe("printPluginTable minimal", () => {
   });
 });
 
-describe("ourin-logger logCommand minimal", () => {
+describe("logger logCommand minimal", () => {
   let mod;
 
   before(async () => {

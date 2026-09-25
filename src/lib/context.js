@@ -73,7 +73,7 @@ function getRpgContextInfo(title, body) {
   const base = _saluranCtx();
   if (title || body) {
     base.externalAdReply = {
-      title: title || config.bot?.name || "Ourin RPG",
+      title: title || config.bot?.name || "Foto RPG",
       body: body || "",
       sourceUrl: config.saluran?.link || "",
       mediaType: 1,
@@ -90,7 +90,7 @@ async function sendGamePreview(sock, jid, text, title, body, options) {
     {
       caption: `${config.info.website} ${text}`,
       url: `${config.info.website}`,
-      title: title || "🎮 OURIN GAMES",
+      title: title || "🎮 FOTO GAMES",
       description: body || "Have fun playing!",
       jpegThumbnail: gameThumbBuffer,
       previewType: 0,
@@ -122,7 +122,7 @@ async function sendRpgPreview(sock, jid, text, title, body, options) {
     {
       caption: `${config.info.website} ${text}`,
       url: `${config.info.website}`,
-      title: title || "⚔️ OURIN RPG",
+      title: title || "⚔️ FOTO RPG",
       description: body || "Adventure awaits!",
       jpegThumbnail: rpgThumbBuffer,
       previewType: 0,
@@ -138,7 +138,7 @@ async function sendToolsPreview(sock, jid, text, title, body, options) {
     {
       caption: `${config.info.website} ${text}`,
       url: `${config.info.website}`,
-      title: title || "🛠️ OURIN TOOLS",
+      title: title || "🛠️ FOTO TOOLS",
       description: body || "Utility & tools",
       jpegThumbnail: gameThumbBuffer,
       previewType: 0,

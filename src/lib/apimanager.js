@@ -22,22 +22,22 @@ const HTTPS_AGENT = new https.Agent({
 });
 
 /**
- * @typedef {Object} OurinApiAuthShape
+ * @typedef {Object} FotoApiAuthShape
  * @property {Object<string, any>} [headers]
  * @property {Object<string, any>} [params]
  */
 
 /**
- * @typedef {Object} OurinApiProviderShape
+ * @typedef {Object} FotoApiProviderShape
  * @property {string} baseURL
- * @property {OurinApiAuthShape} [auth]
+ * @property {FotoApiAuthShape} [auth]
  * @property {Object<string, string>} [headers]
  * @property {number} [cacheTTL]
  * @property {number} [timeout]
  */
 
 /**
- * @typedef {Object} OurinApiRequestOptions
+ * @typedef {Object} FotoApiRequestOptions
  * @property {string} [method]
  * @property {Object<string, any>} [params]
  * @property {any} [data]
@@ -52,7 +52,7 @@ const HTTPS_AGENT = new https.Agent({
  */
 
 /**
- * @typedef {Object} OurinApiMultipartFile
+ * @typedef {Object} FotoApiMultipartFile
  * @property {string} [name]
  * @property {Buffer|import('stream').Readable|string} [value]
  * @property {Buffer|import('stream').Readable|string} [buffer]
@@ -64,9 +64,9 @@ const HTTPS_AGENT = new https.Agent({
 /**
  * Client provider untuk pemanggilan API per namespace.
  */
-class OurinApiProvider {
+class FotoApiProvider {
   /**
-   * @param {OurinApiManager} mgr
+   * @param {FotoApiManager} mgr
    * @param {string} name
    */
   constructor(mgr, name) {
@@ -76,7 +76,7 @@ class OurinApiProvider {
 
   /**
    * @param {string} ep
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<any>}
    */
   request(ep, opt = {}) {
@@ -86,7 +86,7 @@ class OurinApiProvider {
   /**
    * @param {string} ep
    * @param {Object<string, any>} [params]
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<any>}
    */
   get(ep, params = {}, opt = {}) {
@@ -97,7 +97,7 @@ class OurinApiProvider {
    * @param {string} ep
    * @param {Object<string, any>} [params]
    * @param {number} [ttl]
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<any>}
    */
   cache(ep, params = {}, ttl = 15000, opt = {}) {
@@ -107,7 +107,7 @@ class OurinApiProvider {
   /**
    * @param {string} ep
    * @param {any} [data]
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<any>}
    */
   post(ep, data = {}, opt = {}) {
@@ -117,7 +117,7 @@ class OurinApiProvider {
   /**
    * @param {string} ep
    * @param {any} [data]
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<any>}
    */
   put(ep, data = {}, opt = {}) {
@@ -127,7 +127,7 @@ class OurinApiProvider {
   /**
    * @param {string} ep
    * @param {Object<string, any>} [params]
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<any>}
    */
   del(ep, params = {}, opt = {}) {
@@ -137,7 +137,7 @@ class OurinApiProvider {
   /**
    * @param {string} ep
    * @param {any} [data]
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<any>}
    */
   patch(ep, data = {}, opt = {}) {
@@ -147,7 +147,7 @@ class OurinApiProvider {
   /**
    * @param {string} ep
    * @param {Object<string, any>} [params]
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<any>}
    */
   delete(ep, params = {}, opt = {}) {
@@ -157,7 +157,7 @@ class OurinApiProvider {
   /**
    * @param {string} ep
    * @param {Object<string, any>} [params]
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<any>}
    */
   head(ep, params = {}, opt = {}) {
@@ -166,7 +166,7 @@ class OurinApiProvider {
 
   /**
    * @param {string} ep
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<string>}
    */
   text(ep, opt = {}) {
@@ -175,7 +175,7 @@ class OurinApiProvider {
 
   /**
    * @param {string} ep
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<Buffer>}
    */
   buffer(ep, opt = {}) {
@@ -184,7 +184,7 @@ class OurinApiProvider {
 
   /**
    * @param {string} ep
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<any>}
    */
   stream(ep, opt = {}) {
@@ -194,8 +194,8 @@ class OurinApiProvider {
   /**
    * @param {string} ep
    * @param {Object<string, any>} [fields]
-   * @param {OurinApiMultipartFile[]|Object<string, any>} [files]
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiMultipartFile[]|Object<string, any>} [files]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<any>}
    */
   multipart(ep, fields = {}, files = [], opt = {}) {
@@ -233,7 +233,7 @@ class OurinApiProvider {
   }
 }
 
-class CovenantApiProvider extends OurinApiProvider {
+class CovenantApiProvider extends FotoApiProvider {
   gpt4(input, opt = {}) {
     return this.get("/api/ai/gpt4", this.asParams(input, "question"), opt);
   }
@@ -271,7 +271,7 @@ class CovenantApiProvider extends OurinApiProvider {
   }
 }
 
-class NeoxrApiProvider extends OurinApiProvider {
+class NeoxrApiProvider extends FotoApiProvider {
   whatMusic(input, opt = {}) {
     return this.get("/api/whatmusic", this.asParams(input, "url"), opt);
   }
@@ -329,7 +329,7 @@ class NeoxrApiProvider extends OurinApiProvider {
   }
 }
 
-class CukiApiProvider extends OurinApiProvider {
+class CukiApiProvider extends FotoApiProvider {
   tiktokPhoto(params = {}, opt = {}) {
     return this.get("/api/search/tiktokfoto", params, opt);
   }
@@ -363,7 +363,7 @@ class CukiApiProvider extends OurinApiProvider {
   }
 }
 
-class ApiFaaProvider extends OurinApiProvider {
+class ApiFaaProvider extends FotoApiProvider {
   googleImage(params = {}, opt = {}) {
     return this.get("/faa/google-image", params, opt);
   }
@@ -413,7 +413,7 @@ class ApiFaaProvider extends OurinApiProvider {
   }
 }
 
-class OurinMainApiProvider extends OurinApiProvider {
+class FotoMainApiProvider extends FotoApiProvider {
   ytmp4(input, opt = {}) {
     return this.get("/api/ytmp4", this.asParams(input, "url"), opt);
   }
@@ -447,7 +447,7 @@ class OurinMainApiProvider extends OurinApiProvider {
   }
 }
 
-class NexrayApiProvider extends OurinApiProvider {
+class NexrayApiProvider extends FotoApiProvider {
   geminiTts(input, opt = {}) {
     return this.get("/ai/gemini-tts", this.asParams(input, "text"), opt);
   }
@@ -481,13 +481,13 @@ class NexrayApiProvider extends OurinApiProvider {
   }
 }
 
-class YupraApiProvider extends OurinApiProvider {
+class YupraApiProvider extends FotoApiProvider {
   brat(input, opt = {}) {
     return this.get("/api/image/brat", this.asParams(input, "text"), opt);
   }
 }
 
-class EmiliabotApiProvider extends OurinApiProvider {
+class EmiliabotApiProvider extends FotoApiProvider {
   textToSpeech(input, opt = {}) {
     return this.get("/tools/text-to-speech", this.asParams(input, "text"), opt);
   }
@@ -497,7 +497,7 @@ class EmiliabotApiProvider extends OurinApiProvider {
   }
 }
 
-class AzbryApiProvider extends OurinApiProvider {
+class AzbryApiProvider extends FotoApiProvider {
   tiktokSearch(input, opt = {}) {
     return this.get("/api/search/ttsearch", this.asParams(input, "q"), opt);
   }
@@ -524,13 +524,13 @@ class AzbryApiProvider extends OurinApiProvider {
   }
 }
 
-class YuulabsApiProvider extends OurinApiProvider {
+class YuulabsApiProvider extends FotoApiProvider {
   tiktok(input, opt = {}) {
     return this.get("/api/downloader/tiktok", this.asParams(input, "url"), opt);
   }
 }
 
-class ZenzxzApiProvider extends OurinApiProvider {
+class ZenzxzApiProvider extends FotoApiProvider {
   youtube(input, opt = {}) {
     return this.get("/download/youtube", this.asParams(input, "url"), opt);
   }
@@ -544,7 +544,7 @@ class ZenzxzApiProvider extends OurinApiProvider {
   }
 }
 
-class FgsiApiProvider extends OurinApiProvider {
+class FgsiApiProvider extends FotoApiProvider {
   enchantVideo(fields = {}, files = [], opt = {}) {
     return this.multipart("/api/tools/enchantVideo", fields, files, opt);
   }
@@ -562,9 +562,9 @@ class FgsiApiProvider extends OurinApiProvider {
 }
 
 /**
- * API manager terpusat untuk provider eksternal Ourin.
+ * API manager terpusat untuk provider eksternal Foto.
  */
-class OurinApiManager {
+class FotoApiManager {
   /**
    * @param {{ timeout?: number, userAgent?: string, cacheMax?: number, httpAgent?: http.Agent, httpsAgent?: https.Agent }} [opt]
    */
@@ -612,7 +612,7 @@ class OurinApiManager {
 
   /**
    * @param {string} name
-   * @returns {OurinApiProvider}
+   * @returns {FotoApiProvider}
    */
   provider(name) {
     if (!this.hasProvider(name)) {
@@ -623,7 +623,7 @@ class OurinApiManager {
 
   /**
    * @param {string} name
-   * @returns {OurinApiProviderShape}
+   * @returns {FotoApiProviderShape}
    */
   getProviderConfig(name) {
     const cfg = this.providers[name];
@@ -635,8 +635,8 @@ class OurinApiManager {
 
   /**
    * @param {string} name
-   * @param {OurinApiProviderShape} cfg
-   * @returns {OurinApiProvider}
+   * @param {FotoApiProviderShape} cfg
+   * @returns {FotoApiProvider}
    */
   registerProvider(name, cfg) {
     this.providers[name] = this.mergeProvider(this.providers[name], cfg);
@@ -646,8 +646,8 @@ class OurinApiManager {
 
   /**
    * @param {string} name
-   * @param {Partial<OurinApiProviderShape>} cfg
-   * @returns {OurinApiProvider}
+   * @param {Partial<FotoApiProviderShape>} cfg
+   * @returns {FotoApiProvider}
    */
   extendProvider(name, cfg) {
     return this.registerProvider(name, cfg);
@@ -656,7 +656,7 @@ class OurinApiManager {
   /**
    * @param {string} name
    * @param {string} baseURL
-   * @returns {OurinApiProvider}
+   * @returns {FotoApiProvider}
    */
   setBaseURL(name, baseURL) {
     return this.extendProvider(name, { baseURL });
@@ -668,7 +668,7 @@ class OurinApiManager {
       neoxr: NeoxrApiProvider,
       cuki: CukiApiProvider,
       apiFaa: ApiFaaProvider,
-      ourin: OurinMainApiProvider,
+      foto: FotoMainApiProvider,
       nexray: NexrayApiProvider,
       yupra: YupraApiProvider,
       emiliabot: EmiliabotApiProvider,
@@ -695,7 +695,7 @@ class OurinApiManager {
   }
 
   makeProviderClient(name) {
-    const ProviderClass = this.providerClasses?.[name] || OurinApiProvider;
+    const ProviderClass = this.providerClasses?.[name] || FotoApiProvider;
     return new ProviderClass(this, name);
   }
 
@@ -752,7 +752,7 @@ class OurinApiManager {
   /**
    * @param {string} provider
    * @param {string} endpoint
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<any>}
    */
   async request(provider, endpoint, opt = {}) {
@@ -801,7 +801,7 @@ class OurinApiManager {
    * @param {string} provider
    * @param {string} endpoint
    * @param {Object<string, any>} [params]
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<any>}
    */
   get(provider, endpoint, params = {}, opt = {}) {
@@ -811,7 +811,7 @@ class OurinApiManager {
   /**
    * @param {string} provider
    * @param {string} endpoint
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<string>}
    */
   text(provider, endpoint, opt = {}) {
@@ -823,7 +823,7 @@ class OurinApiManager {
    * @param {string} endpoint
    * @param {Object<string, any>} [params]
    * @param {number} [ttl]
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<any>}
    */
   cacheGet(provider, endpoint, params = {}, ttl = 15000, opt = {}) {
@@ -838,7 +838,7 @@ class OurinApiManager {
   /**
    * @param {string} provider
    * @param {string} endpoint
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<Buffer>}
    */
   buffer(provider, endpoint, opt = {}) {
@@ -851,7 +851,7 @@ class OurinApiManager {
   /**
    * @param {string} provider
    * @param {string} endpoint
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<any>}
    */
   stream(provider, endpoint, opt = {}) {
@@ -862,7 +862,7 @@ class OurinApiManager {
    * @param {string} provider
    * @param {string} endpoint
    * @param {any} [data]
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<any>}
    */
   post(provider, endpoint, data = {}, opt = {}) {
@@ -873,7 +873,7 @@ class OurinApiManager {
    * @param {string} provider
    * @param {string} endpoint
    * @param {any} [data]
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<any>}
    */
   put(provider, endpoint, data = {}, opt = {}) {
@@ -884,7 +884,7 @@ class OurinApiManager {
    * @param {string} provider
    * @param {string} endpoint
    * @param {any} [data]
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<any>}
    */
   patch(provider, endpoint, data = {}, opt = {}) {
@@ -895,7 +895,7 @@ class OurinApiManager {
    * @param {string} provider
    * @param {string} endpoint
    * @param {Object<string, any>} [params]
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<any>}
    */
   del(provider, endpoint, params = {}, opt = {}) {
@@ -910,7 +910,7 @@ class OurinApiManager {
    * @param {string} provider
    * @param {string} endpoint
    * @param {Object<string, any>} [params]
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<any>}
    */
   head(provider, endpoint, params = {}, opt = {}) {
@@ -925,7 +925,7 @@ class OurinApiManager {
    * @param {string} provider
    * @param {string} endpoint
    * @param {Object<string, any>} [params]
-   * @param {OurinApiRequestOptions} [opt]
+   * @param {FotoApiRequestOptions} [opt]
    * @returns {Promise<any>}
    */
   delete(provider, endpoint, params = {}, opt = {}) {
@@ -1010,7 +1010,7 @@ class OurinApiManager {
       zenzxz: {
         baseURL: "https://api.zenzxz.my.id",
       },
-      ourin: {
+      foto: {
         baseURL: "https://api.ourin.my.id",
       },
     };
@@ -1253,7 +1253,7 @@ class OurinApiManager {
   }
 }
 
-const ourinApi = new OurinApiManager();
+const fotoApi = new FotoApiManager();
 
-export { OurinApiManager, OurinApiProvider, ourinApi };
-export default ourinApi;
+export { FotoApiManager, FotoApiProvider, fotoApi };
+export default fotoApi;

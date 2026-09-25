@@ -548,7 +548,7 @@ async function handler(m, { sock, config: botConfig, db }) {
                   sellerJid: botConfig.botNumber
                     ? `${botConfig.botNumber}@s.whatsapp.net`
                     : m.sender,
-                  token: "ourin-menu-v8",
+                  token: "foto-menu-v8",
                   totalAmount1000: 3333333,
                   totalCurrencyCode: "IDR",
                   contextInfo: {

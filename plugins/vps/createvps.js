@@ -97,7 +97,7 @@ chpasswd: { expire: False }
 ssh_pwauth: True`,
         private_networking: null,
         volumes: null,
-        tags: ['ourin-bot']
+        tags: ['foto-bot']
     }
     
     await m.reply(`🛠️ *ᴍᴇᴍʙᴜᴀᴛ ᴠᴘs...*\n\n> Hostname: \`${hostname}\`\n> Spec: ${spec.ram} RAM, ${spec.cpu}\n> Region: ${region}`)

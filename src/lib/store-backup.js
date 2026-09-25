@@ -134,7 +134,7 @@ async function sendStoreBackup(sock) {
             `┃ 🔖 Schema: v${SCHEMA_VERSION}\n` +
             `╰┈┈┈┈┈┈┈┈⬡\n\n` +
             `> Type-safe backup. Kompatibel dengan versi mendatang.\n` +
-            `> ${config.bot?.name || 'Ourin-AI'} Store Backup System`
+            `> ${config.bot?.name || 'Foto-AI'} Store Backup System`
         
         await sock.sendMessage(ownerJid, {
             document: { url: backupInfo.path },

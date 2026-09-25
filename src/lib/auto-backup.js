@@ -35,14 +35,14 @@ const EXCLUDE_DIRS = new Set([
   "autoreply_media",
   "build",
   "Baileys-master",
-  "ourin",
+  "foto",
   "ALYA V8",
   "DHX-pro",
   "RTXZY-MD-pro",
   "BETABOTZ-MD2-pro",
   "KazzTzyCanvs",
   "starseed-main",
-  "OurinGlitch-Baileys-main",
+  "FotoGlitch-Baileys-main",
   "Script Lyrra MD V7",
   "Sky Md V2",
   "Marin Kitagawa MD V1.0 (1)",
@@ -55,7 +55,7 @@ const EXCLUDE_DIRS = new Set([
   ".vscode",
   ".gemini",
   "fischit-main",
-  ".ourin-temp",
+  ".foto-temp",
 ]);
 
 const EXCLUDE_EXTENSIONS = new Set([

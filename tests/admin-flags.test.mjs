@@ -6,7 +6,7 @@ const BOT_PN = '628999888777:12@s.whatsapp.net';
 const BOT_LID = '9900011122233344@lid';
 const botJids = [BOT_PN, BOT_LID];
 
-// Bentuk participant ourin per addressing_mode (node_modules/ourin/lib/Socket/groups.js:338)
+// Bentuk participant onigis per addressing_mode (node_modules/onigis/lib/Socket/groups.js:338)
 const lidAddrAdmin = { id: '9911122233344455@lid', phoneNumber: '6281234567890@s.whatsapp.net', admin: 'admin' };
 const pnAddrAdmin = { id: '6281234567890@s.whatsapp.net', lid: '9911122233344455@lid', admin: 'admin' };
 const member = { id: '6285551112223@s.whatsapp.net', lid: '99777888999000111@lid', admin: undefined };

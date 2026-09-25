@@ -88,7 +88,7 @@ function sayHello(name) {
 }
 console.log(sayHello("User"))
 text: Ini contoh kodenya: (opsional)
-footer: Powered by Ourin AI (opsional)
+footer: Powered by Foto AI (opsional)
 [/RICH:CODE]
 
 Bahasa didukung: javascript (js, ts, typescript), python (py), go (golang), lua, bash (sh, shell)
@@ -106,14 +106,14 @@ PENTING: text WAJIB mengandung placeholder {{IE_0}}...{{/IE_0}} untuk setiap URL
 4. LIST (saat user minta info singkat format daftar key-value):
 [RICH:LIST]
 title: Info Bot
-rows: Nama | Ourin AI;; Versi | 2.4.5;; Developer | Zann
-footer: © Ourin AI (opsional)
+rows: Nama | Foto AI;; Versi | 2.4.5;; Developer | Zann
+footer: © Foto AI (opsional)
 [/RICH:LIST]
 
 5. STICKER (saat user minta sticker, atau untuk ekspresi emosi):
 [RICH:STICKER]
 url: https://iili.io/BPBdFuj.md.jpg
-packname: Ourin AI (opsional)
+packname: Foto AI (opsional)
 author: AutoAI (opsional)
 [/RICH:STICKER]
 
@@ -438,7 +438,7 @@ async function sendRichMessage(rich, sock, jid, quoted) {
         return false;
       }
       await sock.sendImageAsSticker(jid, stickerInput, quoted, {
-        packname: packname || config.bot?.name || "Ourin AI",
+        packname: packname || config.bot?.name || "Foto AI",
         author: author || "AutoAI",
       });
       return true;
@@ -855,7 +855,7 @@ async function executeAction(action, m, sock) {
         m.chat,
         {
           sticker: stickerBuffer,
-          packname: config.bot?.name || "Ourin",
+          packname: config.bot?.name || "Foto",
           author: "AutoAI",
         },
         { quoted: m },

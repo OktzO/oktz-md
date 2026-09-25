@@ -258,7 +258,7 @@ const PUNYCODE_PATTERN = /xn--[a-z0-9-]+/i;
 /**
  * Satu sumber kebenaran untuk cek admin, dipakai juga oleh serialize.
  *
- * Bug lama: helper ini hanya membaca `p.jid || p.id` (+ `p.lid`). ourin
+ * Bug lama: helper ini hanya membaca `p.jid || p.id` (+ `p.lid`). library
  * mengirim participant berbeda per addressing_mode: grup LID memberi
  * { id: LID, phoneNumber: PN }, jadi (a) bot admin tidak pernah terdeteksi
  * (semua proteksi diam / balas "notAdmin") dan (b) pesan admin ikut

@@ -1,7 +1,7 @@
 import axios from "axios";
 import config from "../../config.js";
 import te from "../../src/lib/error.js";
-import ourinApi from "../../src/lib/apimanager.js";
+import fotoApi from "../../src/lib/apimanager.js";
 const pluginConfig = {
   name: "bingimage",
   alias: ["imagesearch", "carigambar", "bingimg"],
@@ -31,7 +31,7 @@ async function handler(m, { sock }) {
     await m.react("🔍");
 
     const apikey = config.APIkey?.neoxr || '';
-    const data = await ourinApi.apiFaa.get(
+    const data = await fotoApi.apiFaa.get(
       "/faa/google-image",
       {
         query,

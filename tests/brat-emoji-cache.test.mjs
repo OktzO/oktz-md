@@ -1,7 +1,7 @@
 // C1 + I10 regression (audit RAM safety 2026-09-21):
 //  - emojiImageCache bratvid2 di-cap 128 + FIFO evict.
 //  - emoji-apple.json parse sekali per proses (shared loader), objek yang sama
-//    dibagi ourin-brat & bratvid2 (lama: dua objek 27MB module singleton).
+//    dibagi brat & bratvid2 (lama: dua objek 27MB module singleton).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { loadEmojiMap } from "../src/lib/emoji-map.js";
@@ -20,12 +20,12 @@ function emojiFromMapKey(map) {
     .join("");
 }
 
-test("emoji-apple.json: satu parse, satu objek dibagi ourin-brat & bratvid2", async () => {
+test("emoji-apple.json: satu parse, satu objek dibagi brat & bratvid2", async () => {
   const shared = await loadEmojiMap();
   const viaBrat = await loadBratEmojiMap();
   const viaVid2 = await vidLoadEmojiMap();
 
-  assert.strictEqual(viaBrat, shared, "ourin-brat harus dapat objek yang sama");
+  assert.strictEqual(viaBrat, shared, "brat harus dapat objek yang sama");
   assert.strictEqual(viaVid2, shared, "bratvid2 harus dapat objek yang sama");
   assert.ok(Object.keys(shared).length > 1000, "map berisi Apple emoji");
 });

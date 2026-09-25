@@ -250,7 +250,7 @@ function printPluginTable(plugins) {
  * @param {string} pluginsDir - Path ke directory plugins
  * @returns {number} Jumlah plugin yang berhasil dimuat
  * @example
- * const count = loadPlugins('./ourin-plugins');
+ * const count = loadPlugins('./plugins');
  * console.log(`Loaded ${count} plugins`);
  */
 async function loadPlugins(pluginsDir) {

@@ -255,7 +255,7 @@ function setupAntiCrash() {
 
 async function main() {
   await playBootSequence({
-    name: config.bot?.name || "Ourin-AI",
+    name: config.bot?.name || "Foto-AI",
     version: config.bot?.version || "1.0.0",
     developer: config.bot?.developer || "Developer",
     mode: config.mode || "public",

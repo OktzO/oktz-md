@@ -384,7 +384,7 @@ async function handler(m, { sock, config: botConfig, db, uptime }) {
 │ ◈ *Nama Bot* : *${config.bot?.name}*
 │ ◈ *Versi* : *${config.bot.version}*  
 │ ◈ *Pengembang* : *${config.bot.developer}*  
-│ ◈ *Pustaka* : \`ourin-baileys\`
+│ ◈ *Pustaka* : \`foto-baileys\`
 ╰┈┈┈┈┈┈┈┈
 
 ╭┈┈⫹⫺ *INFORMASI PENGGUNA* ⫹⫺┈┈╮
@@ -467,7 +467,7 @@ Tekan tombol dibawah untuk info lebih lanjut dan untuk memilih kategori
         // Kartu interactiveMessage wajib dibungkus wrapInteractive
         // (viewOnceMessage + deviceListMetadata) — tanpa itu relay sukses
         // tapi kartu tidak muncul di chat. messageParamsJson lama berisi
-        // field invalid (bomboclard/ourin.site) — dibuang.
+        // field invalid (bomboclard/foto.site) — dibuang.
         const msg2 = generateWAMessageFromContent(m.chat, wrapInteractive({
           messageContextInfo: {},
           interactiveMessage: {

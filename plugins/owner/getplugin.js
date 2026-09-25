@@ -157,7 +157,7 @@ async function handler(m, { sock }) {
 
   const code = fs.readFileSync(pluginInfo.path);
 
-  // Key `interactiveButtons` pada sendMessage tidak didukung lib ourin/onigis
+  // Key `interactiveButtons` pada sendMessage tidak didukung lib onigis/onigis
   // (di-drop diam-diam / throw) — kirim source sebagai document .js saja.
   return await sock.sendMessage(m.chat, {
     document: code,

@@ -38,7 +38,7 @@ async function handler(m, { sock }) {
 
     try {
         const groupMeta = m.groupMetadata
-        // findParticipantByNumber: di grup addressing_mode=lid ourin mengirim
+        // findParticipantByNumber: di grup addressing_mode=lid library mengirim
         // { id: LID, phoneNumber: PN }, jadi perbandingan dengan target (PN hasil
         // resolve) tidak pernah ketemu -> "User tidak ditemukan".
         const participant = findParticipantByNumber(groupMeta.participants, target)

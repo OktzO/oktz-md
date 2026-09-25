@@ -1,5 +1,5 @@
 import te from "../../src/lib/error.js";
-import ourinApi from "../../src/lib/apimanager.js";
+import fotoApi from "../../src/lib/apimanager.js";
 const pluginConfig = {
   name: "tts",
   alias: ["say"],
@@ -22,7 +22,7 @@ async function handler(m, { sock }) {
   m.react("🎤");
 
   async function textToSpeech2(text) {
-    return ourinApi.nexray.geminiTts(text);
+    return fotoApi.nexray.geminiTts(text);
   }
 
   try {

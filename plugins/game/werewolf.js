@@ -4,7 +4,7 @@ import { getDatabase } from "../../src/lib/database.js";
  * Social deduction game for WhatsApp
  *
  * Based on reference: RTXZY-MD-pro/lib/werewolf.js
- * Enhanced for OurinAI
+ * Enhanced for FotoAI
  */
 import config from "../../config.js";
 import { getAssetBuffer } from "../../src/lib/asset-manager.js";

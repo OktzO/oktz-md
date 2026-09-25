@@ -156,7 +156,7 @@ async function handler(m, { sock }) {
         const buffer = await canvas.encode('png')
         
         await sock.sendImageAsSticker(m.chat, buffer, m, {
-            packname: config.sticker?.packname || 'Ourin-AI',
+            packname: config.sticker?.packname || 'Foto-AI',
             author: config.sticker?.author || 'Bot'
         })
         

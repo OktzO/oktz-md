@@ -1,5 +1,5 @@
 import te from "../../src/lib/error.js";
-import ourinApi from "../../src/lib/apimanager.js";
+import fotoApi from "../../src/lib/apimanager.js";
 const pluginConfig = {
   name: "sendngl",
   alias: [],
@@ -30,7 +30,7 @@ async function handler(m, { sock }) {
   m.react("🎴");
 
   try {
-    await ourinApi.cuki.sendNgl(
+    await fotoApi.cuki.sendNgl(
       {
         link,
         text: kata,
