@@ -9,7 +9,7 @@ import {
   proto,
   areJidsSameUser,
   generateForwardMessageContent,
-} from "ourin";
+} from "onigis";
 import {
   isLid,
   isLidConverted,
@@ -19,7 +19,7 @@ import {
 
 import fs from "fs";
 import path from "path";
-import { downloadMediaMessage, getContentType } from "ourin";
+import { downloadMediaMessage, getContentType } from "onigis";
 import { addExifToWebp, DEFAULT_METADATA } from "./ourin-exif.js";
 import { STICKER_WEBP_VF } from "./ourin-ffmpeg.js";
 import {

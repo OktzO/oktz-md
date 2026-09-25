@@ -1,7 +1,7 @@
 import axios from "axios";
 import { getDatabase } from "../../src/lib/ourin-database.js";
 import te from "../../src/lib/ourin-error.js";
-import { prepareWAMessageMedia, generateWAMessageFromContent } from "ourin";
+import { prepareWAMessageMedia, generateWAMessageFromContent } from "onigis";
 import { addExpWithLevelCheck } from "../../src/lib/ourin-level.js";
 import { rollWaifu, applyAction, rollEvent, getDailyMood, DOWRY } from "../../src/lib/ourin-waifu.js";
 import { angerEffMood, angerUpdate, applyNeglect, finalGain } from "../../src/lib/ourin-romance.js";

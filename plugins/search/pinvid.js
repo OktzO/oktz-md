@@ -8,7 +8,7 @@ import {
   generateWAMessage,
   generateWAMessageFromContent,
   jidNormalizedUser,
-} from "ourin";
+} from "onigis";
 import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
 const execAsync = promisify(exec);

@@ -1,7 +1,7 @@
 import config from "../../config.js"
 import {
   generateWAMessageFromContent,
-} from "ourin";
+} from "onigis";
 import { wrapInteractive } from "../../src/lib/ourin-rich-messages.js";
 
 const pluginConfig = {

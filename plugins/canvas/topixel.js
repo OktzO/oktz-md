@@ -1,5 +1,5 @@
 import sharp from "sharp";
-import { downloadMediaMessage, getContentType } from "ourin";
+import { downloadMediaMessage, getContentType } from "onigis";
 import te from "../../src/lib/ourin-error.js";
 
 const pluginConfig = {

@@ -1,6 +1,6 @@
 import fetch from "node-fetch";
 import crypto from "crypto";
-import { generateWAMessageFromContent, generateWAMessage, jidNormalizedUser } from "ourin";
+import { generateWAMessageFromContent, generateWAMessage, jidNormalizedUser } from "onigis";
 
 const pluginConfig = {
     name: 'mywaifu',

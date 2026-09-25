@@ -1,4 +1,4 @@
-import { generateWAMessageFromContent, proto } from "ourin";
+import { generateWAMessageFromContent, proto } from "onigis";
 
 const pluginConfig = {
   name: ["sprem", "stickerpremium", "premiumsticker"],

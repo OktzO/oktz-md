@@ -4,7 +4,7 @@ import {
   generateWAMessage,
   generateWAMessageFromContent,
   jidNormalizedUser,
-} from "ourin";
+} from "onigis";
 import { getDatabase } from "./ourin-database.js";
 import { logger } from "./ourin-logger.js";
 import { aiodl, detectPlatform } from "../scraper/aio.js";

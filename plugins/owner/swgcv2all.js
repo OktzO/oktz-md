@@ -1,6 +1,6 @@
 import { fileTypeFromBuffer } from "file-type";
 import te from "../../src/lib/ourin-error.js";
-import { generateWAMessage } from "ourin";
+import { generateWAMessage } from "onigis";
 
 function buildSyntheticSwGcRawMessage(sock, remoteJid, innerMessage, messageId) {
   const botJid = sock.user?.id?.split(":")[0] + "@s.whatsapp.net";

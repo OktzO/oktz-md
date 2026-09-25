@@ -1,5 +1,5 @@
 import pino from 'pino';
-import * as m from 'ourin';
+import * as m from 'onigis';
 
 const logger = pino({ level: 'silent' });
 const sock = m.default({

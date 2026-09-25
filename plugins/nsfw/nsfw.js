@@ -3,7 +3,7 @@ import path from "path"
 import axios from "axios"
 import { getDatabase } from "../../src/lib/ourin-database.js"
 import te from "../../src/lib/ourin-error.js"
-import { prepareWAMessageMedia, generateWAMessageFromContent } from "ourin"
+import { prepareWAMessageMedia, generateWAMessageFromContent } from "onigis"
 
 const NSFW_DATA_DIR = path.join(process.cwd(), "src", "data", "nsfw")
 

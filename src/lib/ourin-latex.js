@@ -28,7 +28,7 @@ const renderLatexToPng = async (latex, options = {}) => {
 };
 
 const createMediaUploadFn = async (sock) => {
-  const { prepareWAMessageMedia } = await import("ourin");
+  const { prepareWAMessageMedia } = await import("onigis");
   return async (imageBuffer, mediaType) => {
     const media = await prepareWAMessageMedia(
       { image: imageBuffer },

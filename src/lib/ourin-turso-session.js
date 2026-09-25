@@ -1,4 +1,4 @@
-import { BufferJSON } from 'ourin';
+import { BufferJSON } from 'onigis';
 import { getTursoClient } from './ourin-turso.js';
 
 const keysCache = new Map();
@@ -25,7 +25,7 @@ async function loadState(scope) {
   if (credsRs.rows && credsRs.rows.length > 0) {
     creds = JSON.parse(credsRs.rows[0].creds, BufferJSON.reviver);
   } else {
-    const { initAuthCreds } = await import('ourin');
+    const { initAuthCreds } = await import('onigis');
     creds = initAuthCreds();
   }
   // keys are loaded lazily on demand

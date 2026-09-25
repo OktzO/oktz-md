@@ -1,5 +1,5 @@
 import { getDatabase } from "../../src/lib/ourin-database.js";
-import { generateWAMessageFromContent } from "ourin";
+import { generateWAMessageFromContent } from "onigis";
 import { saluranCtx } from "../../src/lib/ourin-context.js";
 
 const pluginConfig = {

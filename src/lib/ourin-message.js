@@ -1,4 +1,4 @@
-import { generateWAMessageFromContent, proto } from "ourin";
+import { generateWAMessageFromContent, proto } from "onigis";
 import fs from "fs";
 import path from "path";
 import { saluranCtx } from "./ourin-context.js";

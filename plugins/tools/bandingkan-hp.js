@@ -1,7 +1,7 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 import crypto from "crypto";
-import { generateWAMessageFromContent, generateWAMessage, jidNormalizedUser } from "ourin";
+import { generateWAMessageFromContent, generateWAMessage, jidNormalizedUser } from "onigis";
 
 const pluginConfig = {
     name: 'bandingkan-hp',

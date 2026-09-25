@@ -1,5 +1,5 @@
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
-import { prepareWAMessageMedia, generateWAMessageFromContent, proto } from "ourin";
+import { prepareWAMessageMedia, generateWAMessageFromContent, proto } from "onigis";
 import axios from 'axios'
 import crypto from 'crypto'
 import config from '../../config.js'

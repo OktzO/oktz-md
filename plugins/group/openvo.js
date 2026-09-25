@@ -1,4 +1,4 @@
-import { downloadContentFromMessage } from 'ourin'
+import { downloadContentFromMessage } from 'onigis'
 const pluginConfig = {
     name: 'openvo',
     alias: [],

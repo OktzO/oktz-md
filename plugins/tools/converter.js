@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { mconverter } from "../../src/scraper/mconverter.js";
-import { downloadContentFromMessage } from "ourin";
+import { downloadContentFromMessage } from "onigis";
 import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
 const pluginConfig = {

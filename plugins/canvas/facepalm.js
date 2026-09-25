@@ -1,5 +1,5 @@
 import { createCanvas, loadImage } from "@napi-rs/canvas";
-import { downloadMediaMessage, getContentType } from "ourin";
+import { downloadMediaMessage, getContentType } from "onigis";
 import te from "../../src/lib/ourin-error.js";
 import axios from "axios";
 

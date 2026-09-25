@@ -1,5 +1,5 @@
 import yts from "yt-search";
-import { generateWAMessageFromContent } from "ourin";
+import { generateWAMessageFromContent } from "onigis";
 import axios from "axios";
 import sharp from "sharp";
 import config from "../../config.js";

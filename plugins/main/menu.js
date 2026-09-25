@@ -2,7 +2,7 @@ import { getCasesByCategory } from "../../case/ourin.js";
 import {
   prepareWAMessageMedia,
   generateWAMessageFromContent,
-} from "ourin";
+} from "onigis";
 import config from "../../config.js";
 import {
   formatUptime,
@@ -1149,7 +1149,7 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
         const sharp = (await import("sharp")).default;
         const stickerBuf = await sharp(imageBuffer).resize(512, 512).webp().toBuffer();
 
-        const { prepareWAMessageMedia } = await import("ourin");
+        const { prepareWAMessageMedia } = await import("onigis");
         const uploadMedia = await prepareWAMessageMedia({ image: stickerBuf }, { upload: sock.waUploadToServer });
 
         const fakeQuotedSticker = {
@@ -1166,7 +1166,7 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
           }
         };
 
-        const { generateWAMessageFromContent } = await import("ourin");
+        const { generateWAMessageFromContent } = await import("onigis");
         const menuMedia = await prepareWAMessageMedia({
           image: await getAssetBuffer("ourin")
         }, { upload: sock.waUploadToServer });
@@ -1293,7 +1293,7 @@ I'm ${botName}, your intelligent assistant powered by ${config.bot?.developer}. 
         const thumbBuf = await sharp(imageBuffer).resize(1280, 720).jpeg().toBuffer();
         const favBuf = await sharp(favB).resize(512, 512).jpeg().toBuffer();
 
-        const { prepareWAMessageMedia, generateWAMessageFromContent } = await import("ourin");
+        const { prepareWAMessageMedia, generateWAMessageFromContent } = await import("onigis");
         const uploadMedia = await prepareWAMessageMedia({ image: thumbBuf }, { upload: sock.waUploadToServer, mediaTypeOverride: "thumbnail-link" });
         const uploadFav = await prepareWAMessageMedia({ image: favBuf }, { upload: sock.waUploadToServer, mediaTypeOverride: "thumbnail-link" });
 

@@ -1,7 +1,7 @@
 import axios from "axios";
 import FormData from "form-data";
 import config from "../../config.js";
-import { downloadMediaMessage } from "ourin";
+import { downloadMediaMessage } from "onigis";
 import te from "../../src/lib/ourin-error.js";
 import ourinApi from "../../src/lib/ourin-apimanager.js";
 import { saluranCtx } from "../../src/lib/ourin-context.js";

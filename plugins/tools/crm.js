@@ -1,4 +1,4 @@
-import { generateWAMessageFromContent } from "ourin";
+import { generateWAMessageFromContent } from "onigis";
 import { mkdirSync, writeFileSync, readFileSync } from "fs";
 import path from "path";
 import te from "../../src/lib/ourin-error.js";

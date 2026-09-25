@@ -5,7 +5,7 @@ import {
   makeCacheableSignalKeyStore,
   fetchLatestBaileysVersion,
   fetchLatestWaWebVersion,
-} from "ourin";
+} from "onigis";
 import { Boom } from "@hapi/boom";
 import pino from "pino";
 import fs from "fs";
@@ -882,7 +882,7 @@ async function startConnection(options = {}) {
 
       if (config.fake_call?.active && !global.voipClient) {
         try {
-          const { VoipClient } = await import("ourin");
+          const { VoipClient } = await import("onigis");
           global.voipClient = new VoipClient();
           await global.voipClient.connectWithSocket(sock);
           colors.logger.success("voip", "Mesin VoIP nyala nih bos (shared socket)");
@@ -894,7 +894,7 @@ async function startConnection(options = {}) {
           if (typeof global.voipClient.destroy === "function") {
             global.voipClient.destroy();
             global.voipClient = null;
-            const { VoipClient } = await import("ourin");
+            const { VoipClient } = await import("onigis");
             global.voipClient = new VoipClient();
             await global.voipClient.connectWithSocket(sock);
           } else if (typeof global.voipClient.connectWithSocket === "function") {
