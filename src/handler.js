@@ -65,7 +65,7 @@ import {
   loadJadibotDb,
 } from "./lib/jadibot-database.js";
 import { getActiveJadibots } from "./lib/jadibot-manager.js";
-import { handleCommand as handleCaseCommand } from "../case/ourin.js";
+import { handleCommand as handleCaseCommand } from "../case/foto.js";
 import { RateLimiterMemory } from "rate-limiter-flexible";
 
 import { games as ourinGames } from "./lib/games.js";

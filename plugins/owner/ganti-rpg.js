@@ -1,12 +1,12 @@
 import te from '../../src/lib/error.js'
 import { updateAssetUrl } from '../../src/lib/uploader.js'
 const pluginConfig = {
-    name: 'ganti-ourin-v8.jpg',
-    alias: ['gantiourinv8', 'setourinv8'],
+    name: 'ganti-rpg.jpg',
+    alias: ['gantirpg', 'setrpg'],
     category: 'owner',
-    description: 'Ganti gambar v8.jpg (thumbnail welcome)',
-    usage: '.ganti-ourin-v8.jpg (reply/kirim gambar)',
-    example: '.ganti-ourin-welcome.jpg',
+    description: 'Ganti gambar rpg.jpg (thumbnail rpg)',
+    usage: '.ganti-rpg.jpg (reply/kirim gambar)',
+    example: '.ganti-rpg.jpg',
     isOwner: true,
     isPremium: false,
     isGroup: false,
@@ -20,7 +20,7 @@ async function handler(m, { sock }) {
     const isImage = m.isImage || (m.quoted && m.quoted.type === 'imageMessage')
     
     if (!isImage) {
-        return m.reply(`🖼️ *ɢᴀɴᴛɪ ᴏᴜʀɪɴ-ᴠ8.ᴊᴘɢ*\n\n> Kirim/reply gambar untuk mengganti\n> File: assets/image/v9.jpeg`)
+        return m.reply(`🖼️ *ɢᴀɴᴛɪ ʀᴘɢ.ᴊᴘɢ*\n\n> Kirim/reply gambar untuk mengganti\n> File: assets/image/rpg.jpeg`)
     }
     
     try {
@@ -37,8 +37,8 @@ async function handler(m, { sock }) {
         
         await m.reply(`⏳ Sedang mengupload gambar...`)
         try {
-            const newUrl = await updateAssetUrl('v8', buffer, 'v8.jpeg')
-            m.reply(`✅ *ʙᴇʀʜᴀsɪʟ*\n\n> Gambar v8.jpeg telah diganti ke URL baru:\n> ${newUrl}\n> Config telah diupdate secara realtime!`)
+            const newUrl = await updateAssetUrl('rpg', buffer, 'rpg.jpeg')
+            m.reply(`✅ *ʙᴇʀʜᴀsɪʟ*\n\n> Gambar rpg.jpeg telah diganti ke URL baru:\n> ${newUrl}\n> Config telah diupdate secara realtime!`)
         } catch (e) {
             m.reply(`❌ Gagal mengupload gambar: ${e.message}`)
         }

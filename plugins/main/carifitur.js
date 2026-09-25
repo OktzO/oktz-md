@@ -1,5 +1,5 @@
 import { getAssetBuffer } from "../../src/lib/asset-manager.js";
-import { getCaseCommands } from "../../case/ourin.js";
+import { getCaseCommands } from "../../case/foto.js";
 import fs from "fs";
 import path from "path";
 import te from "../../src/lib/error.js";

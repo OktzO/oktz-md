@@ -1,12 +1,12 @@
 import te from '../../src/lib/error.js'
 import { updateAssetUrl } from '../../src/lib/uploader.js'
 const pluginConfig = {
-    name: 'ganti-ourin.mp3',
-    alias: ['gantiourinaudio', 'setourinaudio'],
+    name: 'ganti-mp4.mp4',
+    alias: ['gantimp4', 'setmp4'],
     category: 'owner',
-    description: 'Ganti audio foto.mp3',
-    usage: '.ganti-ourin.mp3 (reply/kirim audio)',
-    example: '.ganti-ourin.mp3',
+    description: 'Ganti video foto.mp4',
+    usage: '.ganti-mp4.mp4 (reply/kirim video)',
+    example: '.ganti-mp4.mp4',
     isOwner: true,
     isPremium: false,
     isGroup: false,
@@ -17,10 +17,10 @@ const pluginConfig = {
 }
 
 async function handler(m, { sock }) {
-    const isAudio = m.type === 'audioMessage' || (m.quoted && m.quoted.type === 'audioMessage')
+    const isVideo = m.type === 'videoMessage' || (m.quoted && m.quoted.type === 'videoMessage')
     
-    if (!isAudio) {
-        return m.reply(`🎵 *ɢᴀɴᴛɪ ᴏᴜʀɪɴ.ᴍᴘ3*\n\n> Kirim/reply audio untuk mengganti\n> File: assets/audio/foto.mp3`)
+    if (!isVideo) {
+        return m.reply(`🎬 *ɢᴀɴᴛɪ ᴍᴘ4.ᴍᴘ4*\n\n> Kirim/reply video untuk mengganti\n> File: assets/video/foto.mp4`)
     }
     
     try {
@@ -32,13 +32,13 @@ async function handler(m, { sock }) {
         }
         
         if (!buffer) {
-            return m.reply(`❌ Gagal mendownload audio`)
+            return m.reply(`❌ Gagal mendownload video`)
         }
         
         await m.reply(`⏳ Sedang mengupload gambar...`)
         try {
-            const newUrl = await updateAssetUrl('mp3', buffer, 'foto.mp3')
-            m.reply(`✅ *ʙᴇʀʜᴀsɪʟ*\n\n> File foto.mp3 telah diganti ke URL baru:\n> ${newUrl}\n> Config telah diupdate secara realtime!`)
+            const newUrl = await updateAssetUrl('mp4', buffer, 'foto.mp4')
+            m.reply(`✅ *ʙᴇʀʜᴀsɪʟ*\n\n> File foto.mp4 telah diganti ke URL baru:\n> ${newUrl}\n> Config telah diupdate secara realtime!`)
         } catch (e) {
             m.reply(`❌ Gagal mengupload file: ${e.message}`)
         }
