@@ -4,7 +4,7 @@ storage/
 database/
 .worktrees/
 .superpowers/
-tests/OURIN/
+tests/foto/
 .env
 .traineddata
 eng.traineddata

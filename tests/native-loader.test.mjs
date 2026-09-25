@@ -1,4 +1,4 @@
-// ourin-native-loader contract tests.
+// native-loader contract tests.
 // 1. hasNative() boolean + ocr() returns a trimmed string through the loader
 //    (native .node when present, tesseract.js fallback otherwise).
 // 2. OCR must actually READ text — rendered with a bundled font via
