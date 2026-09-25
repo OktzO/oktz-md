@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node --max-old-space-size=512 --expose-gc index.js",
     "dev": "NODE_ENV=development node --max-old-space-size=512 --expose-gc index.js",
-    "test": "node --test tests/",
+    "test": "node --test \"tests/**/*.test.?(m)js\"",
     "lint": "eslint plugins/",
     "postinstall": "node -e \"try{require('sharp')}catch(e){require('child_process').execSync('npm rebuild sharp --foreground-scripts',{stdio:'inherit'})}\" && node native/fetch-prebuilt.mjs && node -e \"try{require('child_process').execSync('which ffmpeg || apt-get install -y ffmpeg',{stdio:'inherit'})}catch(e){}\""
   },
