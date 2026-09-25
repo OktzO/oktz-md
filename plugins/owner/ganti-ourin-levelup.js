@@ -4,7 +4,7 @@ const pluginConfig = {
     name: 'ganti-ourin-levelup.jpg',
     alias: ['gantiourinlevelup', 'setourinlevelup'],
     category: 'owner',
-    description: 'Ganti gambar ourin-levelup.jpg',
+    description: 'Ganti gambar levelup.jpg',
     usage: '.ganti-ourin-levelup.jpg (reply/kirim gambar)',
     example: '.ganti-ourin-levelup.jpg',
     isOwner: true,

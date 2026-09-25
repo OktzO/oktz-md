@@ -4,7 +4,7 @@ const pluginConfig = {
     name: 'ganti-ourin-welcome.jpg',
     alias: ['gantiwelcome', 'setourinwelcome'],
     category: 'owner',
-    description: 'Ganti gambar ourin-welcome.jpg (thumbnail welcome)',
+    description: 'Ganti gambar welcome.jpg (thumbnail welcome)',
     usage: '.ganti-ourin-welcome.jpg (reply/kirim gambar)',
     example: '.ganti-ourin-welcome.jpg',
     isOwner: true,
