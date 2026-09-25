@@ -1080,7 +1080,7 @@ async function messageHandler(msg, sock, options = {}) {
           const { default: path } = await import('path')
           const { default: os } = await import('os')
           const { promisify } = await import('util')
-          const { generateWAMessage, getBuffer, generateWAMessageFromContent, proto, generateMessageID } = await import('ourin')
+          const { generateWAMessage, getBuffer, generateWAMessageFromContent, proto, generateMessageID } = await import('onigis')
           const { exec: childExec } = await import('child_process')
           const { VERSION, Button, ButtonV2, Carousel, AIRich, } = await import('./lib/ourin-builder.js')
           const exec = promisify(childExec)
@@ -1140,7 +1140,7 @@ async function messageHandler(msg, sock, options = {}) {
           const { default: fs } = await import('fs')
           const { default: path } = await import('path')
           const { default: os } = await import('os')
-          const { generateWAMessage, getBuffer, generateWAMessageFromContent, proto, generateMessageID } = await import('ourin')
+          const { generateWAMessage, getBuffer, generateWAMessageFromContent, proto, generateMessageID } = await import('onigis')
 
           const result = await ${expr}
           if (result === undefined) return 'undefined'
