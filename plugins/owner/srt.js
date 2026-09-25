@@ -3,7 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { getDatabase } from '../../src/lib/ourin-database.js';
 import te from '../../src/lib/ourin-error.js';
-import { generateWAMessageFromContent, generateWAMessage, jidNormalizedUser } from 'ourin';
+import { generateWAMessageFromContent, generateWAMessage, jidNormalizedUser } from 'onigis';
 
 const pluginConfig = {
     name: 'srt',

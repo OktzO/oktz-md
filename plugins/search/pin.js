@@ -2,7 +2,7 @@ import {
   generateWAMessage,
   generateWAMessageFromContent,
   jidNormalizedUser,
-} from "ourin";
+} from "onigis";
 import axios from "axios";
 import crypto from "crypto";
 import te from "../../src/lib/ourin-error.js";

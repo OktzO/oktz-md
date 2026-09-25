@@ -8,7 +8,7 @@ import {
   DisconnectReason,
   jidNormalizedUser,
   useMultiFileAuthState,
-} from "ourin";
+} from "onigis";
 import { logger } from "./ourin-logger.js";
 import { addJadibotOwner, unloadJadibotDb } from "./ourin-jadibot-database.js";
 import { extendSocket } from "./ourin-socket.js";
@@ -382,7 +382,7 @@ async function startJadibot(sock, m, userJid, usePairing = true) {
     default: makeWASocket,
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
-  } = await import("ourin");
+  } = await import("onigis");
   const { version } = await fetchLatestBaileysVersion();
   const pinoModule = await import("pino");
   const pinoLogger = pinoModule.default({ level: "silent" });

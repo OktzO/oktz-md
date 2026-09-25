@@ -1,6 +1,6 @@
 import config from "../config.js";
 import { isSelf } from "../config.js";
-import { generateWAMessageFromContent, prepareWAMessageMedia } from "ourin";
+import { generateWAMessageFromContent, prepareWAMessageMedia } from "onigis";
 import { serialize, getCachedThumb, getCachedSharpThumb } from "./lib/ourin-serialize.js";
 import { saluranCtx } from "./lib/ourin-context.js";
 import {

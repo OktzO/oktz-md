@@ -12,7 +12,7 @@ import { saluranCtx } from "../../src/lib/ourin-context.js";
 import { createGoodbyeCard } from "../../src/lib/ourin-welcome-card.js";
 import te from "../../src/lib/ourin-error.js";
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
-import { prepareWAMessageMedia, generateWAMessageFromContent } from "ourin";
+import { prepareWAMessageMedia, generateWAMessageFromContent } from "onigis";
 function resolvePlaceholders(
   template,
   username,

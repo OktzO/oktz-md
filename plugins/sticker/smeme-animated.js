@@ -2,7 +2,7 @@ import axios from 'axios';
 import config from '../../config.js';
 import te from '../../src/lib/ourin-error.js';
 import { uploadImage } from '../../src/lib/ourin-uploader.js';
-import { downloadMediaMessage, getContentType } from 'ourin';
+import { downloadMediaMessage, getContentType } from 'onigis';
 
 const pluginConfig = {
   name: 'smeme-animated',

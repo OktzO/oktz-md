@@ -1,6 +1,6 @@
 import * as botmodePlugin from "../group/botmode.js";
 import { getCasesByCategory } from "../../case/ourin.js";
-import { prepareWAMessageMedia, generateWAMessageFromContent } from "ourin";
+import { prepareWAMessageMedia, generateWAMessageFromContent } from "onigis";
 import config from "../../config.js";
 import axios from "axios";
 import sharp from "sharp";

@@ -6,7 +6,7 @@ import { config } from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
 import { handleAntiSwGc } from "../../src/lib/ourin-group-protection.js";
 import { saluranCtx } from "../../src/lib/ourin-context.js";
-import { generateWAMessage } from "ourin";
+import { generateWAMessage } from "onigis";
 
 const botConfig = config;
 

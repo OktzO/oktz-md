@@ -1,4 +1,4 @@
-import { proto, generateMessageIDV2 } from "ourin";
+import { proto, generateMessageIDV2 } from "onigis";
 import { randomBytes, randomUUID, getRandomValues } from "crypto";
 export const JS_KEYWORDS = new Set([
   "import",

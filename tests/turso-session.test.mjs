@@ -3,7 +3,7 @@ import assert from 'node:assert';
 
 describe('turso session buffer roundtrip', () => {
   it('BufferJSON roundtrips creds-like object with Buffer', async () => {
-    const { BufferJSON } = await import('ourin');
+    const { BufferJSON } = await import('onigis');
     const creds = {
       noiseKey: { private: Buffer.from('deadbeef', 'hex'), public: Buffer.from('cafebabe', 'hex') },
       signedIdentityKey: { private: Buffer.from('aa', 'hex'), public: Buffer.from('bb', 'hex') },

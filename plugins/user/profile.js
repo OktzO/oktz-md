@@ -1,7 +1,7 @@
 import config from "../../config.js";
 import { getDatabase } from "../../src/lib/ourin-database.js";
 import { getRole } from "./level.js";
-import { getDevice } from "ourin";
+import { getDevice } from "onigis";
 
 const pluginConfig = {
   name: "profile",

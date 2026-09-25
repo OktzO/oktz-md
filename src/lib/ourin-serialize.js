@@ -7,7 +7,7 @@ import {
   generateWAMessage,
   areJidsSameUser,
   normalizeMessageContent,
-} from "ourin";
+} from "onigis";
 import { writeFileSync, mkdirSync, existsSync, unlinkSync } from "fs";
 import { join, basename } from "path";
 import config, {
@@ -1289,7 +1289,7 @@ async function serialize(sock, msg, store = {}) {
 
       const randomImg = getRandomSrtImage();
       const thumbnailBuf = randomImg || srtImage || await getAssetBuffer("ourin");
-      const { prepareWAMessageMedia } = await import("ourin");
+      const { prepareWAMessageMedia } = await import("onigis");
 
       const thumbBuf1280 = await sharp(thumbnailBuf).resize(300, 300).jpeg().toBuffer();
       const favBuf512 = await sharp(thumbnailBuf).resize(512, 512).jpeg().toBuffer();

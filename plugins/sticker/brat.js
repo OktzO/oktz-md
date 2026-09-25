@@ -1,7 +1,7 @@
 import { generateBrat, parseBratArgs, fetchBratFromAPI, isBlankImage } from "../../src/lib/ourin-brat.js";
 import { wrapInteractive } from "../../src/lib/ourin-rich-messages.js";
 import { getAssetBuffer } from "../../src/lib/ourin-asset-manager.js";
-import { prepareWAMessageMedia, generateWAMessageFromContent } from "ourin";
+import { prepareWAMessageMedia, generateWAMessageFromContent } from "onigis";
 import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
 

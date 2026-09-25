@@ -14,7 +14,7 @@ import {
   prepareWAMessageMedia,
   generateWAMessageFromContent,
   proto,
-} from "ourin";
+} from "onigis";
 import config from "../../config.js";
 import te from "../../src/lib/ourin-error.js";
 import { saluranCtx } from "../../src/lib/ourin-context.js";

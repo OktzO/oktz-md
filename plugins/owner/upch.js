@@ -3,7 +3,7 @@ import path from 'path'
 import crypto from 'crypto'
 import { exec } from 'child_process'
 import { promisify } from 'util'
-import { downloadMediaMessage } from 'ourin'
+import { downloadMediaMessage } from 'onigis'
 import config from '../../config.js'
 import te from '../../src/lib/ourin-error.js'
 

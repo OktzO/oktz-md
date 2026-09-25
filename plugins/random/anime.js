@@ -1,6 +1,6 @@
 import axios from "axios";
 import te from "../../src/lib/ourin-error.js";
-import { prepareWAMessageMedia, generateWAMessageFromContent } from "ourin";
+import { prepareWAMessageMedia, generateWAMessageFromContent } from "onigis";
 
 const nexrayTypes = [
   "waifu", "neko", "shinobu", "megumin", "bully", "cuddle", "cry", "hug",

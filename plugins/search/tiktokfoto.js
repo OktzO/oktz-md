@@ -1,6 +1,6 @@
 import axios from 'axios'
 import crypto from 'crypto'
-import { generateWAMessage, generateWAMessageFromContent, jidNormalizedUser } from 'ourin'
+import { generateWAMessage, generateWAMessageFromContent, jidNormalizedUser } from 'onigis'
 import config from '../../config.js'
 import te from '../../src/lib/ourin-error.js'
 

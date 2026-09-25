@@ -1,7 +1,7 @@
 import axios from "axios";
 import te from "../../src/lib/ourin-error.js";
 import { uploadImage } from "../../src/lib/ourin-uploader.js";
-import { downloadMediaMessage } from "ourin";
+import { downloadMediaMessage } from "onigis";
 
 const pluginConfig = {
     name: "profileig",

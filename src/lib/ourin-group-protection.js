@@ -1,4 +1,4 @@
-import { downloadMediaMessage } from "ourin";
+import { downloadMediaMessage } from "onigis";
 import {
   isLid,
   lidToJid,
@@ -869,7 +869,7 @@ async function handleAntiRemove(messageUpdate, sock, db) {
           msgType === "audioMessage" ||
           msgType === "stickerMessage"
         ) {
-          const { downloadMediaMessage } = await import("ourin");
+          const { downloadMediaMessage } = await import("onigis");
           const fakeMsg = {
             key: cached.key,
             message: { [msgType]: structuredClone(msgContent[msgType]) },
@@ -908,7 +908,7 @@ async function handleAntiRemove(messageUpdate, sock, db) {
             await sock.sendMessage(chatId, sendContent, { quoted: headerMsg });
           }
         } else {
-          const { generateWAMessageFromContent } = await import("ourin");
+          const { generateWAMessageFromContent } = await import("onigis");
           const cleanContent = {};
           for (const k of contentKeys) {
             if (typeof msgContent[k] === "object" && msgContent[k] !== null) {
@@ -1031,7 +1031,7 @@ async function handleAntiRemoveFromUpsert(msg, sock, db) {
           msgType === "audioMessage" ||
           msgType === "stickerMessage"
         ) {
-          const { downloadMediaMessage } = await import("ourin");
+          const { downloadMediaMessage } = await import("onigis");
           const fakeMsg = {
             key: cached.key,
             message: { [msgType]: structuredClone(msgContent[msgType]) },
@@ -1070,7 +1070,7 @@ async function handleAntiRemoveFromUpsert(msg, sock, db) {
             await sock.sendMessage(chatId, sendContent, { quoted: headerMsg });
           }
         } else {
-          const { generateWAMessageFromContent } = await import("ourin");
+          const { generateWAMessageFromContent } = await import("onigis");
           const cleanContent = {};
           for (const k of contentKeys) {
             if (typeof msgContent[k] === "object" && msgContent[k] !== null) {

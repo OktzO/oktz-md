@@ -1,5 +1,5 @@
 import * as botmodePlugin from "../group/botmode.js";
-import { generateWAMessageFromContent, prepareWAMessageMedia } from "ourin";
+import { generateWAMessageFromContent, prepareWAMessageMedia } from "onigis";
 import config from "../../config.js";
 import axios from "axios";
 import {
