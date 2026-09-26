@@ -42,9 +42,12 @@ async function handler(m, { sock }) {
   m.react("🕕");
   try {
     let mediaBuffer;
-    if (m.quoted) {
+    // quoted hanya dipakai kalau dia media. Kalau user reply TEKS sambil
+    // kirim foto + caption .smeme, quoted.download() return null (bukan media)
+    // dan foto user jadi diabaikan.
+    if (m.quoted?.isMedia === true && typeof m.quoted.download === 'function') {
       mediaBuffer = await m.quoted.download();
-    } else if (m.download) {
+    } else if (typeof m.download === 'function' && m.isMedia) {
       mediaBuffer = await m.download();
     }
     if (!mediaBuffer) {

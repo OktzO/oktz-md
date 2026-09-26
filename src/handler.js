@@ -14,6 +14,7 @@ import {
   findSimilarCommands,
   formatSuggestionMessage,
 } from "./lib/similarity.js";
+import { buildNotFoundPayload } from "./lib/command-suggestion.js";
 import { getDatabase } from "./lib/database.js";
 import {
   formatUptime,
@@ -1513,32 +1514,37 @@ async function messageHandler(msg, sock, options = {}) {
       const similarityEnabled = db.setting("similarity") !== false;
 
       if (similarityEnabled) {
-        const suggestions = findSimilarCommands(m.command, allCommands, {
-          maxResults: 1,
-          minSimilarity: 0.8,
-          maxDistance: 2,
+        const payload = buildNotFoundPayload(m.command, allCommands, {
+          prefix: m.prefix,
+          pushName: m.pushName,
         });
 
-        if (suggestions.length > 0) {
-          const suggestedCommand = m.prefix + suggestions[0].command;
-          const simpleMessage = `I'm sorry, but I don't have that command :(\n\nDid you mean this command?\n⇒ *${suggestedCommand}*`;
-
+        if (payload.buttons.length > 0) {
           try {
-            await sock.sendPreview(
+            // quick_reply: user tinggal ketuk, tidak perlu mengetik ulang.
+            // Bug lama: pesan error berbahasa Inggris dikirim lewat
+            // sendPreview tanpa tombol sama sekali.
+            await sock.sendButton(
               m.chat,
+              config.assets["foto2"] ? config.assets["foto2"] : null,
+              payload.text,
+              m,
               {
-                caption: config.info.website + "\n" + simpleMessage,
-                url: config.info.website,
-                title: "Command not found",
-                description: `Suggestions Command | ${config.bot.name}`,
-                jpegThumbnail: await getCachedSharpThumb(config.assets["foto2"], 300, 300),
-                previewType: 1,
+                type: "image",
+                header: { title: "Command Tidak Ditemukan" },
+                footer: config.bot.name,
+                buttons: payload.buttons,
               },
-              { quoted: m }
             );
           } catch (err) {
-            console.error("[Similarity] Gagal mengirim pesan similarity preview:", err.message);
+            console.error(
+              "[Suggestion] Gagal kirim card, fallback ke teks:",
+              err.message,
+            );
+            await m.reply(payload.text);
           }
+        } else {
+          await m.reply(payload.text);
         }
       }
 

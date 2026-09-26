@@ -8,8 +8,8 @@ try { process.loadEnvFile(); } catch { }
 //  utamakan baca object config sampai bawah
 const config = {
   info: {
-    website: "https://firefly.maiku.my.id",
-    grupwa: "https://chat.whatsapp.com/xxxx",
+    website: "https://oktzz.xyz",
+    grupwa: "https://chat.whatsapp.com/H1MOIGsWKuK1ulzOBAjW9b",
   },
 
   owner: {
@@ -120,9 +120,9 @@ const config = {
   },
 
   saluran: {
-    id: "120363400911374213@newsletter", // ID saluran (contoh: 120363xxx@newsletter)                          // ID saluran (contoh: 120363xxx@newsletter)
+    id: "120363411617217441@newsletter", // ID saluran (contoh: 120363xxx@newsletter)
     name: "Join saluran resmi Oktz", // Nama saluran
-    link: "https://whatsapp.com/channel/0029VbB37bgBfxoAmAlsgE0t", // Link saluran
+    link: "https://whatsapp.com/channel/0029Vb8z7S0KrWQvCa8i0J0I", // Link saluran
   },
 
   groupProtection: {

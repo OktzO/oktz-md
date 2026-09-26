@@ -94,6 +94,8 @@ async function handler(m, { sock }) {
     const hasQuotedMedia = m.quoted?.isMedia
     const isDirectMedia = m.isMedia && (m.isImage || m.isVideo)
 
+    let uploadWarning = null
+
     if (hasQuotedMedia || isDirectMedia) {
         await m.reply(`⏳ _Mengunggah media..._`)
         try {
@@ -107,7 +109,11 @@ async function handler(m, { sock }) {
                 }
             }
         } catch (e) {
+            // Upload gagal = tidak ada thumbnail. Kalau diam-diam, owner
+            // mengira produknya ada gambar padahal tidak ada sama sekali.
             console.error('[AddProduk] Upload error:', e.message)
+            uploadWarning = `⚠️ *Gagal upload media: ${e.message}*
+> Produk tetap disimpan TANPA thumbnail.`
         }
     }
 
@@ -143,6 +149,10 @@ async function handler(m, { sock }) {
     if (description) reply += `📝 Deskripsi: _${description}_\n`
     if (imageUrl) reply += `🖼️ Thumbnail: ✅ Gambar\n`
     if (videoUrl) reply += `🎬 Thumbnail: ✅ Video\n`
+    if (uploadWarning) reply += `\n${uploadWarning}\n`
+    else if (!imageUrl && !videoUrl) {
+        reply += `🖼️ Thumbnail: *tidak ada*\n`
+    }
     reply += `\n📌 *Langkah Selanjutnya:*\n`
 
     if (type === 'digital') {

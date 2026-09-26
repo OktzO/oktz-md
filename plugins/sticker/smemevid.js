@@ -50,9 +50,10 @@ async function handler(m, { sock }) {
 
     try {
         let mediaBuffer
-        if (m.quoted) {
+        // Sama seperti smeme.js: quoted hanya dipakai kalau isMedia.
+        if (m.quoted?.isMedia === true && typeof m.quoted.download === 'function') {
             mediaBuffer = await m.quoted.download()
-        } else if (m.download) {
+        } else if (typeof m.download === 'function' && m.isMedia) {
             mediaBuffer = await m.download()
         }
 

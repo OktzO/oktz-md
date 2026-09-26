@@ -41,8 +41,17 @@ async function handler(m, { sock }) {
     let filesPayload = []
     let isZip = false
 
+    // m.quoted tidak punya field mimetype/filename — quoted di serialize.js
+    // hanya { key, message, type, body, isMedia, ... }. Meta file ada di
+    // quoted.message.documentMessage. Lihat store/addstok.js untuk pola ini.
+    const quotedDoc = m.quoted.message?.documentMessage
+    const quotedMime = String(quotedDoc?.mimetype || '')
+    const quotedName = String(
+        quotedDoc?.fileName || m.quoted.fileName || ''
+    ).toLowerCase()
+
     try {
-        if (m.quoted.mimetype === 'application/zip' || (m.quoted.filename && m.quoted.filename.endsWith('.zip'))) {
+        if (quotedMime === 'application/zip' || quotedName.endsWith('.zip')) {
             isZip = true
             const buffer = await m.quoted.download()
             const zip = new AdmZip(buffer)
@@ -64,8 +73,9 @@ async function handler(m, { sock }) {
                 return m.reply(`❌ *FILE ZIP KOSONG*\n\nFile ZIP yang Anda unggah tidak berisi file apapun. Pastikan file ZIP tersebut berisi proyek HTML/Web statis.`)
             }
         } else if (
-            m.quoted.mimetype === 'text/html' ||
-            (m.quoted.filename && (m.quoted.filename.endsWith('.html') || m.quoted.filename.endsWith('.htm')))
+            quotedMime === 'text/html' ||
+            quotedName.endsWith('.html') ||
+            quotedName.endsWith('.htm')
         ) {
             const buffer = await m.quoted.download()
             filesPayload.push({
