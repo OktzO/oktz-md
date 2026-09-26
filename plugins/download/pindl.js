@@ -59,6 +59,12 @@ async function handler(m, { sock }) {
       throw new Error("Tidak ada media ditemukan");
     }
 
+    // Reaksi ✅ hanya sah kalau ada file yang benar-benar terkirim.
+    // Sebelumnya m.react("✅") berada di luar loop tanpa syarat: primary
+    // gagal, fallback gagal, user dapat 0 file tapi tetap lihat centang hijau.
+    let sentCount = 0;
+    let lastError = "";
+
     for (const media of mediaList) {
       if (media.type === "video") {
         let masterUrl = media.url;
@@ -123,6 +129,7 @@ async function handler(m, { sock }) {
                 type: "video",
                 contextInfo: { forwardingScore: 99, isForwarded: true }
             });
+            sentCount += 1;
 
         } catch (err) {
             console.error("[PinDL HLS Error]:", err.message);
@@ -139,8 +146,10 @@ async function handler(m, { sock }) {
                   type: "video",
                   contextInfo: { forwardingScore: 99, isForwarded: true },
                 });
+            sentCount += 1;
             } catch (fallbackErr) {
                 console.error("[PinDL Fallback Error]:", fallbackErr.message);
+                lastError = fallbackErr.message;
             }
         } finally {
             if (fs.existsSync(videoTemp)) fs.unlinkSync(videoTemp);
@@ -171,12 +180,14 @@ async function handler(m, { sock }) {
                 isForwarded: true,
               },
             });
+            sentCount += 1;
           } catch (gifErr) {
             console.error("[PinDL] GIF convert error:", gifErr.message);
             await sock.sendMedia(m.chat, media.url, null, m, {
               type: "image",
               contextInfo: { forwardingScore: 99, isForwarded: true },
             });
+            sentCount += 1;
           } finally {
             if (fs.existsSync(gifPath)) fs.unlinkSync(gifPath);
             if (fs.existsSync(mp4Path)) fs.unlinkSync(mp4Path);
@@ -189,10 +200,20 @@ async function handler(m, { sock }) {
               isForwarded: true,
             },
           });
+            sentCount += 1;
         }
       }
     }
-    m.react("✅");
+    if (sentCount > 0) {
+      m.react("✅");
+    } else {
+      m.react("❌");
+      m.reply(
+        `❌ *ɢᴀɢᴀʟ*\n\n> Videonya gagal diunduh.\n` +
+          (lastError ? `> Penyebab: \`${String(lastError).slice(0, 120)}\`\n` : "") +
+          `> Pinterest biasanya memblokir unduhan dari luar — coba lagi nanti ya.`,
+      );
+    }
   } catch (error) {
     console.error("[PinDL] Error:", error);
     m.react("☢");

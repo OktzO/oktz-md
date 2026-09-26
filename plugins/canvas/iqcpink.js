@@ -435,9 +435,13 @@ async function handler(m, { sock, text }) {
         
         let targetImgBuffer = null;
         try {
-            if (m.quoted && typeof m.quoted.download === 'function') {
+            // Cek quoted itu MEDIA dulu. quoted.download() hanya bisa
+            // dipanggil kalau quoted.isMedia — kalau bukan, dia return null
+            // (serialize.js:543) sehingga video/foto yang dikirim user malah
+            // diabaikan. Pola sama sudah dipakai wink.js.
+            if (m.quoted?.isMedia === true && typeof m.quoted.download === 'function') {
                 targetImgBuffer = await m.quoted.download();
-            } else if (typeof m.download === 'function' && (m.isMedia || m.mtype === 'imageMessage' || m.type === 'imageMessage')) {
+            } else if (typeof m.download === 'function' && m.isMedia) {
                 targetImgBuffer = await m.download();
             }
         } catch (e) {}

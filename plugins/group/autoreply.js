@@ -259,8 +259,12 @@ async function handler(m, { sock }) {
         let imageBuffer = null
         let imagePath = null
         
-        const hasQuotedImage = m.quoted && (m.quoted.mtype === 'imageMessage' || m.quoted.type === 'image')
-        const hasDirectImage = m.mtype === 'imageMessage' || m.type === 'image'
+        // m.mtype / m.quoted.mtype tidak pernah di-set serializer (sisa nama
+        // field Baileys lama) — selalu undefined, jadi fitur gambar mati total.
+        // m.type berisi "imageMessage" (bukan "image"), dan quoted punya
+        // isImage. Lihat src/lib/serialize.js:807 & :538.
+        const hasQuotedImage = m.quoted && (m.quoted.isImage === true || m.quoted.type === 'imageMessage')
+        const hasDirectImage = m.isImage === true || m.type === 'imageMessage'
         
         if (hasQuotedImage) {
             try {
@@ -293,10 +297,17 @@ async function handler(m, { sock }) {
         }
         
         if (existingIndex !== -1) {
-            if (customReplies[existingIndex].image && customReplies[existingIndex].image !== imagePath) {
+            // Data loss: imagePath null (user cuma edit teks) tapi entri lama
+            // punya gambar → `!== null` true → file lama dihapus. Kalau user
+            // cuma mau ganti teks, gambar lama harus tetap dipakai.
+            const previousImage = customReplies[existingIndex].image
+            const keepsOldImage = !imagePath && !!previousImage
+            if (keepsOldImage) {
+                replyData.image = previousImage
+            } else if (previousImage && previousImage !== imagePath) {
                 try {
-                    if (fs.existsSync(customReplies[existingIndex].image)) {
-                        fs.unlinkSync(customReplies[existingIndex].image)
+                    if (fs.existsSync(previousImage)) {
+                        fs.unlinkSync(previousImage)
                     }
                 } catch {}
             }

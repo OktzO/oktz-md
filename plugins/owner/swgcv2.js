@@ -155,12 +155,17 @@ async function handler(m, { sock, db }) {
   const tempDir = path.join(process.cwd(), "temp");
   if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
+  // m.quoted.mimetype tidak pernah di-set (lihat serialize.js quoted object) —
+  // pakai quoted.message[quoted.type] seperti store/addstok.js.
+  const quotedAudioMime = String(
+    m.quoted?.message?.[m.quoted?.type]?.mimetype || ""
+  );
+  const isQuotedAudio =
+    m.quoted?.isAudio === true || quotedAudioMime.startsWith("audio");
+
   if (
     m.quoted &&
-    (m.quoted.isImage ||
-      m.quoted.isVideo ||
-      m.quoted.isAudio ||
-      m.quoted.mimetype?.startsWith("audio"))
+    (m.quoted.isImage || m.quoted.isVideo || isQuotedAudio)
   ) {
     try {
       buffer = await m.quoted.download();
@@ -179,11 +184,14 @@ async function handler(m, { sock, db }) {
       } else if (m.quoted.isVideo) {
         rawContent.video = buffer;
         rawContent.caption = text || "";
-      } else if (m.quoted.isAudio || m.quoted.mimetype?.startsWith("audio")) {
+      } else if (isQuotedAudio) {
         rawContent.audio = buffer;
-        rawContent.mimetype =
-          fileType?.mime || m.quoted.mimetype || "audio/mpeg";
-        rawContent.ptt = m.quoted.msg?.ptt || false;
+        // fileType dari buffer lebih akurat daripada field yang tidak ada.
+        rawContent.mimetype = fileType?.mime || quotedAudioMime || "audio/mpeg";
+        // ptt ada di quoted.message[quoted.type].ptt (serialize.js tidak
+        // menyalinnya ke level quoted) — tanpa ini voice note terkirim sebagai
+        // file audio biasa, bukan bubble mikrofon.
+        rawContent.ptt = m.quoted?.message?.[m.quoted?.type]?.ptt === true;
       }
     } catch (e) {
       await m.reply(te(m.prefix, m.command, m.pushName));

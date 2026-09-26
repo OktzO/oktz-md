@@ -258,7 +258,10 @@ async function handler(m, { sock, config: botConfig }) {
         const author = options.author || botConfig.sticker?.author || botConfig.owner?.name || 'Bot'
         
         const hasProcessing = options.crop || options.resize || options.circle || options.rounded
-        
+        // Deklarasi di luar blok: efek gagal harus dilaporkan setelah sticker
+        // dikirim, jadi flag-nya harus terlihat di scope yang lebih luas.
+        let processed = true
+
         if (hasProcessing) {
             const tempDir = path.join(process.cwd(), 'temp')
             if (!fs.existsSync(tempDir)) {
@@ -279,7 +282,11 @@ async function handler(m, { sock, config: botConfig }) {
                 }
                 buffer = fs.readFileSync(outputPath)
             } catch (e) {
+                // Root cause: buffer cuma di-rebind DI DALAM try. Kalau ffmpeg
+                // gagal, buffer tetap yang ASLI lalu dikirim seolah-olah efeknya
+                // berlaku — user minta --circle, dapat foto mentah + centang hijau.
                 console.error('[Sticker] FFmpeg processing failed:', e.message)
+                processed = false
             }
             
             if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath)
@@ -291,8 +298,17 @@ async function handler(m, { sock, config: botConfig }) {
         } else if (isVideo) {
             await sock.sendVideoAsSticker(m.chat, buffer, m, { packname, author })
         }
-        
+
         await m.react('✅')
+
+        if (hasProcessing && !processed) {
+            // Kirim tanpa efek + kasih tahu, jangan diam-diam passing.
+            await m.reply(
+                `⚠️ *Efek tidak bisa diterapkan*\n\n` +
+                `> Sticker sudah dikirim, tapi efek yang kakak minta gagal diproses.\n` +
+                `> _Sebaiknya cek format/ukuran sumbernya ya._`
+            )
+        }
         
     } catch (error) {
         m.reply(te(m.prefix, m.command, m.pushName))
