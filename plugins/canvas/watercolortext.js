@@ -1,6 +1,7 @@
 import te from "../../src/lib/error.js";
 import config from "../../config.js";
 import axios from "axios";
+import { explainFailure, MissingApiKeyError } from "../../src/lib/stalker-fallback.js";
 
 const pluginConfig = {
   name: "watercolorfx",
@@ -28,6 +29,18 @@ async function handler(m, { sock }) {
   }
 
   m.react("🕕");
+
+  // Nexray tidak punya padanan watercolortext (dicek live: semua /ephoto/* 500),
+  // jadi tidak ada fallback. Kalau key kosong, sebut saja — user bisa isi.
+  if (!config.APIkey.cuki) {
+    m.react("❌");
+    return m.reply(
+      explainFailure(
+        new MissingApiKeyError("cuki", "APIKEY_CUKI"),
+        `${m.prefix}watercolortext`,
+      ),
+    );
+  }
 
   try {
     const url = `https://api.cuki.biz.id/api/ephoto/watercolortext?apikey=${config.APIkey.cuki}&query=${encodeURIComponent(text)}`;

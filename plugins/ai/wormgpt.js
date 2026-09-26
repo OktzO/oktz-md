@@ -1,6 +1,5 @@
 import te from "../../src/lib/error.js";
-import config from "../../config.js";
-import axios from "axios";
+import { fetchAiText } from "../../src/lib/stalker-fallback.js";
 
 const pluginConfig = {
   name: "wormgpt",
@@ -30,15 +29,10 @@ async function handler(m, { sock }) {
   m.react("🕕");
 
   try {
-    const url = `https://api.cuki.biz.id/api/ai/wormgpt?apikey=${config.APIkey.cuki}&question=${encodeURIComponent(text)}`;
-    const { data } = await axios.get(url, { timeout: 30000 });
-
-    if (!data.status || !data.data?.response) {
-      throw new Error("Gagal mendapatkan response");
-    }
+    const { value: answer } = await fetchAiText("wormgpt", text);
 
     m.react("✅");
-    await m.reply(`${data.data.response}`);
+    await m.reply(answer);
   } catch (error) {
     console.log(error);
     m.react("☢");

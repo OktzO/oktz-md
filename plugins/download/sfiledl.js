@@ -1,6 +1,7 @@
 import config from '../../config.js'
 import { f } from '../../src/lib/http.js'
 import te from '../../src/lib/error.js'
+import { explainFailure, MissingApiKeyError } from '../../src/lib/stalker-fallback.js'
 const pluginConfig = {
     name: 'sfiledl',
     alias: ['sfile', 'sfiledownload'],
@@ -33,6 +34,13 @@ async function handler(m, { sock }) {
     }
 
     m.react('🕕')
+
+    // Nexray /search/sfile menjawab "Query is required" untuk param url maupun
+    // query (dicek live), jadi tidak bisa jadi fallback.
+    if (!config.APIkey.neoxr) {
+        m.react('❌')
+        return m.reply(explainFailure(new MissingApiKeyError('neoxr', 'APIKEY_NEOXR'), `${m.prefix}sfiledl`))
+    }
 
     try {
         const res = await f(`https://api.neoxr.eu/api/sfile?url=${encodeURIComponent(url)}&apikey=${config.APIkey.neoxr}`)

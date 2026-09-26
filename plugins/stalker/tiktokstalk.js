@@ -1,6 +1,5 @@
-import axios from 'axios'
 import te from '../../src/lib/error.js'
-import config from '../../config.js'
+import { fetchTiktokProfile } from '../../src/lib/stalker-fallback.js'
 
 const pluginConfig = {
     name: 'tiktokstalk',
@@ -37,37 +36,31 @@ async function handler(m, { sock }) {
     m.react('🔍')
     
     try {
-        const res = await axios.get(`https://firefly.maiku.my.id/api/stalk-tiktok?apikey=${config.APIkey.firefly}&username=${encodeURIComponent(username)}`, {
-            timeout: 30000
-        })
-        
-        if (!res.data?.status || !res.data?.data) {
-            m.react('❌')
-            return m.reply(`❌ Username *@${username}* tidak ditemukan`)
-        }
-        
-        const d = res.data.data
-        const s = d.stats
-        
+        const { value: d } = await fetchTiktokProfile(username)
+
         const caption = `🎵 *ᴛɪᴋᴛᴏᴋ sᴛᴀʟᴋ*\n\n` +
             `👤 *Username:* @${d.username}\n` +
-            `📛 *Nama:* ${d.nickname}\n` +
+            `📛 *Nama:* ${d.name || '-'}\n` +
             `✅ *Verified:* ${d.verified ? 'Ya' : 'Tidak'}\n` +
             `🔒 *Private:* ${d.private ? 'Ya' : 'Tidak'}\n\n` +
-            `👥 *Followers:* ${shortNum(s.followers)}\n` +
-            `👤 *Following:* ${shortNum(s.following)}\n` +
-            `❤️ *Likes:* ${shortNum(s.hearts)}\n` +
-            `🎬 *Videos:* ${shortNum(s.videos)}\n\n` +
-            `📝 *Bio:*\n${d.signature || '-'}\n\n` +
-            `🔗 https://tiktok.com/@${d.username}`
-        
+            `👥 *Followers:* ${shortNum(d.followers)}\n` +
+            `👤 *Following:* ${shortNum(d.following)}\n` +
+            `❤️ *Likes:* ${shortNum(d.likes)}\n` +
+            `🎬 *Videos:* ${shortNum(d.videos)}\n\n` +
+            `📝 *Bio:*\n${d.bio || '-'}\n\n` +
+            `🔗 ${d.link}`
+
         m.react('✅')
-        
-        await sock.sendMessage(m.chat, {
-            image: { url: d.avatar },
-            caption
-        }, { quoted: m })
-        
+
+        if (d.avatar) {
+            await sock.sendMessage(m.chat, {
+                image: { url: d.avatar },
+                caption
+            }, { quoted: m })
+        } else {
+            await m.reply(caption)
+        }
+
     } catch (error) {
         m.react('☢')
         m.reply(te(m.prefix, m.command, m.pushName))

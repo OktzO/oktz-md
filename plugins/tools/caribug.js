@@ -1,6 +1,7 @@
 import axios from "axios";
 import config from "../../config.js";
 import te from "../../src/lib/error.js";
+import { explainFailure, MissingApiKeyError } from "../../src/lib/stalker-fallback.js";
 
 const pluginConfig = {
   name: "caribug",
@@ -24,6 +25,18 @@ async function handler(m, { args }) {
   }
 
   m.react("🕕");
+
+  // Nexray tidak punya padanan caribug (dicek live: /ai/llamacoder 500,
+  // /ai/hammer 400), jadi tidak ada fallback. Kalau key kosong, sebut saja.
+  if (!config.APIkey.cuki) {
+    m.react("❌");
+    return m.reply(
+      explainFailure(
+        new MissingApiKeyError("cuki", "APIKEY_CUKI"),
+        `${m.prefix}caribug`,
+      ),
+    );
+  }
 
   try {
     const apiUrl = `https://api.cuki.biz.id/api/aicode/caribug`;

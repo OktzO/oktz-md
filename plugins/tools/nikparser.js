@@ -1,5 +1,5 @@
 import te from "../../src/lib/error.js";
-import config from "../../config.js";
+import { parseNik } from "../../src/lib/stalker-fallback.js";
 
 const pluginConfig = {
   name: "nikparser",
@@ -12,9 +12,6 @@ const pluginConfig = {
   energi: 1,
   isEnabled: true,
 };
-
-const API = "https://api.obscuraworks.org/api/v2/tools/nik";
-const KEY = config.APIkey.obscura;
 
 const PROVINSI = {
   11: "Aceh",
@@ -68,14 +65,8 @@ async function handler(m, { sock }) {
   m.react("🕕");
 
   try {
-    const r = await fetch(`${API}?nik=${nik}`, {
-      headers: {
-        Accept: "application/json, image/*, audio/*, video/*",
-        Authorization: `Bearer ${KEY}`,
-      },
-    });
-
-    const data = await r.json();
+    // parseNik mengembalikan { value, provider } — ambil .value-nya.
+    const { value: data } = await parseNik(nik);
 
     if (!data?.valid) {
       m.react("❌");

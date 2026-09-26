@@ -1,6 +1,5 @@
-import axios from 'axios'
 import te from '../../src/lib/error.js'
-import config from '../../config.js'
+import { fetchNpmProfile } from '../../src/lib/stalker-fallback.js'
 
 const pluginConfig = {
     name: 'npmstalk',
@@ -37,26 +36,15 @@ async function handler(m, { sock }) {
     m.react('🔍')
     
     try {
-        const res = await axios.get(`https://firefly.maiku.my.id/api/stalk-npm?apikey=${config.APIkey.firefly}&username=${encodeURIComponent(username)}`, {
-            timeout: 30000
-        })
-        
-        if (!res.data?.status || !res.data?.data) {
-            m.react('❌')
-            return m.reply(`❌ Username *${username}* tidak ditemukan`)
-        }
-        
-        const d = res.data.data
-        const s = d.stats || {}
-        
+        const { value: d } = await fetchNpmProfile(username)
+
         let caption = `📦 *ɴᴘᴍ sᴛᴀʟᴋ*\n\n` +
             `👤 *Username:* ${d.username}\n` +
             `📛 *Nama:* ${d.name || '-'}\n` +
             `📧 *Email:* ${d.email || '-'}\n\n` +
-            `📦 *Total Packages:* ${s.total_packages || 0}\n` +
-            `📉 *Monthly Downloads:* ${shortNum(s.total_monthly_downloads)}\n\n` +
+            `📝 *Deskripsi:*\n${d.description || '-'}\n\n` +
             `🔗 ${d.profile}\n\n`
-            
+
         if (d.packages && d.packages.length > 0) {
             caption += `*Daftar Package:*\n`
             d.packages.slice(0, 5).forEach((pkg) => {
@@ -65,14 +53,18 @@ async function handler(m, { sock }) {
                 caption += `> 📝 ${pkg.description}\n\n`
             })
         }
-        
+
         m.react('✅')
-        
-        await sock.sendMessage(m.chat, {
-            image: { url: d.avatar },
-            caption
-        }, { quoted: m })
-        
+
+        if (d.avatar) {
+            await sock.sendMessage(m.chat, {
+                image: { url: d.avatar },
+                caption
+            }, { quoted: m })
+        } else {
+            await m.reply(caption)
+        }
+
     } catch (error) {
         m.react('☢')
         m.reply(te(m.prefix, m.command, m.pushName))

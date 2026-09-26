@@ -1,6 +1,7 @@
 import axios from "axios";
 import te from "../../src/lib/error.js";
 import config from "../../config.js";
+import { explainFailure, MissingApiKeyError } from "../../src/lib/stalker-fallback.js";
 const pluginConfig = {
   name: "text2img",
   alias: [],
@@ -28,7 +29,7 @@ async function handler(m, { sock }) {
   m.react("🕕");
 
   if (!config.APIkey.firefly) {
-    return m.reply(`❌ *API Key belum diset!*\n\n> Owner harus set \`APIKEY_FIREFLY\` di \`.env\``)
+    return m.reply(explainFailure(new MissingApiKeyError('firefly', 'APIKEY_FIREFLY'), `${m.prefix}text2img`))
   }
 
   try {
