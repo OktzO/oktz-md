@@ -12,11 +12,10 @@ import {
   getCommandsByCategory,
   getCategories,
 } from "../../src/lib/plugins.js";
-import { getAssetBuffer } from "../../src/lib/asset-manager.js";
+import { getAssetBuffer, safeThumbnail } from "../../src/lib/asset-manager.js";
 import fs from "fs";
 import path from "path";
 import axios from "axios";
-import sharp from "sharp";
 import { wrapInteractive } from "../../src/lib/rich-messages.js";
 
 const pluginConfig = {
@@ -649,10 +648,7 @@ Welcome to ${config.bot?.name}, Our bot will help you
 
         // Quoted kartu lokasi berisi cuaca (pola .allmenu variant 5):
         // tampil sebagai "preview" di atas kartu menu.
-        const weatherThumb = await sharp(getAssetBuffer("foto"))
-          .resize(300, 300)
-          .toBuffer()
-          .catch(() => null);
+        const weatherThumb = await safeThumbnail(getAssetBuffer("foto"), 300);
         const qWeather = {
           key: { fromMe: false, participant: "0@s.whatsapp.net", remoteJid: m.sender },
           message: {
@@ -678,7 +674,7 @@ Welcome to ${config.bot?.name}, Our bot will help you
       }
 
       case 4: {
-        const thumbnail = await sharp(getAssetBuffer("foto")).resize(300, 300).toBuffer()
+        const thumbnail = await safeThumbnail(getAssetBuffer("foto"), 300)
         const qvideo = {
           key: {
             fromMe: false,
@@ -840,7 +836,7 @@ Enjoy your use brother.`
             return "Cuaca tidak tersedia"
           }
         }
-        const thumbnail = await sharp(getAssetBuffer("foto")).resize(300, 300).toBuffer()
+        const thumbnail = await safeThumbnail(getAssetBuffer("foto"), 300)
         const qOrder = {
           key: {
             fromMe: false,
@@ -1010,7 +1006,7 @@ _i am an automated system (WhatsApp bot) that can help to do something search an
           topCmdText += `╭   • Belum ada command\n╰➤------------------------------\n`
         }
 
-        const thumbnail = await sharp(getAssetBuffer("foto")).resize(300, 300).toBuffer()
+        const thumbnail = await safeThumbnail(getAssetBuffer("foto"), 300)
         const msg6 = generateWAMessageFromContent(m.chat, wrapInteractive({
           messageContextInfo: {},
               interactiveMessage: {

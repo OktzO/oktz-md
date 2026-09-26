@@ -3,13 +3,12 @@ import { getCasesByCategory } from "../../case/foto.js";
 import { prepareWAMessageMedia, generateWAMessageFromContent } from "onigis";
 import config from "../../config.js";
 import axios from "axios";
-import sharp from "sharp";
 import { getCommandsByCategory,
   getCategories,
   getPlugin,
 } from "../../src/lib/plugins.js";
 import { getTimeGreeting } from "../../src/lib/formatter.js";
-import { getAssetBuffer } from "../../src/lib/asset-manager.js";
+import { getAssetBuffer, safeThumbnail } from "../../src/lib/asset-manager.js";
 import fs from "fs"
 import { wrapInteractive } from "../../src/lib/rich-messages.js";
 
@@ -310,7 +309,7 @@ async function handler(m, { sock, db }) {
             }
           }
 
-          const thumbnail = await sharp(getAssetBuffer("foto")).resize(300, 300).toBuffer()
+          const thumbnail = await safeThumbnail(getAssetBuffer("foto"), 300)
           const qOrder = {
             key: { fromMe: false, participant: '0@s.whatsapp.net', remoteJid: m.sender },
             message: { locationMessage: { degreesLatitude: 0, degreesLongitude: 0, name: await weatherMenu(), jpegThumbnail: thumbnail } }
@@ -498,7 +497,7 @@ async function handler(m, { sock, db }) {
           }
         }
 
-        const thumbnail = await sharp(getAssetBuffer("foto")).resize(300, 300).toBuffer()
+        const thumbnail = await safeThumbnail(getAssetBuffer("foto"), 300)
         const qOrder = {
           key: { fromMe: false, participant: '0@s.whatsapp.net', remoteJid: m.sender },
           message: { locationMessage: { degreesLatitude: 0, degreesLongitude: 0, name: await weatherMenu(), jpegThumbnail: thumbnail } }
@@ -567,7 +566,7 @@ async function handler(m, { sock, db }) {
           }
         }
 
-        const thumbnail = await sharp(getAssetBuffer("foto")).resize(300, 300).toBuffer()
+        const thumbnail = await safeThumbnail(getAssetBuffer("foto"), 300)
 
         const msg6 = generateWAMessageFromContent(m.chat, wrapInteractive({
           viewOnceMessage: {

@@ -37,7 +37,7 @@ import fsc from "fs";
 import { getDatabase } from "./database.js";
 import { saluranCtx } from "./context.js";
 import { LRUCache } from "lru-cache";
-import { getAssetBuffer } from "./asset-manager.js";
+import { getAssetBuffer, safeThumbnail } from "./asset-manager.js";
 let _prefixCache = null;
 let _prefixCacheTime = 0;
 const PREFIX_CACHE_TTL = 30000;
@@ -1024,9 +1024,11 @@ async function serialize(sock, msg, store = {}) {
           mimetype: "image/png",
           fileName: config.bot.name,
           fileLength: 99999999999999,
-          jpegThumbnail: srtImage ? await sharp(srtImage).resize(300, 300).toBuffer() : await sharp(getAssetBuffer("foto2"))
-            .resize(300, 300)
-            .toBuffer(),
+          // safeThumbnail: sharp() melempar synchronus kalau input null, jadi
+          // .catch() di rantai promise tidak akan menangkap apa pun.
+          jpegThumbnail: srtImage
+            ? await safeThumbnail(srtImage, 300)
+            : await safeThumbnail(getAssetBuffer("foto2"), 300),
           caption: text,
           ...defaultOptions,
           ...options,
@@ -1126,9 +1128,11 @@ async function serialize(sock, msg, store = {}) {
           mimetype: "image/png",
           fileName: config.bot.name,
           fileLength: 99999999999999,
-          jpegThumbnail: srtImage ? await sharp(srtImage).resize(300, 300).toBuffer() : await sharp(getAssetBuffer("foto2"))
-            .resize(300, 300)
-            .toBuffer(),
+          // safeThumbnail: sharp() melempar synchronus kalau input null, jadi
+          // .catch() di rantai promise tidak akan menangkap apa pun.
+          jpegThumbnail: srtImage
+            ? await safeThumbnail(srtImage, 300)
+            : await safeThumbnail(getAssetBuffer("foto2"), 300),
           caption: text,
           ...defaultOptions,
           ...options,

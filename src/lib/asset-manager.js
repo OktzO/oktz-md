@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import sharp from "sharp";
 import { logger } from "./logger.js";
 import config from "../../config.js";
 
@@ -54,6 +55,45 @@ export function getAssetBuffer(key, configAssets = null) {
   }
 
   return null;
+}
+
+/**
+ * Resize asset jadi thumbnail, aman terhadap input yang tidak bisa
+ * diproses sharp.
+ *
+ * Kenapa helper ini perlu: `getAssetBuffer()` kontraknya boleh `null`
+ * (file hilang / gagal read). Tapi `sharp(null)` melempar error
+ * SYNCHRONOUS — sehingga pola
+ *
+ *   await sharp(getAssetBuffer("foto")).resize(300, 300).toBuffer()
+ *     .catch(() => null)
+ *
+ * tidak menangkap apa pun: `.catch()` menempel ke promise hasil
+ * `toBuffer()`, sementara `sharp()` sudah lempar sebelum promise itu
+ * ada. Akibatnya satu variant menu lempar dan seluruh `.menu` hilang.
+ *
+ * @param {Buffer|string|null|undefined} input
+ * @param {number} size sisi thumbnail (piksel)
+ * @returns {Promise<Buffer|null>} null kalau tidak bisa diproses
+ */
+export async function safeThumbnail(input, size = 300) {
+  if (!input) return null;
+
+  let pipeline;
+  try {
+    // sharp() melempar synchronus kalau input tidak valid — bungkus di
+    // dalam try, bukan pakai .catch() di rantai promise.
+    pipeline = sharp(input).resize(size, size);
+  } catch {
+    return null;
+  }
+
+  try {
+    const buf = await pipeline.toBuffer();
+    return buf && buf.length > 0 ? buf : null;
+  } catch {
+    return null;
+  }
 }
 
 export function updateAssetAndSave(key, buffer, filepath) {
