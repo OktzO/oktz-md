@@ -46,6 +46,7 @@ import {
   shouldRenderQr,
   shouldUseQrFallback,
 } from "./lib/qr-fallback.js";
+import { isSwGcCandidate } from "./lib/group-protection.js";
 const groupCache = new NodeCache({ stdTTL: 5 * 60, useClones: false, maxKeys: 500 });
 const processedMessages = new NodeCache({ stdTTL: 30, useClones: false, maxKeys: 5000 });
 const msgRetryCounterCache = new NodeCache({ stdTTL: 60, useClones: false, maxKeys: 2000 });
@@ -1255,50 +1256,12 @@ async function startConnection(options = {}) {
         continue;
       }
 
-      const allMsgKeys = Object.keys(msg.message || {});
-
-      const isStatusMention =
-        allMsgKeys.includes("groupStatusMessage") ||
-        allMsgKeys.includes("groupStatusMessageV2") ||
-        allMsgKeys.includes("groupStatusMentionMessage") ||
-        allMsgKeys.includes("groupMentionedMessage") ||
-        allMsgKeys.includes("statusMentionMessage") ||
-        msg.message?.viewOnceMessage?.message?.groupStatusMessage ||
-        msg.message?.viewOnceMessage?.message?.groupStatusMessageV2 ||
-        msg.message?.viewOnceMessageV2?.message?.groupStatusMessage ||
-        msg.message?.viewOnceMessageV2?.message?.groupStatusMessageV2 ||
-        msg.message?.viewOnceMessageV2Extension?.message?.groupStatusMessage ||
-        msg.message?.viewOnceMessageV2Extension?.message
-          ?.groupStatusMessageV2 ||
-        msg.message?.ephemeralMessage?.message?.groupStatusMessage ||
-        msg.message?.ephemeralMessage?.message?.groupStatusMessageV2 ||
-        msg.message?.viewOnceMessage?.message?.groupStatusMentionMessage ||
-        msg.message?.viewOnceMessageV2?.message?.groupStatusMentionMessage ||
-        msg.message?.viewOnceMessageV2Extension?.message
-          ?.groupStatusMentionMessage ||
-        msg.message?.ephemeralMessage?.message?.groupStatusMentionMessage ||
-        msg.message?.[msgType]?.message?.groupStatusMessage ||
-        msg.message?.[msgType]?.message?.groupStatusMessageV2 ||
-        msg.message?.[msgType]?.message?.groupStatusMentionMessage ||
-        msg.message?.[msgType]?.contextInfo?.groupMentions?.length > 0;
-
-      const hasGroupMentionInContext = (() => {
-        const content = msg.message?.[msgType];
-        if (content?.contextInfo?.groupMentions?.length > 0) return true;
-
-        const viewOnce =
-          msg.message?.viewOnceMessage?.message ||
-          msg.message?.viewOnceMessageV2?.message ||
-          msg.message?.viewOnceMessageV2Extension?.message;
-        if (viewOnce) {
-          const vType = Object.keys(viewOnce)[0];
-          if (viewOnce[vType]?.contextInfo?.groupMentions?.length > 0)
-            return true;
-        }
-        return false;
-      })();
-
-      if (isStatusMention || hasGroupMentionInContext) {
+      // Gate SWGC. Sebelumnya di sini ada daftar flat sendiri yang tidak
+      // sinkron dengan detectSwGcType — dua sumber kebenaran, dan bisa berbeda.
+      // groupStatusMessageV2Extension sama sekali tidak ada di daftar lama,
+      // jadi status yang dibungkus begitu lolos. Sekarang satu detector
+      // dipakai semua pemanggil (connection.js + handler.js).
+      if (isSwGcCandidate(msg)) {
         const groupJid = msg.key.remoteJid;
 
         try {

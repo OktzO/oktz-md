@@ -29,7 +29,9 @@ async function handler(m, { db }) {
             `> • groupStatusMentionMessage\n` +
             `> • groupMentionedMessage\n` +
             `> • statusMentionMessage\n` +
+            `> • groupStatusMessage\n` +
             `> • contextInfo.groupMentions\n\n` +
+            `> Admin dan pesan dari bot sendiri tidak akan disentuh.\n\n` +
             `> \`${m.prefix}antiswgc on\`\n` +
             `> \`${m.prefix}antiswgc off\``
         )

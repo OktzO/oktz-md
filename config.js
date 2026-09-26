@@ -136,7 +136,7 @@ const config = {
     antitagsw: "⚠ *AntiTagSW* — Tag status dari @%user% dihapus.",
     antiviewonce: "👁️ *ViewOnce* — Dari @%user%",
     antiremove: "🗑️ *AntiDelete* — @%user% menghapus pesan:",
-    antiswgc: "⚠ *AntiSWGC* — Gak ada sw grup sw grup @%user%",
+    antiswgc: "⚠ *AntiSWGC* — SW group type *%type%* dari @%user% dihapus.",
     antihidetag: "⚠ *AntiHidetag* — Hidetag dari @%user% dihapus.",
     antitoxicWarn:
       "⚠ @%user% berkata kasar.\nPeringatan ke %warn% dari %max%, pelanggaran berikutnya bisa di-%method%.",
