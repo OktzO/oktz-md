@@ -438,8 +438,35 @@ function detectPhishing(text) {
   return { matched, hasLink, score, matches: [...new Set(matches)] };
 }
 
-function findSwGcType(node, path = "message", seen = new WeakSet()) {
+/**
+ * Ambil contextInfo dari node. Semua msgType WA punya contextInfo, tapi
+ * posisinya bisa satu lapis dalam, jadi dibaca langsung dari node.
+ */
+function contextInfoOf(node) {
   if (!node || typeof node !== "object") return null;
+  if (node.contextInfo && typeof node.contextInfo === "object") {
+    return node.contextInfo;
+  }
+  return null;
+}
+
+/**
+ * SWGC = "orang nge-share status ke grup", bukan pesan biasa.
+ *
+ * Dua aturan yang WAJIB dijaga:
+ *
+ * 1. JANGAN rekursif tanpa batas. `quotedMessage` sering berisi SWGC
+ *    (user mengutip status lalu membalas). Kalau ikut dicek, balasan biasa
+ *    ikut terhapus — persis keluhan "yang bukan SWGC malah kena".
+ *
+ * 2. Ikuti wrapper yang benar-benar ada di wire. onigis tidak meng-unwrap
+ *    `groupStatusMessageV2Extension`, jadi bentuk itu wajib dicek langsung;
+ *    sebelumnya tidak ada yang memeriksanya sehingga "kadang lolos".
+ */
+function findSwGcType(node, path = "message", seen = new WeakSet(), depth = 0) {
+  // Batas kedalaman: pesan WA nyata paling dalam ~4 lapis (viewOnce →
+  // extendedText → contextInfo). Sisanya bukan mention, hanya pemborosan.
+  if (!node || typeof node !== "object" || depth > 6) return null;
   if (seen.has(node)) return null;
   seen.add(node);
 
@@ -448,6 +475,9 @@ function findSwGcType(node, path = "message", seen = new WeakSet()) {
   }
   if (node.groupStatusMessageV2) {
     return `${path}.groupStatusMessageV2`;
+  }
+  if (node.groupStatusMessageV2Extension) {
+    return `${path}.groupStatusMessageV2Extension`;
   }
   if (node.groupStatusMentionMessage) {
     return `${path}.groupStatusMentionMessage`;
@@ -458,13 +488,17 @@ function findSwGcType(node, path = "message", seen = new WeakSet()) {
   if (node.statusMentionMessage) {
     return `${path}.statusMentionMessage`;
   }
-  if (node.contextInfo?.groupMentions?.length > 0) {
+
+  const ci = contextInfoOf(node);
+  if (ci && Array.isArray(ci.groupMentions) && ci.groupMentions.length > 0) {
     return `${path}.contextInfo.groupMentions`;
   }
 
   for (const [key, value] of Object.entries(node)) {
     if (!value || typeof value !== "object") continue;
-    const found = findSwGcType(value, `${path}.${key}`, seen);
+    // Jangan pernah masuk ke isi pesan yang sedang dikutip.
+    if (key === "quotedMessage") continue;
+    const found = findSwGcType(value, `${path}.${key}`, seen, depth + 1);
     if (found) return found;
   }
 
@@ -476,6 +510,15 @@ function detectSwGcType(rawMsg) {
   if (!msg) return null;
 
   return findSwGcType(msg, "message");
+}
+
+/**
+ * Gate tunggal untuk semua pemanggil (connection.js + handler.js).
+ * Sebelumnya connection.js punya daftar flat sendiri yang tidak sinkron
+ * dengan detectSwGcType — dua sumber kebenaran yang bisa berbeda.
+ */
+function isSwGcCandidate(rawMsg) {
+  return Boolean(detectSwGcType(rawMsg));
 }
 
 function matchCustomRule(text, rules = []) {
@@ -660,6 +703,19 @@ async function handleAntilink(m, sock, db) {
   }
 }
 
+/**
+ * JID bot dalam bentuk PN yang bisa dibandingkan.
+ *
+ * `sock.user.id` bisa "62899:12@s.whatsapp.net" (dengan device) atau
+ * "62899@s.whatsapp.net" (tanpa). Pola lama `id.split(":")[0] + "@s.whatsapp.net"`
+ * di kasus kedua jadi "62899@s.whatsapp.net@s.whatsapp.net" — semua cek
+ * "apakah ini bot?" lalu gagal, dan bot mulai revoke pesan sendiri.
+ */
+function botJidOf(sock) {
+  const number = String(sock?.user?.id || "").split(":")[0].split("@")[0];
+  return number ? `${number}@s.whatsapp.net` : "";
+}
+
 async function handleAntiTagSW(rawMsg, sock, db) {
   const key = rawMsg.key;
   if (!key?.remoteJid) return false;
@@ -680,8 +736,16 @@ async function handleAntiTagSW(rawMsg, sock, db) {
   if (!hasStatusTag) return false;
 
   const sender = key.participant || key.remoteJid;
-  const botNumber = sock.user?.id?.split(":")[0] + "@s.whatsapp.net";
-  if (isSameParticipant(sender, botNumber)) return false;
+  const botNumber = botJidOf(sock);
+  // Bandingkan ke PN DAN ke LID: di grup addressing_mode=lid, participant
+  // pesan bot sendiri adalah sock.user.lid, bukan sock.user.id.
+  if (
+    key.fromMe === true ||
+    isSameParticipant(sender, botNumber) ||
+    (sock.user?.lid && isSameParticipant(key.participant, sock.user.lid))
+  ) {
+    return false;
+  }
 
   try {
     const groupMeta = await sock.groupMetadata(chatId);
@@ -1360,11 +1424,20 @@ async function handleAntiSwGc(rawMsg, sock, db) {
   if (!detectedType) return false;
 
   const sender = resolveMessageSenderJid(key, sock);
-  const botNumber = normalizeComparableJid(
-    sock.user?.id?.split(":")[0] + "@s.whatsapp.net",
-  );
-  const isSelfSender =
-    key.fromMe === true || isSameParticipant(sender, botNumber);
+  const botNumber = botJidOf(sock);
+  // Pesan bot sendiri tidak boleh pernah di-revoke. Sebelumnya isSelfSender
+  // hanya dipakai untuk MENELEWATI cek admin, lalu tetap dihapus — bot
+  // memproses outputnya sendiri dan menghapus pesannya sendiri.
+  //
+  // Bandingkan ke PN DAN ke LID: di grup addressing_mode=lid, participant
+  // pesan bot sendiri adalah sock.user.lid, bukan sock.user.id.
+  if (
+    key.fromMe === true ||
+    isSameParticipant(sender, botNumber) ||
+    (sock.user?.lid && isSameParticipant(key.participant, sock.user.lid))
+  ) {
+    return false;
+  }
 
   try {
     const groupMeta = await sock.groupMetadata(chatId);
@@ -1372,8 +1445,7 @@ async function handleAntiSwGc(rawMsg, sock, db) {
     const botCand = [botNumber, sock.user?.lid];
     const senderTag = (sender || botNumber || "Unknown").split("@")[0];
 
-    if (!isSelfSender && isAdminCheck(groupMeta.participants, senderCand))
-      return false;
+    if (isAdminCheck(groupMeta.participants, senderCand)) return false;
     if (!isBotAdminCheck(groupMeta.participants, botCand)) {
       await sock.sendMessage(chatId, {
         text: gpMsg("notAdmin"),
@@ -1442,6 +1514,8 @@ export {
   handleAntilink,
   handleAntiTagSW,
   handleAntiSwGc,
+  detectSwGcType,
+  isSwGcCandidate,
   handleAntiJudol,
   handleAntiPhising,
   handleAntiCustom,

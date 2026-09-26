@@ -286,16 +286,25 @@ async function queryTranscode(id) {
   return res.data.data;
 }
 
+/**
+ * Tunggu transcode selesai. Kalau lewat batas waktu, THROW — jangan
+ * kembalikan URL asli seolah-olah itu hasil enhance. Versi lama diam-diam
+ * mengembalikan fallbackSourceUrl, jadi user bayar energi + dapat video
+ * mentah yang dijawab "udah jadi Ultra HD".
+ *
+ * @param queryFn injeksi untuk test; default ke queryTranscode.
+ */
 async function waitTranscode(
   id,
   fallbackSourceUrl,
   maxTry = 80,
   delayMs = 3000,
+  queryFn = queryTranscode,
 ) {
   let last = null;
 
   for (let i = 1; i <= maxTry; i++) {
-    const data = await queryTranscode(id);
+    const data = await queryFn(id);
     last = data;
 
     const video = data?.video || data?.url || data?.source_url || "";
@@ -306,7 +315,9 @@ async function waitTranscode(
       data?.video_url ||
       "";
 
-    if (videoTranscoded) {
+    // Hasil yang sah harus URL https DAN berbeda dari sumber — kalau sama,
+    // transcode belum jalan dan server cuma mengulang URL original.
+    if (isUsableUrl(videoTranscoded) && videoTranscoded !== fallbackSourceUrl) {
       return {
         source_url: video || fallbackSourceUrl,
         video_transcoded: videoTranscoded,
@@ -314,14 +325,13 @@ async function waitTranscode(
       };
     }
 
-    await sleep(delayMs);
+    if (i < maxTry) await sleep(delayMs);
   }
 
-  return {
-    source_url: fallbackSourceUrl,
-    video_transcoded: fallbackSourceUrl,
-    raw: last,
-  };
+  throw new Error(
+    `Transcode tidak selesai dalam ${Math.round((maxTry * delayMs) / 1000)} detik. ` +
+      `Respons terakhir: ${JSON.stringify(last).slice(0, 200)}`,
+  );
 }
 
 async function delivery(sourceUrl, videoTranscoded, taskName) {
@@ -394,17 +404,25 @@ async function queryBatch(msgId) {
   return res.data.data;
 }
 
+function isUsableUrl(value) {
+  return typeof value === "string" && value.startsWith("https://");
+}
+
 function extractResultUrl(data) {
   const item = data?.item_list?.[0];
   const media = item?.result?.media_info_list?.[0];
 
-  return (
-    media?.media_data ||
-    item?.result?.result_url ||
-    item?.result?.url ||
-    item?.client_ext_params?.video_transcoded ||
-    ""
-  );
+  // Meitu kadang mengisi media_data dengan JSON dimensi, bukan URL. Teruskan
+  // mentah ke sendMedia = user cuma lihat "gagal" tanpa sebab.
+  for (const candidate of [
+    media?.media_data,
+    item?.result?.result_url,
+    item?.result?.url,
+    item?.client_ext_params?.video_transcoded,
+  ]) {
+    if (isUsableUrl(candidate)) return candidate;
+  }
+  return "";
 }
 
 function extractNextMsgId(data, currentMsgId) {
@@ -432,44 +450,54 @@ function extractNextMsgId(data, currentMsgId) {
   return "";
 }
 
-async function waitResult(firstMsgId, maxTry = 120, delayMs = 5000) {
+/**
+ * Tunggu hasil akhir. Bedakan "gagal" (error_code selain pending) dari
+ * "belum selesai" — yang kedua bukan error, hanya perlu waktu lagi.
+ *
+ * @param queryFn injeksi untuk test; default ke queryBatch.
+ */
+async function waitResult(firstMsgId, maxTry = 120, delayMs = 5000, queryFn = queryBatch) {
   let msgId = firstMsgId;
   let last = null;
 
   for (let i = 1; i <= maxTry; i++) {
-    const data = await queryBatch(msgId);
+    const data = await queryFn(msgId);
     last = data;
 
     const nextMsgId = extractNextMsgId(data, msgId);
 
     if (nextMsgId) {
       msgId = nextMsgId;
-      await sleep(1000);
+      if (i < maxTry) await sleep(1000);
       continue;
     }
 
-    const url = extractResultUrl(data);
     const errorCode = data?.item_list?.[0]?.result?.error_code;
     const errorMsg = data?.item_list?.[0]?.result?.error_msg;
 
-    if (url && url.startsWith("http") && errorCode === 0) {
-      return url;
-    }
-
+    // Gagal betulan → berhenti sekarang, jangan habis 10 menit buat await.
     if (errorCode && errorCode !== 29901 && errorCode !== 0) {
       throw new Error(`task gagal: ${errorCode} ${errorMsg || ""}`);
     }
 
-    await sleep(delayMs);
+    const url = extractResultUrl(data);
+    if (isUsableUrl(url) && errorCode === 0) {
+      return url;
+    }
+
+    if (i < maxTry) await sleep(delayMs);
   }
 
-  throw new Error(`result belum selesai: ${JSON.stringify(last)}`);
+  throw new Error(
+    `Result belum selesai dalam ${Math.round((maxTry * delayMs) / 1000)} detik. ` +
+      `Respons terakhir: ${JSON.stringify(last).slice(0, 200)}`,
+  );
 }
 
 async function winkEnhance(video, { filename } = {}) {
   if (!video) throw new Error("video is required");
 
-  const safeName = filename || `wink-${crypto.randomUUID()}.mp4`;
+  const safeName = safeTempName(filename || `wink-${crypto.randomUUID()}`);
   const filePath = Buffer.isBuffer(video)
     ? path.join(os.tmpdir(), safeName)
     : video;
@@ -485,6 +513,7 @@ async function winkEnhance(video, { filename } = {}) {
 
   try {
     const taskName = `Enhancer-Ultra HD-${path.parse(filePath).name}`;
+    const plan = planPollBudget();
 
     const sign = await getMaatSign();
     const policy = await getUploadPolicy(sign);
@@ -493,7 +522,12 @@ async function winkEnhance(video, { filename } = {}) {
     await getVideoInfo(uploaded.file_key);
 
     const transcodeId = await startTranscode(uploaded.file_key);
-    const transcode = await waitTranscode(transcodeId, uploaded.source_url);
+    const transcode = await waitTranscode(
+      transcodeId,
+      uploaded.source_url,
+      plan.transcodeTries,
+      plan.transcodeDelay,
+    );
 
     const task = await delivery(
       transcode.source_url,
@@ -508,7 +542,11 @@ async function winkEnhance(video, { filename } = {}) {
       );
     }
 
-    const resultUrl = await waitResult(firstMsgId);
+    const resultUrl = await waitResult(
+      firstMsgId,
+      plan.resultTries,
+      plan.resultDelay,
+    );
 
     return {
       resultUrl,
@@ -522,4 +560,85 @@ async function winkEnhance(video, { filename } = {}) {
   }
 }
 
+/**
+ * Nama file temp yang aman. Dipakai untuk os.tmpdir() — tanpa sanitasi,
+ * filename dari luar bisa keluar dari direktori temp (path traversal).
+ */
+function safeTempName(input) {
+  const base = String(input || "")
+    .replace(/[/\\]+/g, "-")
+    .replace(/\.\./g, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "-")
+    .replace(/^-+/, "")
+    .slice(0, 80);
+  const stem = base.replace(/\.mp4$/i, "") || "wink-video";
+  return `${stem}.mp4`;
+}
+
+/**
+ * Anggaran polling total. Default lama 80×3s + 120×5s = 840 detik (14
+ * menit) padahal plugin menjanjikan "1-5 menit" — userebak nunggu dan
+ * tidak tahu prosesnya jalan atau mati. Sekarang dibatasi total 4 menit
+ * 30 detik, dibagi: transcode 150s, result 120s.
+ */
+const POLL = { transcodeMs: 150000, resultMs: 120000 };
+
+function planPollBudget() {
+  const transcodeDelay = 3000;
+  const resultDelay = 4000;
+  return {
+    transcodeMs: POLL.transcodeMs,
+    resultMs: POLL.resultMs,
+    totalMs: POLL.transcodeMs + POLL.resultMs,
+    transcodeTries: Math.ceil(POLL.transcodeMs / transcodeDelay),
+    resultTries: Math.ceil(POLL.resultMs / resultDelay),
+    transcodeDelay,
+    resultDelay,
+  };
+}
+
+function totalWorstCaseMs() {
+  // Angka default lama, dipakai test untuk mengunci janji "1-5 menit".
+  return 80 * 3000 + 120 * 5000;
+}
+
+/** Deteksi respons basi: msg_id yang diminta sudah bukan milik job ini. */
+function isStaleResponse(responseMsgId, currentMsgId) {
+  return Boolean(responseMsgId) && responseMsgId !== currentMsgId;
+}
+
+/**
+ * Sumber video: pesan sendiri atau yang di-reply. Plugin pernah memanggil
+ * `m.quoted.download()` lebih dulu; kalau tidak ada quoted, pemanggil
+ m.download tetap jalan karena `?.()`. Dipisah supaya jelas.
+ */
+function pickVideoPayload(m) {
+  if (m?.isVideo) return "self";
+  if (m?.quoted?.type === "videoMessage") return "quoted";
+  if (
+    m?.type === "documentMessage" &&
+    m?.message?.documentMessage?.mimetype?.startsWith("video")
+  ) {
+    return "self";
+  }
+  if (
+    m?.quoted?.type === "documentMessage" &&
+    m?.quoted?.message?.documentMessage?.mimetype?.startsWith("video")
+  ) {
+    return "quoted";
+  }
+  return null;
+}
+
 export default winkEnhance;
+export {
+  extractResultUrl,
+  extractNextMsgId,
+  waitTranscode,
+  waitResult,
+  pickVideoPayload,
+  planPollBudget,
+  totalWorstCaseMs,
+  isStaleResponse,
+  safeTempName,
+};
