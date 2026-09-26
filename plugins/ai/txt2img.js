@@ -1,6 +1,7 @@
 import config from '../../config.js'
 import { f } from './../../src/lib/http.js'
 import te from '../../src/lib/error.js'
+import { explainFailure, MissingApiKeyError } from '../../src/lib/stalker-fallback.js'
 const pluginConfig = {
     name: 'text2img3',
     alias: [],
@@ -34,6 +35,13 @@ async function handler(m, { sock }) {
     const [prompt] = input.split('|').map(s => s.trim())
 
     m.react('🕕')
+
+    // Nexray tidak punya endpoint text2img yang hidup (dicek live: /ai/gptimage
+    // 404, /ai/deepimg 500), jadi tidak ada fallback tanpa key.
+    if (!config.APIkey.neoxr) {
+        m.react('❌')
+        return m.reply(explainFailure(new MissingApiKeyError('neoxr', 'APIKEY_NEOXR'), `${m.prefix}txt2img`))
+    }
 
     try {
         const { data } = await f(`https://api.neoxr.eu/api/stablediff?prompt=${encodeURIComponent(prompt)}&model=default&orientation=potrait&apikey=${config.APIkey.neoxr}`)

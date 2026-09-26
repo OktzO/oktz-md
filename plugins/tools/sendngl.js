@@ -1,5 +1,5 @@
 import te from "../../src/lib/error.js";
-import fotoApi from "../../src/lib/apimanager.js";
+import { sendNgl } from "../../src/lib/stalker-fallback.js";
 const pluginConfig = {
   name: "sendngl",
   alias: [],
@@ -17,8 +17,11 @@ const pluginConfig = {
 };
 
 async function handler(m, { sock }) {
-  const text = m.text?.split("|");
-  const [link, kata] = text;
+  // m.text = bagian setelah nama command, tapi user tetap mengetik spasi
+  // di sekitar "|" — trim biar URL/pesan tidak ikut spaces.
+  const [rawLink, rawKata] = (m.text ?? "").split("|");
+  const link = rawLink?.trim();
+  const kata = rawKata?.trim();
   if (!link)
     return m.reply(
       `*LINK NGL NYA MANA ??*\nContoh: \`${m?.prefix}sendngl https://ngl.link/xxxx | hai`,
@@ -30,15 +33,7 @@ async function handler(m, { sock }) {
   m.react("🎴");
 
   try {
-    await fotoApi.cuki.sendNgl(
-      {
-        link,
-        text: kata,
-      },
-      {
-        timeout: 30000,
-      },
-    );
+    await sendNgl(link, kata);
 
     m.react("✅");
 

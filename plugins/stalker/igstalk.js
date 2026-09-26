@@ -1,6 +1,7 @@
 import axios from 'axios'
 import te from '../../src/lib/error.js'
 import config from '../../config.js'
+import { explainFailure, MissingApiKeyError } from '../../src/lib/stalker-fallback.js'
 
 const pluginConfig = {
     name: 'igstalk',
@@ -39,7 +40,14 @@ async function handler(m, { sock }) {
     }
     
     m.react('🔍')
-    
+
+    // Nexray tidak punya /stalker/instagram (dicek live: 500), jadi tidak ada
+    // fallback. Kalau key-nya kosong, itu penyebabnya — sebut saja.
+    if (!config.APIkey.firefly) {
+        m.react('❌')
+        return m.reply(explainFailure(new MissingApiKeyError('firefly', 'APIKEY_FIREFLY'), `${m.prefix}igstalk`))
+    }
+
     try {
         const res = await axios.get(
             `https://firefly.maiku.my.id/api/stalk-instagram?apikey=${config.APIkey.firefly}&username=${encodeURIComponent(username)}`,

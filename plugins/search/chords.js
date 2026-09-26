@@ -1,6 +1,7 @@
 import axios from 'axios'
 import config from '../../config.js'
 import te from '../../src/lib/error.js'
+import { explainFailure, MissingApiKeyError } from '../../src/lib/stalker-fallback.js'
 const pluginConfig = {
     name: 'chords',
     alias: ['chord', 'kunci', 'kuncigitar'],
@@ -33,7 +34,13 @@ async function handler(m, { sock }) {
     }
     
     m.react('🕕')
-    
+
+    // Nexray tidak punya endpoint chord (dicek live), jadi tidak ada fallback.
+    if (!NEOXR_APIKEY) {
+        m.react('❌')
+        return m.reply(explainFailure(new MissingApiKeyError('neoxr', 'APIKEY_NEOXR'), `${m.prefix}chords`))
+    }
+
     try {
         const { data } = await axios.get(`https://api.neoxr.eu/api/chord?q=${encodeURIComponent(text)}&apikey=${NEOXR_APIKEY}`, {
             timeout: 30000

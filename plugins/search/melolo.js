@@ -1,6 +1,7 @@
 import config from "../../config.js";
 import te from "../../src/lib/error.js";
 import fotoApi from "../../src/lib/apimanager.js";
+import { explainFailure, MissingApiKeyError } from "../../src/lib/stalker-fallback.js";
 
 const pluginConfig = {
   name: "melolo",
@@ -68,8 +69,15 @@ async function handler(m, { sock }) {
     );
   }
 
+  // api.covenant.sbs DNS gagal (dicek live 2026-09-26) dan nexray tidak punya
+  // endpoint melolo, jadi tidak ada fallback — sebut key yang perlu di-set.
   if (!config.APIkey?.covenant) {
-    return m.reply("❌ API key covenant tidak dikonfigurasi!");
+    return m.reply(
+      explainFailure(
+        new MissingApiKeyError("covenant", "APIKEY_COVENANT"),
+        `${m.prefix}melolo`,
+      ),
+    );
   }
 
   m.react("🔍");

@@ -1,6 +1,5 @@
-import { f } from '../../src/lib/http.js'
 import te from '../../src/lib/error.js'
-import config from '../../config.js'
+import { fetchAiText } from '../../src/lib/stalker-fallback.js'
 const pluginConfig = {
     name: 'gita',
     alias: ['gitagpt', 'bhagavadgita'],
@@ -25,19 +24,11 @@ async function handler(m, { sock }) {
 
     m.react('🕕')
 
-    if (!config.APIkey.cuki) {
-        return m.reply(`❌ *API Key belum diset!*\n\n> Owner harus set \`APIKEY_CUKI\` di \`.env\``)
-    }
-
     try {
-        const url = `https://api.cuki.biz.id/api/ai/gita?apikey=${config.APIkey.cuki}&q=${encodeURIComponent(text)}`
-        const data = await f(url)
-
-        const content = data?.results
-        if (!content) throw new Error('Respons Gita kosong')
+        const { value: content } = await fetchAiText('gita', text)
 
         m.react('✅')
-        await m.reply(`${content?.trim()}`)
+        await m.reply(content)
 
     } catch (error) {
         m.react('☢')
