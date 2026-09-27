@@ -1,4 +1,8 @@
 import { getDatabase } from "../../src/lib/database.js";
+import {
+  analyzeCustomPattern,
+  CUSTOM_MAX_RULES,
+} from "../../src/lib/group-protection.js";
 
 const pluginConfig = {
   name: "anticustom",
@@ -76,10 +80,14 @@ function parsePatternAnswer(text) {
   if (/^regex\s*:/i.test(raw)) {
     const pattern = raw.replace(/^regex\s*:/i, "").trim();
     if (!pattern) return { error: "Regex kosong. Isi setelah `regex:` ya." };
-    try {
-      new RegExp(pattern, "i");
-    } catch {
-      return { error: "Regex tidak valid. Coba cek lagi polanya." };
+    // Admin grup boleh nulis regex, tapi pola yang bisa bikin `.test()`
+    // backtracking eksponensial akan membekukan seluruh bot (bukan cuma grup
+    // ini) karena dicek sinkron untuk setiap pesan. Tolak di tahap instalasi.
+    const verdict = analyzeCustomPattern(pattern);
+    if (!verdict.safe) {
+      return {
+        error: `Regex ditolak: ${verdict.reason}.\nPakai \`contains\` dengan kata kunci aja, atau pola yang lebih sederhana.`,
+      };
     }
     return {
       type: "regex",
@@ -427,6 +435,19 @@ async function replyHandler(m, { sock }) {
       createdAt,
     }));
 
+    // Group-protection hanya mengevaluasi CUSTOM_MAX_RULES rule pertama per
+    // pesan, jadi rule setelah itu tidak akan pernah berjalan. Bilang ke admin,
+    // jangan diam-diam diabaikan.
+    if (filteredRules.length + generatedRules.length > CUSTOM_MAX_RULES) {
+      clearSession(sessionKey);
+      await m.reply(
+        `❌ Group ini sudah punya ${filteredRules.length} rule.\n` +
+          `Batasnya *${CUSTOM_MAX_RULES} rule per grup* supaya pengecekan tiap pesan tetap cepat.\n\n` +
+          `> Hapus rule lama dulu: \`${m.prefix}anticustom list\` lalu \`${m.prefix}anticustom del <judul>\``,
+      );
+      return true;
+    }
+
     db.setGroup(m.chat, {
       anticustom: "on",
       anticustomMode: session.action,
@@ -453,4 +474,4 @@ async function replyHandler(m, { sock }) {
   return false;
 }
 
-export { pluginConfig as config, handler, replyHandler };
+export { pluginConfig as config, handler, replyHandler, parsePatternAnswer };

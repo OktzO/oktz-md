@@ -7,6 +7,7 @@ import {
   normalizeComparableJid,
 } from "./lid.js";
 import { adminFlagsFor } from "./serialize.js";
+import { evictOldestOverCap } from "./cache-cap.js";
 import config from "../../config.js";
 const messageCache = new Map();
 const CACHE_EXPIRY = 10 * 60 * 1000;
@@ -521,24 +522,685 @@ function isSwGcCandidate(rawMsg) {
   return Boolean(detectSwGcType(rawMsg));
 }
 
-function matchCustomRule(text, rules = []) {
-  if (!text || !Array.isArray(rules) || rules.length === 0) return null;
+// ---------------------------------------------------------------------------
+// AntiCustom: pola datang dari admin grup (`regex:` di plugins/group/anticustom.js).
+//
+// Seluruh blok ini bounding: `matchCustomRule()` jalan sinkron di event loop
+// untuk SETIAP pesan, jadi pola yang bisa backtrack eksponensial membekukan
+// seluruh bot (bukan cuma grup itu). Dua lapis pertahanan:
+//
+//   1. Analisis struktural (analyzeCustomPattern) menolak pola dengan
+//      kuantifier bersarang / alternasi overlap di bawah kuantifier /
+//      kuantifier bertumpuk yang bisa overlap. Dipakai juga saat instalasi.
+//   2. Batas kerja per pesan: panjang subjek dipotong, jumlah rule dibatasi,
+//      budget waktu total, dan RegExp di-precompile + di-cache (dulu
+//      `new RegExp` ulang di tiap pesan).
+//
+// Aturan tidak aman yang sudah menempel di DB sebelum patch tetap inert:
+// performanya dicek ulang tiap kali pola pertama kali dipakai, bukan hanya
+// saat instalasi.
+// ---------------------------------------------------------------------------
 
-  for (const rule of rules) {
-    if (!rule || !rule.pattern) continue;
+const CUSTOM_MAX_PATTERN_LEN = 120;
+const CUSTOM_MAX_SUBJECT_LEN = 512;
+const CUSTOM_MAX_RULES = 50;
+const CUSTOM_MAX_UNBOUNDED_QUANTIFIERS = 6;
+const CUSTOM_MATCH_BUDGET_MS = 20;
+const CUSTOM_REGEX_CACHE_CAP = 200;
 
-    if (rule.type === "regex") {
-      try {
-        const flags = rule.flags || "i";
-        const regex = new RegExp(rule.pattern, flags);
-        if (regex.test(text)) return rule;
-      } catch {}
+const CHAR_SET_ANY = Object.freeze({ any: true, chars: null, ws: "maybe" });
+const CHAR_SET_NONE = Object.freeze({ any: false, chars: new Set(), ws: "never" });
+// `\S` = "bukan whitespace": satu-satunya kelas yang tidak akan pernah
+// overlap dengan `\s`.
+const CHAR_SET_ANY_WITHOUT_SPACE = Object.freeze({
+  any: true,
+  chars: null,
+  ws: "never",
+});
+
+const WHITESPACE_CHARS = new Set(
+  " \t\n\r\f\v\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff".split(
+    "",
+  ),
+);
+
+// `ws`: apakah set ini bisa kena karakter whitespace.
+//   "only"  = hanya whitespace (contoh: `\s`)
+//   "never" = tidak pernah whitespace (contoh: `\S`)
+//   "maybe" = tidak diketahui / semua karakter (contoh: `.`, `[^a]`, `\D`)
+function wsModeOf(chars) {
+  let hasSpace = false;
+  let hasOther = false;
+  for (const char of chars) {
+    if (WHITESPACE_CHARS.has(char)) hasSpace = true;
+    else hasOther = true;
+  }
+  if (!hasSpace) return "never";
+  if (!hasOther) return "only";
+  return "maybe";
+}
+
+function charSetOf(chars) {
+  const set = new Set(chars);
+  return { any: false, chars: set, ws: wsModeOf(set) };
+}
+
+// `i` aktif: satu literal bisa cocok dengan huruf besar/kecilnya.
+function literalSet(char) {
+  const lower = char.toLowerCase();
+  const upper = char.toUpperCase();
+  return charSetOf(lower === upper ? [char] : [lower, upper]);
+}
+
+function setUnion(target, other) {
+  if (other.any) {
+    target.any = true;
+    target.ws = "maybe";
+    return target;
+  }
+  for (const char of other.chars) target.chars.add(char);
+  target.ws = wsModeOf(target.chars);
+  return target;
+}
+
+// Dua set dianggap overlap kalau ada teks yang bisa dicocokkan keduanya.
+function setsOverlap(a, b) {
+  if (a.any && b.any) return true;
+  if (a.any) {
+    if (a.ws === "maybe") return true;
+    if (a.ws === "only") return b.ws !== "never";
+    return b.ws !== "only";
+  }
+  if (b.any) {
+    if (b.ws === "maybe") return true;
+    if (b.ws === "only") return a.ws !== "never";
+    return a.ws !== "only";
+  }
+  for (const char of a.chars) {
+    if (b.chars.has(char)) return true;
+  }
+  return false;
+}
+
+function setIsEmpty(set) {
+  return !set.any && set.chars.size === 0;
+}
+
+const SHORTHAND_SETS = {
+  d: charSetOf("0123456789"),
+  w: charSetOf("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_"),
+  s: charSetOf(WHITESPACE_CHARS),
+  S: CHAR_SET_ANY_WITHOUT_SPACE,
+};
+
+const CONTROL_ESCAPES = {
+  n: "\n",
+  r: "\r",
+  t: "\t",
+  f: "\f",
+  v: "\v",
+  0: "\0",
+};
+
+function readEscape(src, start) {
+  const char = src[start + 1];
+  if (char === undefined) {
+    return { kind: "char", set: charSetOf([]), next: start + 1, broken: true };
+  }
+  if (char >= "1" && char <= "9") {
+    return { kind: "backref", set: CHAR_SET_ANY, next: start + 2 };
+  }
+  if (SHORTHAND_SETS[char]) {
+    return { kind: "char", set: SHORTHAND_SETS[char], next: start + 2 };
+  }
+  if (char === "D" || char === "W" || char === "p" || char === "P") {
+    // `\D`/`\W` masih bisa cocok dengan whitespace, jadi tetap "maybe".
+    return { kind: "char", set: CHAR_SET_ANY, next: start + 2 };
+  }
+  if (char === "b" || char === "B") {
+    // Assertion, bukan karakter: `\w+\b` itu idiom aman dan harus tetap lolos.
+    return { kind: "assert", set: CHAR_SET_NONE, next: start + 2 };
+  }
+  if (char === "x" && /^[0-9a-fA-F]{2}/.test(src.slice(start + 2, start + 4))) {
+    return {
+      kind: "char",
+      set: literalSet(String.fromCharCode(parseInt(src.slice(start + 2, start + 4), 16))),
+      next: start + 4,
+    };
+  }
+  if (char === "u" && src[start + 2] === "{") {
+    const close = src.indexOf("}", start + 3);
+    const body = close === -1 ? "" : src.slice(start + 3, close);
+    if (close !== -1 && /^[0-9a-fA-F]+$/.test(body)) {
+      return {
+        kind: "char",
+        set: literalSet(String.fromCodePoint(parseInt(body, 16))),
+        next: close + 1,
+      };
+    }
+  }
+  if (char === "u" && /^[0-9a-fA-F]{4}/.test(src.slice(start + 2, start + 6))) {
+    return {
+      kind: "char",
+      set: literalSet(String.fromCharCode(parseInt(src.slice(start + 2, start + 6), 16))),
+      next: start + 6,
+    };
+  }
+  return { kind: "char", set: literalSet(CONTROL_ESCAPES[char] ?? char), next: start + 2 };
+}
+
+function readCharClass(src, start) {
+  let index = start + 1;
+  let negated = false;
+  if (src[index] === "^") {
+    negated = true;
+    index += 1;
+  }
+
+  const set = charSetOf([]);
+  let first = true;
+  let closed = false;
+
+  while (index < src.length) {
+    const char = src[index];
+
+    if (char === "]" && !first) {
+      closed = true;
+      index += 1;
+      break;
+    }
+    first = false;
+
+    if (char === "\\") {
+      const escape = readEscape(src, index);
+      if (escape.kind === "backref") {
+        return { set: CHAR_SET_ANY, next: index + 2, broken: true };
+      }
+      setUnion(set, escape.set);
+      index = escape.next;
       continue;
     }
 
-    if (text.toLowerCase().includes(String(rule.pattern).toLowerCase())) {
-      return rule;
+    // POSIX class gaya `[[:alpha:]]` -> Perl regex, tidak didukung RegExp JS.
+    if (char === "[" && src[index + 1] === ":") {
+      const close = src.indexOf("]", index);
+      index = close === -1 ? src.length : close + 1;
+      set.any = true;
+      continue;
     }
+
+    const next = src[index + 1];
+    if (next === "-" && src[index + 2] !== undefined && src[index + 2] !== "]") {
+      const tail = src[index + 2];
+      if (tail === "\\") {
+        setUnion(set, literalSet(char));
+        setUnion(set, literalSet("-"));
+        index += 2;
+        continue;
+      }
+      const from = char.codePointAt(0);
+      const to = tail.codePointAt(0);
+      if (to < from) {
+        set.any = true;
+        index += 3;
+        continue;
+      }
+      for (let code = from; code <= to; code += 1) {
+        set.chars.add(String.fromCodePoint(code));
+      }
+      index += 3;
+      continue;
+    }
+
+    set.chars.add(char);
+    if (char.toLowerCase() !== char.toUpperCase()) {
+      set.chars.add(char.toLowerCase());
+      set.chars.add(char.toUpperCase());
+    }
+    index += 1;
+  }
+
+  // `[abc` tanpa penutup: `new RegExp` akan throw, rule jadi inert. analysed
+  // sebagai "apa saja" supaya tidak ada jalur aman yang lolos.
+  if (!closed) return { set: CHAR_SET_ANY, next: index, broken: true };
+  return { set: negated ? CHAR_SET_ANY : set, next: index, broken: false };
+}
+
+function readQuantifier(src, start) {
+  const char = src[start];
+  if (char === "*" || char === "+") {
+    return { min: char === "*" ? 0 : 1, max: Infinity, next: start + 1 };
+  }
+  if (char === "?") {
+    return { min: 0, max: 1, next: start + 1 };
+  }
+  if (char === "{") {
+    const match = /^\{(\d+)(,(\d*))?\}/.exec(src.slice(start));
+    if (match) {
+      const min = Number(match[1]);
+      const max = match[2] === undefined ? min : match[3] === "" ? Infinity : Number(match[3]);
+      return { min, max, next: start + match[0].length };
+    }
+  }
+  return null;
+}
+
+function readAtom(src, start) {
+  const char = src[start];
+
+  if (char === "\\") return { ...readEscape(src, start), kind: "char" };
+  if (char === "[") {
+    const parsed = readCharClass(src, start);
+    return { kind: "char", set: parsed.set, next: parsed.next, broken: parsed.broken };
+  }
+  if (char === ".") {
+    return { kind: "char", set: CHAR_SET_ANY, next: start + 1 };
+  }
+  if (char === "^" || char === "$") {
+    return { kind: "assert", set: CHAR_SET_NONE, next: start + 1 };
+  }
+  if (char === "(") return readGroupAtom(src, start);
+  if (char === ")" || char === "|" || char === "]") {
+    return { kind: "broken", set: CHAR_SET_NONE, next: start + 1, broken: true };
+  }
+  return { kind: "char", set: literalSet(char), next: start + 1 };
+}
+
+function findGroupEnd(src, start) {
+  let depth = 0;
+  let index = start;
+  let inClass = false;
+
+  while (index < src.length) {
+    const char = src[index];
+    if (inClass) {
+      if (char === "\\") index += 1;
+      else if (char === "]") inClass = false;
+      index += 1;
+      continue;
+    }
+    if (char === "\\") {
+      index += 2;
+      continue;
+    }
+    if (char === "[") {
+      inClass = true;
+      index += 1;
+      continue;
+    }
+    if (char === "(") depth += 1;
+    else if (char === ")") {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+    index += 1;
+  }
+  return -1;
+}
+
+function readGroupAtom(src, start) {
+  let inner = start + 1;
+  if (src[inner] === "?") {
+    // (?:...) (?=...) (?!...) (?<=...) (?<!...) (?<name>...) (?ims-...)
+    if (src[inner + 1] === "<" && src[inner + 2] !== "=" && src[inner + 2] !== "!") {
+      const close = src.indexOf(">", inner + 2);
+      inner = close === -1 ? inner + 1 : close + 1;
+    } else {
+      inner += 2;
+    }
+  }
+
+  const end = findGroupEnd(src, start);
+  if (end === -1) {
+    return {
+      kind: "broken",
+      set: CHAR_SET_ANY,
+      next: src.length,
+      broken: true,
+      analysis: EMPTY_GROUP_ANALYSIS,
+    };
+  }
+
+  const analysis = analyzeAlternation(src.slice(inner, end));
+  return {
+    kind: "group",
+    set: analysis.first,
+    next: end + 1,
+    broken: analysis.broken,
+    analysis,
+  };
+}
+
+const EMPTY_GROUP_ANALYSIS = {
+  first: CHAR_SET_ANY,
+  broken: true,
+  reason: null,
+  hasQuantifier: false,
+  canMatchEmpty: true,
+  overlappingBranches: false,
+  hasUnboundedQuantifier: false,
+  singleChar: false,
+  unbounded: 0,
+};
+
+// Panjang run literal berurutan yang dimulai di `start`. Dipakai supaya
+// `.*anjing` (literal panjang setelah kuantifier) tidak dianggap ambigu,
+// sementara `.*a` (satu karakter) tetap dianggap ambigu.
+function literalRunLength(src, start) {
+  if (src[start] === "\\") return 1;
+  let index = start;
+  while (index < src.length) {
+    const char = src[index];
+    if (
+      char === "[" ||
+      char === "(" ||
+      char === ")" ||
+      char === "|" ||
+      char === "." ||
+      char === "^" ||
+      char === "$" ||
+      char === "*" ||
+      char === "+" ||
+      char === "?"
+    ) {
+      break;
+    }
+    if (readQuantifier(src, index + 1)) break;
+    index += 1;
+  }
+  return index - start;
+}
+
+/**
+ * Analisis satu cabang (tanpa `|` di level teratas) menjadi daftar item.
+ * Item = satu atom + kuantifier-nya.
+ */
+function analyzeBranch(src, state) {
+  const items = [];
+  let index = 0;
+  let reason = null;
+
+  const reject = (message) => {
+    if (!reason) reason = message;
+  };
+
+  while (index < src.length) {
+    const char = src[index];
+    if (char === "|" || char === ")") return { items, reason };
+
+    const atom = readAtom(src, index);
+    if (atom.broken) state.broken = true;
+
+    let next = atom.next;
+    const quantifier = readQuantifier(src, next);
+    if (quantifier) next = quantifier.next;
+
+    if (atom.kind === "assert") {
+      index = next;
+      continue;
+    }
+
+    const quantified = Boolean(quantifier);
+    const unbounded = quantified && (quantifier.max === Infinity || quantifier.max === 1);
+    const runLength =
+      atom.kind === "char" && !quantified && src[index] !== "\\" && src[index] !== "["
+        ? literalRunLength(src, index)
+        : 0;
+
+    const isGroup = atom.kind === "group";
+    if (isGroup) {
+      state.unbounded += atom.analysis.unbounded;
+      if (quantified) {
+        // Kelompok yang diulang + isi yang bisa diulang/dikosongkan =ibi
+        // backtracking eksponensial.
+        if (atom.analysis.hasQuantifier) {
+          reject("ada kuantifier di dalam kelompok yang juga diulang (mis. `(a+)+`)");
+        }
+        if (atom.analysis.canMatchEmpty) {
+          reject("isi kelompok yang diulang bisa kosong (mis. `(a*|b)+`)");
+        }
+        if (atom.analysis.overlappingBranches) {
+          reject("dua cabang alternasi di bawah kuantifier bisa cocok dengan teks yang sama (mis. `(a|ab)+`)");
+        }
+      }
+    }
+
+    const item = {
+      set: atom.set,
+      quantified,
+      unbounded,
+      // `unbounded` hanya untuk atom ini. `expansive` juga mencakup kelompok
+      // yang isinya bisa mezclar beberapa panjang (mis. `(a+)`), karena
+      // `(a+)(a+)$`Tetap quadratic walau `(a+)` itu sendiri tidak diulang.
+      expansive:
+        unbounded || (isGroup && atom.analysis.hasUnboundedQuantifier),
+      singleChar: isGroup
+        ? atom.analysis.singleChar
+        : runLength > 0
+          ? runLength <= 1
+          : true,
+      canMatchEmpty: quantified
+        ? quantifier.min === 0 || (isGroup && atom.analysis.canMatchEmpty)
+        : isGroup
+          ? atom.analysis.canMatchEmpty
+          : setIsEmpty(atom.set),
+    };
+
+    index = runLength > 0 ? index + runLength : next;
+
+    const previous = items[items.length - 1];
+    if (previous && previous.expansive && setsOverlap(previous.set, item.set)) {
+      if (item.quantified) {
+        reject("dua kuantifier bertumpuk menebak karakter yang sama (mis. `a*a*`)");
+      } else if (item.expansive || item.singleChar) {
+        reject("karakter setelah kuantifier bisa ikut ditelan kuantifier itu (mis. `.*a`)");
+      }
+    }
+
+    if (unbounded) state.unbounded += 1;
+    items.push(item);
+  }
+
+  return { items, reason };
+}
+
+function splitAlternation(src) {
+  const branches = [];
+  let depth = 0;
+  let start = 0;
+  let inClass = false;
+
+  for (let index = 0; index < src.length; index += 1) {
+    const char = src[index];
+    if (inClass) {
+      if (char === "\\") index += 1;
+      else if (char === "]") inClass = false;
+      continue;
+    }
+    if (char === "\\") {
+      index += 1;
+      continue;
+    }
+    if (char === "[") {
+      inClass = true;
+      continue;
+    }
+    if (char === "(") depth += 1;
+    else if (char === ")") depth -= 1;
+    else if (char === "|" && depth === 0) {
+      branches.push(src.slice(start, index));
+      start = index + 1;
+    }
+  }
+
+  branches.push(src.slice(start));
+  return branches;
+}
+
+function analyzeAlternation(src) {
+  const state = { unbounded: 0, broken: false };
+  const branches = splitAlternation(src);
+  const first = charSetOf([]);
+  let allSingleChar = true;
+  let canMatchEmpty = false;
+  let hasQuantifier = false;
+  let hasUnboundedQuantifier = false;
+  let overlappingBranches = false;
+  let reason = null;
+  let previousFirst = null;
+
+  for (const branch of branches) {
+    const result = analyzeBranch(branch, state);
+    if (result.reason && !reason) reason = result.reason;
+    if (state.broken && !reason) {
+      reason = "pola tidak bisa diurai (kurung kurawal tidak seimbang)";
+    }
+
+    if (result.items.length === 0) {
+      canMatchEmpty = true;
+      allSingleChar = false;
+      continue;
+    }
+
+    const head = result.items[0];
+    if (head.quantified) allSingleChar = false;
+    if (!head.singleChar) allSingleChar = false;
+    if (head.canMatchEmpty) canMatchEmpty = true;
+    if (head.quantified) hasQuantifier = true;
+    if (result.items.some((item) => item.quantified)) hasQuantifier = true;
+    if (result.items.some((item) => item.unbounded)) hasUnboundedQuantifier = true;
+    if (result.items.every((item) => item.canMatchEmpty)) canMatchEmpty = true;
+    if (previousFirst && setsOverlap(previousFirst, head.set)) overlappingBranches = true;
+
+    setUnion(first, head.set);
+    previousFirst = head.set;
+  }
+
+  return {
+    first,
+    broken: state.broken,
+    reason,
+    hasQuantifier,
+    canMatchEmpty,
+    overlappingBranches,
+    hasUnboundedQuantifier,
+    singleChar: allSingleChar,
+    unbounded: state.unbounded,
+  };
+}
+
+/**
+ * Gerbang install-time untuk pola dari admin grup.
+ *
+ * Menolak (fail-closed) pola yang bisa membuat `.test()` backtracking
+ * eksponensial/polomial: kuantifier bersarang, isi kelompok yang diulang
+ * masih bisa kosong, alternasi overlap di bawah kuantifier, kuantifier
+ * bertumpuk yang overlap, backreference, dan pola terlalu panjang.
+ *
+ * @returns {{safe: boolean, reason: string|null}}
+ */
+function analyzeCustomPattern(pattern) {
+  const source = String(pattern ?? "");
+
+  if (!source.trim()) return { safe: false, reason: "pola kosong" };
+  if (source.length > CUSTOM_MAX_PATTERN_LEN) {
+    return {
+      safe: false,
+      reason: `pola terlalu panjang (maks ${CUSTOM_MAX_PATTERN_LEN} karakter)`,
+    };
+  }
+
+  let analysis;
+  try {
+    analysis = analyzeAlternation(source);
+  } catch {
+    return { safe: false, reason: "pola tidak bisa diurai" };
+  }
+
+  if (analysis.broken) {
+    return { safe: false, reason: "pola tidak bisa diurai (kurung kurawal tidak seimbang)" };
+  }
+  if (analysis.reason) return { safe: false, reason: analysis.reason };
+  if (analysis.unbounded > CUSTOM_MAX_UNBOUNDED_QUANTIFIERS) {
+    return {
+      safe: false,
+      reason: `terlalu banyak kuantifier tak terbatas (maks ${CUSTOM_MAX_UNBOUNDED_QUANTIFIERS})`,
+    };
+  }
+
+  try {
+    new RegExp(source, "i");
+  } catch {
+    return { safe: false, reason: "regex tidak valid" };
+  }
+
+  return { safe: true, reason: null };
+}
+// `g`/`y` bikin `.test()` stateful (lastIndex) sehingga hasilbergantian antar
+// pesan untuk rule yang sama. Buang supaya hasil per pesan deterministik.
+function sanitizeCustomFlags(flags) {
+  const keep = new Set();
+  for (const flag of String(flags ?? "i")) {
+    if (flag === "i" || flag === "m" || flag === "s" || flag === "u" || flag === "v") {
+      keep.add(flag);
+    }
+  }
+  return keep.size ? [...keep].join("") : "i";
+}
+
+const _customRegexCache = new Map();
+
+/**
+ * Precompile + cache. Cache berisi `null` juga, jadi pola yang sudah
+ * dinyatakan tidak aman tidak dianalisis ulang tiap pesan.
+ */
+function getCustomRegex(rule) {
+  const pattern = String(rule.pattern);
+  const flags = sanitizeCustomFlags(rule.flags);
+  const key = flags + "|" + pattern;
+
+  if (_customRegexCache.has(key)) return _customRegexCache.get(key);
+
+  let compiled = null;
+  if (analyzeCustomPattern(pattern).safe) {
+    try {
+      compiled = new RegExp(pattern, flags);
+    } catch {
+      compiled = null;
+    }
+  }
+  _customRegexCache.set(key, compiled);
+  evictOldestOverCap(_customRegexCache, CUSTOM_REGEX_CACHE_CAP);
+  return compiled;
+}
+
+/**
+ * Cocokkan satu pesan dengan rule AntiCustom milik grup.
+ * Batas kerja per pesan: subjek dipotong ke CUSTOM_MAX_SUBJECT_LEN, maksimal
+ * CUSTOM_MAX_RULES rule, budget CUSTOM_MATCH_BUDGET_MS total, dan setiap
+ * regex di-precompile sekali (cache) bukan tiap pesan.
+ */
+function matchCustomRule(text, rules = []) {
+  if (!text || !Array.isArray(rules) || rules.length === 0) return null;
+
+  const subject = String(text).slice(0, CUSTOM_MAX_SUBJECT_LEN);
+  const lower = subject.toLowerCase();
+  const deadline = Date.now() + CUSTOM_MATCH_BUDGET_MS;
+  const limit = Math.min(rules.length, CUSTOM_MAX_RULES);
+
+  for (let index = 0; index < limit; index += 1) {
+    if (index > 0 && Date.now() > deadline) break;
+
+    const rule = rules[index];
+    if (!rule || !rule.pattern) continue;
+
+    if (rule.type === "regex") {
+      const regex = getCustomRegex(rule);
+      if (regex && regex.test(subject)) return rule;
+      continue;
+    }
+
+    if (lower.includes(String(rule.pattern).toLowerCase())) return rule;
   }
 
   return null;
@@ -1526,4 +2188,11 @@ export {
   handleAntilinkGc,
   handleAntilinkAll,
   handleAntiHidetag,
+  analyzeCustomPattern,
+  matchCustomRule,
+  CUSTOM_MAX_PATTERN_LEN,
+  CUSTOM_MAX_SUBJECT_LEN,
+  CUSTOM_MAX_RULES,
+  CUSTOM_MAX_UNBOUNDED_QUANTIFIERS,
+  CUSTOM_MATCH_BUDGET_MS,
 };
