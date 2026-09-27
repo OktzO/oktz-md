@@ -163,6 +163,17 @@ const config = {
     smartTriggers: false,
   },
 
+  // Batas kerja otomatis: auto-AI, CAI chat, auto-download, auto-join,
+  // transkripsi Groq CMD-VN, dan smart trigger. Semua jalan di pesan biasa
+  // (bukan cuma command), jadi limiter global tidak menyentuh jalur ini —
+  // tanpa kuota, orang asing di mode "public" bisa membakar API key.
+  autoWork: {
+    enabled: true, // kill switch: false = matikan kuota auto-work
+    points: 10, // pesan auto-work per pengguna per durationSec
+    durationSec: 60,
+    energi: 1, // energi yang dipotong per pekerjaan auto (0 = tanpa potong)
+  },
+
   registration: {
     enabled: false, // Jika true, user harus mendaftar sebelum menggunakan bot
     rewards: {

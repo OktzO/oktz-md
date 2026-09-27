@@ -337,6 +337,66 @@ const globalRateLimiter = new RateLimiterMemory({
   blockDuration: 2,
 });
 
+/**
+ * Kuota KERJA OTOMATIS — path mahal yang jalan di pesan biasa (bukan command):
+ * auto-AI, CAI chat, auto-download, auto-join, transkripsi Groq CMD-VN, dan
+ * smart trigger. Semuanya ada SEBELUM `if (!m.isCommand) return;`, jadi
+ * limiter global (8 titik / 3 dtk) tidak pernah menyentuhnya: di mode
+ * "public" siapa pun bisa membakar kuota Groq/Gemini/unduhan pihak ketiga
+ * tanpa batas. Kuota ini sengaja dipisah dari limiter command supaya command
+ * asli tetap dibatasi persis seperti sebelumnya dan tidak jadi double-charge.
+ */
+const autoWorkLimiter = new RateLimiterMemory({
+  points: config.autoWork?.points ?? 10,
+  duration: config.autoWork?.durationSec ?? 60,
+});
+
+/**
+ * Konsumsi 1 unit kuota auto-work untuk satu pesan.
+ * @returns {Promise<boolean>} true = boleh jalan, false = kuota/energi habis.
+ */
+async function consumeAutoWorkQuota(m, db, key) {
+  if (config.autoWork?.enabled === false) return true;
+  if (m.isOwner || m.isPremium) return true;
+
+  const cost = config.autoWork?.energi ?? 1;
+  const energiEnabled =
+    db.setting("energi") !== undefined
+      ? db.setting("energi")
+      : config.energi?.enabled !== false;
+  const chargeEnergi = cost > 0 && energiEnabled;
+
+  if (chargeEnergi) {
+    const currentEnergi =
+      db.getUser(m.sender)?.energi ?? (config.energi?.default ?? 0);
+    if (currentEnergi !== -1 && currentEnergi < cost) return false;
+  }
+
+  try {
+    await autoWorkLimiter.consume(key);
+  } catch {
+    return false;
+  }
+
+  if (chargeEnergi) db.updateEnergi(m.sender, -cost);
+
+  return true;
+}
+
+/**
+ * Satu guard per pesan: hasil keputusan memoized supaya auto-AI + CAI +
+ * auto-download + auto-join + smart trigger pada pesan yang sama hanya
+ * memakai SATU unit kuota (tidak ada double-charge antar titik kerja).
+ * @returns {() => Promise<boolean>}
+ */
+function createAutoWorkGuard(m, db, key) {
+  let decided = null;
+  return async function allowAutoWork() {
+    if (decided === null) decided = await consumeAutoWorkQuota(m, db, key);
+    return decided;
+  };
+}
+
 const cachedGamePlugins = new Map();
 
 try {
@@ -882,12 +942,22 @@ async function messageHandler(msg, sock, options = {}) {
       }
     }
 
+    // Guard kuota kerja otomatis. Dipasang DI DEPAN semua titik kerja mahal
+    // (transkripsi Groq, auto-AI, CAI, auto-download, auto-join, smart
+    // trigger) — bukan setelah command gate seperti limiter global.
+    const allowAutoWork = createAutoWorkGuard(
+      m,
+      db,
+      `${botId}_auto_${m.sender}`,
+    );
+
     const cmdVnEnabled = db.setting("cmdVn") || false;
     if (
       cmdVnEnabled &&
       m.type === "audioMessage" &&
       !m.isCommand &&
-      config.APIkey?.groq
+      config.APIkey?.groq &&
+      (await allowAutoWork())
     ) {
       let inputFile = null;
       let wavFile = null;
@@ -1032,27 +1102,27 @@ async function messageHandler(msg, sock, options = {}) {
       }
     }
 
-    if (handleAutoAI && m.isGroup && !m.isCommand) {
+    if (handleAutoAI && m.isGroup && !m.isCommand && (await allowAutoWork())) {
       try {
         const aiHandled = await handleAutoAI(m, sock);
         if (aiHandled) return;
       } catch (e) { }
     }
 
-    if (caiChatHandler && !m.isCommand && m.body) {
+    if (caiChatHandler && !m.isCommand && m.body && (await allowAutoWork())) {
       try {
         const caiHandled = await caiChatHandler(m, sock);
         if (caiHandled) return;
       } catch (e) { }
     }
 
-    if (handleAutoDownload && m.body) {
+    if (handleAutoDownload && m.body && (await allowAutoWork())) {
       try {
         handleAutoDownload(m, sock, m.body);
       } catch (e) { }
     }
 
-    if (autoJoinDetector && m.body) {
+    if (autoJoinDetector && m.body && (await allowAutoWork())) {
       try {
         const joined = await autoJoinDetector(m, sock);
         if (joined) return;
@@ -1323,8 +1393,10 @@ async function messageHandler(msg, sock, options = {}) {
         if (gameHandled) return;
       }
 
-      const smartHandled = await handleSmartTriggers(m, sock, db);
-      if (smartHandled) return;
+      if (await allowAutoWork()) {
+        const smartHandled = await handleSmartTriggers(m, sock, db);
+        if (smartHandled) return;
+      }
 
       if (m.quoted?.id || m.quoted?.key?.id) {
         try {
@@ -2294,4 +2366,6 @@ export {
   checkMode,
   isSpamming,
   handleAntiRemoveFromUpsert,
+  consumeAutoWorkQuota,
+  createAutoWorkGuard,
 };
