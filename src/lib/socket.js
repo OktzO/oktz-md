@@ -14,6 +14,7 @@ import {
   isLid,
   isLidConverted,
   resolveAnyLidToJid,
+  resolveFromSock,
   getCachedJid,
 } from "./lid.js";
 
@@ -45,6 +46,40 @@ function getTempDir() {
   const tmpDir = path.join(process.cwd(), "tmp");
   if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
   return tmpDir;
+}
+
+const contactNameOf = (ct) =>
+  ct ? ct.name || ct.notify || ct.pushName || ct.verifiedName || null : null;
+
+// Cari nama di store dengan mencoba SEMUA kunci yang mungkin: jid apa adanya
+// (store boleh keyed by LID), lalu PN hasil mapping kalau ini LID.
+// src/lib/lid.js:resolveFromSock sudah mencoba tiga sumber mapping -- cache
+// lid, signalRepository.lidMapping.getPNForLID, dan back-reference
+// contact.lid di store -- jadi tidak ada mapping yang terlewat di sini.
+// Kalau memang tidak ada mapping, pemanggil tetap dapat "Unknown": infra.md
+// melarang fabrikasi nomor dari digit LID.
+async function lookupContactName(sock, jid, id) {
+  const contacts = sock?.store?.contacts;
+  if (!contacts) return null;
+
+  const keys = [];
+  const push = (k) => {
+    if (k && !keys.includes(k)) keys.push(k);
+  };
+  push(jid);
+  push(id);
+
+  for (const probe of [jid, id]) {
+    if (!isLid(probe) && !isLidConverted(probe)) continue;
+    // resolveFromSock mengembalikan probe itu sendiri kalau tidak ada mapping
+    push(await resolveFromSock(probe, sock));
+  }
+
+  for (const k of keys) {
+    const n = contactNameOf(contacts[k]);
+    if (n) return n;
+  }
+  return null;
 }
 
 // Buffer sticker adalah ArrayBuffer di luar heap V8, jadi --max-old-space-size
@@ -979,14 +1014,16 @@ async function extendSocket(sock) {
     try {
       if (sock.onWhatsApp) {
         const [result] = await sock.onWhatsApp(id).catch(() => []);
-        if (
-          result?.exists &&
-          result?.jid &&
-          sock.store?.contacts?.[result.jid]
-        ) {
-          const ct = sock.store.contacts[result.jid];
-          if (ct.name) return ct.name;
-          if (ct.notify) return ct.notify;
+        if (result?.exists) {
+          // Kontrak onWhatsApp yang baru menjamin result.jid === id yang
+          // dipanggil: lib/Socket/socket.js pushing { jid, digits } ke `asked`
+          // lalu memetakan balik dari `asked`, jadi jid di jawaban selalu
+          // jid pemanggil, bukan PN hasil resolusi. contacts[result.jid]
+          // karena itu HANYA mengulang miss yang sudah dicoba di baris di
+          // atas -- fallback ini mati. Yang belum pernah dicoba: untuk LID,
+          // kunci PN hasil mapping.
+          const n = await lookupContactName(sock, jid, id);
+          if (n) return n;
         }
       }
     } catch {}

@@ -533,6 +533,24 @@ function cacheLidJid(lid, jid) {
   trimLidCache();
 }
 
+// Buang mapping LID beserta semua aliasnya. cacheLidJid() menulis satu bare
+// number, tapi cacheParticipantLids() menulis tiga alias untuk pasangan yang
+// sama (<lid>@lid, <number>@lid, <number>@s.whatsapp.net), jadi penghapusan
+// harus menyebut semuanya atau salah satu alias akan tetap resolve.
+// Dipakai juga oleh test yang butuh cache dingin supaya tidak bisa lulus
+// karena sisa run sebelumnya.
+function forgetCachedJid(lid) {
+  if (!lid) return false;
+  const key = String(lid);
+  const bare = key.replace(/@(lid|s\.whatsapp\.net)$/, "");
+  let removed = false;
+  for (const k of [key, `${bare}@lid`, `${bare}@s.whatsapp.net`]) {
+    if (lidCache.delete(k)) removed = true;
+  }
+  if (removed) markDirty();
+  return removed;
+}
+
 async function resolveFromSock(jid, sock) {
   if (!jid || !sock) return jid;
   try {
@@ -615,6 +633,7 @@ export {
   getCachedJid,
   normalizeToPhoneNumber,
   cacheLidJid,
+  forgetCachedJid,
   resolveFromSock,
   getLidCacheSize,
   savePersistentCache,
