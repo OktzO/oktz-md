@@ -28,17 +28,22 @@ import {
 import { initAutoBackup } from "./lib/auto-backup.js";
 import { AsyncPool } from "./lib/async-pool.js";
 import {
+  BROKEN_SESSION_KEEP,
   classifyClose,
+  classifyLogout401,
   clearPairingPending,
+  FALSE_LOGOUT_RETRIES,
   getCooldownRemainingMs,
   isPairingPending,
   isRateLimitError,
   markPairingPending,
   normalizePairingNumber,
+  pruneBrokenSessions,
   resetPairingCreds,
   writeCooldown,
 } from "./lib/pairing-state.js";
 import { resolveWaVersion } from "./lib/wa-version.js";
+import { resolveKeepAlive } from "./lib/keepalive.js";
 import {
   buildQrFilePath,
   canRenderMore,
@@ -109,6 +114,7 @@ function stopWatchdog() {
 let reconnectTimer = null;
 let reconnectScheduled = false;
 let _flushTimer = null;
+let falseLogoutRetries = 0;
 
 function clearScheduledReconnect() {
   if (reconnectTimer) {
@@ -422,23 +428,21 @@ async function startConnection(options = {}) {
   const storageRoot = path.dirname(sessionPath);
 
   const TURSO_ENABLED = config.turso?.enabled && config.turso?.url;
+  if (!fs.existsSync(sessionPath))
+    fs.mkdirSync(sessionPath, { recursive: true });
+
+  // File lokal selalu jadi session store; Turso hanya mirror best-effort.
+  // Kalau Turso satu-satunya penyimpanan, token mati = sesi hilang permanen.
+  const { useDurableAuthState, setRemoteSessionLogger } =
+    await import("./lib/turso-session.js");
+  setRemoteSessionLogger((m) => colors.logger.warn("turso", m));
+
   let state, saveCreds;
   if (TURSO_ENABLED) {
-    const { useTursoAuthState } = await import("./lib/turso-session.js");
-    const result = await useTursoAuthState("main");
-    if (!result.state) {
-      if (!fs.existsSync(sessionPath))
-        fs.mkdirSync(sessionPath, { recursive: true });
-      const res = await useMultiFileAuthState(sessionPath);
-      state = res.state;
-      saveCreds = res.saveCreds;
-    } else {
-      state = result.state;
-      saveCreds = result.saveCreds;
-    }
+    const res = await useDurableAuthState("main", sessionPath);
+    state = res.state;
+    saveCreds = res.saveCreds;
   } else {
-    if (!fs.existsSync(sessionPath))
-      fs.mkdirSync(sessionPath, { recursive: true });
     const result = await useMultiFileAuthState(sessionPath);
     state = result.state;
     saveCreds = result.saveCreds;
@@ -464,7 +468,9 @@ async function startConnection(options = {}) {
     markOnlineOnConnect: false,
     generateHighQualityLinkPreview: false,
     shouldIgnoreJid: (jid) => (jid ? jid.includes("meta_ai") : false),
-    keepAliveIntervalMs: 10000,
+    keepAliveIntervalMs: resolveKeepAlive({
+      configured: config.session?.keepAliveIntervalMs,
+    }).intervalMs,
     getMessage: async (key) => {
       if (store) {
         const msg = store.messages.get(key.remoteJid)?.get(key.id);
@@ -739,6 +745,26 @@ async function startConnection(options = {}) {
 
       const action = classifyClose(sc, sock.authState?.creds);
       if (action !== "reconnect") {
+        // coba dulu sebelum purge, jangan langsung percaya 401
+        if (
+          classifyLogout401({
+            statusCode: sc,
+            creds: sock.authState?.creds,
+            connectedAt: connectionState.connectedAt,
+            retries: falseLogoutRetries,
+          }) === "retry"
+        ) {
+          falseLogoutRetries++;
+          connectionState.reconnectAttempts++;
+          colors.logger.warn(
+            "whatsapp",
+            `401 belum dianggap logout (percobaan ${falseLogoutRetries}/${FALSE_LOGOUT_RETRIES}) — sesi dipertahankan, reconnect dulu`,
+          );
+          scheduleReconnect(config.session?.reconnectInterval || 15e3, options);
+          return;
+        }
+        falseLogoutRetries = 0;
+
         connectionState.reconnectAttempts++;
         const m = config.session?.maxReconnectAttempts || 5;
         if (connectionState.reconnectAttempts <= m) {
@@ -772,13 +798,14 @@ async function startConnection(options = {}) {
           );
           try {
             if (fs.existsSync(sessionPath)) {
-              // rename, jangan rm — 401 transien masih bisa dipulihkan manual
-              // dari backup; rm langsung = sesi hilang permanen
-              for (const f of fs.readdirSync(storageRoot)) {
-                if (f.startsWith(`${path.basename(sessionPath)}.broken-`)) {
-                  try { fs.rmSync(path.join(storageRoot, f), { recursive: true, force: true }); } catch { }
-                }
-              }
+              // rename, jangan rm — 401 transien masih bisa dipulihkan dari
+              // backup. JANGAN hapus semua .broken-* dulu: itu menghapus
+              // satu-satunya salinan sesi lama sebelum sesi ini dibackup.
+              pruneBrokenSessions(
+                storageRoot,
+                path.basename(sessionPath),
+                BROKEN_SESSION_KEEP,
+              );
               fs.renameSync(
                 sessionPath,
                 `${sessionPath}.broken-${Date.now()}`,
@@ -799,17 +826,21 @@ async function startConnection(options = {}) {
             options,
           );
         } else {
+          // jangan leave listener: bot jadi zombie (proses hidup, tanpa
+          // reconnect, tanpa log)
           colors.logger.error(
             "whatsapp",
-            "sesi tetap ditolak setelah beberapa kali coba — butuh intervensi manual (nomor dibanned / register ulang)",
+            `sesi tetap ditolak setelah ${m}× coba — tetap mencoba tiap 10 menit (cek HP: Linked Devices bisa jadi sudah di-unlink)`,
           );
           connectionState.reconnectAttempts = 0;
-          try { sock.ev?.removeAllListeners?.(); } catch { }
+          falseLogoutRetries = 0;
+          scheduleReconnect(10 * 60e3, options);
         }
         return;
       }
 
       if (sc === 440) {
+        // 440 = sesi dipakai koneksi lain; sesi SAH, jangan hapus apa pun
         connectionState.reconnectAttempts++;
         if (connectionState.reconnectAttempts <= 3) {
           colors.logger.info(
@@ -820,10 +851,10 @@ async function startConnection(options = {}) {
         } else {
           colors.logger.error(
             "whatsapp",
-            "konflik sesi — perangkat lain terdeteksi, matikan bot yang lain",
+            "konflik sesi 440 berulang — cek tidak ada proses bot lain (pm2/Jadibot) memakai sesi ini",
           );
           connectionState.reconnectAttempts = 0;
-          try { sock.ev?.removeAllListeners?.(); } catch { }
+          scheduleReconnect(10 * 60e3, options);
         }
         return;
       }
@@ -848,6 +879,7 @@ async function startConnection(options = {}) {
       connectionState.isReady = true;
       connectionState.reconnectAttempts = 0;
       connectionState.connectedAt = new Date();
+      falseLogoutRetries = 0;
 
       // auth lolos: pairingSukses, marker tidak boleh ikut terpersist
       if (isPairingPending(sock.authState?.creds)) {

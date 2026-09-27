@@ -76,7 +76,112 @@ describe("pairing state", () => {
     });
   });
 
-  describe("classifyClose", () => {
+  describe("classifyLogout401 (false logout guard)", () => {
+  const authed = { registered: true, account: { id: "1@s.whatsapp.net" } };
+  const now = 1_000_000_000;
+
+  it("retries a 401 that lands right after connect", () => {
+    const verdict = m.classifyLogout401({
+      statusCode: 401,
+      creds: authed,
+      connectedAt: now - 5_000,
+      now,
+      retries: 0,
+    });
+    assert.equal(verdict, "retry");
+  });
+
+  it("trusts the logout once retries are exhausted", () => {
+    const verdict = m.classifyLogout401({
+      statusCode: 401,
+      creds: authed,
+      connectedAt: now - 5_000,
+      now,
+      retries: m.FALSE_LOGOUT_RETRIES,
+    });
+    assert.equal(verdict, "trust");
+  });
+
+  it("trusts a 401 that arrives long after connect (real logout)", () => {
+    const verdict = m.classifyLogout401({
+      statusCode: 401,
+      creds: authed,
+      connectedAt: now - 6 * 3600e3,
+      now,
+      retries: 0,
+    });
+    assert.equal(verdict, "trust");
+  });
+
+  it("never retries when the session was never authenticated", () => {
+    const verdict = m.classifyLogout401({
+      statusCode: 401,
+      creds: { registered: false },
+      connectedAt: now - 1_000,
+      now,
+      retries: 0,
+    });
+    assert.equal(verdict, "trust");
+  });
+
+  it("never retries a non-401 status", () => {
+    for (const code of [408, 428, 440, 500, 515, undefined]) {
+      const verdict = m.classifyLogout401({
+        statusCode: code,
+        creds: authed,
+        connectedAt: now - 1_000,
+        now,
+        retries: 0,
+      });
+      assert.equal(verdict, "trust", `status ${code} must not be retried`);
+    }
+  });
+});
+
+describe("pruneBrokenSessions", () => {
+  it("keeps the newest N broken sessions instead of deleting all", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "broken-"));
+    for (const ts of [1, 2, 3, 4, 5]) {
+      fs.mkdirSync(path.join(root, `session.broken-${ts}`));
+    }
+    // decoy: tidak boleh ikut terhapus
+    fs.mkdirSync(path.join(root, "session-extra"));
+    fs.writeFileSync(path.join(root, "session.broken-3", "creds.json"), "{}");
+
+    m.pruneBrokenSessions(root, "session", 3);
+
+    const left = fs
+      .readdirSync(root)
+      .filter((f) => f.startsWith("session.broken-"))
+      .sort();
+    assert.deepEqual(
+      left,
+      ["session.broken-3", "session.broken-4", "session.broken-5"],
+      "oldest broken sessions pruned, newest kept",
+    );
+    assert.ok(
+      fs.existsSync(path.join(root, "session-extra")),
+    );
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("is a no-op when fewer backups than the cap exist", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "broken2-"));
+    fs.mkdirSync(path.join(root, "session.broken-1"));
+    const removed = m.pruneBrokenSessions(root, "session", 3);
+    assert.equal(removed, 0);
+    assert.ok(fs.existsSync(path.join(root, "session.broken-1")));
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("does not throw on a missing directory", () => {
+    assert.doesNotThrow(() =>
+      m.pruneBrokenSessions("/tmp/definitely-not-here-xyz", "session", 3),
+    );
+  });
+});
+
+describe("classifyClose", () => {
     it("purges the session on a genuine logout of a paired session", () => {
       const creds = { account: { accountSignatureKey: "x" } };
       assert.equal(m.classifyClose(401, creds), "purge-session");

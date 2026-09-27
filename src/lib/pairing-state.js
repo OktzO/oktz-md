@@ -50,6 +50,57 @@ export function classifyClose(statusCode, creds) {
   return "reconnect";
 }
 
+// WA kadang kirim 401 palsu tepat setelah handshake. Percaya langsung = hapus
+// sesi sah. Referensi: zaileys retry 2x sebelum believe a logout.
+export const FALSE_LOGOUT_GRACE_MS = 60 * 1000;
+export const FALSE_LOGOUT_RETRIES = 2;
+
+/**
+ * Apakah 401 ini boleh dipercaya sebagai logout asli?
+ * @returns {"retry"|"trust"}
+ */
+export function classifyLogout401({
+  statusCode,
+  creds,
+  connectedAt,
+  now = Date.now(),
+  retries = 0,
+  graceMs = FALSE_LOGOUT_GRACE_MS,
+  maxRetries = FALSE_LOGOUT_RETRIES,
+} = {}) {
+  if (statusCode !== 401) return "trust";
+  if (!isAuthenticated(creds)) return "trust";
+  // baru saja konek → sangat mungkin 401 palsu
+  if (connectedAt && now - connectedAt < graceMs && retries < maxRetries) {
+    return "retry";
+  }
+  return "trust";
+}
+
+// berapa folder .broken-* yang disimpan; sebelumnya semua dihapus sebelum
+// rename, jadi tiap 401 menghapus satu-satunya salinan sesi lama.
+export const BROKEN_SESSION_KEEP = 3;
+
+export function pruneBrokenSessions(storageRoot, sessionBaseName, keep = BROKEN_SESSION_KEEP) {
+  let removed = 0;
+  try {
+    const prefix = `${sessionBaseName}.broken-`;
+    const entries = fs
+      .readdirSync(storageRoot)
+      .filter((f) => f.startsWith(prefix))
+      // timestamp di nama → urut kronologis
+      .sort();
+    const excess = entries.length - Math.max(0, keep);
+    for (let i = 0; i < excess; i++) {
+      try {
+        fs.rmSync(path.join(storageRoot, entries[i]), { recursive: true, force: true });
+        removed++;
+      } catch { }
+    }
+  } catch { }
+  return removed;
+}
+
 export function isRateLimitError(error) {
   if (!error) return false;
   const message = typeof error.message === "string" ? error.message : "";

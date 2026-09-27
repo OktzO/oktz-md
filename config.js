@@ -25,6 +25,8 @@ const config = {
     qrDir: "qr", // folder penyimpanan file QR (di dalam storage/)
     qrPngWidth: 320, // lebar PNG QR, makin kecil makin padat
     qrMaxPrints: 5, // batas cetak QR di terminal, biar tidak memenuhi layar
+    // batas kill koneksi = interval + 5000ms; jangan <30000 (slack 5s, rawan 408 saat idle)
+    keepAliveIntervalMs: 30000,
   },
 
   fake_call: {

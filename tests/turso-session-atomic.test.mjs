@@ -8,13 +8,26 @@ async function setupTurso() {
   return { client, tursoModule };
 }
 
+// loadState() return null kalau session_creds kosong; test ini cuma keys store
+async function loadSeededState(scope) {
+  const tursoModule = await import('../src/lib/turso.js');
+  const client = tursoModule.getTursoClient();
+  await client.execute({
+    sql: 'INSERT INTO session_creds (scope, creds, updated_at) VALUES (?, ?, ?) ON CONFLICT(scope) DO UPDATE SET creds = excluded.creds',
+    args: [scope, JSON.stringify({ registered: true }), 1],
+  });
+  const { loadState } = await import('../src/lib/turso-session.js');
+  const state = await loadState(scope);
+  assert.ok(state, `loadState(${scope}) should return a state once a row exists`);
+  return state;
+}
+
 describe('turso session keys.set atomic writes', () => {
   it('writes all keys via a single batch() call, not per-key execute()', async () => {
     const { client } = await setupTurso();
     const batchSpy = mock.method(client, 'batch');
 
-    const { loadState } = await import('../src/lib/turso-session.js');
-    const state = await loadState('main');
+    const state = await loadSeededState('main');
 
     await state.keys.set({
       'pre-key': {
@@ -47,8 +60,7 @@ describe('turso session keys.set atomic writes', () => {
     const originalBatch = client.batch;
     client.batch = async () => { throw new Error('batch not supported'); };
 
-    const { loadState } = await import('../src/lib/turso-session.js');
-    const state = await loadState('main');
+    const state = await loadSeededState('main');
 
     await state.keys.set({
       'pre-key': { 'id1': { keyPair: 'a' }, 'id2': { keyPair: 'b' } },
@@ -63,10 +75,10 @@ describe('turso session keys.set atomic writes', () => {
 
   it('deleteTursoSession clears cached keys for every category of the scope', async () => {
     const { client } = await setupTurso();
-    const { loadState, deleteTursoSession } = await import('../src/lib/turso-session.js');
+    const { deleteTursoSession } = await import('../src/lib/turso-session.js');
 
     const scope = 'clear-cache-test';
-    const state = await loadState(scope);
+    const state = await loadSeededState(scope);
     await state.keys.set({
       'pre-key': { 'k1': { v: 1 } },
       'session': { 'k2': { v: 2 } },
