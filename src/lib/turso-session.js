@@ -12,6 +12,136 @@ const KEYS_CACHE_CAP = 1000;
 // SETELAH operator punya kesempatan mengambilnya; tidak ada yang hilang diam.
 const CORRUPT_KEY_KEEP = 5;
 
+// Jumlah karantina creds yang disimpan sebelum yang tertua dibuang. Bot yang
+// boot gagal berulang tidak boleh menabrak batas inode, tapi file lama
+// dibuang hanya SETELAH operator sempat mengambilnya.
+const BROKEN_CREDS_KEEP = 5;
+
+function pruneBrokenCredsBackups(storageRoot, credsPath, report) {
+  const dir = path.dirname(credsPath);
+  const base = path.basename(credsPath);
+  try {
+    const backups = fs
+      .readdirSync(dir)
+      .filter((f) => f.startsWith(`${base}.broken-`))
+      .sort();
+    while (backups.length > BROKEN_CREDS_KEEP) {
+      const victim = backups.shift();
+      try {
+        fs.rmSync(path.join(dir, victim), { force: true });
+        report?.(`karantina creds lama dibuang: ${victim}`);
+      } catch { }
+    }
+  } catch { }
+  void storageRoot;
+}
+
+// Pindahkan creds.json yang tidak bisa dipakai ke <file>.broken-<ts>.
+// RENAME, bukan unlink: isi asli utuh untuk dipulihkan operator dan tidak
+// ada satu pun file yang dihapus. Identitas di dalam file itu tidak berlaku
+// lagi, tapi membawanya ke log lebih berguna daripada diam-diam hilang.
+function quarantineBrokenCreds(credsPath, report) {
+  const dest = `${credsPath}.broken-${Date.now()}`;
+  try {
+    fs.renameSync(credsPath, dest);
+  } catch (e) {
+    report?.(`gagal memindahkan creds.json ke karantina: ${e.message}`);
+    return null;
+  }
+  report?.(
+    `creds.json tidak bisa dipakai -> dipindah ke ${path.basename(dest)} ` +
+      `(isi file TIDAK dihapus, bisa dipulihkan dari sana). ` +
+      `Bot mulai dengan sesi baru: pair ulang / scan QR lagi. ` +
+      `Kalau ini terjadi berulang, cek izin tulis folder storage.`,
+  );
+  return dest;
+}
+
+// Klasifikasi kegagalan load auth-state.
+//
+// "corrupt" hanya diberikan kalau kita BISA membuktikan file-nya ada dan
+// errornya memang tentang file itu. Semua else -- EACCES, folder bukan
+// direktori, ENOSPC, ENOENT yang aneh -- dikembalikan sebagai "other" supaya
+// pemanggil TIDAK mengarang pemulihan. Mengarantaina file karena masalah
+// yang lain seperti ini justru menghapus bukti masalah aslinya.
+function classifyAuthStateFailure(error, { credsExists, credsPath } = {}) {
+  const message = String(error?.message || error || "");
+  if (!credsExists) return { kind: "other", reason: "creds.json tidak ada" };
+  if (message.includes(credsPath) || message.includes("creds.json")) {
+    return { kind: "corrupt", reason: message };
+  }
+  return { kind: "other", reason: message };
+}
+
+/**
+ * Muat auth state, dan pulihkan sendiri kalau creds.json ada tapi rusak.
+ *
+ * =onigis menolak creds.json yang HADIR tapi tidak bisa dipakai (`me: null`,
+ * array di level atas, `"hello"`, JSON terpotong) alih-alih diam-diam
+ * memalsukan identitas baru. Itu fail-closed yang benar. Tapi startConnection
+ * dulu dipanggil tanpa guard di dalam main(), dan main().catch melakukan
+ * process.exit(1) -- jadi setiap boot gagal sampai operator menghapus
+ * storage/session dengan tangan. Repo ini sudah punya storage/session.broken-*,
+ * jadi itu benar-benar pernah terjadi.
+ *
+ * Karantina di level FILE, bukan folder: pre-key, app-state, dan session-*
+ * milik identitas itu, tapi membuang folder berarti identifier baru DAN
+ * memicu rate-overlimit, sedangkan mengganti identitas tanpa menghapus apa
+ * pun tidak meninggalkan jejak yang tidak bisa dipulihkan. Yang dibuang
+ * hanya file creds.json itu sendiri, yang memang sudah tidak berlaku.
+ *
+ * Creds RUSAK dan creds BELUM PAIR sengaja tidak dicampur:
+ * - rusak: file ada tapi JSON-nya tidak bisa dipakai -> karantina + sesi baru
+ * - belum pair: file sah, `me` tidak ada, `registered: false` -> kondisi
+ *   NORMAL hasil pairing yang belum selesai, dibiarkan apa adanya tanpa report
+ *   karantina, karena inilah yang terjadi pada setiap pairing baru.
+ * Klasifikasi hanya melaporkan "corrupt" kalau file-nya terbukti ADA dan
+ * errornya memang tentang file itu.
+ *
+ * @returns {Promise<{state: Object, saveCreds: Function, recovered: boolean}>}
+ */
+async function loadAuthStateWithRecovery(sessionPath, report) {
+  const credsPath = path.join(sessionPath, "creds.json");
+  const load = async () => {
+    const { useMultiFileAuthState } = await import("onigis");
+    return useMultiFileAuthState(sessionPath);
+  };
+
+  try {
+    const res = await load();
+    return { state: res.state, saveCreds: res.saveCreds, recovered: false };
+  } catch (error) {
+    const credsExists = (() => {
+      try {
+        return fs.existsSync(credsPath);
+      } catch {
+        return false;
+      }
+    })();
+
+    const kind = classifyAuthStateFailure(error, { credsExists, credsPath });
+    if (kind.kind !== "corrupt") {
+      // Bukan masalah creds.json: mengarantaina apa pun di sini akan
+      // menghapus bukti masalah yang sebenarnya. Biarkan error asli naik
+      // supaya pesan yang muncul jujur.
+      throw error;
+    }
+
+    report?.(
+      `gagal memuat sesi dari ${path.basename(sessionPath)}: ${kind.reason}`,
+    );
+    const dest = quarantineBrokenCreds(credsPath, report);
+    if (!dest) {
+      // Tidak bisa dipindah: jangan ulangi tanpa batas, biarkan error asli.
+      throw error;
+    }
+    pruneBrokenCredsBackups(path.dirname(sessionPath), credsPath, report);
+
+    const res = await load();
+    return { state: res.state, saveCreds: res.saveCreds, recovered: true };
+  }
+}
+
 function trimLocalCache(local, cap) {
   if (local.size <= cap) return;
   const excess = local.size - cap;
@@ -300,10 +430,15 @@ async function useTursoAuthState(scope = 'main') {
 // File lokal = source of truth yang durable, Turso hanya mirror best-effort.
 // Token Turso mati = warning, bukan logout.
 async function useDurableAuthState(scope, folder) {
-  const { useMultiFileAuthState, initAuthCreds } = await import('onigis');
+  const { initAuthCreds } = await import('onigis');
   if (!folder) throw new Error('useDurableAuthState butuh folder lokal');
 
-  const local = await useMultiFileAuthState(folder);
+  // Jalur INI yang hidup di produksi (config.turso.enabled default true), dan
+  // useMultiFileAuthState di dalamnya yang melempar kalau creds.json ada tapi
+  // tidak bisa dipakai. Tanpa recovery di sini, tiap boot gagal sampai
+  // operator menghapus storage/session dengan tangan.
+  const loaded = await loadAuthStateWithRecovery(folder, warnRemote);
+  const local = { state: loaded.state, saveCreds: loaded.saveCreds };
   let creds = local.state.creds;
   // Dibungkus DI SINI, bukan nanti di keys.get: ini satu-satunya titik di mana
   // store lokal dibuat, dan useMultiFileAuthState juga dipakai langsung dari
@@ -418,4 +553,7 @@ export {
   trimLocalCache,
   withCorruptKeyRecovery,
   quarantineCorruptKeyFiles,
+  loadAuthStateWithRecovery,
+  classifyAuthStateFailure,
+  quarantineBrokenCreds,
 };

@@ -446,6 +446,7 @@ function defaultLibraryLogReport(level, text) {
 
 const libraryLogger = createLibraryLogger();
 
+
 /**
  * Interface untuk input terminal
  * @type {readline.Interface|null}
@@ -598,18 +599,26 @@ async function startConnection(options = {}) {
     state = res.state;
     saveCreds = res.saveCreds;
   } else {
-    const result = await useMultiFileAuthState(sessionPath);
+    const res = await loadAuthStateWithRecovery(sessionPath, (m) =>
+      colors.logger.error("session", m),
+    );
+    if (res.recovered) {
+      colors.logErrorBox(
+        "sesi direset",
+        "creds.json tidak bisa dipakai, sudah dikarantina. Bot akan pair ulang.",
+      );
+    }
     // Jalur tanpa Turso juga perlu karantina key file rusak: store di sini
     // mentah dari library, jadi keys.get yang melempar mematikan decryption
     // untuk peer itu selamanya tanpa file rusak pernah hilang dari disk.
     state = {
-      creds: result.state.creds,
-      keys: withCorruptKeyRecovery(result.state.keys, {
+      creds: res.state.creds,
+      keys: withCorruptKeyRecovery(res.state.keys, {
         sessionPath,
         report: (m) => colors.logger.warn("session", m),
       }),
     };
-    saveCreds = result.saveCreds;
+    saveCreds = res.saveCreds;
   }
 
   const version = await getWaVersion()
@@ -1910,3 +1919,12 @@ export {
   attachEventErrorReporter,
   createLibraryLogger,
 };
+
+// Di-ekspor ulang supaya import dari connection.js (dipakai test, dan
+// startConnection) tetap satu pintu. Implementasinya ada di turso-session.js
+// karena useDurableAuthState -- jalur produksi yang hidup -- butuh yang sama.
+export {
+  loadAuthStateWithRecovery,
+  classifyAuthStateFailure,
+  quarantineBrokenCreds,
+} from "./lib/turso-session.js";
