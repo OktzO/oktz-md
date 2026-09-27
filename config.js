@@ -214,6 +214,18 @@ const config = {
   // TURSO — DB + session disimpan remote di Turso (libsql).
   // Isi url + authToken punyamu di sini (atau pakai env TURSO_URL / TURSO_AUTH_TOKEN).
   // Ambil di https://console.turso.io → create database → generate token.
+  // Provider untuk 7 plugin to*.js (tomekah, tofigure, tojapanese, dll).
+  // Semuanya butuh API efek gambar yang menerima URL. Default cuma "faa",
+  // tapi Cloudflare WAF di sana memblokir /faa/* per IP klien — kalau VPS kamu
+  // kena, tambahkan provider lain di sini (urutan = urutan percobaan).
+  effectApi: {
+    providers: [
+      { name: "faa", base: "https://api-faa.my.id/faa" },
+      // { name: "vynaa", base: "https://vynaa.web.id/maker/botcahx-maker", apikey: "" },
+    ],
+    timeoutMs: 45000,
+  },
+
   turso: {
     url: process.env.TURSO_URL || "",
     authToken: process.env.TURSO_AUTH_TOKEN || "",

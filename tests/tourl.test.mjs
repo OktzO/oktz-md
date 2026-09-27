@@ -15,11 +15,8 @@ const HOST_URLS = {
   litterbox: 'https://litter.catbox.moe/abc.png',
   kappa: 'https://kappa.lol/abc',
   uguu: 'https://d.uguu.se/abc.png',
-  tmpfiles: 'https://tmpfiles.org/123/abc.png',
   uploadee: 'https://www.upload.ee/image/1/abc.png',
-  top4top: 'https://g.top4top.io/p_abc.png',
   leopard: 'https://leopard.hosting.pecon.us/dl/abc/abc.png',
-  quax: 'https://qu.ax/abc',
   nekohime: 'https://cdn.nekohime.site/file/abc.png',
   pasters: 'https://paste.rs/abc',
   cnets: 'https://paste.c-net.org/abc',
@@ -54,15 +51,6 @@ function fakeResponse(url) {
       }),
     };
   }
-  if (u.includes('tmpfiles.org')) {
-    return {
-      ok: true,
-      json: async () => ({
-        status: 'success',
-        data: { url: HOST_URLS.tmpfiles },
-      }),
-    };
-  }
   if (u.includes('upload.ee')) {
     if (u.includes('ubr_link_upload')) {
       return { text: async () => '<script>startUpload("PID123")</script>' };
@@ -75,30 +63,16 @@ function fakeResponse(url) {
     }
     return { text: async () => '' };
   }
-  if (u.includes('top4top.io')) {
-    if (u.endsWith('/')) {
-      return { text: async () => '<input name="sid" value="S1">' };
-    }
-    return {
-      text: async () => `<input value="${HOST_URLS.top4top}">`,
-    };
-  }
   if (u.includes('leopard')) {
     return {
       text: async () =>
         `Download link: <a href=${HOST_URLS.leopard}>x</a>`,
     };
   }
-  if (u.includes('qu.ax')) {
-    return {
-      ok: true,
-      json: async () => ({ success: true, files: [{ url: HOST_URLS.quax }] }),
-    };
-  }
   if (u.includes('nekohime')) {
     return {
       ok: true,
-      json: async () => ({ files: [{ url: HOST_URLS.nekohime }] }),
+      json: async () => ({ files: [{ url: HOST_URLS.nekohime, status: 'uploaded' }] }),
     };
   }
   if (u.includes('paste.rs')) {
@@ -245,7 +219,7 @@ describe('tourl — text path (paste)', () => {
       `body paste harus berisi teks aslinya, dapat: ${JSON.stringify(posted)}`,
     );
     assert.ok(
-      !fetchCalls.some((c) => /litterbox|kappa\.lol|uguu\.se|tmpfiles|upload\.ee|top4top|leopard|qu\.ax|nekohime/.test(c.url || '')),
+      !fetchCalls.some((c) => /litterbox|kappa\.lol|uguu\.se|upload\.ee|leopard|nekohime/.test(c.url || '')),
       'jalur teks tidak boleh menyentuh host file',
     );
   });
@@ -361,11 +335,8 @@ describe('tourl — text path (paste)', () => {
       HOST_URLS.litterbox,
       HOST_URLS.kappa,
       HOST_URLS.uguu,
-      HOST_URLS.tmpfiles,
       HOST_URLS.uploadee,
-      HOST_URLS.top4top,
       HOST_URLS.leopard,
-      HOST_URLS.quax,
       HOST_URLS.nekohime,
     ]) {
       assert.ok(text.includes(url), `body harus memuat ${url}`);
@@ -485,11 +456,8 @@ describe('tourl — fan-out upload', () => {
       'litterbox',
       'kappa.lol',
       'uguu.se',
-      'tmpfiles.org',
       'upload.ee',
-      'top4top.io',
       'leopard',
-      'qu.ax',
       'nekohime',
     ];
     for (const h of triedHosts) {
@@ -515,7 +483,7 @@ describe('tourl — fan-out upload', () => {
       assert.equal(sock.calls.sendButton.length, 1);
       const text = sock.calls.sendButton[0][2];
       assert.ok(text.includes('kappa.lol'), 'host cepat harus tetap masuk');
-      assert.ok(text.includes('qu.ax'), 'host cepat harus tetap masuk');
+      assert.ok(text.includes('leopard'), 'host cepat harus tetap masuk');
       assert.ok(text.includes('nekohime.site'), 'host lambat juga harus masuk');
     } finally {
       slowHosts.clear();
@@ -658,16 +626,19 @@ describe('tourl — impor & regression', () => {
       'utf8',
     );
     for (const [imp, uses] of [
-      ['FormData', /new FormData\(\)/],
       ['fetch', /await fetch\(/],
-      ['mime', /mime\.lookup/],
       ['downloadMediaMessage', /downloadMediaMessage\(/],
       ['getContentType', /getContentType\(/],
       ['te', /te\(/],
       ['config', /config\.bot/],
+      ['UPLOAD_PROVIDERS', /UPLOAD_PROVIDERS/],
     ]) {
       assert.match(src, uses, `${imp} di-import tapi tidak dipakai — hapus import-nya`);
     }
+    // Daftar host upload pindah ke src/lib/upload-providers.js, jadi
+    // FormData/mime tidak lagi dipakai di tourl dan tidak boleh di-import.
+    assert.doesNotMatch(src, /form-data/, 'FormData tidak lagi dipakai di tourl');
+    assert.doesNotMatch(src, /mime-types/, 'mime tidak lagi dipakai di tourl');
   });
 
   test('tidak ada import mati di plugin yang di-swap', async () => {

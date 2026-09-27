@@ -1,6 +1,5 @@
 import { getDatabase } from '../../src/lib/database.js'
-import axios from 'axios'
-import FormData from 'form-data'
+import { uploadImage } from '../../src/lib/uploader.js'
 
 const pluginConfig = {
     name: 'addlist',
@@ -18,20 +17,6 @@ const pluginConfig = {
     isEnabled: true
 }
 
-async function uploadToCatbox(buffer, filename = 'file.jpg') {
-    try {
-        const form = new FormData()
-        form.append('fileToUpload', buffer, { filename })
-        form.append('reqtype', 'fileupload')
-        const res = await axios.post('https://catbox.moe/user/api.php', form, {
-            headers: form.getHeaders(),
-            timeout: 30000
-        })
-        return res.data?.startsWith('http') ? res.data : null
-    } catch {
-        return null
-    }
-}
 
 async function handler(m, { sock }) {
     if (m.isGroup) {
@@ -89,7 +74,7 @@ async function handler(m, { sock }) {
             const buffer = hasQuotedMedia ? await m.quoted.download() : await m.download()
             if (buffer) {
                 const isVideo = m.quoted?.isVideo || m.quoted?.type === 'videoMessage' || m.isVideo
-                const url = await uploadToCatbox(buffer, isVideo ? 'video.mp4' : 'image.jpg')
+                const url = await uploadImage(buffer, isVideo ? 'video.mp4' : 'image.jpg')
                 if (url) {
                     if (isVideo) videoUrl = url
                     else imageUrl = url

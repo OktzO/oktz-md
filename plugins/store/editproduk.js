@@ -1,6 +1,5 @@
 import { getDatabase } from '../../src/lib/database.js'
-import axios from 'axios'
-import FormData from 'form-data'
+import { uploadImage } from '../../src/lib/uploader.js'
 
 const pluginConfig = {
     name: 'editproduk',
@@ -18,20 +17,6 @@ const pluginConfig = {
     isEnabled: true
 }
 
-async function uploadToCatbox(buffer, filename = 'file.jpg') {
-    try {
-        const form = new FormData()
-        form.append('fileToUpload', buffer, { filename })
-        form.append('reqtype', 'fileupload')
-        const res = await axios.post('https://catbox.moe/user/api.php', form, {
-            headers: form.getHeaders(),
-            timeout: 30000
-        })
-        return res.data?.startsWith('http') ? res.data : null
-    } catch {
-        return null
-    }
-}
 
 async function handler(m, { sock }) {
     if (m.isGroup) {
@@ -152,7 +137,7 @@ async function handler(m, { sock }) {
             try {
                 const buffer = hasMedia ? await m.quoted.download() : await m.download()
                 if (buffer) {
-                    const url = await uploadToCatbox(buffer, 'image.jpg')
+                    const url = await uploadImage(buffer, 'image.jpg')
                     if (url) product.image = url
                     else return m.reply(`❌ *Gagal mengunggah gambar.* Coba lagi nanti 🖼️`)
                 }
@@ -169,7 +154,7 @@ async function handler(m, { sock }) {
             try {
                 const buffer = hasMedia ? await m.quoted.download() : await m.download()
                 if (buffer) {
-                    const url = await uploadToCatbox(buffer, 'video.mp4')
+                    const url = await uploadImage(buffer, 'video.mp4')
                     if (url) product.video = url
                     else return m.reply(`❌ *Gagal mengunggah video.* Coba lagi nanti 🎬`)
                 }

@@ -1,6 +1,5 @@
-import FormData from "form-data";
+import { uploadImage } from "../../src/lib/uploader.js";
 import fetch from "node-fetch";
-import mime from "mime-types";
 import { downloadMediaMessage, getContentType } from "onigis";
 import te from "../../src/lib/error.js";
 
@@ -20,26 +19,6 @@ const pluginConfig = {
   isEnabled: true,
 };
 
-async function uploadToCatbox(buffer, filename = "file.jpg") {
-  const form = new FormData();
-  form.append("reqtype", "fileupload");
-  form.append("fileToUpload", buffer, {
-    filename,
-    contentType: mime.lookup(filename) || "image/jpeg",
-  });
-
-  const res = await fetch("https://catbox.moe/user/api.php", {
-    method: "POST",
-    body: form,
-    headers: form.getHeaders(),
-    timeout: 30000,
-  });
-
-  if (!res.ok) throw new Error("Catbox gagal");
-  const url = await res.text();
-  if (!url.startsWith("http")) throw new Error("Invalid response");
-  return url;
-}
 
 async function handler(m, { sock }) {
   let media = null;
@@ -63,7 +42,7 @@ async function handler(m, { sock }) {
   await m.react("🕕");
 
   try {
-    const imgUrl = await uploadToCatbox(media);
+    const imgUrl = await uploadImage(media);
 
     const apiUrl = `https://api.nexray.eu.cc/canvas/gura?url=${encodeURIComponent(imgUrl)}`;
     const res = await fetch(apiUrl);

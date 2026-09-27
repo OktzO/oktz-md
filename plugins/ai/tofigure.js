@@ -1,4 +1,4 @@
-import axios from 'axios'
+import { applyImageEffect } from '../../src/lib/effect-api.js';
 import { uploadImage } from '../../src/lib/uploader.js'
 import te from '../../src/lib/error.js'
 const pluginConfig = {
@@ -40,12 +40,11 @@ async function handler(m, { sock }) {
         
         const imageUrl = await uploadImage(buffer, 'image.jpg')
         
-        const apiUrl = `https://api-faa.my.id/faa/tofigura?url=${encodeURIComponent(imageUrl)}`
-        const res = await axios.get(apiUrl, { responseType: 'arraybuffer' })
+        const res = await applyImageEffect('tofigura', imageUrl)
         
         m.react('✅')
         
-        await sock.sendMedia(m.chat, Buffer.from(res.data), null, m, {
+        await sock.sendMedia(m.chat, res, null, m, {
             type: 'image',
         })
         

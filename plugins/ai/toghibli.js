@@ -1,5 +1,5 @@
 import { uploadImage } from '../../src/lib/uploader.js'
-import { f } from '../../src/lib/http.js'
+import { applyImageEffect } from '../../src/lib/effect-api.js'
 import te from '../../src/lib/error.js'
 const pluginConfig = {
     name: 'toghibli',
@@ -41,11 +41,11 @@ async function handler(m, { sock }) {
         
         const imageUrl = await uploadImage(buffer, 'image.jpg')
         
-        const res = await f(`https://api-faa.my.id/faa/toghibli?url=${encodeURIComponent(imageUrl)}`, 'arrayBuffer')
+        const res = await applyImageEffect('toghibli', imageUrl)
         
         m.react('✅')
         
-        await sock.sendMedia(m.chat, Buffer.from(res), null, m, {
+        await sock.sendMedia(m.chat, res, null, m, {
             type: 'image',
         })
         
