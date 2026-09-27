@@ -47,7 +47,14 @@ function getTempDir() {
   return tmpDir;
 }
 
-const STICKER_PACK_CAP_BYTES = 200 * 1024 * 1024;
+// Buffer sticker adalah ArrayBuffer di luar heap V8, jadi --max-old-space-size
+// sama sekali tidak mengaturnya. src/lib/profiler.js mencatat baseline RSS idle
+// 290-375MB di host 1GB dengan --max-old-space-size=512, jadi sisa headroom-nya
+// cuma ~650MB. Cap lama 200MB berdiri persis sebesar satu pack besar, sehingga
+// cap itu secara matematis tidak pernah bisa ditegakkan. 32MB masih menampung
+// 2-3 pack berukuran wajar (1-15MB) -- cukup untuk fitur forward-by-id --
+// dan tidak menyerap apa pun yang berarti dari baseline itu.
+const STICKER_PACK_CAP_BYTES = 32 * 1024 * 1024;
 
 function packSizeBytes(data) {
   const pack = data?.message?.stickerPackMessage;
@@ -62,12 +69,30 @@ function packSizeBytes(data) {
 function createStickerPackCache(capBytes = STICKER_PACK_CAP_BYTES) {
   const map = new Map();
   let totalBytes = 0;
+  // Guard lama `map.size > 1` membuat satu pack tunggal jadi permanen tak
+  // terevict: begitu dia satu-satunya entri, loop berhenti dan Buffer
+  // 200MB yang beronggok di luar heap tertahan sampai proses mati. Sekarang
+  // entri yang sendirian sudah melebihi cap ditolak saat masuk (lihat set()
+  // di bawah), jadi loop evict boleh turun ke nol entri tanpa risiko
+  // menelan seluruh cache.
   const evictToUnderCap = (keepKey) => {
-    while (totalBytes > capBytes && map.size > 1) {
+    // Pegas jumlah entri saat masuk, bukan map.size: map.size menyusut tiap
+    // iterasi, jadi batas yang bergerak sendiri bisa menghentikan loop di
+    // tengah jalan dan meninggalkan total di atas cap.
+    let budget = map.size;
+    while (totalBytes > capBytes && budget-- > 0) {
       const oldest = map.keys().next().value;
-      if (oldest === undefined || oldest === keepKey) break;
-      totalBytes -= packSizeBytes(map.get(oldest));
-      map.delete(oldest);
+      if (oldest === undefined) break;
+      // keepKey bisa jadi entri tertua kalau key-nya di-set ulang (Map tidak
+      // mengubah urutan saat re-set). Kalau masih ada entri lain, evict yang
+      // lain dulu dan sisakan keepKey.
+      const victim =
+        oldest === keepKey && map.size > 1
+          ? [...map.keys()].find((k) => k !== keepKey)
+          : oldest;
+      if (victim === undefined) break;
+      totalBytes -= packSizeBytes(map.get(victim));
+      map.delete(victim);
     }
   };
   const api = {
@@ -75,8 +100,18 @@ function createStickerPackCache(capBytes = STICKER_PACK_CAP_BYTES) {
     has: (k) => map.has(k),
     // ponytail: re-set of existing key keeps Map insertion order (no recency refresh); `delete`+`set` would restore it — evict-oldest sanctioned as-is.
     set: (k, v) => {
+      const incoming = packSizeBytes(v);
       if (map.has(k)) totalBytes -= packSizeBytes(map.get(k));
-      totalBytes += packSizeBytes(v);
+      // Satu pack yang lebih besar dari cap tidak akan pernah muat, berapa
+      // kali pun entri lain di-evict. Buang yang ada, jangan simpan yang baru:
+      // pack tidak ter-cache hanya berarti forward-by-id perlu pesan aslinya,
+      // sedangkan 200MB yang tertahan tidak akan pernah bisa dilepas.
+      if (incoming > capBytes) {
+        map.delete(k);
+        evictToUnderCap(k);
+        return api;
+      }
+      totalBytes += incoming;
       map.set(k, v);
       evictToUnderCap(k);
       return api;
@@ -100,6 +135,16 @@ function createStickerPackCache(capBytes = STICKER_PACK_CAP_BYTES) {
     },
   };
   return api;
+}
+
+// Dipanggil saat disconnect dan saat logout(). Pack di-cache cuma supaya bisa
+// di-forward ulang by-id; begitu koneksi putus, tidak ada yang akan meminta
+// pack lama, dan membawanya ke reconnect berikutnya berarti satu siklus penuh
+// Buffer yang tidak terpakai masih menghuni RSS.
+function clearStickerPackCache() {
+  try {
+    global.stickerPackCache?.clear?.();
+  } catch { }
 }
 
 async function downloadBuffer(url) {
@@ -597,6 +642,7 @@ async function extendSocket(sock) {
       packs.push({ id, name: data.name, savedAt: data.savedAt });
     return packs;
   };
+  sock.clearStickerPackCache = clearStickerPackCache;
 
   sock.forwardStickerPack = async (jid, packIdOrMessage, m) => {
     let messageContent;
@@ -1255,4 +1301,6 @@ export {
   getTempDir,
   createStickerPackCache,
   packSizeBytes,
+  clearStickerPackCache,
+  STICKER_PACK_CAP_BYTES,
 };

@@ -82,7 +82,7 @@ describe("groupMetadataCache age-sweep (>800 cap, drop since >30min)", () => {
   });
 });
 
-describe("stickerPackCache byte-cap (200MB default, evict oldest)", () => {
+describe("stickerPackCache byte-cap (32MB default, evict oldest)", () => {
   it("computes pack size from sticker buffers", () => {
     const data = pack("p", 1024);
     assert.equal(packSizeBytes(data), 1024);
@@ -116,10 +116,16 @@ describe("stickerPackCache byte-cap (200MB default, evict oldest)", () => {
     assert.ok(cache.totalBytes <= 1000);
   });
 
-  it("keeps a single oversized pack (never evicts last entry)", () => {
+  it("drops a single oversized pack (it can never fit under the cap)", () => {
+    // assertion ini sengaja dibalik pada fix C1. Guard lama `map.size > 1`
+    // membuat satu pack tunggal permanen tak terevict: cap 200MB persis
+    // sebesar satu pack besar, jadi 200MB Buffer eksternal bisa tertahan
+    // sampai proses mati dan --max-old-space-size tidak mengaturnya sama
+    // sekali. Cap kini ditolak saat masuk.
     const cache = createStickerPackCache(200);
     cache.set("huge", pack("huge", 500));
-    assert.ok(cache.get("huge"), "single pack retained even over cap");
+    assert.equal(cache.get("huge"), undefined, "pack tunggal over-cap dibuang");
+    assert.ok(cache.totalBytes <= 200);
   });
 
   it("tracks re-set of existing key without double counting", () => {

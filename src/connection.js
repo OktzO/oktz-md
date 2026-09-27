@@ -14,7 +14,7 @@ import readline from "readline";
 import NodeCache from "node-cache";
 import config, { isOwner as isOwners, setBotNumber } from "../config.js";
 import * as colors from "./lib/logger.js";
-import { extendSocket } from "./lib/socket.js";
+import { extendSocket, clearStickerPackCache } from "./lib/socket.js";
 import {
   isLid,
   lidToJid,
@@ -767,6 +767,12 @@ async function startConnection(options = {}) {
       connectionState.isConnected = false;
       connectionState.isReady = false;
       stopWatchdog();
+      // Pack sticker cuma berguna selama socket ini hidup: tidak ada yang
+      // akan meminta pack lama setelah putus, dan membawanya ke siklus
+      // reconnect berikutnya berarti satu siklus penuh Buffer eksternal
+      // yang tidak terpakai masih menghuni RSS. Kapitalisasi cache tidak
+      // di-index oleh identitas, jadi ini aman untuk bot multi-sesi.
+      clearStickerPackCache();
 
       const r =
         d?.error instanceof Boom
@@ -1762,6 +1768,10 @@ async function logout() {
     if (fs.existsSync(sessionPath)) {
       fs.rmSync(sessionPath, { recursive: true, force: true });
     }
+
+    // Sesi dihapus, jadi pack yang di-cache untuk sesi itu tidak akan pernah
+    // bisa di-forward lagi. Jangan tunggu GC.
+    clearStickerPackCache();
 
     if (config.turso?.enabled && config.turso?.url) {
       const { deleteTursoSession } = await import("./lib/turso-session.js");
