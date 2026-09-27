@@ -1,8 +1,16 @@
 import { BufferJSON } from 'onigis';
+import fs from 'fs';
+import path from 'path';
 import { getTursoClient } from './turso.js';
 
 const keysCache = new Map();
 const KEYS_CACHE_CAP = 1000;
+
+// Berapa file rusak yang boleh menumpuk per tipe sebelum yang paling lama
+// dibuang. Tanpa ini, karantina berulang akan mengisi folder sesi tanpa batas
+// pada bot yang corruption-nya terus-menerus. Isinya hanya dibuang
+// SETELAH operator punya kesempatan mengambilnya; tidak ada yang hilang diam.
+const CORRUPT_KEY_KEEP = 5;
 
 function trimLocalCache(local, cap) {
   if (local.size <= cap) return;
@@ -10,6 +18,125 @@ function trimLocalCache(local, cap) {
   for (let i = 0; i < excess; i++) {
     local.delete(local.keys().next().value);
   }
+}
+
+// File auth-state yang rusak tidak bisa "diperbaiki" di tempat: isinya hilang
+// dan tidak ada salinan. Yang bisa dilakukan hanya memindahkannya supaya
+// baca berikutnya jadi miss -- dan miss pre-key/sender-key adalah jalur
+// protokol NORMAL (sesi di-re-negotiate), bukan error. Fail-loud sendirian
+// tidak cukup karena file rusak tidak pernah hilang dari disk, jadi hasilnya
+// outage permanen yang hanya bisa dilihat dari log.
+//
+// RENAME, bukan unlink: isi asli utuh di file .broken-<ts> untuk dipulihkan
+// operator, dan tidak ada satu pun file yang dihapus.
+//
+// Corrupt != absent. File yang memang tidak ada (ENOENT) adalah "belum ada
+// nilai" yang wajar dan TIDAK boleh dilaporkan; hanya file yang ADA tapi tidak
+// bisa di-parse yang dikarantina.
+function quarantineCorruptKeyFiles(sessionPath, type, report) {
+  let files;
+  try {
+    files = fs.readdirSync(sessionPath);
+  } catch {
+    return [];
+  }
+  const prefix = `${String(type).replace(/\//g, '__').replace(/:/g, '-')}-`;
+  const moved = [];
+  for (const name of files) {
+    if (!name.startsWith(prefix) || !name.endsWith('.json')) continue;
+    if (name.includes('.broken-')) continue;
+    const full = path.join(sessionPath, name);
+    let body;
+    try {
+      body = fs.readFileSync(full, "utf8");
+    } catch {
+      continue;
+    }
+    try {
+      JSON.parse(body);
+    } catch {
+      const dest = `${full}.broken-${Date.now()}`;
+      try {
+        fs.renameSync(full, dest);
+        moved.push({ name, dest });
+      } catch (e) {
+        report?.(`gagal memindahkan ${name} ke karantina: ${e.message}`);
+      }
+    }
+  }
+  if (moved.length) {
+    pruneCorruptKeyBackups(sessionPath, prefix, report);
+    for (const m of moved) {
+      report?.(
+        `file key rusak dikarantina: ${m.name} -> ${path.basename(m.dest)} ` +
+          `(isi tidak bisa di-parse; key dianggap hilang dan sesi akan ` +
+          `di-re-negotiate, file aslinya tetap ada untuk dipulihkan)`,
+      );
+    }
+  }
+  return moved;
+}
+
+function pruneCorruptKeyBackups(sessionPath, prefix, report) {
+  try {
+    const backups = fs
+      .readdirSync(sessionPath)
+      .filter((f) => f.startsWith(prefix) && f.includes(".broken-"))
+      .sort();
+    while (backups.length > CORRUPT_KEY_KEEP) {
+      const victim = backups.shift();
+      try {
+        fs.rmSync(path.join(sessionPath, victim), { force: true });
+        report?.(`karantina key lama dibuang: ${victim}`);
+      } catch { }
+    }
+  } catch { }
+}
+
+// Bungkus keys store lokal dengan pemulihan koruppsi.
+//
+// Read dilakukan PER ID, bukan satu batch: keys.get di library memakai
+// Promise.all, jadi satu file rusak melempar untuk SELURUH batch dan
+// menenggelamkan key yang sehat ikut yang salah baca. Per-id memakai
+// allSettled, jadi key sehat tetap kembali dan hanya id yang rusak yang
+// jadi miss.
+//
+// Bentuk objek store diteruskan apa adanya (get/set/getMany) supaya wrapper
+// ini transparan untuk semua konsumennya.
+function withCorruptKeyRecovery(store, { sessionPath, report } = {}) {
+  if (!store || typeof store.get !== "function") return store;
+  const wrapGet = (fetch) =>
+    async function get(type, ids) {
+      if (!Array.isArray(ids) || ids.length === 0) return {};
+      let settled;
+      try {
+        settled = await Promise.allSettled(ids.map((id) => fetch(type, [id])));
+      } catch {
+        // library store tidak bisa dibaca sama sekali (mis. folder hilang)
+        report?.(`keys.get(${type}) gagal total: tidak ada key yang bisa dibaca`);
+        return {};
+      }
+      const out = {};
+      let corrupt = 0;
+      for (let i = 0; i < ids.length; i++) {
+        const r = settled[i];
+        if (r.status === "fulfilled" && r.value && r.value[ids[i]]) {
+          out[ids[i]] = r.value[ids[i]];
+        } else if (r.status === "rejected") {
+          corrupt++;
+        }
+      }
+      if (corrupt > 0 && sessionPath) {
+        quarantineCorruptKeyFiles(sessionPath, type, report);
+      }
+      return out;
+    };
+
+  return {
+    ...store,
+    get: wrapGet((type, ids) => store.get(type, ids)),
+    set: store.set ? store.set.bind(store) : undefined,
+  };
 }
 
 // reports remote problems to the bot logger instead of a bare console.warn,
@@ -178,7 +305,13 @@ async function useDurableAuthState(scope, folder) {
 
   const local = await useMultiFileAuthState(folder);
   let creds = local.state.creds;
-  const localKeys = local.state.keys;
+  // Dibungkus DI SINI, bukan nanti di keys.get: ini satu-satunya titik di mana
+  // store lokal dibuat, dan useMultiFileAuthState juga dipakai langsung dari
+  // connection.js pada jalur tanpa Turso.
+  const localKeys = withCorruptKeyRecovery(local.state.keys, {
+    sessionPath: folder,
+    report: warnRemote,
+  });
 
   // sisa pairing gagal (registered:false tapi me/pairingCode terisi) bukan sesi sah
   const looksPaired = creds.registered === true || Boolean(creds.account);
@@ -202,8 +335,20 @@ async function useDurableAuthState(scope, folder) {
     get: async (type, ids) => {
       const out = {};
       if (!Array.isArray(ids) || ids.length === 0) return out;
-      // lokal dulu (durable), Turso hanya untuk key yang belum ada di disk
-      const localGot = await localKeys.get(type, ids);
+      // lokal dulu (durable), Turso hanya untuk key yang belum ada di disk.
+      // localKeys sudah dibungkus withCorruptKeyRecovery: file rusak jadi
+      // miss + karantina, tidak pernah lempar ke sini. Jaring pengaman
+      // tambahan tetap ada karena store lokal bisa gagal dengan cara lain
+      // (EACCES, I/O), dan kegagalannya di sini berarti bot diam untuk peer
+      // itu selamanya.
+      let localGot = {};
+      try {
+        localGot = await localKeys.get(type, ids);
+      } catch (e) {
+        warnRemote(
+          `keys.get(${type}) gagal total: ${e.message} (lokal) -- key dianggap hilang, sesi mungkin re-negotiate`,
+        );
+      }
       const missing = ids.filter((id) => !localGot[id]);
       if (missing.length && remoteKeys) {
         try {
@@ -217,7 +362,14 @@ async function useDurableAuthState(scope, folder) {
       return out;
     },
     set: async (data) => {
-      await localKeys.set(data);
+      try {
+        await localKeys.set(data);
+      } catch (e) {
+        // key yang gagal ditulis = sesi tidak bisa di-re-negotiate nanti.
+        // Reporter, bukan dibiarkan hilang.
+        warnRemote(`keys.set(${Object.keys(data || {}).join(",")}) gagal: ${e.message}`);
+        return;
+      }
       if (!remoteKeys) return;
       try {
         await remoteKeys.set(data);
@@ -264,4 +416,6 @@ export {
   saveCreds,
   deleteTursoSession,
   trimLocalCache,
+  withCorruptKeyRecovery,
+  quarantineCorruptKeyFiles,
 };

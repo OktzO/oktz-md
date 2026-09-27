@@ -585,8 +585,11 @@ async function startConnection(options = {}) {
 
   // File lokal selalu jadi session store; Turso hanya mirror best-effort.
   // Kalau Turso satu-satunya penyimpanan, token mati = sesi hilang permanen.
-  const { useDurableAuthState, setRemoteSessionLogger } =
-    await import("./lib/turso-session.js");
+  const {
+    useDurableAuthState,
+    setRemoteSessionLogger,
+    withCorruptKeyRecovery,
+  } = await import("./lib/turso-session.js");
   setRemoteSessionLogger((m) => colors.logger.warn("turso", m));
 
   let state, saveCreds;
@@ -596,7 +599,16 @@ async function startConnection(options = {}) {
     saveCreds = res.saveCreds;
   } else {
     const result = await useMultiFileAuthState(sessionPath);
-    state = result.state;
+    // Jalur tanpa Turso juga perlu karantina key file rusak: store di sini
+    // mentah dari library, jadi keys.get yang melempar mematikan decryption
+    // untuk peer itu selamanya tanpa file rusak pernah hilang dari disk.
+    state = {
+      creds: result.state.creds,
+      keys: withCorruptKeyRecovery(result.state.keys, {
+        sessionPath,
+        report: (m) => colors.logger.warn("session", m),
+      }),
+    };
     saveCreds = result.saveCreds;
   }
 
