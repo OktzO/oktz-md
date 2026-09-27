@@ -1,31 +1,56 @@
-import axios from 'axios'
-import FormData from 'form-data'
+import { createUploadProviders } from './upload-providers.js'
 
-const termaiKey = process.env.TERMAI_UPLOAD_KEY || ''
-const termaiDomain = 'https://c.termai.cc'
+const PROVIDER_TIMEOUT_MS = 20000
 
-async function uploadToTermai(buffer, filename = 'image.jpg') {
-  const form = new FormData()
-  form.append('file', buffer, { filename })
-
-  const response = await axios.post(`${termaiDomain}/api/upload?key=${termaiKey}`, form, {
-    headers: { ...form.getHeaders(), 'User-Agent': 'Mozilla/5.0' },
-    timeout: 60000
-  })
-
-  if (response.data?.status && response.data?.path) {
-    return response.data.path
+// 9 host keyless, semua dicek hidup 2026-09-27. Sequential early-return, bukan
+// fan-out: .tourl memang butuh semua host (user pilih), tapi upload internal
+// cuma butuh SATU URL. Fan-out di sini bikin 9x bandwidth terbuang dan user
+// nunggu host paling lambat (~20 detik) walau host pertama sudah jadi di 1
+// detik. Kalau satu host mati, pindah saja ke berikutnya.
+//
+// Alias lama (uploadToTelegraph/uploadTo0x0/uploadToCatbox/uploadToTmpfiles/
+// uploadToUguu) DIHAPUS: tidak pernah di-import, dan semuanya menunjuk ke satu
+// fungsi yang sama jadi hanya berpura-pura punya redundancy.
+export async function uploadImage(buffer, filename = 'image.jpg', opts = {}) {
+  const providers = opts.providers ?? createUploadProviders();
+  if (!providers.length) {
+    throw new Error('Upload gagal: tidak ada host upload yang dikonfigurasi');
   }
 
-  throw new Error('Termai upload failed')
+  const perProviderMs = opts.perProviderMs ?? PROVIDER_TIMEOUT_MS;
+  const errors = [];
+
+  for (const provider of providers) {
+    try {
+      const result = await withTimeout(
+        provider.run(buffer, filename),
+        perProviderMs,
+      );
+      const url = result?.url;
+      if (typeof url !== 'string' || !url) {
+        throw new Error('respons tanpa URL');
+      }
+      return url;
+    } catch (e) {
+      errors.push(`${provider.name}: ${e.message}`);
+    }
+  }
+
+  throw new Error(`Upload gagal di semua host — ${errors.join(' | ')}`);
 }
 
-export const uploadImage = uploadToTermai
-export const uploadToTelegraph = uploadToTermai
-export const uploadTo0x0 = uploadToTermai
-export const uploadToCatbox = uploadToTermai
-export const uploadToTmpfiles = uploadToTermai
-export const uploadToUguu = uploadToTermai
+function withTimeout(promise, ms) {
+  let timer;
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`timeout ${ms}ms`)),
+        ms,
+      );
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
 
 import fs from 'fs';
 import path from 'path';
