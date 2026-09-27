@@ -54,6 +54,69 @@ import {
 import { isSwGcCandidate } from "./lib/group-protection.js";
 const groupCache = new NodeCache({ stdTTL: 5 * 60, useClones: false, maxKeys: 500 });
 const processedMessages = new NodeCache({ stdTTL: 30, useClones: false, maxKeys: 5000 });
+
+// node-cache v5 TIDAK evict saat maxKeys tercapai — set() melempar ECACHEFULL
+// (lib/node_cache.js: set() mengecek `stats.keys >= maxKeys` sebelum cek
+// key yang sudah ada, jadi re-set key lama juga melempar). Dulu set() ini
+// telanjang di dalam loop pesan messages.upsert: sekali cap tripped, throw
+// itu memanggil exit listener dan SETIAP pesan sisa di batch itu hilang.
+// Di 167 msg/s cap 5000 dengan TTL 30s tripped terus-menerus, jadi ini bukan
+// kasus tepi — dan tanpa listener `error` di ev (lihat pairFor... err) gagalnya
+// juga tidak tercatat di mana pun.
+//
+// Isi cache ini murni penanda "sudah diproses" dengan TTL 30 detik, bukan
+// data: kehilangan entri terlama hanya berarti pesan yang usianya sudah > TTL
+// bisa diproses dua kali, dan itu persis perilaku yang sudah ada sebelum TTL
+// habis. Jadi evict-oldest di sini murah dan tidak merusak apa pun.
+function createMessageDedup(cache, maxKeys) {
+  // Set = insertion-ordered, jadi FIFO gratis tanpa linked list.
+  const fifo = new Set();
+
+  // Entri yang sudah kedaluwarsa oleh TTL tidak lagi ada di dalam cache.
+  // Kalau dibiarkan menumpuk, antrean FIFO jadi jauh lebih besar dari
+  // maxKeys dan loop evict jadi mahal. Bersihkan dari yang tertua, hanya
+  // saat fifo melewati cap.
+  const pruneExpired = () => {
+    if (fifo.size <= maxKeys) return;
+    for (const k of fifo) {
+      if (!cache.has(k)) fifo.delete(k);
+      if (fifo.size <= maxKeys) break;
+    }
+  };
+
+  return {
+    has: (k) => cache.has(k),
+    set(k, v) {
+      pruneExpired();
+      if (!fifo.has(k)) fifo.add(k);
+      // set() melempar saat keys >= maxKeys, jadi buat ruang lebih dulu
+      let guard = 0;
+      while (cache.getStats().keys >= maxKeys && fifo.size && guard++ < maxKeys) {
+        const oldest = fifo.values().next().value;
+        fifo.delete(oldest);
+        cache.del(oldest);
+      }
+      try {
+        cache.set(k, v);
+      } catch {
+        // jaring pengaman terakhir: bookkeeping dedup tidak boleh pernah
+        // menghentikan pemrosesan batch. Setilan dilewati = pesan ini
+        // diproses ulang, tidak fatal.
+        fifo.delete(k);
+      }
+      return true;
+    },
+    clear() {
+      fifo.clear();
+      cache.flushAll();
+    },
+    get size() {
+      return cache.getStats().keys;
+    },
+  };
+}
+
+const messageDedup = createMessageDedup(processedMessages, 5000);
 const msgRetryCounterCache = new NodeCache({ stdTTL: 60, useClones: false, maxKeys: 2000 });
 
 let lastMessageReceived = Date.now();
@@ -1222,8 +1285,8 @@ async function startConnection(options = {}) {
       }
 
       const msgId = msg.key?.id;
-      if (msgId && processedMessages.has(msgId)) continue;
-      if (msgId) processedMessages.set(msgId, true);
+      if (msgId && messageDedup.has(msgId)) continue;
+      if (msgId) messageDedup.set(msgId, true);
 
       let msgTimestamp = 0;
       if (msg.messageTimestamp) {
@@ -1724,4 +1787,5 @@ export {
   isConnected,
   getUptime,
   logout,
+  createMessageDedup,
 };
