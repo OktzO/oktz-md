@@ -66,12 +66,25 @@ async function handler(m, { sock }) {
     return m.reply(`Ih masa ngirim menfess buat diri sendiri sih kak? Kasih buat orang lain dong! 😂`);
   }
 
+  let onWa;
   try {
-    const [onWa] = await sock.onWhatsApp(targetNumber);
-    if (!onWa?.exists) {
-      return m.reply(`Yah kak, nomor \`${targetNumber}\` ternyata nggak terdaftar di WhatsApp! 😔`);
-    }
-  } catch (e) {}
+    [onWa] = await sock.onWhatsApp(targetNumber);
+  } catch (e) {
+    //=onigisLempar saat query usync timeout (Boom 408). "Tidak diketahui"
+    // BUKAN "terdaftar" — kalau error ini ditelan, pesan anonim terkirim ke
+    // nomor yang tidak pernah diverifikasi. Fail-closed.
+    return m.reply(
+      `Hmm kak, verifikasi nomor \`${targetNumber}\` ke WhatsApp gagal (timeout/koneksi), jadi pesan belum dikirim ya. Coba lagi nanti kak! 🙏`,
+    );
+  }
+
+  if (onWa?.exists !== true) {
+    return m.reply(
+      onWa?.exists === false
+        ? `Yah kak, nomor \`${targetNumber}\` ternyata nggak terdaftar di WhatsApp! 😔`
+        : `Hmm kak, nomor \`${targetNumber}\` belum bisa dipastikan terdaftar di WhatsApp, jadi pesan belum dikirim. Coba lagi nanti kak! 🙏`,
+    );
+  }
 
   if (message.length < 5) {
     return m.reply(`Pesannya kependekan kak! Minimal 5 karakter ya biar lebih bermakna. 📝`);

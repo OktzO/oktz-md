@@ -145,14 +145,29 @@ async function handler(m, { sock }) {
     return m.reply(`❌ Tidak dapat menentukan nomor target.`);
   }
 
+  const targetNumber = targetUser.split("@")[0];
+  let onWa;
   try {
-    const [onWa] = await sock.onWhatsApp(targetUser.split("@")[0]);
-    if (!onWa?.exists) {
-      return m.reply(
-        `❌ Nomor \`${targetUser.split("@")[0]}\` tidak terdaftar di WhatsApp!`,
-      );
-    }
-  } catch (e) {}
+    [onWa] = await sock.onWhatsApp(targetNumber);
+  } catch (e) {
+    // onWhatsApp lempar kalau query usync timeout (Boom 408) / koneksi putus.
+    // "Tidak diketahui" BUKAN "terdaftar" — gate ini harus fail-closed, kalau
+    // tidak admin root_admin + password-nya bisa diprovisioning dan dikirim ke
+    // nomor yang tidak pernah diverifikasi.
+    return m.reply(
+      `❌ Gagal memverifikasi nomor \`${targetNumber}\` di WhatsApp\n\n` +
+        `> Verifikasi gagal (timeout/koneksi), jadi admin tidak dibuat.\n` +
+        `> Coba lagi beberapa saat lagi.`,
+    );
+  }
+
+  if (onWa?.exists !== true) {
+    return m.reply(
+      onWa?.exists === false
+        ? `❌ Nomor \`${targetNumber}\` tidak terdaftar di WhatsApp!`
+        : `❌ Nomor \`${targetNumber}\` belum bisa dipastikan terdaftar di WhatsApp, admin dibatalkan.`,
+    );
+  }
 
   const email = `${username}@gmail.com`;
   const name = capitalize(username) + " Admin";

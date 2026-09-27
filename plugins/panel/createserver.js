@@ -206,15 +206,24 @@ async function handler(m, { sock }) {
     return m.reply(`❌ Tidak dapat menentukan nomor target.`);
   }
 
+  const targetNumber = targetUser.split("@")[0];
+  let onWa;
   try {
-    const [onWa] = await sock.onWhatsApp(targetUser.split("@")[0]);
-    if (!onWa?.exists) {
-      return m.reply(
-        `❌ Nomor \`${targetUser.split("@")[0]}\` tidak terdaftar di WhatsApp!`,
-      );
-    }
+    [onWa] = await sock.onWhatsApp(targetNumber);
   } catch (e) {
-    return m.reply(`❌ Gagal validasi nomor WhatsApp.`);
+    // Fail-closed: onWhatsApp bisa lempar (usync timeout 408 / koneksi putus)
+    // dan "tidak diketahui" ≠ "terdaftar".
+    return m.reply(
+      `❌ Gagal validasi nomor \`${targetNumber}\` di WhatsApp, server tidak dibuat.`,
+    );
+  }
+
+  if (onWa?.exists !== true) {
+    return m.reply(
+      onWa?.exists === false
+        ? `❌ Nomor \`${targetNumber}\` tidak terdaftar di WhatsApp!`
+        : `❌ Nomor \`${targetNumber}\` belum bisa dipastikan terdaftar di WhatsApp, server dibatalkan.`,
+    );
   }
 
   const specs = RAM_SPECS[ram];
