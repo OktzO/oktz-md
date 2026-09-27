@@ -335,27 +335,116 @@ const connectionState = {
 };
 
 /**
- * Logger instance dengan level minimal
- * @type {Object}
+ * Reporter kegagalan handler event.
+ *
+ * Event buffer library sekarang MEMILIKI promise tiap handler: attach()
+ * di lib/Utils/event-buffer.js membungkus tiap listener, dan penolakan --
+ * entah async rejection atau throw sinkron -- diteruskan ke
+ * reportHandlerError() -> reportError().
+ *
+ * reportError() mengirim ke kanal 'error' HANYA kalau ada listener; kalau
+ * tidak ada, jatuh ke logger.error(). Bot ini punya logger level "silent"
+ * (dan TIDAK punya listener 'error'), jadi sebelum commit ini fallback itu
+ * membuang semuanya: setiap kegagalan handler berubah dari "kotak merah di
+ * console" (dari unhandledRejection yang ditangkap setupAntiCrash di
+ * index.js) menjadi tidak ada sama sekali. Tidak ada unhandledRejection yang
+ * lolos, jadi tidak ada juga yang bisa di-catching.
+ *
+ * Yang terdampak nyata: listener tanpa top-level guard — jadibot-manager.js
+ * `connection.update` (body async panjang), `chats.upsert` di file ini, dan
+ * dua listener `async ([event])` yang langsung TypeError kalau event-nya
+ * malformed.
+ *
+ * Isinya SENGJA hanya nama event, bukan payload-nya: ini jalur yang reachable
+ * dari data wire, dan payload bisa memuat isi chat yang tidak boleh bocor ke
+ * log operator.
  */
-const logger = pino({
-  level: "silent",
-  hooks: {
-    logMethod(inputArgs, method) {
-      const msg = inputArgs[0];
-      if (
-        typeof msg === "string" &&
-        (msg.includes("Closing") ||
-          msg.includes("session") ||
-          msg.includes("SessionEntry") ||
-          msg.includes("prekey"))
-      ) {
-        return;
-      }
-      return method.apply(this, inputArgs);
+function createEventErrorReporter(report) {
+  const emit = typeof report === "function" ? report : defaultHandlerErrorReport;
+  return (err, events) => {
+    try {
+      const where =
+        Array.isArray(events) && events.length ? events.join(", ") : "?";
+      emit(err, events, where);
+    } catch {
+      // Reporter ini tidak boleh pernah melempar. Kalau iya, library memperlakukan kegagalan
+      // di kanal error sebagai terminal dan membuangnya -- jadi
+      // kita justru kehilangan satu-satunya bukti.
+    }
+  };
+}
+
+function defaultHandlerErrorReport(err, events, where) {
+  colors.logErrorBox(
+    `event handler ${where}`,
+    err?.message || String(err),
+  );
+  if (config.dev?.debugLog && err?.stack) console.error(colors.c.gray(err.stack));
+}
+
+function attachEventErrorReporter(ev, report) {
+  if (!ev || typeof ev.on !== "function") return null;
+  const listener = createEventErrorReporter(report);
+  ev.on("error", listener);
+  return listener;
+}
+
+/**
+ * Logger yang diteruskan ke library.
+ *
+ * Keputusan: level "silent" -> "error", plus hook logMethod yang lama
+ * DIBUANG.
+ *
+ * Alasannya: level "silent" membuang channel error yang baru dan membuat
+ * kegagalan handler tidak terlihat -- persis yang sedang diperbaiki. Semua
+ * yang dulu disaring hook (Closing / session / SessionEntry / prekey) adalah
+ * trace/debug/warn, jadi ambang "error" sudah membisukan semuanya tanpa hook
+ * -- tidak ada kontrol derau yang hilang. Sebaliknya hook itu justru
+ * berbahaya: dia menyaring berdasarkan isi pesan di level APAPUN, jadi error
+ * yang kebetulan menyebut "session" atau "prekey" ikut hilang. Itu lubang
+ * yang harus ditutup, bukan dipertahankan.
+ *
+ * 32 titik logger.error di dalam library (KRITIS: dekripsi pesan gagal, upload
+ * pre-key gagal, stream error, inbound frame error) semuanya hilang sebelum
+ * ini. Format output ikut reporter bot, bukan JSON mentah pino, supaya
+ * konsisten dengan sisa console.
+ */
+function createLibraryLogger(report) {
+  const emit = typeof report === "function" ? report : defaultLibraryLogReport;
+  const base = pino(
+    { level: "error" },
+    {
+      write(line) {
+        const { level, msg } = parsePinoLine(line);
+        emit(level, msg);
+      },
     },
-  },
-});
+  );
+  return base;
+}
+
+function parsePinoLine(line) {
+  try {
+    const rec = JSON.parse(line);
+    const { err } = rec;
+    const extra = err
+      ? ` | ${err?.message || (typeof err === "string" ? err : "")}`
+      : "";
+    return {
+      // record pino menyimpan level sebagai angka (50), bukan label
+      level: pino.levels.labels[rec.level] ?? rec.level ?? "error",
+      msg: `${rec.msg ?? ""}${extra}`,
+    };
+  } catch {
+    return { level: "error", msg: line };
+  }
+}
+
+function defaultLibraryLogReport(level, text) {
+  colors.logger.error("library", `${level}: ${text}`);
+}
+
+const libraryLogger = createLibraryLogger();
 
 /**
  * Interface untuk input terminal
@@ -516,12 +605,12 @@ async function startConnection(options = {}) {
   const pairingNumber = config.session?.pairingNumber || "";
   const sock = makeWASocket({
     version: version,
-    logger,
+    logger: libraryLogger,
     printQRInTerminal:
       !usePairingCode && (config.session?.printQRInTerminal ?? true),
     auth: {
       creds: state.creds,
-      keys: makeCacheableSignalKeyStore(state.keys, logger),
+      keys: makeCacheableSignalKeyStore(state.keys, libraryLogger),
     },
     // elemen ke-3 ("22.0.0") tidak pernah dikirim server: pairing cuma pakai
     // browser[0] (OS) + browser[1] (nama browser) — lihat
@@ -557,6 +646,13 @@ async function startConnection(options = {}) {
 
   store.bind(sock.ev);
   sock.store = store;
+
+  // WAJIB dipasang sebelum listener lain apa pun: tanpa ini event buffer
+  // tidak punya kanal 'error', jadi reportError() jatuh ke logger.error() --
+  // yang sekarang sudah bukan silent, tapi jadi satu_report per error level
+  // tanpa konteks event mana yang gagal. Reporter bot (logErrorBox) jauh
+  // lebih berguna: menyebut event yang gagal.
+  attachEventErrorReporter(sock.ev);
 
   connectionState.sock = sock;
   extendSocket(sock);
@@ -1798,4 +1894,7 @@ export {
   getUptime,
   logout,
   createMessageDedup,
+  createEventErrorReporter,
+  attachEventErrorReporter,
+  createLibraryLogger,
 };
