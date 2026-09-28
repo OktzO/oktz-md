@@ -192,36 +192,128 @@ function startSrcWatcher(srcPath) {
   logger.debug("dev", `Monitoring directory: ${srcPath}`);
 }
 
-function setupAntiCrash() {
-  process.on("uncaughtException", (error, origin) => {
-    const ignoredErrors = [
-      "write EOF",
-      "ECONNRESET",
-      "EPIPE",
-      "ETIMEDOUT",
-      "ENOTFOUND",
-      "ECONNREFUSED",
-      "read ECONNRESET",
-    ];
-    const isIgnored = ignoredErrors.some(
-      (msg) => error.message?.includes(msg) || error.code === msg,
+// ---------------------------------------------------------------------------
+// Fault handling (B5).
+//
+// Dua masalah lama di sini:
+//
+//  1. Handler-nya menelan SEMUA error lalu `return`, jadi process lanjut jalan
+//     dalam keadaan tidak terdefinisi. Fault yang tidak dikenal dan berulang
+//     (plugin cycle, socket lifecycle, timer yang salah) = loop diam yang tidak
+//     pernah terlihat. Sekarang ada ambang: fault yang TIDAK termasuk
+//     allow-list transien, sebanyak MAX_FAULTS_IN_WINDOW dalam FAULT_WINDOW_MS,
+//     menghentikan engine. Fault pertama tetap hanya dilaporkan.
+//  2. `unhandledRejection` mencetak nilai yang ditolak SECARA UTUH ke stdout.
+//     Nilai itu bisa apa saja — objek dari wire yang berisi isi chat, Buffer,
+//     atau objek yang menyimpan kredensial. Sekarang hanya ringkasan terikat
+//     dan ter-redaksi yang dicetak (summarizeFault), dan argumen kedua
+//     (nilai yang sudah settle) tidak pernah dicetak sama sekali.
+// ---------------------------------------------------------------------------
+
+const FAULT_SUMMARY_MAX = 400;
+const FAULT_STACK_MAX = 1200;
+const FAULT_KEYS_MAX = 24;
+const MAX_FAULTS_IN_WINDOW = 5;
+const FAULT_WINDOW_MS = 60_000;
+
+// Noise jaringan. Bukan fault: tidak dihitung ke ambang, tidak dilaporkan.
+const TRANSIENT_FAULT_CODES = [
+  "write EOF",
+  "ECONNRESET",
+  "EPIPE",
+  "ETIMEDOUT",
+  "ENOTFOUND",
+  "ECONNREFUSED",
+  "read ECONNRESET",
+];
+
+// Pola kredensial yang harus hilang dari log sebelum ditulis.
+const SECRET_PATTERNS = [
+  /\b(?:gh[pousr]_|sk-(?:live|test)|xox[baprs]-|AKIA)[A-Za-z0-9_-]{8,}/g,
+  /\bbearer\s+[A-Za-z0-9._-]{8,}/gi,
+  /([?&](?:access_token|api_key|apikey|token|key|secret|password)=)[^&\s"']+/gi,
+  /((?:password|passwd|pwd|secret|token|api[_-]?key|apikey|auth|session|cookie)\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;&}]+)/gi,
+];
+const REDACTED = "[redacted]";
+
+function redactSecrets(text) {
+  let out = String(text ?? "");
+  for (const pattern of SECRET_PATTERNS) {
+    pattern.lastIndex = 0;
+    out = out.replace(pattern, (match, prefix) =>
+      prefix ? `${prefix}${REDACTED}` : REDACTED,
     );
-    if (isIgnored) return;
+  }
+  return out;
+}
 
-    logErrorBox("uncaught exception", error.message);
-    console.error(c.gray(error.stack));
-    logger.system("system", "Engine is still running");
-  });
+/**
+ * Ringkasan satu nilai fault: terikat panjangnya, ter-redaksi, dan aman
+ * terhadap objek siklik / Proxy yang meledak saat diinspeksi.
+ *
+ * Untuk objek, yang dicetak hanya nama field — bukan nilainya. Objek dari wire
+ * bisa berisi apa saja, dan "nilai objek" adalah tempat kebocoran paling sering
+ * terjadi.
+ */
+function summarizeFault(value) {
+  try {
+    if (value === null) return "null";
+    if (value === undefined) return "undefined";
 
-  process.on("unhandledRejection", (reason, promise) => {
-    logErrorBox("unhandled rejection", reason?.stack || String(reason));
-    console.error(c.gray("Promise:"), promise);
-    logger.system("system", "Engine is still running");
-  });
+    const type = typeof value;
+    if (type === "string") {
+      return redactSecrets(value).slice(0, FAULT_SUMMARY_MAX);
+    }
+    if (type === "number" || type === "boolean" || type === "bigint") {
+      return `${type} ${String(value)}`;
+    }
+    if (type === "function") {
+      return `function ${value.name || "(anonymous)"}`;
+    }
+    if (type === "symbol") return `symbol ${String(value)}`;
 
-  process.on("warning", (warning) => {
-    logger.warn("system", `${warning.name}: ${warning.message}`);
-  });
+    if (Buffer.isBuffer(value)) {
+      return `[Buffer ${value.length} bytes]`;
+    }
+    if (value instanceof Error) {
+      const label = `${value.name || "Error"}${value.code ? ` [${String(value.code)}]` : ""}`;
+      const detail = [
+        value.message === undefined ? "" : String(value.message),
+        typeof value.stack === "string" ? value.stack : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+      return redactSecrets(`${label}: ${detail}`).slice(0, FAULT_STACK_MAX);
+    }
+    if (Array.isArray(value)) {
+      return `[Array ${value.length} items]`;
+    }
+
+    const keys = Object.keys(value);
+    const shown = keys.slice(0, FAULT_KEYS_MAX).join(", ");
+    const rest = keys.length - FAULT_KEYS_MAX;
+    const more = rest > 0 ? `, +${rest} more` : "";
+    const kind = value.constructor?.name || "Object";
+    return `${kind} with ${keys.length} key(s): [${shown}${more}]`;
+  } catch {
+    return "[uninspectable fault value]";
+  }
+}
+
+function isTransientFault(value) {
+  if (!value) return false;
+  if (typeof value === "string") {
+    return TRANSIENT_FAULT_CODES.some((needle) => value.includes(needle));
+  }
+  if (typeof value.code === "string" && TRANSIENT_FAULT_CODES.includes(value.code)) {
+    return true;
+  }
+  if (typeof value.message !== "string") return false;
+  return TRANSIENT_FAULT_CODES.some((needle) => value.message.includes(needle));
+}
+
+function setupAntiCrash(options = {}) {
+  const { onFatal = null } = options;
 
   // ponytail: guard 2 sinyal berturut-turut — SIGINT kedua = force exit,
   // supaya shutdown yang menggantung tetap bisa diinterupsi user.
@@ -247,10 +339,89 @@ function setupAntiCrash() {
     logger.info("system", "Engine stopped safely");
     process.exit(0);
   };
+
+  const faultTimestamps = [];
+  let fatalFired = false;
+
+  const stopEngine = (why) => {
+    if (fatalFired) return;
+    fatalFired = true;
+    if (onFatal) {
+      try {
+        onFatal(why);
+      } catch (error) {
+        logger.error("system", `onFatal failed: ${error.message}`);
+      }
+      return;
+    }
+    logErrorBox(
+      "too many faults",
+      `stopping after ${faultTimestamps.length} faults in ${FAULT_WINDOW_MS / 1000}s — the state can no longer be trusted`,
+    );
+    gracefulShutdown(why).catch(() => process.exit(1));
+  };
+
+  // true kalau fault ini sudah melewati ambang.
+  const countFault = () => {
+    const now = Date.now();
+    while (
+      faultTimestamps.length &&
+      now - faultTimestamps[0] >= FAULT_WINDOW_MS
+    ) {
+      faultTimestamps.shift();
+    }
+    faultTimestamps.push(now);
+    return faultTimestamps.length >= MAX_FAULTS_IN_WINDOW;
+  };
+
+  function handleUncaughtException(error, origin) {
+    if (isTransientFault(error)) return;
+
+    logErrorBox(
+      "uncaught exception",
+      redactSecrets(error?.message ?? "(no message)").slice(0, FAULT_SUMMARY_MAX),
+    );
+    logger.error(
+      "system",
+      `uncaught exception (${origin || "unknown origin"}): ${summarizeFault(error)}`,
+    );
+
+    if (countFault()) {
+      stopEngine("repeated uncaught exceptions");
+      return;
+    }
+    logger.system("system", "Engine is still running");
+  }
+
+  function handleUnhandledRejection(value) {
+    if (isTransientFault(value)) return;
+
+    // Ringkasan saja. Nilai yang ditolak tidak pernah dicetak utuh, dan
+    // argumen kedua (nilai yang sudah settle) sengaja diabaikan: justru
+    // di situ payload/data user dan objek berkredensial berada.
+    logErrorBox("unhandled rejection", summarizeFault(value));
+
+    if (countFault()) {
+      stopEngine("repeated unhandled rejections");
+      return;
+    }
+    logger.system("system", "Engine is still running");
+  }
+
+  process.on("uncaughtException", handleUncaughtException);
+
+  process.on("unhandledRejection", handleUnhandledRejection);
+
+  process.on("warning", (warning) => {
+    logger.warn("system", `${warning.name}: ${warning.message}`);
+  });
+
   process.on("SIGINT", () => gracefulShutdown("STOP (SIGINT)"));
   process.on("SIGTERM", () => gracefulShutdown("TERMINATE (SIGTERM)"));
 
   logger.success("system", "Anti-Crash Protection is Active");
+
+  return { handleUncaughtException, handleUnhandledRejection, stopEngine };
 }
 
 async function main() {
@@ -431,8 +602,17 @@ async function main() {
   });
 }
 
-main().catch((error) => {
-  logErrorBox("Fatal Error", error.message);
-  console.error(c.gray(error.stack));
-  process.exit(1);
-});
+// `node --test` (dan harness yang meng-import file ini untuk menguji
+// setupAntiCrash) mengisi NODE_TEST_CONTEXT di process-nya sendiri. Import
+// index.js = import SEMUA modul boot bot; kalau main() ikut jalan di sana,
+// harness-nya yang tersalut oleh koneksi WhatsApp sungguhan. Jadi boot hanya
+// jalan di luar test runner.
+if (!process.env.NODE_TEST_CONTEXT) {
+  main().catch((error) => {
+    logErrorBox("Fatal Error", error.message);
+    console.error(c.gray(error.stack));
+    process.exit(1);
+  });
+}
+
+export { setupAntiCrash, summarizeFault, MAX_FAULTS_IN_WINDOW };
