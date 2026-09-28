@@ -290,6 +290,30 @@ setInterval(() => {
   }
 }, 30000).unref();
 
+// Batas privilege jadibot (B1).
+//
+// Pencipta jadibot dicatat sebagai owner jadibot itu, jadi `m.isOwner` true
+// (lihat blok isJadibot di bawah). Sub-bot BUKAN sandbox: process, filesystem,
+// dan .env sama dengan bot utama. Jadi "owner di dalam jadibot" tidak boleh
+// berarti owner host — user premium yang membayar tidak boleh dapat RCE.
+//
+// Gate pemanggil ada di src/lib/jadibot-manager.js (blokir sebelum serialize).
+// Fungsi ini lapisan kedua, di sisi router, karena ada jalur yang menulis ulang
+// `m.body`/`m.command` SESUDAH gate pemanggil: perintah VN dari voice note
+// (fuzzy-match ke nama plugin mana pun) dan sticker command. Tanpa lapisan ini
+// `.exec ...` masih bisa dibentuk dari voice note di dalam jadibot.
+function denyJadibotOwner(m, reason) {
+  const text =
+    reason === "eval"
+      ? "⛔ *ᴀᴄᴄᴇꜱꜱ ᴅᴇɴɪᴇɴ* — perintah eval/inspect owner tidak tersedia di jadibot.\n" +
+        "> Sub-bot berbagi process dan file dengan bot utama, jadi eval = akses ke host.\n" +
+        "> Perintah biasa (dan semua fitur premium) tetap bisa dipakai."
+      : "⚠️ *ᴀᴋsᴇꜱ ᴛᴇʀʙᴀᴛᴀꜱ*\n\n" +
+        "Fitur ini hanya tersedia di bot utama.\nJadibot tidak dapat mengakses fitur ini.\n\n" +
+        "> Hubungi owner bot utama untuk informasi lebih lanjut.";
+  return m.reply(text);
+}
+
 function logCommandExec({ m, sock, db, isJadibot }) {
   if (!config.features?.logMessage || isJadibot || !m.command) return;
   let groupName = null;
@@ -1130,6 +1154,7 @@ async function messageHandler(msg, sock, options = {}) {
     }
 
     if (m.body?.startsWith(">>") && m.isOwner) {
+      if (isJadibot) return denyJadibotOwner(m, "eval");
       const code = m.body.slice(2).trim();
       if (!code) return;
 
@@ -1190,6 +1215,7 @@ async function messageHandler(msg, sock, options = {}) {
     }
 
     if (m.body?.startsWith("!!") && m.isOwner) {
+      if (isJadibot) return denyJadibotOwner(m, "eval");
       const expr = m.body.slice(2).trim();
       if (!expr) return;
 
@@ -1627,59 +1653,66 @@ async function messageHandler(msg, sock, options = {}) {
       return;
     }
 
+    // Batas privilege jadibot — berlaku di private DAN group.
+    //
+    // Sebelumnya blok ini hidup di dalam `if (m.isGroup)` di bawah, jadi chat
+    // private sama sekali tidak pernah ikut diblokir: user premium yang punya
+    // jadibot bisa `.panel`, `.store`, `.pushkontak`, `.sewa` dari DM. Yang
+    // memang hanya bermakna di grup adalah `botMode`, bukan daftar blokir
+    // ini — dan teks balasannya ("Jadibot tidak dapat mengakses fitur ini")
+    // sejak awal ditulis untuk berlaku universal. Dipindahkan ke luar
+    // `if (m.isGroup)` supaya private dan group punya batas yang sama, dan
+    // supaya jalur rewrite m.command (VN/sticker command) ikut tertutup:
+    // keduanya dispatch ke plugin yang sama lewat titik ini.
+    if (isJadibot) {
+      const jadibotCategory = plugin.config.category?.toLowerCase();
+      const jadibotBlockedCategories = [
+        "owner",
+        "sewa",
+        "panel",
+        "store",
+        "pushkontak",
+      ];
+      const jadibotBlockedCommands = [
+        "sewa",
+        "sewabot",
+        "sewalist",
+        "listsewa",
+        "addsewa",
+        "delsewa",
+        "extendsewa",
+        "checksewa",
+        "sewainfo",
+        "sewagroup",
+        "stopsewa",
+        "jadibot",
+        "listjadibot",
+        "addowner",
+        "delowner",
+        "ownerlist",
+        "listowner",
+        "self",
+        "public",
+        "botmode",
+        "restart",
+        "shutdown",
+      ];
+
+      if (
+        jadibotBlockedCategories.includes(jadibotCategory) ||
+        jadibotBlockedCommands.includes(m.command.toLowerCase())
+      ) {
+        return denyJadibotOwner(m, "owner");
+      }
+    }
+
     if (m.isGroup) {
       const groupData = db.getGroup(m.chat) || {};
       let botMode = groupData.botMode || "all";
       const pluginCategory = plugin.config.category?.toLowerCase();
       const baseAllowed = ["main", "group", "sticker", "owner"];
 
-      if (isJadibot) {
-        botMode = "all";
-
-        const jadibotBlockedCategories = [
-          "owner",
-          "sewa",
-          "panel",
-          "store",
-          "pushkontak",
-        ];
-        const jadibotBlockedCommands = [
-          "sewa",
-          "sewabot",
-          "sewalist",
-          "listsewa",
-          "addsewa",
-          "delsewa",
-          "extendsewa",
-          "checksewa",
-          "sewainfo",
-          "sewagroup",
-          "stopsewa",
-          "jadibot",
-          "listjadibot",
-          "addowner",
-          "delowner",
-          "ownerlist",
-          "listowner",
-          "self",
-          "public",
-          "botmode",
-          "restart",
-          "shutdown",
-        ];
-
-        if (
-          jadibotBlockedCategories.includes(pluginCategory) ||
-          jadibotBlockedCommands.includes(m.command.toLowerCase())
-        ) {
-          return m.reply(
-            `⚠️ *ᴀᴋsᴇs ᴛᴇʀʙᴀᴛᴀs*\n\n` +
-            `Fitur ini hanya tersedia di bot utama.\n` +
-            `Jadibot tidak dapat mengakses fitur ini.\n\n` +
-            `> Hubungi owner bot utama untuk informasi lebih lanjut.`,
-          );
-        }
-      }
+      if (isJadibot) botMode = "all";
 
       const modeConfig = {
         all: { allowed: null, excluded: null, name: "All Features" },

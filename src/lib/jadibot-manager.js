@@ -7,10 +7,13 @@ import {
   delay,
   DisconnectReason,
   jidNormalizedUser,
+  normalizeMessageContent,
   useMultiFileAuthState,
 } from "onigis";
 import { logger } from "./logger.js";
 import { addJadibotOwner, unloadJadibotDb } from "./jadibot-database.js";
+import { getMessageBody, getMessageType, parseCommand } from "./serialize.js";
+import { getPlugin } from "./plugins.js";
 import { extendSocket } from "./socket.js";
 import { getAssetBuffer } from "./asset-manager.js";
 import { evictOldestOverCap } from "./cache-cap.js";
@@ -20,6 +23,208 @@ const reconnectAttempts = new Map();
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_INTERVAL = 5000;
 const GROUP_META_CACHE_CAP = 200;
+const BLOCK_NOTICE_CAP = 200;
+
+// ---------------------------------------------------------------------------
+// Batas privilege jadibot (B1).
+//
+// Pencipta jadibot dicatat sebagai OWNER jadibot itu, dan src/handler.js
+// menerjemahkannya jadi `m.isOwner = true` untuk semua pesan di sub-bot. Karena
+// router-nya sama dengan bot utama, itu memberi user PREMIUM jalur yang sama
+// dengan owner: prefix `>>` dan `!!` (new AsyncFunction + `await import(
+// 'child_process')`) plus seluruh direktori plugin `owner` -- termasuk `exec`,
+// `ganticode` (menulis file plugin), `stopalljadibot` (mematikan jadibot semua
+// user), dan `addowner` (menulis daftar owner host).
+//
+// Sub-bot bukan sandbox: dia berbagi process, filesystem, dan .env dengan bot
+// utama. Jadi "owner di dalam jadibot" tidak boleh berarti owner penuh. Yang
+// tetap jalan: semua plugin non-owner, termasuk semua plugin premium -- itu
+// yang dibayar user. Yang dicabut: eval/inspect dan kategori `owner`.
+//
+// Gate ada di DUA lapis, karena satu lapis saja bukan boundary:
+//
+//   1. Sisi pemanggil (file ini) — satu-satunya tempat pesan jadibot masuk ke
+//      router, jadi blokir SEBELUM serialize/getPlugin. Murah, dan bisa
+//      membalas ke user kenapa command-nya ditolak.
+//   2. Sisi router (src/handler.js) — wajib, karena ada jalur yang menulis
+//      ulang `m.body`/`m.command` SESUDAH gate di sini: perintah VN dari voice
+//      note (handler.js:1074, fuzzy-match ke nama plugin mana pun) dan sticker
+//      command (handler.js:1452). Keduanya membuat `m.command` owner plugins
+//      recoverable dari input yang sama sekali tidak kelihatan sebagai command
+//      di gate pemanggil.
+//
+// Batas ideal (tidak dikerjakan di sini): `m.isJadibotOwner` terpisah dari
+// `m.isOwner` di serialize.js, supaya "owner jadibot" tidak pernah berarti
+// "owner host" sama sekali. Lihat laporan.
+// ---------------------------------------------------------------------------
+
+// Prefix yang dibaca handler.js sebagai eval/inspect owner.
+const JADIBOT_BLOCKED_BODY_PREFIXES = [">>", "!!"];
+const JADIBOT_OWNER_ONLY_CATEGORY = "owner";
+const JADIBOT_BLOCK_NOTICE_MS = 30_000;
+
+// Wrapper yang bisa membungkus isi pesan. `normalizeMessageContent` (onigis)
+// hanya membuka wrapper di level TERATAS; kalau sebuah wrapper duduk di dalam
+// container tipe pesan (mis. extendedTextMessage) router melihat teks kosong
+// dan tidak ada yang dievaluasi. Gate ini sengaja MEMBUKA LEBIH DALAM dari
+// router: kalau isi dalam wrapper apa pun bisa mencapai AsyncFunction di
+// handler.js, kita tetap blokir. Menembak lebih dalam dari router tidak
+// menambah false positive, hanya menutup jalur yang belum teruji.
+const JADIBOT_WRAPPER_KEYS = [
+  "ephemeralMessage",
+  "viewOnceMessage",
+  "viewOnceMessageV2",
+  "viewOnceMessageV2Extension",
+  "documentWithCaptionMessage",
+  "editedMessage",
+  "associatedChildMessage",
+  "groupStatusMessage",
+  "groupStatusMessageV2",
+];
+const JADIBOT_WRAPPER_MAX_DEPTH = 3;
+
+function isJadibotOwnerOnlyPlugin(plugin) {
+  if (!plugin) return false;
+  if (plugin.config?.isOwner === true) return true;
+  return plugin.config?.category === JADIBOT_OWNER_ONLY_CATEGORY;
+}
+
+// `config.name` bisa string, array, atau string berisi koma
+// (ex. ["arsip","archive"] -> "arsip,archive"). Kalau pemanggil mengirim bentuk
+// mentah, satu lookup tidak cukup dan plugin owner bisa lolos. Pecah semua
+// kandidat; kalau salah satu resolve ke plugin owner, seluruhnya owner-only.
+function isJadibotOwnerOnlyCommand(name) {
+  const values = Array.isArray(name) ? name : [name];
+  const candidates = [];
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    for (const part of String(value).split(",")) {
+      const candidate = part.trim().toLowerCase();
+      if (candidate) candidates.push(candidate);
+    }
+  }
+  return candidates.some((candidate) =>
+    isJadibotOwnerOnlyPlugin(getPlugin(candidate)),
+  );
+}
+
+/**
+ * Semua body yang mungkin dibaca router dari sebuah pesan.
+ *
+ * Lolosan pertama persis meniru serialize(): `normalizeMessageContent` →
+ * `getMessageBody(getMessageType(...))`. Lolosan berikutnya menelusuri wrapper
+ * dan container tipe pesan sampai JADIBOT_WRAPPER_MAX_DEPTH.
+ *
+ * `contextInfo` (dan karena itu `quotedMessage`) SENGAJA tidak pernah
+ * ditelusuri: isi yang di-quote bukan perintah pengirim.
+ */
+function jadibotMessageBodies(msg) {
+  const bodies = [];
+  const seen = new Set();
+
+  const visit = (raw, depth) => {
+    if (!raw || typeof raw !== "object" || depth > JADIBOT_WRAPPER_MAX_DEPTH) {
+      return;
+    }
+    if (seen.has(raw)) return;
+    seen.add(raw);
+
+    let data;
+    let type;
+    let body;
+    try {
+      data = normalizeMessageContent(raw) || raw;
+      type = getMessageType(data);
+      body = getMessageBody(data, type) || "";
+    } catch {
+      return;
+    }
+    if (body) bodies.push(String(body));
+
+    for (const key of JADIBOT_WRAPPER_KEYS) {
+      const inner = data[key];
+      if (!inner || typeof inner !== "object") continue;
+      // protocolMessage membawa { editedMessage }, bukan pesan langsung.
+      if (key === "protocolMessage" && inner.editedMessage) {
+        visit(inner.editedMessage, depth + 1);
+        continue;
+      }
+      visit(inner.message ?? inner, depth + 1);
+    }
+
+    if (type && typeof data[type] === "object" && data[type]) {
+      visit(data[type], depth + 1);
+    }
+  };
+
+  visit(msg?.message, 0);
+  return bodies;
+}
+
+/**
+ * @returns {"eval"|"owner"|null} alasan diblokir, null kalau boleh lewat.
+ */
+function blockedJadibotCommand(msg, { isJadibot = true } = {}) {
+  if (!isJadibot || !msg) return null;
+
+  let bodies;
+  try {
+    bodies = jadibotMessageBodies(msg);
+  } catch {
+    return null;
+  }
+
+  for (const body of bodies) {
+    if (!body) continue;
+
+    for (const prefix of JADIBOT_BLOCKED_BODY_PREFIXES) {
+      if (body.startsWith(prefix)) return "eval";
+    }
+
+    let parsed;
+    try {
+      parsed = parseCommand(body, config.command?.prefix || ".");
+    } catch {
+      parsed = null;
+    }
+    if (!parsed?.isCommand || !parsed.command) continue;
+
+    if (isJadibotOwnerOnlyCommand(parsed.command)) return "owner";
+  }
+
+  return null;
+}
+
+const _jadibotBlockNotices = new Map();
+
+async function notifyJadibotBlocked(sock, id, msg, reason) {
+  const chat = msg?.key?.remoteJid;
+  if (!chat) return;
+  const sender = msg.key?.participant || msg.key?.remoteJid || "unknown";
+  const noticeKey = `${id}:${sender}`;
+
+  const now = Date.now();
+  if (now - (_jadibotBlockNotices.get(noticeKey) || 0) < JADIBOT_BLOCK_NOTICE_MS) {
+    return;
+  }
+  _jadibotBlockNotices.set(noticeKey, now);
+  evictOldestOverCap(_jadibotBlockNotices, BLOCK_NOTICE_CAP);
+
+  const text =
+    reason === "eval"
+      ? "⛔ *ᴄᴏᴍᴍᴀɴᴅ ɪɴɪ ᴅɪᴀᴡᴀʀ* — perintah eval/inspect owner tidak tersedia di jadibot.\n" +
+        "> Sub-bot berbagi process dan file dengan bot utama, jadi eval = akses ke host.\n" +
+        "> Perintah biasa (dan semua fitur premium) tetap bisa dipakai."
+      : "⛔ *ᴄᴏᴍᴍᴀɴᴅ ᴏᴡɴᴇʀ* — perintah kategori owner tidak tersedia di jadibot.\n" +
+        "> Kalau jadibotmu error, minta ke operator bot (pemilik utama).\n" +
+        "> Perintah biasa (dan semua fitur premium) tetap bisa dipakai.";
+
+  try {
+    await sock.sendMessage(chat, { text });
+  } catch (e) {
+    logger.error("Jadibot", `Failed to send blocked notice: ${e.message}`);
+  }
+}
 
 function ensureJadibotAuthFolder() {
   if (!fs.existsSync(JADIBOT_AUTH_FOLDER)) {
@@ -697,6 +902,12 @@ async function startJadibot(sock, m, userJid, usePairing = true) {
         continue;
       }
 
+      const blocked = blockedJadibotCommand(msg, { isJadibot: true });
+      if (blocked) {
+        await notifyJadibotBlocked(childSock, id, msg, blocked);
+        continue;
+      }
+
       try {
         const { messageHandler } = await import("../handler.js");
         await messageHandler(msg, childSock, {
@@ -926,4 +1137,8 @@ export {
   safeSend,
   evictOldestOverCap,
   GROUP_META_CACHE_CAP,
+  JADIBOT_BLOCKED_BODY_PREFIXES,
+  blockedJadibotCommand,
+  isJadibotOwnerOnlyCommand,
+  isJadibotOwnerOnlyPlugin,
 };
