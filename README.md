@@ -1,104 +1,84 @@
 <div align="center">
 
 # ⚡ OKTZ-MD v3.3.1
-### Next-Generation Modular WhatsApp Multi-Device Bot
+### Modular WhatsApp Multi-Device Bot
 
 [![Node Version](https://img.shields.io/badge/Node.js-%3E%3D22.0.0-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
-[![Engine](https://img.shields.io/badge/Engine-Onigi--Baileys%20v10.1.0--rc.3-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](https://github.com/OktzO/Onigi)
-[![Signal](https://img.shields.io/badge/Signal-oktz--signal%200.2.0--rc.1%20%28MIT%29-red?style=for-the-badge&logo=signal&logoColor=white)](https://www.npmjs.com/package/oktz-signal)
+[![Tests](https://img.shields.io/badge/tests-668%20pass%20%2F%200%20fail-success?style=for-the-badge)](https://nodejs.org)
+[![Engine](https://img.shields.io/badge/Engine-Onigi--Baileys%20v10.1.0--rc.6-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](https://github.com/OktzO/Onigi)
 [![Database](https://img.shields.io/badge/Database-Turso%20%26%20LowDB-4ff8d2?style=for-the-badge&logo=sqlite&logoColor=black)](https://turso.tech)
-[![Plugins](https://img.shields.io/badge/Plugins-827%20Loaded-blueviolet?style=for-the-badge&logo=speedtest&logoColor=white)](#-kategori-plugin-34-kategori)
+[![Plugins](https://img.shields.io/badge/plugins-829%20files%20%2F%2034%20categories-blueviolet?style=for-the-badge&logo=speedtest&logoColor=white)](#-kategori-plugin)
 [![License](https://img.shields.io/badge/License-ISC-orange?style=for-the-badge)](LICENSE)
 
 <p align="center">
-  <b>Modern, Ultra-Fast, Memory-Optimized WhatsApp Bot Architecture</b><br>
-  Dibangun menggunakan ES Module native, hot-reload dynamic plugin loader, sistem dual-routing, serta manajemen memori canggih dengan Turso LibSQL persistence.
+  <b>ES Module, plugin modular, penyimpanan hybrid LowDB + Turso LibSQL.</b><br>
+  Bot WhatsApp multi-device dengan sistem plugin yang bisa dimuat ulang
+  saat runtime dan penjaga memori yang aktif.
 </p>
 
 ---
 
-[Fitur Utama](#-fitur-utama) •
-[Struktur File](#-struktur-proyek) •
+[Fitur](#-fitur) •
+[Struktur](#-struktur-proyek) •
 [Instalasi](#-instalasi--menjalankan) •
 [Konfigurasi](#-konfigurasi) •
-[Benchmark & Audit](#-benchmark--audit) •
-[Panduan Plugin](#-panduan-membuat-plugin) •
-[Testing](#-testing--keamanan) •
-[Infrastruktur](#-infrastruktur--arsitektur)
+[Plugin](#-panduan-membuat-plugin) •
+[Testing](#-testing) •
+[Operasional](#-kebutuhan-operasional) •
+[Arsitektur](#-infrastruktur--arsitektur)
 
 ---
 
-> ## ⚠️ STATUS: UNSTABLE / EXPERIMENTAL
+> ## ⚠️ STATUS
 >
-> **Versi ini mengganti engine E2EE Signal dari `libsignal` (GPL) ke `oktz-signal` (MIT, Rust native)**
-> >melalui **Onigi-Baileys v10.1.0-rc.3** (rebase `@whiskeysockets/baileys` 7.0.0-rc14).
->
-> - Kriptografi & wire format diuji terhadap oracle `libsignal` v6, **tapi belum 100% terjamin
->   kompatibel di semua kondisi WhatsApp** (perangkat/iOS lama, re-sync session, backlog message).
-> - Bug interop diperbaiki secara iteratif — **selalu update ke versi `oktz-signal` & `Onigi` terbaru**.
-> - Jika ada pesan tampil **"Menunggu pesan ini..."** / MAC verification failed: pastikan
->   `git pull && npm install` di panel, lalu restart. Kalau masih, unlink devices & re-scan QR.
-> - **Audit internal September 2026** sudah dilakukan (lihat [Benchmark & Audit](#-benchmark--audit)) — 2 temuan CRITICAL di bot ini sudah terdokumentasi dengan lokasi fix-nya.
+> - **Eksperimental.** Stack E2EE memakai `oktz-signal` (Rust native, MIT)
+>   melalui Onigi-Baileys. Kalau pesan tertahan sebagai "Menunggu pesan ini..."
+>   atau gagal verifikasi MAC: `git pull && npm install`, lalu restart. Kalau
+>   masih, lepas perangkat dan pindai ulang QR.
+> - **Tidak ada benchmark publik.** Halaman ini tidak mengklaim angka performa
+>   apa pun. Angka RAM yang dipakai di bawah adalah hasil pengukuran di host
+>   Pterodactyl 1GB, dan sumbernya dituliskan per klaim.
 
 ---
 
 </div>
 
-## 🚀 Fitur Utama
+## 🚀 Fitur
 
-<table>
-<tr>
-<td width="50%">
+Bagian ini sengaja memakai kalimat pendek. Setiap butir di bawah adalah
+fitur yang **ada di kode dan terjangkau lewat router** — bukan backlog.
+Untuk rincian per kategori, lihat [tabel kategori plugin](#-kategori-plugin).
+### 🧠 AI
+- Multi-provider: Gemini, Claude, DeepSeek, Qwen3, GPT-5 (`src/scraper/`:
+  `gemini.js`, `claudehaiku.js`, `deepseek.js`, `qwen3.js`, `gpt5.js`, `gpt52.js`).
+- Image generation & image-to-image (`txt2img.js`, `txt2img2.js`, `img2img.js`).
+- CMD VN: transkripsi voice note via Groq Whisper, hasilnya dieksekusi sebagai command.
 
-### 🧠 AI & Intelligent Chat
-- **Multi-Model Provider:** Integrasi Gemini, Claude, DeepSeek, Qwen3, GPT-5.
-- **Image Generation:** Text-to-Image & Image-to-Image engine.
-- **Smart Triggers:** Auto-reply cerdas berbasis context & keyword.
-- **Voice Command (CMD VN):** Transkripsi voice note via Groq Whisper, langsung dieksekusi sebagai command.
+### 🛡️ Proteksi Grup
+- Antilink, antijudol, antiviewonce, antihidetag, antitoxic, antispam,
+  antibot, antidocument, antisticker, antimedia, anti-remove
+  (`src/lib/group-protection.js`).
+- Sewa grup: auto-join, durasi, dan auto-kick saat kedaluwarsa.
+- Anti-crash guard: handler `uncaughtException` + `unhandledRejection` global.
 
-### 🛡️ Group Security & Protection
-- **Full Guard System:** Anti-Link, Anti-Toxic, Anti-Spam, Anti-Bot.
-- **Media Protection:** Anti-ViewOnce, Anti-Sticker, Anti-Document.
-- **Safety Enforcement:** Anti-Hidetag, Anti-Phishing, Anti-Judol.
-- **Rental (Sewa Grup):** Auto-join, durasi sewa, & auto-kick expired.
-- **Anti-Remove:** Deteksi hapus pesan anggota (anti-revoke).
+### 🎮 Game, RPG, Ekonomi
+- RPG: dungeon, mining, fishing, hunting, crafting, clan.
+- Ekonomi: limit/energi, bank, store.
+- Game interaktif:Family 100, fisch, chess, tictactoe, suit pvp, ulartangga.
 
-### 🎮 Gaming, RPG & Economy
-- **Full RPG System:** Dungeon, Mining, Fishing, Hunting, Crafting, Clan.
-- **Economy:** Limit/Energi system, Bank, Store, Market transaksi.
-- **Casual & Interactive:** Tebak Gambar, Tebak Kata, Family 100, Fisch, Chess, TicTacToe, Suit PvP, Ulartangga.
+### 📥 Downloader & Scraper
+- 26 plugin download: TikTok, YouTube, Instagram, Facebook, Twitter/X,
+  Spotify, SoundCloud, Terabox, Douyin, CapCut, dan lainnya.
+- 59 modul scraper di `src/scraper/`.
+- TikTok memakai rantai fallback otomatis — lihat
+  [catatan TikTok](#-tiktok-rantai-fallback).
 
-### 🥰 Waifu & Husbando Gacha
-- **Gacha System:** Roll waifu/husbando dengan pity system & tier (Common→Mythic).
-- **Interaksi Romance:** Aksi, event, mood, affection, jealousy check, married system.
-- **Koleksi:** Album, pool browsing, daily claim, neglekt/anger system.
+### ⚙️ DevOps & Sub-Bot
+- Panel hosting (Pterodactyl, cPanel, Linode) dan kontrol VPS (DigitalOcean).
+- Jadibot: sub-bot multi-sesi dengan auto-restore saat koneksi terbuka.
 
-</td>
-<td width="50%">
-
-### 📥 Media Downloaders & Scrapers
-- **Social Downloader:** YouTube (Audio/Video), TikTok (`.tt` no-WM + fallback `savett`), IG, FB, Twitter/X, Spotify, SoundCloud, Terabox, Douyin.
-- **TikTok Multi-Provider:** `tikwm → savett → yuulabs → musicaldown` automatic fallback chain saat satu provider kena blokir (Cloudflare 403).
-- **59+ Scraper Modules:** Pinterest, Google Search, GSMArena, Anime info, lirik lagu, dan scraper kustom.
-
-### ⚙️ DevOps & Cloud Management
-- **Panel Hosting:** Pterodactyl server manager & Vercel deployment.
-- **Server Control:** VPS Management (Linode, DigitalOcean, CPanel).
-- **Sub-Bot:** Jadibot multi-session system dengan auto-restore.
-
-### ⚡ Infrastructure & Resiliency
-- **Dual Routing Engine:** Plugin-based (dynamic) + Case-based fallback.
-- **Hybrid Storage:** LowDB (local JSON) + Turso LibSQL (remote cloud).
-- **Anti-Crash Guard:** Uncaught exception filter & auto network recover.
-- **Memory Monitor:** Garbage collection watcher, temp cleaner, daily pruner mencegah OOM.
-
-### 🔍 Stalker & Tools
-- **Profile Stalker:** Instagram, ML, Discord, TikTok, dll.
-- **Utility Tools:** Konverter, status cek, primbon Jawa, random content, ephoto.
-
-</td>
-</tr>
-</table>
+### 🔍 Tools
+- Stalker profil, primbon Jawa, random, ephoto, konverter.
 
 ---
 
@@ -106,332 +86,405 @@
 
 ```text
 oktz-md/
-├── 📁 assets/                 # Asset statis bot
-│   ├── 📁 audio/              # Sound effects & voice prompts
-│   ├── 📁 fonts/              # Custom typography & canvas fonts
-│   ├── 📁 image/              # Banner, avatar default, menu thumbnails
-│   ├── 📁 kertas/             # Template magernulis / canvas note
-│   └── 📁 video/              # Video intros & template media
-├── 📁 case/                   # Built-in fast commands handler
-│   └── ourin.js               # Direct switch-case execution (~5 command)
-├── 📁 database/               # Runtime data (local JSON fallback)
-│   ├── 📁 autoreply_media/    # Storage media respon otomatis
-│   ├── 📁 cpanel/             # Database akun & order cpanel
-│   ├── 📁 main/               # User state, inventory, & global data
-│   └── lid-cache.json         # Cache resolusi LID → JID
-├── 📁 docs/                   # Spesifikasi arsitektur & rencana proyek
-├── 📁 plugins/                # 827 Dynamic Plugins (34 Kategori)
-│   ├── 📁 ai/                 # OpenAI, Gemini, Claude, prompt generator (47)
-│   ├── 📁 anime/              # Anime info, picture stream, tracer (3)
-│   ├── 📁 download/           # TikTok, YT, IG, Spotify downloaders (26)
-│   ├── 📁 game/               # Tebak-tebakan, kuis, multiplayer mini-games (37)
-│   ├── 📁 group/              # Admin tools, group protection, settings (101)
-│   ├── 📁 owner/              # Evaluator, exec, broadcast, backup (147)
-│   ├── 📁 panel/              # Pterodactyl & hosting automation (22)
-│   ├── 📁 rpg/                # Mining, clan, inventory, levelup (67)
-│   ├── 📁 search/             # Web search, scraper query (45)
-│   ├── 📁 sticker/            # Sticker converter, meme maker, brat (22)
-│   └── ...                    # (Lihat tabel kategori lengkap di bawah)
-├── 📁 src/                    # Bot Core Engine
-│   ├── 📁 data/               # Data statis (Tebakan, Asmaul Husna, NSFW)
-│   ├── 📁 database/           # Schema handler & database sync adapter
-│   ├── 📁 lib/                # 71 library modules (memory, scheduler, dll)
-│   ├── 📁 scraper/            # 59 scraper functions & extraction modules
-│   ├── 📁 tiktok/             # Data feed asupan TikTok (JSON)
-│   ├── connection.js          # Socket connection & auth event handler
-│   └── handler.js             # Message router, middleware, spam blocker
-├── 📁 tests/                  # Test suite (Node native test runner, 14 file)
-├── config.js                  # Konfigurasi sentral bot
-├── index.js                   # Application entrypoint & worker supervisor
-├── infra.md                   # Dokumentasi infrastruktur internal
-└── package.json               # Manifest dependencies & project scripts
+├── assets/                  # Gambar, font, audio, video
+├── case/
+│   └── foto.js              # Built-in switch-case: 4 grup command
+├── database/                # Data runtime (JSON), gitignored
+├── docs/                    # Audit internal & catatan desain
+├── native/                  # Loader + fetch prebuilt binary
+├── plugins/                 # 829 file plugin (34 kategori)
+│   ├── owner/               # 150 — eval, exec, broadcast, sewa, backup
+│   ├── group/               # 101 — proteksi, welcome, mute, warn
+│   ├── rpg/                 #  66 — dungeon, clan, inventory, levelup
+│   ├── tools/               #  56 — utilitas harian
+│   ├── cek/                 #  48 — kuis / cek kepribadian
+│   ├── ai/                  #  46 — integrasi AI + image gen
+│   ├── search/              #  46 — web search & scraper
+│   ├── fun/                 #  39 — game teks ringan
+│   ├── game/                #  36 — game grup interaktif
+│   ├── canvas/              #  31 — kartu & gambar
+│   ├── download/            #  26 — downloader media
+│   ├── sticker/             #  22 — pembuat stiker
+│   ├── panel/               #  21 — Pterodactyl & hosting
+│   ├── main/                #  20 — menu, ping, stats
+│   ├── user/                #  17 — profil user
+│   ├── stalker/             #  15 — stalking profil
+│   ├── store/               #  14 — toko digital
+│   ├── info/                #  14 — informasi
+│   ├── random/              #  12 — konten acak
+│   ├── clan/                #   9
+│   ├── primbon/             #   8
+│   ├── vps/                 #   6 — kontrol VPS
+│   └── ...                  # 15 kategori lagi, 1-4 file each
+├── src/
+│   ├── lib/                 # 87 modul library
+│   ├── scraper/             # 59 modul scraper
+│   ├── tiktok/              # 8 feed JSON
+│   ├── connection.js        # Socket & event auth
+│   └── handler.js           # Router pesan
+├── tests/                   # 71 file test (node:test)
+├── config.js                # Konfigurasi sentral
+├── index.js                 # Entry point
+├── infra.md                 # Dokumen arsitektur internal
+└── .github/workflows/ci.yml # CI: test, lint, penjaga secret
 ```
 
-### 📦 Kategori Plugin (34 Kategori, 827 Plugin)
+---
 
-| Kategori | Jml | Deskripsi | Kategori | Jml | Deskripsi |
-|---|---:|---|---|---:|---|
-| `owner` | 147 | Eval, exec, manage bot, cap energi/premium | `game` | 37 | Interactive group games |
-| `group` | 101 | Antilink, welcome, mute, warn, dll | `canvas` | 31 | Image generation & card |
-| `rpg` | 67 | RPG petualangan, dungeon, clan | `download` | 26 | Media downloaders |
-| `tools` | 55 | Utility harian & converter | `sticker` | 22 | Sticker creation |
-| `cek` | 48 | Quiz / personality check | `panel` | 22 | Hosting panel (Pterodactyl dll) |
-| `ai` | 47 | AI chat integration + image gen | `main` | 20 | Menu, ping, stats |
-| `search` | 45 | Multi-engine web scraper | `user` | 17 | User profile & daftar |
-| `fun` | 39 | Mini text game & hiburan | `stalker` | 15 | Profile stalking |
-| `store` | 14 | Toko digital & transaksi | `random` | 12 | Random generator |
-| `info` | 14 | Informasi & statistik | `clan` | 9 | Sistem guild/clan |
-| `primbon` | 8 | Weton & ramalan Jawa | `vps` | 6 | VPS / cloud control |
-| `religi` | 4 | Konten keagamaan | `asupan` | 4 | Short video feed |
-| `utility` | 3 | Notifikasi makan/tidur, inspect | `anime` | 3 | Top anime, waifu |
-| `tts` | 2 | Text-to-speech | `nsfw` | 2 | NSFW (gated) |
-| `media` | 2 | Media processing | `islamic` | 2 | Quran & jadwal sholat |
-| `pushkontak` | 1 | Push contact massal | `jpm` | 1 | Jadwal pesan massal |
-| `ephoto` | 1 | Ephoto templates | `convert` | 1 | Audio converter |
+## 📦 Kategori Plugin
+
+Jumlah di bawah adalah hitungan `find plugins -name '*.js'` per folder, bukan
+estimasi. Totalnya **829 file di 34 kategori**. Angka ini adalah jumlah *file*,
+bukan jumlah command — satu file bisa mendaftarkan banyak nama lewat
+`name: ['a','b','c']` (contohnya `plugins/vps/vpskontrol.js` daftarkan empat).
+
+| Kategori | File | Kategori | File |
+|---|---:|---|---:|
+| `owner` | 150 | `info` | 14 |
+| `group` | 101 | `random` | 12 |
+| `rpg` | 66 | `clan` | 9 |
+| `tools` | 56 | `primbon` | 8 |
+| `cek` | 48 | `vps` | 6 |
+| `search` | 46 | `religi` | 4 |
+| `ai` | 46 | `asupan` | 4 |
+| `fun` | 39 | `utility` | 3 |
+| `game` | 36 | `anime` | 3 |
+| `canvas` | 31 | `tts` | 2 |
+| `download` | 26 | `nsfw` | 2 |
+| `sticker` | 22 | `media` | 2 |
+| `panel` | 21 | `islamic` | 2 |
+| `main` | 20 | `pushkontak` | 1 |
+| `user` | 17 | `jpm` | 1 |
+| `stalker` | 15 | `ephoto` | 1 |
+| `store` | 14 | `convert` | 1 |
+
+Tidak semua file di `owner/` bisa dipakai semua orang. Baca
+[Model Akses](#-model-akses) sebelum bot Anda diekspos.
 
 ---
 
 ## 🛠️ Instalasi & Menjalankan
 
 ### Persyaratan Sistem
-- **Node.js:** `>= 22.0.0`
-- **FFmpeg:** Terpasang pada sistem (atau otomatis via binary package)
-- **RAM:** Minimal 512 MB (Rekomendasi 1 GB+)
+- **Node.js:** `>= 22.0.0` (`engines` di `package.json`).
+- **RAM:** lihat [Kebutuhan Operasional](#-kebutuhan-operasional) — angka
+  minimumnya bukan sekadar "512 MB".
+- **ffmpeg:** opsional di sistem. `src/lib/ffmpeg.js` mencari urutan: variabel
+  `FFMPEG_PATH`/`FFPROBE_PATH` → `PATH` → binary bawaan
+  `@ffmpeg-installer/ffmpeg`. Jadi instalasi tidak perlu apt-get.
 
-### 1. Clone & Install Dependencies
+### 1. Clone & Install
 ```bash
 git clone https://github.com/OktzO/oktz-md.git
 cd oktz-md
 npm install
 ```
-> `npm install` otomatis menginstall `oktz-signal` (Rust native) + `onigis` v10.1.0-rc.3 (Onigi-Baileys).
-> Native binary disertakan untuk `linux-x64-gnu`. Di platform lain, build dari source:
-> ```bash
-> cd node_modules/oktz-signal && npm run build:native  # butuh Rust + gcc
-> ```
+`postinstall` melakukan tiga hal berurutan: rebuild `sharp` bila perlu, ambil
+prebuilt `ourin_native` dari GitHub Release, lalu pasang ffmpeg bila belum ada.
+Ketiganya **tidak wajib** untuk menjalankan test suite — lihat
+[Test](#-testing).
 
-### 2. Konfigurasi Environment (`.env`)
-Copy `.env.example` jadi `.env`, lalu isi:
+### 2. Konfigurasi Environment
+Salin `.env.example` ke `.env`, lalu isi:
 ```env
-# Database Turso (remote DB + session)
-TURSO_URL=libsql://your-database-name.turso.io
-TURSO_AUTH_TOKEN=your-auth-token
+TURSO_URL=libsql://<database>.turso.io
+TURSO_AUTH_TOKEN=<token>
 
-# API key untuk fitur yang pakai layanan eksternal
 APIKEY_NEOXR=
 APIKEY_FGSI=
-GROQ_API_KEY=          # Dipakai untuk transkripsi voice command (CMD VN)
+GROQ_API_KEY=          # untuk transkripsi voice command (CMD VN)
 APIKEY_COVENANT=
 APIKEY_OBSCURA=
 APIKEY_FIREFLY=
 APIKEY_CUKI=
-
-NODE_ENV=production
 ```
-File `.env` tidak di-commit (sudah ada di `.gitignore`).
+`.env` sudah ada di `.gitignore` dan tidak boleh di-commit. Nilai `.env` yang
+bocor ke file ter-track akanCI tangkap oleh `scripts/secret-guard.mjs`.
 
-### 3. Menjalankan Bot
+> Jangan tempel nilai `.env` ke commit, issue, atau log CI. Guard mencetak
+> nama variabel dan path file saja, tidak pernah nilainya.
 
+### 3. Menjalankan
 ```bash
-# Mode Development (Hot-Reload & Garbage Collection Exposed)
-npm run dev
-
-# Mode Start Development
-npm start
-
-# Mode Production
-node index.js
+npm start          # produksi: node --max-old-space-size=512 --expose-gc
+npm run dev        # mode pengembangan (hot-reload plugin)
 ```
 
-**Pairing / QR:** Set `config.session.usePairingCode: true` + isi `pairingNumber` untuk pairing code, atau `false` untuk QR code. Scan dengan WhatsApp → Linked Devices.
+`npm start` **tidak** menyalakan `NODE_ENV=development`; hanya `npm run dev`
+yang melakukannya. Ini berbeda dari versi lama README yang menyatakan
+sebaliknya.
+
+**Pairing / QR:** `config.session.usePairingCode: true` memakai pairing code
+(`pairingNumber`), `false` memakai QR.
 
 ---
 
-## 📊 Benchmark & Audit
+## 🧪 Testing
 
-> Audit baris-per-baris penuh (September 2026): core bot + database/storage layer + engine Onigi + oktz-signal, plus benchmark reproducible vs `@whiskeysockets/baileys` 7.0.0-rc14 upstream dan `libsignal` v6. Environment: Node v20.19.1, Linux x64.
+```bash
+npm test      # 668 test, 71 file
+npm run lint  # eslint, cakupan plugins/ saja
+```
 
-### Performa stack E2EE (oktz-signal via Onigi vs baileys asli + libsignal)
+Suite memakai runner bawaan Node dengan mocking modul, dan seluruhnya berjalan
+**offline terhadap stub socket** — tidak ada yang menjalankan bot, memanggil
+WhatsApp, atau menyentuh Turso. Ini diverifikasi, bukan diasumsikan: suite
+dijalankan dengan `net.connect`, `tls.connect`, dan `dns.*` diblokir lewat
+preload, dan hasilnya tetap **668 pass / 0 fail** tanpa satu pun koneksi keluar.
+Satu-satunya percobaan DNS adalah ke domain `.invalid` (RFC 2606, memang
+diservis untuk tidak bisa di-resolve) di `tests/upstream-diagnostics.test.mjs`.
 
-Stack bot ini memakai `onigis@10.1.0-rc.3` → `oktz-signal@0.2.0-rc.1` (Rust). Angka berbanding engine baileys asli (libsignal JS):
+Untuk lantai yang benar-benar diuji: **Node v22.23.3**, sesuai `engines`.
+Workflow CI menguji Node 22 dan 24.
 
-| Skenario | Stack oktz (Rust) | Baileys asli (libsignal JS) | Hasil |
-|---|---:|---:|---|
-| **Build session E2EE penuh** (X3DH + PKMsg) | 3,5 ms | 31,8 ms | **9× lebih cepat** |
-| **Steady-state per pesan** (ratchet dua arah) | 195–330 µs | 570–695 µs | **2–3,5× lebih cepat** |
-| XEdDSA sign / verify | 139–166 µs | 30,7–32,3 **ms** | **186–233× lebih cepat** |
-| WABinary roundtrip (rust encode) | 146,4 µs | 154,7 µs | +5,7% lebih cepat |
+### Cakupan test (71 file, dipilih)
+| Area | File |
+|---|---|
+| Privilege escalation | `number-match.security.test.mjs` |
+| Batas privilege jadibot | `jadibot-owner-privilege.test.mjs` |
+| Gate admin fail-closed | `onwhatsapp-gate.test.mjs` |
+| Merge/rename | `rename-invariants.test.mjs` |
+| Session & kredensial | `creds-recovery.test.mjs`, `auth-key-corruption.test.mjs`, `turso-session*.test.mjs` |
+| Memori & cache | `memory-leaks.test.mjs`, `memory-monitor-limit.test.mjs`, `message-dedup-cap.test.mjs` |
+| Profiler | `profiler.test.mjs`, `profiler-heap-guard.test.mjs` |
+| Stiker & media | `sticker-batch.test.mjs`, `animated-sticker-alpha.test.mjs`, `exif.test.mjs` |
+| Keamanan input | `anti-crash-bounds.test.mjs`, `anticustom-pattern-safety.test.mjs`, `ffmpeg-injection.test.mjs` |
+| LID / user store | `user-lid.test.mjs`, `lid-resolve.test.mjs`, `group-protection-lid.test.mjs` |
 
-Detail lengkap per-primitive + metodologi: lihat README [oktz-signal](../oktz-signal/README.md) dan [Onigi](../Onigi/README.md).
+---
 
-### Hasil audit — ringkasan temuan
+## 🛡️ Model Akses
 
-| Area | CRITICAL | HIGH | MEDIUM | LOW |
-|---|---:|---:|---:|---:|
-| Core bot (handler, connection, plugins) | 1 | 5 | 12 | 9 |
-| Database & storage | 1 | 5 | 9 | 5 |
-| Onigi (engine baileys) | 1 | 2 | 8 | 8 |
-| oktz-signal (Rust E2EE) | 0 | 4 | 8 | 7 |
+Ini bagian yang paling sering digeneralisasi berlebihan, jadi ditulis sesuai
+`src/lib/middleware.js`.
 
-**Estimasi RAM jangka panjang** (mengukur sendiri via profiler bawaan, baseline idle 290–375 MB): normal 24 jam ±350–450 MB (stabil) — 72 jam di ≥500 grup aktif ±450–600 MB (GC threshold 450 MB mulai sering trigger, by design `--expose-gc`).
+**Tiga flag per plugin**, dievaluasi berurutan di `checkPermission()`:
 
-### Top fix prioritas (urutan dampak)
+| Flag | Arti | Baris |
+|---|---|---|
+| `isOwner` | Hanya owner | `middleware.js:54` |
+| `isPremium` | Premium (owner & partner otomatis lolos) | `middleware.js:69` |
+| `isAdmin` | Admin grup, hanya berlaku di grup | `middleware.js:96` |
 
-1. 🔴 **CRITICAL — Privilege escalation via newsletter** (`src/lib/ourin-serialize.js:662-663,737-740`): semua post dari channel yang bot follow mendapat `m.isOwner = true` → post `.eval` di channel publik = RCE penuh. Fix: jangan turunkan isOwner dari isNewsletter; skip pesan channel yang participant ≠ bot.
-2. 🔴 **CRITICAL — `.backupdb` crash** (`src/lib/ourin-store-backup.js:105`): `config` dipakai tanpa import → ReferenceError saat runtime. Fix: 1 baris import.
-3. 🟠 **HIGH — Listener `group-participants.update` terpasang 2×** (`src/connection.js:752 + 1287`): welcome/goodbye terkirim dobel, DB write 2×, fetch metadata 2× per event. Fix: hapus salah satu.
-4. 🟠 **HIGH — SIGINT memotong flush Turso** (`index.js:222-250`): `db.save()` tanpa await + `process.exit(0)` → data lokal lebih baru bisa tertimpa Turso stale saat boot berikutnya. Fix: await save sebelum exit.
-5. 🟠 **HIGH — Write non-atomic + reset `[]` senyap di 5 modul DB** (`ourin-premium-db.js`, `ourin-jadibot-database.js`, `ourin-roles-cpanel.js`, `ourin-lid.js`, `ourin-sticker-command.js`): crash mid-write = corrupt → loader diam-diam reset `[]` → owner/premium bisa wipe tanpa jejak. Fix: pola temp+rename + backup `.corrupted` seperti di `validateJsonFile`.
-6. 🟠 **HIGH — Rate limiter anti-spam tidak pernah aktif** (`config.js:148-156`): key `features.antiSpam` tidak ada di object → `isSpamming` selalu false. Fix: tambahkan key tersebut.
-7. 🟠 **HIGH — `npm start` men-set `NODE_ENV=production` bukannya development flag** — script `start` masih men-set `NODE_ENV=development` → hot-reload watcher aktif di production, setiap edit plugin menumpuk modul di ESM cache (+1–5 MB/edit, tak bisa dibersihkan). Fix: pisahkan script start production.
+### `user.access` melonggarkan semua gate
 
-### Inefficiency hot-path terbesar (CPU per pesan, tanpa ubah perilaku)
+`middleware.js:37-52` menghitung `hasAccess` bila `user.access` punya entri
+untuk command itu yang belum kedaluwarsa. `hasAccess` itu di-OR ke **enam**
+gate, bukan hanya `isOwner`:
 
-- Cache layer `ourin-performance.js` (121 baris) **dibuat tapi tidak pernah dipakai** — `db.getGroup` dipanggil ±8× per pesan grup, `db.getUser` 4×. Aktifkan (atau hapus).
-- `isOwner/isPremium/isPartner/isBanned` full-scan berlapis → `isOwner()` dieksekusi ≥4× per pesan (`config.js:332-494`).
-- `setUser` per command dengan `lastSeen` → rewrite blob users.json PENUH tiap 5 detik (`src/handler.js:860-865`).
-- `sharp().resize()` asset statis per reply variant 2/5/7/11 (`ourin-serialize.js:993-1260`) — hasil identik tiap kali; precompute saat boot.
-- `isPremium()` memicu `db.save()` penuh saat menemukan entry expired — pindah expiry-sweep ke scheduler.
+`isOwner` (`:54`) · `isPartner` (`:61`) · `isPremium` (`:69`) ·
+`isAdmin` (`:96`) · matikan fitur `game` per grup (`:120`) ·
+matikan fitur `rpg` per grup (`:128`)
 
-### Dead code terverifikasi (aman dihapus)
+Artinya satu entri `user.access` yang tidak kedaluwarsa membuka command owner
+untuk user itu. Ini perilaku yang disengaja, tapi harus diketahui operator
+sebelum memberi akses.
 
-Folder `otz-signal/` (kosong 0 file, sisa proyek rewrite), `ourin-backup.js` + `ourin-roles-linode.js` + `ourin-roles-digitalocean.js` (dead + broken), `ourin-otp-service.js`, `ourin-latex.js`, `ourin-carbon.js`, `ourin-pinterest.js` (0 importer), cache layer `ourin-performance.js` (90%), tabel Turso `backup_snapshots` (dibuat tak dipakai), 2 plugin `botmode` bentrok nama (group vs owner — loader menimpa, fitur group tak terjangkau), duplikat binary `.node` 1MB.
+### Plugin yang tidak memakai `isOwner`
 
-### Yang sudah benar (layak dicatat)
+Tidak semua plugin host memakai flag framework:
 
-Atomic write temp+rename di Database utama, parameterized SQL semua (0 SQL injection), backup file corrupt dengan `.bak` di `validateJsonFile`, `matchJid` strict-equality (fix privilege escalation lama, ada regression test), temp cleaner dengan yield + retention, sweeper semua cache game/session, guard `_asyncWrite`, dan matchJid test di CI.
+- **`plugins/vps/*` (6 file)** dan **12 dari 21 `plugins/panel/*`**
+  mendeklarasikan `isOwner: false`, jadi gate framework tidak menyaringnya.
+  Semuanya—the `vps` group dan 11 `panel`—punya gate kedua sendiri di dalam
+  handler (`hasAccess`, `hasAccessToServer`, `hasFullAccess`, `canManageRole`)
+  yang membaca daftar di `config.digitalocean.sellers` / `ownerPanels` atau
+  store peran. Default-nya kosong, jadi **deny-by-default**.
+- **`plugins/panel/cpanel.js`** adalah menu read-only tanpa gate kedua: ia
+  menampilkan menu dan peran milik pemanggil. Tidak menulis apa pun.
+- **`plugins/search/pap.js`** memakai gate khusus di dalam handlernya sendiri
+  (lihat baris 92), terpisah dari `isOwner`.
+
+### Pesan yang dikirim sendiri
+
+`src/lib/serialize.js:770` memberi `m.isOwner = true` pada `m.fromMe`. Jadi
+pesan yang bot kirim ke account-nya sendiri terbaca sebagai owner-tier.
+Persis untuk `append` maupun `notify`, keduanya ditangani di
+`src/connection.js:1382`. Ini jalur yang membuat `=>` (eval) dan `$` (exec)
+di `src/connection.js:1614` dan `:1652` hidup. Jangan sampai account bot
+dipakai untuk chat biasa.
+
+### Jadibot bukan sandbox
+
+Sub-bot berbagi process, filesystem, dan `.env` dengan bot utama. Batasnya
+diterapkan di `src/handler.js:1667`:
+
+- Kategori **`owner` diblokir seluruhnya**, bukan hanya plugin yang disebut.
+- Kategori **`sewa`, `panel`, `store`, `pushkontak` diblokir**.
+- Command `sewa*`, `jadibot*`, `botmode`, `restart`, `shutdown` diblokir.
+- Prefix body `>>` dan `!!` diblokir.
+
+Blokir ini berlaku di **grup maupun private chat**. Private dulu tidak ikut
+terblokir; itu sudah diperbaiki. Plugin `sewa` sendiri ada di kategori
+`owner`, jadi tercakup dua kali.
+
+Nilai yang tersisa: `m.isOwner` di dalam jadibot berarti "owner jadibot itu",
+bukan owner host — lihat `src/handler.js:762`.
+
+---
+
+## 💾 Kebutuhan Operasional
+
+| Batas | Nilai | Sumber |
+|---|---|---|
+| Heap ceiling | **512 MB** | `package.json` → `start`: `--max-old-space-size=512` |
+| RSS limit (monitor) | 550 MB | `src/lib/memory-monitor.js:3` |
+| GC trigger RSS | 380 MB | `src/lib/memory-monitor.js:4` |
+| GC trigger heap | 250 MB | `src/lib/memory-monitor.js:5` |
+| Profiler RSS ceiling | 400 MB | `src/lib/profiler.js:42` |
+| Profiler proyeksi ceiling | 800 MB | `src/lib/profiler.js:44` |
+
+`npm start` sengaja mengunci heap di 512 MB. Itu batas keras, bukan saran:
+node akan `OOM` sebelum host kehabisan RAM, bukan sesudahnya. Kalau bot
+restart berulang, itu ceilings yang bekerja.
+
+### CPU profiler menulis tanpa batas
+
+`src/lib/profiler.js` menulis ke `storage/profiling/`. **Tidak ada logika
+retensi sama sekali** — tidak ada prune, tidak ada ttl, tidak ada `unlink`
+(`profiler.js:204` satu-satunya titik tulis). Isi direktori itu tumbuh
+sampai seseorang menghapusnya secara manual. Di mesin ini direktori itu sudah
+135 MB dari 25 file, dengan file tertua dari 30 Agustus.
+
+Kalau `storage/profiling` adalah volume yang tidak dibersihkan, itu akan
+makan disk. Periprogram perlu menambahkan retensi; ini belum ada.
+
+### Angka RAM
+
+Diukur di host Pterodactyl 512MB/1GB, `src/lib/profiler.js:17-18` mencatat
+idle `rss 290-375MB` dan `heapTotal 185-195MB`. Itu kondisi idle, bukan
+garansi runtime. Untuk angka 24 jam dan 72 jam, lihat
+`docs/profiling-audit.md` dan `docs/ram-safety-audit-2026-09-21.md`.
+
+---
+
+## 🎬 TikTok: Rantai Fallback
+
+Satu provider diblokir ≠ selesai. Rantainya:
+
+```
+src/scraper/tiktok.js (ttdown)      tikwm → savett → yuulabs → musicaldown
+plugins/download/tiktokdl.js  (.tt) tikwm → savett(raw) → savett(resolved)
+plugins/download/tiktokdl2.js (.tt2) savett.cc (csrf token + form POST)
+```
+
+- **tikwm** cepat, tapi sering kena Cloudflare 403 di IP datacenter.
+- **savett** butuh token CSRF + cookie, dan mau menerima shortlink mentah.
+
+Kalau semua kena blokir, `.tt` memang gagal. Itu batas provider, bukan bug —
+`docs/` mencatatnya.
 
 ---
 
 ## ⚙️ Konfigurasi (`config.js`)
 
-Pengaturan sentral bot terdapat pada file `config.js`:
+Nilai di bawah adalah default yang benar-benar ada di `config.js`, bukan
+contoh karangan.
 
 ```javascript
-export default {
-  // Mode Operasional
-  mode: "public",                // "public" (semua user) | "self" (hanya owner)
-
-  // Sesi & Pairing
-  session: {
-    usePairingCode: true,        // true = Pairing Code, false = QR Code
-    pairingNumber: "628xxx",     // Nomor WhatsApp bot (format: 628xxx)
-  },
-
-  // Owner Setting
-  owner: {
-    name: "Zann",
-    number: "628xxx",            // Nomor owner utama
-  },
-
-  // Command & Behavior
-  command: {
-    prefix: ".",                 // Simbol prefix command bot
-  },
-
-  features: {
-    autoRead: true,              // Otomatis read pesan masuk
-    antiCall: false,             // Blokir/tolak panggilan otomatis
-    smartTriggers: false,        // Auto-reply berbasis kata kunci
-  },
-
-  energi: {
-    enabled: true,               // Sistem batas limit/energi
-    default: 25,                 // Default energi user baru
-  },
-
-  turso: {
-    enabled: true,               // Aktifkan sinkronisasi Turso LibSQL
-  }
-};
+mode: "public",                 // "public" | "self"
+session: { usePairingCode: true, pairingNumber: "628..." },
+command: { prefix: "." },
+features: { autoRead: true, antiCall: false, smartTriggers: false, logMessage: true },
+energi:  { enabled: true, default: 99999, premium: 99999999, owner: -1 },
+registration: { enabled: false },
+turso: { enabled: true, syncInterval: 5000 },
+dev: { watchPlugins: true, debugLog: false },
 ```
 
-### Konfigurasi Tambahan (opsional)
-- **`registration.enabled`** — wajibkan user daftar (`daftar`) sebelum pakai command.
-- **`features.logMessage`** — log command per-fitur ke console (tanpa nomor user).
-- **`dev.watchPlugins`** — hot-reload plugin otomatis saat file berubah (mode dev).
-- **`dev.debugLog`** — tampilkan stack trace lengkap saat error.
-- **`errorTemplate`** — template pesan error global command.
+Catatan yang sering disalahdokumentasikan:
+
+- `energi.default` adalah **99999**, bukan 25. Batas energi praktis datang dari
+  kuota per-command (`limit`), bukan dari default ini.
+- `features.logMessage` aktif secara default.
+- `dev.watchPlugins` aktif di config, tapi hot-reload hanya berjalan di
+  `NODE_ENV=development` — yaitu hanya lewat `npm run dev`.
+
+Opsi lain: `features.antiCall`, `registration.rewards`, `turso.syncInterval`,
+`backup.{enabled,intervalHours,retainDays}`, `errorTemplate`.
 
 ---
 
 ## 🧩 Panduan Membuat Plugin
 
-Setiap plugin baru diletakkan di `plugins/<kategori>/<nama-plugin>.js` menggunakan format ES Module:
+Taruh di `plugins/<kategori>/<nama>.js`, format ES Module:
 
 ```javascript
-/**
- * Plugin Template - Oktz-MD
- */
 export const config = {
-  name: "ping",                         // Nama command utama (wajib)
-  alias: ["p", "speed", "test"],        // Alias command (opsional)
-  category: "utility",                  // Kategori plugin
-  description: "Cek responsivitas bot", // Deskripsi command
-  usage: ".ping",                       // Cara penggunaan
+  name: "ping",                   // wajib (string atau string[])
+  alias: ["p"],
+  category: "utility",            # diisi otomatis dari nama folder
+  description: "Cek responsivitas bot",
+  usage: ".ping",
 
-  // Permission & Flags
-  isOwner: false,                       // Khusus owner bot
-  isPremium: false,                     // Khusus user premium
-  isGroup: false,                       // Khusus pesan grup
-  isPrivate: false,                     // Khusus private chat (PC)
-  isAdmin: false,                       // User harus admin grup
-  isBotAdmin: false,                    // Bot harus jadi admin grup
+  isOwner: false,                 // lihat /docs model akses
+  isPremium: false,
+  isGroup: false,
+  isPrivate: false,
+  isAdmin: false,
+  isBotAdmin: false,
 
-  // Rate Limit & Cost
-  cooldown: 3,                          // Cooldown per-eksekusi (detik)
-  limit: 1                              // Konsumsi energi/limit per-use
+  cooldown: 3,                    // detik
+  limit: 1,                       # konsumsi energi
+  isEnabled: true,
 };
 
 export async function handler(m, { sock, store, config, plugins }) {
-  const start = Date.now();
   await m.reply("Pong!");
-  const latency = Date.now() - start;
-  await m.reply(`⚡ Kecepatan respon: *${latency}ms*`);
 }
 ```
 
-### Objek `m` (Serialized Message)
-Setelah di-`serialize`, objek `m` berisi field berguna:
-- `m.text` / `m.body` — teks penuh (tanpa prefix)
-- `m.command` / `m.args` — command + argumen
-- `m.prefix` — prefix yang dipakai
-- `m.chat` — JID chat, `m.sender` — JID pengirim
-- `m.isGroup` / `m.isPrivate` / `m.isAdmin` / `m.isOwner`
-- `m.reply(text)` — reply text, `m.react(emoji)` — react ke pesan
+Setiap field opsional di-merge dari `defaultConfig` di
+`src/lib/plugins.js:61`, jadi yang wajib hanya `config.name` dan `handler`.
 
-### Hot-Reload
-Saat mode dev + `dev.watchPlugins`, file plugin yang diedit otomatis di-load ulang tanpa restart bot. Manual: gunakan command `reload` (owner) bila tersedia.
+### Objek `m`
+`m.text` / `m.body` · `m.command` / `m.args` · `m.prefix` · `m.chat` ·
+`m.sender` · `m.isGroup` / `m.isPrivate` / `m.isAdmin` / `m.isOwner` ·
+`m.reply(text)` · `m.react(emoji)`
 
----
-
-## 🧪 Testing & Keamanan
-
-Project ini menggunakan Node.js native test runner:
-
-```bash
-# Jalankan seluruh unit test
-npm test
-```
-
-### Cakupan Test (14 file)
-- **`number-match.security.test.mjs`** — verifikasi `isOwner` strict equality (anti privilege escalation via partial match)
-- **`turso-db/helper/session.test.mjs`** — Turso DB, helper, session auth state + atomic writes
-- **`waifu-data/lib.test.mjs`**, **`husbu-data/lib.test.mjs`** — data pool & gacha logic (300+ entri)
-- **`romance-lib.test.mjs`** — shared romance engine (diminish, fatigue, neglekt, anger)
-- **`afk.test.mjs`**, **`lid-resolve.test.mjs`**, **`logger-command.test.mjs`** — AFK persistence, LID resolve, log
-- **`memory-leaks.test.mjs`** — deteksi kebocoran cron job / cache cap
-
-### Arsitektur Keamanan & Stabilitas
-- **Strict Number Matching:** Verifikasi ketat JID WhatsApp owner tanpa bypass spoofing format.
-- **Anti-Crash Guard:** Global uncaught exception handler memastikan bot tetap aktif saat terjadi transient network error.
-- **Memory & Resource Monitor:** Automatic temp cleaner dan Garbage Collection watcher mencegah kebocoran memori (OOM).
-- **Rate Limiter:** Anti-spam per-user (rate-limiter-flexible).
-- **Group Protection:** Antilink, antitoxic, antispam, antibot, antidocument, antisticker, antimedia, antidetele.
+### Hot-reload
+Di mode dev, file yang diedit dimuat ulang tanpa restart. **Tidak ada command
+`reload`** — versi lama README menyebutkannya, dan command itu tidak ada di
+kode. Reload dipicu oleh watcher, atau oleh plugin owner yang memanggil
+`hotReloadPlugin()` secara eksplisit (`plugins/owner/addplugin.js:114`,
+`ganticode.js:156`, `gantiscraper.js:93`).
 
 ---
 
 ## 🏗️ Infrastruktur & Arsitektur
 
-Untuk dokumentasi teknis internal (alur eksekusi, message routing, plugin system, database, session, key libraries) lihat **`infra.md`**.
+Dokumentasi teknis internal ada di **`infra.md`**. Ringkasnya:
 
-Ringkasan cepat:
-- **Entry Point:** `index.js` → setup anti-crash, init database, preload assets, load plugins, scheduler, lalu start connection.
-- **Routing:** `src/handler.js` → serialize → filter → case handler → group protection → permission check → `getPlugin(command)` → eksekusi `handler()`.
-- **Plugin Store:** `src/lib/ourin-plugins.js` — 3 Map (`commands`, `aliases`, `categories`).
-- **Storage:** LowDB (JSON lokal) untuk data utama + Turso LibSQL (cloud) untuk session auth.
-- **Downloader TikTok:** fallback chain `tikwm → savett → yuulabs → musicaldown` supaya tetap jalan saat satu provider kena blokir.
+- **Entry point:** `index.js` → anti-crash, database, asset, plugin, scheduler,
+  lalu `startConnection()`.
+- **Routing:** `src/handler.js` → serialize → filter → case handler →
+  proteksi grup → permission check → `getPlugin(command)` → `handler()`.
+- **Plugin store:** `src/lib/plugins.js` — tiga Map: `commands`, `aliases`,
+  `categories`.
+- **Database:** LowDB (JSON lokal) untuk data utama; Turso LibSQL untuk
+  session auth.
+- **Case vs plugin:** `case/foto.js` menangani 4 grup command bawaan
+  (`cping`/`cspeed`/`clatency`, `listallcase`, `listallplugin`, dan alias-nya)
+  sebelum plugin mencari jalan.
+
+### ⚠️ Benchmark
+Tidak ada benchmark yang bisa direproduksi di repo ini. Berkas `run-sim.mjs`
+dan `sim-load.mjs` adalah harness pengembangan lokal, **keduanya gitignored**
+dan bukan bagian dari repo. Referensi benchmark di README versi lama
+(9× lebih cepat, 186–233×, dan sejenisnya) berasal dari audit engine
+`oktz-signal`, bukan dari pengukuran bot ini, dan tidak diulang di sini.
 
 ---
 
 ## 📄 Lisensi & Kredit
 
 - **Author:** [Zann](https://github.com)
-- **Base Engine:** [`Onigi-Baileys`](https://github.com/OktzO/Onigi) v10.1.0-rc.3 — rebase `@whiskeysockets/baileys` 7.0.0-rc14 (via alias `ourin` di package.json)
-- **E2EE Signal Engine:** [`oktz-signal`](https://www.npmjs.com/package/oktz-signal) v0.2.0-rc.1 — MIT replacement untuk `libsignal` (GPL), Rust native
-- **License:** Distributed under the **ISC License**.
-- **Stack E2EE:** `oktz-signal` (X3DH + Double Ratchet, Rust) + `oktz-curve25519` (native curve helpers) → `onigis` (Onigi-Baileys) → `oktz-md`.
+- **Base engine:** [`Onigi-Baileys`](https://github.com/OktzO/Onigi)
+  v10.1.0-rc.6 — rebase `@whiskeysockets/baileys`.
+- **E2EE:** [`oktz-signal`](https://www.npmjs.com/package/oktz-signal)
+  — pengganti `libsignal` (GPL) dengan Rust native (MIT).
+- **License:** ISC.
 
-<div align="center">
-  <sub>Dibuat dengan ❤️ untuk ekosistem bot WhatsApp yang lebih andal dan efisien.</sub>
-</div>
+> Saat berkembang, `node_modules/onigis` dan `node_modules/ourin` bisa berupa
+> symlink ke checkout lokal `Onigi/`, bukan paket npm. CI memasang dari
+> `package-lock.json`, bukan dari symlink itu.
