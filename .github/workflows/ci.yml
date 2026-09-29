@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# The suite never opens a socket, so the only writes we care about are the
+# ones a test makes on purpose. Cancelling in-flight jobs when a new push
+# lands keeps a superseded run from finishing minutes after its commit is
+# already stale.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    # Runs on ONE node version: the guard is version-independent, and this is
+    # the job that must be trustworthy enough to block a merge on its own.
+    name: secret leak guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # The guard runs `git ls-files` and `git check-ignore` against the
+          # real index, so it needs the history-free clone that checkout makes
+          # by default. Nothing here reads git history.
+          fetch-depth: 1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      # A real .env must never reach a runner, so the guard is pointed at a
+      # synthetic env file instead. These are throwaway strings, generated
+      # here, never used by anything.
+      #
+      # The point is NOT to re-detect today's leaks (that needs the operator's
+      # real .env, and the guard run locally is what does that). The point is
+      # to keep the detector itself honest on every push: the structural checks
+      # still run for real, and the self-test below proves the value scan
+      # still fires. A guard that silently stopped matching would otherwise
+      # look exactly like a green build.
+      #
+      # Seeding from .env.example was tried first and is wrong: the template
+      # holds non-secret defaults (BRAT_FONT_URL, BRAT_EMOJI_URL) that
+      # legitimately appear in src/lib/brat.js and emoji-map.js, so it
+      # produced false positives rather than detections.
+      - name: Build a synthetic env file for the detector
+        run: |
+          set -euo pipefail
+          {
+            echo "TURSO_URL=ci-synthetic-0001"
+            echo "APIKEY_CUKI=ci-synthetic-0002"
+            echo "GH_TOKEN=ci-synthetic-0003"
+          } > "$RUNNER_TEMP/ci.env"
+      - name: Assert .env is ignored and no env value is tracked
+        run: node scripts/secret-guard.mjs --env-file "$RUNNER_TEMP/ci.env"
+      - name: The guard must fail on a planted leak
+        # A guard nobody has seen fail is a guard nobody should trust. This
+        # stages a file containing a value that is definitely not in the repo,
+        # points the detector at an env containing that same value, and asserts
+        # the guard rejects it. If a future edit breaks the value scan, this
+        # step fails instead of the pipeline passing quietly.
+        run: |
+          set -euo pipefail
+          echo "ci-plant-marker-9f3a2b7c" > planted-selftest.md
+          git add planted-selftest.md
+          echo "CI_PLANTED=ci-plant-marker-9f3a2b7c" >> "$RUNNER_TEMP/ci.env"
+          if node scripts/secret-guard.mjs --env-file "$RUNNER_TEMP/ci.env"; then
+            echo "::error::secret guard passed a planted leak — the value scan is not working"
+            exit 1
+          fi
+          echo "::notice::guard correctly rejected the planted value"
+
+  build:
+    name: test + lint (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22 is the floor declared in package.json "engines". 24 is the
+        # current LTS line. Both are tested: a bot pinned to 22 in production
+        # must not be allowed to drift on a runtime nobody runs.
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      # --ignore-scripts, deliberately.
+      #
+      # The postinstall chain is `npm rebuild sharp` -> `node
+      # native/fetch-prebuilt.mjs` -> `apt-get install ffmpeg`. None of it is
+      # needed to run the suite, and all of it is unwanted in CI:
+      #   * sharp 0.35 ships prebuilt linux-x64 binaries as optional
+      #     dependencies (@img/sharp-linux-x64 + libvips) and has no install
+      #     script, so it loads without a rebuild.
+      #   * native/fetch-prebuilt.mjs pulls a ~10MB .node from GitHub
+      #     releases. src/lib/native-loader.js falls back to tesseract.js when
+      #     it is absent, and tests/native-loader.test.mjs asserts exactly
+      #     that both paths read text. Verified: with native/platforms/ moved
+      #     aside the suite still reports 668 pass / 0 fail.
+      #   * ffmpeg resolves from @ffmpeg-installer/ffmpeg, a real dependency
+      #     in the lockfile, so tests/ffmpeg-injection.test.mjs does not need
+      #     the apt-get either.
+      # Letting postinstall run would instead let a fetch or an apt-get
+      # failure break the build for reasons unrelated to the code.
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Runtime status
+        run: |
+          echo "node $(node --version) / npm $(npm --version)" >> "$GITHUB_STEP_SUMMARY"
+          echo "heap ceiling from npm start: $(node -e 'console.log(JSON.parse(require("fs").readFileSync("package.json","utf8")).scripts.start)')" >> "$GITHUB_STEP_SUMMARY"
+      # `npm test` is invoked as the SCRIPT, never re-spelled inline. The
+      # script carries `--experimental-test-module-mocks`, and several suites
+      # import mocks through it; hand-rolling the node --test line would drop
+      # the flag and the mock-based tests would fail for the wrong reason.
+      - name: Run the test suite
+        run: npm test
+      - name: Run the linter
+        # `npm run lint` is eslint over plugins/ only — that is the declared
+        # scope, not an oversight, and this step is named accordingly.
+        run: npm run lint
