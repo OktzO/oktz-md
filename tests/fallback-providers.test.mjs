@@ -12,6 +12,32 @@ const axiosStub = {
 };
 mock.module('axios', { defaultExport: axiosStub, namedExports: axiosNamed });
 
+// Provider keys are pinned to a dummy BEFORE anything imports config.js.
+//
+// config.js calls process.loadEnvFile() at module scope and copies
+// process.env into config.APIkey once. So without this, whether a provider
+// looks "alive" depended on the operator's own .env: with real keys present
+// the primary answered and nexray was correctly never called, and with no
+// .env the primary threw MissingApiKeyError and fell through to nexray. Three
+// "provider hidup ⇒ nexray TIDAK dipanggil" tests therefore passed on the
+// author's machine and failed on a clean CI checkout, which has no .env.
+//
+// A value already present in process.env wins over the .env file, so this
+// pins the tests to a known state and stops them from reading real
+// credentials. config.js is only reached through the dynamic import inside
+// loadPlugin and the explicit `await import('../config.js')` below, both of
+// which run after this statement.
+for (const key of [
+  'APIKEY_CUKI',
+  'APIKEY_FIREFLY',
+  'APIKEY_OBSCURA',
+  'APIKEY_NEOXR',
+  'APIKEY_FGSI',
+  'APIKEY_COVENANT',
+]) {
+  if (process.env[key] === undefined) process.env[key] = 'test-dummy-key';
+}
+
 /**
  * Stub axios.get berdasarkan host. Setiap entri = [regex, handler].
  * Handler mengembalikan { status, body } — throw berarti network error.
