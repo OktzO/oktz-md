@@ -1,6 +1,7 @@
 node_modules/
 storage/
 .opencode/
+.agents/
 database/
 .worktrees/
 .superpowers/
