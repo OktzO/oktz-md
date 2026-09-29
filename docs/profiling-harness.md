@@ -1,5 +1,14 @@
 # Profiling Harness — Ourin MD
 
+> **Catatan usang (ditambahkan saat audit dokumentasi, 2026-09-29).** Dokumen ini
+> adalah catatan historis, bukan spesifikasi yang berlaku. Dua hal berubah sejak
+> tanggalnya ditulis: (1) prefix `ourin-` pada modul `src/lib/` dihapus —
+> `src/lib/ourin-foo.js` kini `src/lib/foo.js`, jadi setiap path `ourin-*` di bawah
+> sudah tidak ada; (2) jumlah plugin bergerak (sekarang 829 file, bukan angka di
+> dokumen ini). Angka dan verdict di bawah tetap valuable sebagai rekaman tanggal
+> itu — jangan diperlakukan sebagai kondisi repo sekarang. Untuk kondisi terkini,
+> lihat `infra.md` dan `README.md`.
+
 Date: 2026-08-30 · Tujuan: kumpulkan data empiris nyata (CPU flamegraph + heap
 snapshot) dari proses yang jalan sungguhan di produksi, BUKAN baca kode manual
 lagi (dua audit sebelumnya sudah exhausted metode baca source).
@@ -51,6 +60,27 @@ storage/profiling/
 - `storage/` di-gitignore dan **persist melewati restart** (folder ini tempat
   session WhatsApp — diverifikasi: session hidup kembali setelah restart).
 - File diberi timestamp biar gak timpa-timpakan.
+
+> ### ⚠️ Tidak ada retensi — hapus manual
+>
+> `src/lib/profiler.js` **tidak punya logika retensi sama sekali**. Tidak ada
+> prune, tidak ada TTL, tidak ada `unlink`; satu-satunya titik tulisnya
+> `fs.writeFileSync` di baris 204. Folder `storage/profiling/` tumbuh tanpa
+> batas sampai seseorang menghapusnya.
+>
+> Yang perlu diperhatikan: satu heap snapshot bisa 5-30 MB. Di mesin audit
+> ini foldernya sudah **135 MB dari 25 file**, dengan file tertua dari 30
+> Agustus. Kalau `storage/profiling` ada di volume yang tidak dinasionalkan,
+> HABISKAN disk.
+>
+> Bersihkan secara berkala:
+> ```bash
+> # hapus yang lama; file hari ini masih dipakai
+> find storage/profiling -name '*.cpuprofile' -mtime +7 -delete
+> find storage/profiling -name '*.heapsnapshot' -mtime +7 -delete
+> ```
+> Menambahkan retensi otomatis ke `src/lib/profiler.js` adalah perbaikan
+> yang benar, tapi belum ada di kode.
 
 ### Cara ambil file keluar dari panel
 

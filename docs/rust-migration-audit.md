@@ -1,5 +1,14 @@
 # Rust-Migration Audit — Ourin MD
 
+> **Catatan usang (ditambahkan saat audit dokumentasi, 2026-09-29).** Dokumen ini
+> adalah catatan historis, bukan spesifikasi yang berlaku. Dua hal berubah sejak
+> tanggalnya ditulis: (1) prefix `ourin-` pada modul `src/lib/` dihapus —
+> `src/lib/ourin-foo.js` kini `src/lib/foo.js`, jadi setiap path `ourin-*` di bawah
+> sudah tidak ada; (2) jumlah plugin bergerak (sekarang 829 file, bukan angka di
+> dokumen ini). Angka dan verdict di bawah tetap valuable sebagai rekaman tanggal
+> itu — jangan diperlakukan sebagai kondisi repo sekarang. Untuk kondisi terkini,
+> lihat `infra.md` dan `README.md`.
+
 Date: 2026-08-29 · Host audit: IDX container (2 core / 8GB / Node v20.19.1) · Target production: Pterodactyl panel, x86_64, total RAM 1GB (free ~350-500MB), 1 core, disk 3GB · Metode: baseline real-run (`process.memoryUsage()` + `--expose-gc`, aset nyata `assets/`), sweep dep vs import nyata seluruh repo, spike napi-rs end-to-end.
 
 > **Status doc ini: AUDIT (belum implementasi).** Setiap verdict di bawah keputusan audit,

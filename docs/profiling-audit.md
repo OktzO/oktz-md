@@ -1,5 +1,14 @@
 # Profiling Audit — Ourin MD (kandidat Rust: Go/No-go)
 
+> **Catatan usang (ditambahkan saat audit dokumentasi, 2026-09-29).** Dokumen ini
+> adalah catatan historis, bukan spesifikasi yang berlaku. Dua hal berubah sejak
+> tanggalnya ditulis: (1) prefix `ourin-` pada modul `src/lib/` dihapus —
+> `src/lib/ourin-foo.js` kini `src/lib/foo.js`, jadi setiap path `ourin-*` di bawah
+> sudah tidak ada; (2) jumlah plugin bergerak (sekarang 829 file, bukan angka di
+> dokumen ini). Angka dan verdict di bawah tetap valuable sebagai rekaman tanggal
+> itu — jangan diperlakukan sebagai kondisi repo sekarang. Untuk kondisi terkini,
+> lihat `infra.md` dan `README.md`.
+
 Date: 2026-08-30 · Data: window CPU produksi pertama (Pterodactyl panel,
 Node v22.23.2) + catatan status heap. Metode: analisis flamegraph
 (`.cpuprofile`, self-time + total-time), BUKAN baca kode manual.

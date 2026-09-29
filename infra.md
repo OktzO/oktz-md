@@ -10,13 +10,13 @@ config.js                 → config tunggal + helper functions (isOwner, isPrem
 case/foto.js             → case-based command handler (minor, ~5 built-in commands)
 src/connection.js         → WhatsApp WebSocket connection (Baileys)
 src/handler.js            → message router (pusat routing, ~2200 baris)
-src/lib/*                 → 71 library modules
+src/lib/*                 → 87 library modules
 src/scraper/*             → 59 scraper modules
 src/tiktok/*              → 8 JSON data feed asupan TikTok
-plugins/<kategori>/*.js   → 827 plugin files (34 kategori)
+plugins/<kategori>/*.js   → 829 plugin files (34 kategori)
 assets/                   → media assets (images, fonts, audio, video)
 database/                 → runtime data files (JSON, lowdb, lid-cache)
-tests/                    → node:test (14 suite) + fixtures tests/foto/
+tests/                    → node:test (71 file) + fixtures tests/foto/ (gitignored)
 infra.md                  → dokumentasi ini
 ```
 
@@ -92,8 +92,8 @@ messageHandler(msg, sock)
 
 ## Dual Routing
 
-1. **Case** — `case/foto.js`: switch-case sederhana, built-in, di-handle duluan di `messageHandler()`. Hanya ~5 command (ping, latency, listcase, listplugin).
-2. **Plugin** — mayoritas command: lookup by name di `pluginStore`, eksekusi `handler()`. ~827 plugin.
+1. **Case** — `case/foto.js`: switch-case sederhana, built-in, di-handle duluan di `messageHandler()`. Tiga grup command (11 nama): `cping`/`cspeed`/`clatency`, `listallcase`/`lcase`/`caselist`/`allcase`, `listallplugin`/`lplugin`/`pluginlist`/`allplugin`.
+2. **Plugin** — mayoritas command: lookup by name di `pluginStore`, eksekusi `handler()`. 829 file plugin.
 
 ## Database (`src/lib/database.js`)
 
@@ -131,52 +131,80 @@ messageHandler(msg, sock)
 - `isPremium()` → owner/partner otomatis premium, cek expiry
 - `isBanned()` → owner tidak bisa di-ban
 - Middleware di handler: permission check sebelum eksekusi plugin
-- Rate limiter (rate-limiter-flexible): `globalRateLimiter` 8 points / 3s + `spamDelayTracker`
+- Rate limiter (rate-limiter-flexible): `globalRateLimiter` 8 points / 3s + `spamDelayTracker` (`src/handler.js:358-361`)
 - Group protection: antilink, antitoxic, antispam, antibot, antidocument, antisticker, antimedia, anti-hidetag, anti-phishing, anti-judol, anti-remove
 - Anti-crash guard: global uncaughtException + unhandledRejection handler
 - Secret management: semua API key dipindah ke `.env` (tidak di-commit)
+
+### Tiga hal yang mudah disalahpahami soal akses
+
+1. **`user.access` bukan hanya pintu owner.** Di `src/lib/middleware.js:37-52`
+   sebuah entri `user.access` yang belum kedaluwarsa di-OR ke enam gate:
+   `isOwner` (`:54`), `isPartner` (`:61`), `isPremium` (`:69`), `isAdmin`
+   (`:96`), matikan fitur `game` per grup (`:120`), dan matikan fitur `rpg`
+   per grup (`:128`).
+
+2. **`m.fromMe` = owner-tier.** `src/lib/serialize.js:770` menulis
+   `m.isOwner = m.fromMe ? true : ...`, untuk `isPartner` dan `isPremium`
+   juga. `src/connection.js:1382` memproses event bertipe `notify` **dan**
+   `append`, jadi pesan yang bot kirim ke account-nya sendiri ikut masuk
+   router dengan owner-tier. Jangan pakai account bot untuk chat biasa.
+
+3. **Tidak semua plugin host pakai `isOwner`.** `plugins/vps/*` (6 file) dan
+   12 dari 21 `plugins/panel/*` mendeklarasikan `isOwner: false`, jadi gate
+   framework tidak menyaringnya. 11 di antaranya punya gate kedua di dalam
+   handler (`hasAccess`, `hasAccessToServer`, `hasFullAccess`, `canManageRole`),
+   semua default-deny. `plugins/panel/cpanel.js` tidak punya gate kedua,
+   tetapi read-only.
+
+Lihat juga bagian **Jadibot bukan sandbox** di `README.md` untuk batas
+sub-bot.
 
 ## Key Libraries
 
 | Library | Fungsi |
 |---------|--------|
-| `foto-baileys` | WhatsApp MD protocol (fork of @whiskeysockets/baileys) |
+| `onigis` | WhatsApp MD protocol (fork of @whiskeysockets/baileys) — dinamai `foto-baileys` di versi lama |
 | `lowdb` | JSON file database |
 | `@libsql/client` | Turso/libsql edge database |
-| `@napi-rs/canvas` | Canvas rendering (welcome card, dll) |
+| `@napi-rs/canvas` | Canvas rendering (welcome card, OCR fixture) |
 | `sharp` | Image processing |
+| `brat-canvas` | Render kartu brat/bratvid |
 | `fluent-ffmpeg` | Audio/video processing |
 | `pino` | Logging (Baileys internal) |
 | `cron` | Job scheduling |
 | `rate-limiter-flexible` | Rate limiting |
-| `node-webpmux` | Webp EXIF (sticker metadata) |
 | `lru-cache` | Performance caching (apimanager, thumb) |
+| `node-cache` | Cache key/value sederhana |
 | `undici` | HTTP client |
-| `axios` | HTTP requests |
+| `axios` | HTTP requests — termasuk scraper Gemini (`src/scraper/gemini.js`) |
 | `cheerio` | HTML scraping |
-| `tesseract.js` | OCR |
+| `tesseract.js` | OCR, fallback saat binary native `ourin_native` tidak ada |
 | `ssh2` | SSH (VPS management) |
 | `btch-downloader` | Media downloader (FB, CapCut, ttdl) |
-| `@google/generative-ai` | Gemini AI |
 | `google-tts-api` | Text-to-speech |
 
-## Direktori Plugin (827 file, 34 kategori)
+Tidak ada `@google/generative-ai`: integrasi Gemini memakai REST via `axios`.
+Tidak ada `node-webpmux`: metadata stiker ditulis sendiri di `src/lib/exif.js`
+menggunakan `fs` + `crypto`.
+
+## Direktori Plugin (829 file, 34 kategori)
 
 | Kategori | Jumlah | Fungsi |
 |----------|-------:|--------|
-| owner | 147 | Eval, exec, manage bot, cap energi/premium |
+| owner | 150 | Eval, exec, manage bot, cap energi/premium, sewa |
 | group | 101 | Antilink, welcome, mute, warn, dll |
-| rpg | 67 | RPG game system |
-| tools | 55 | Utility tools |
+| rpg | 66 | RPG game system |
+| tools | 56 | Utility tools |
 | cek | 48 | Quiz/check personality |
-| ai | 47 | AI chat integration + image gen |
-| search | 45 | Search engines |
+| ai | 46 | AI chat integration + image gen |
+| search | 46 | Search engines |
 | fun | 39 | Fun commands |
-| game | 37 | Interactive games |
+| game | 36 | Interactive games |
 | canvas | 31 | Image generation |
 | download | 26 | Media downloaders |
 | sticker | 22 | Sticker creation |
-| panel | 22 | Hosting panel (Pterodactyl, DO, Linode, CPanel) |
+| panel | 21 | Hosting panel (Pterodactyl, DO, Linode, CPanel) |
 | main | 20 | Core commands (menu, ping, stats) |
 | user | 17 | User profile |
 | stalker | 15 | Profile stalking |
@@ -198,6 +226,10 @@ messageHandler(msg, sock)
 | jpm | 1 | Jadwal pesan massal |
 | ephoto | 1 | Ephoto templates |
 | convert | 1 | Audio converter |
+
+Jumlah di atas adalah hitungan file `.js` per folder. Satu file bisa
+mendaftarkan beberapa command lewat `name: ['a','b','c']`, jadi ini bukan
+jumlah command.
 
 ## Scraper & Downloader
 
@@ -233,20 +265,59 @@ Built-in di `case/foto.js`:
 - `config.dev.watchPlugins` → hot-reload plugin saat file berubah
 - `config.dev.debugLog` → stack trace di error
 - Anti-crash: uncaughtException + unhandledRejection handler
-- SIGINT/SIGTERM: save database, exit safe
+- SIGINT/SIGTERM: save database, exit safe (sinyal kedua = force exit)
+
+Hanya `npm run dev` yang menyalakan `NODE_ENV=development`. `npm start` tidak,
+meski `dev.watchPlugins` bernilai `true` di config — watcher hanya aktif di
+mode development.
+
+## Batas Memori Produksi
+
+| Batas | Nilai | Sumber |
+|-------|------:|--------|
+| Heap ceiling | 512 MB | `package.json` → `start`: `--max-old-space-size=512` |
+| RSS limit (monitor) | 550 MB | `src/lib/memory-monitor.js:3` |
+| GC trigger (RSS) | 380 MB | `src/lib/memory-monitor.js:4` |
+| GC trigger (heap) | 250 MB | `src/lib/memory-monitor.js:5` |
+| Profiler RSS ceiling | 400 MB | `src/lib/profiler.js:42` |
+| Profiler proyeksi ceiling | 800 MB | `src/lib/profiler.js:44` |
+
+`--max-old-space-size=512` itu batas keras, bukan saran: proses OOM sebelum
+host kehabisan RAM. `storage/profiling` tidak punya retensi — lihat
+`docs/profiling-harness.md`.
 
 ## Testing
 
-`npm test` → `node --test tests/` (14 suite, 97 assertions)
+`npm test` → `node --experimental-test-module-mocks --test "tests/**/*.test.?(m)js"`
+— 71 file, 668 test, 0 gagal. Jalankan lewat script, jangan menulis ulang
+perintahnya: flag `--experimental-test-module-mocks` dipakai beberapa suite.
+
+`npm run lint` → `eslint plugins/` (cakupan hanya `plugins/`, bukan seluruh repo).
+
+Suite berjalan **offline terhadap stub socket** — tidak menjalankan bot, tidak
+menghubungi WhatsApp, tidak menyentuh Turso. Diverifikasi dengan memblokir
+`net.connect` / `tls.connect` / `dns.*` lewat preload: 668 pass, nol koneksi
+keluar. Satu-satunya percobaan DNS ke domain `.invalid` (RFC 2606, memang
+diservis tidak ter-resolve) di `tests/upstream-diagnostics.test.mjs`.
+
+CI ada di `.github/workflows/ci.yml`: test + lint di Node 22 dan 24, plus
+`scripts/secret-guard.mjs` yang memeriksa `.env` tidak bocor ke file ter-track.
+
+Grup test yang penting saat menyentuh auth/session:
 
 - `number-match.security.test.mjs` — verifikasi `isOwner` strict equality (anti privilege escalation via partial match)
+- `jadibot-owner-privilege.test.mjs` — batas privilege owner jadibot (blokir seluruh kategori `owner`, prefix `>>` / `!!`)
+- `onwhatsapp-gate.test.mjs` — gate provisioning admin fail-closed
+- `rename-invariants.test.mjs` — merge `ourin` → `foto`: import resolve, tidak ada sisa `ourin-*.js`, kunci aset utuh
 - `turso-db.test.mjs`, `turso-helper.test.mjs`, `turso-session.test.mjs`, `turso-session-atomic.test.mjs` — Turso DB + session auth state + atomic batch/sequential fallback
 - `waifu-data.test.mjs`, `waifu-lib.test.mjs`, `husbu-data.test.mjs`, `husbu-lib.test.mjs`, `romance-lib.test.mjs` — gacha data pool (300+ entri), pity system, aksi/mood/jealousy
 - `afk.test.mjs` — persistence + alias guard + mention throttle
 - `lid-resolve.test.mjs` — LID→JID resolution + fallback
 - `logger-command.test.mjs` — log command tanpa nomor user
 - `memory-leaks.test.mjs` — cron job leak, cache cap (antispam, waifupool pages)
-- `tests/foto/` — fixture: full copy struktur bot + database sampel untuk integration test
+- `profiler.test.mjs`, `profiler-heap-guard.test.mjs` — kontrak profiler + ceiling heap snapshot
+- `tests/foto/` — fixture untuk integration test. **Gitignored** dan tidak ada
+  di checkout bersih; test yang bergantung padanya akan gagal di CI.
 
 ## Troubleshooting Umum
 
@@ -254,6 +325,29 @@ Built-in di `case/foto.js`:
 |---|---|---|
 | `.tt` gagal semua | Semua provider kena Cloudflare 403 di IP server | Cek log `[tiktokDl]`, butuh proxy/residential IP atau API berbayar (TikHub) |
 | Plugin tidak ke-load | Error syntax / import rusak | `node --check plugins/<file>.js`, cek log `plugin failed <file>` |
-| Bot restart terus | OOM | Aktifkan `--max-old-space-size=512` (sudah di npm scripts), cek memory monitor |
+| Bot restart terus | OOM | `--max-old-space-size=512` sudah ada di `npm start`; cek memory monitor (RSS limit 550MB) |
 | Turso error | Network / batch tidak didukung | Sudah ada fallback sequential + file lokal, cek `[turso]` log |
 | Session hilang | Turso down / session expired | Auto-recovery main-session + restore jadibot di `connection open` |
+| Disk penuh | `storage/profiling` menumpuk tanpa batas | Hapus `storage/profiling/*.cpuprofile` dan `*.heapsnapshot` secara berkala — tidak ada retensi otomatis |
+| `npm test` gagal di mesin bersih | `tests/foto/` gitignored, jadi fixture tidak ada | Suite utama tidak memerlukannya; kalau ada test lokal yang gagal, itu test yang butuh fixture |
+
+## Dokumen lain di `docs/`
+
+Audit dan catatan desain. Semuanya analisis historis, bukan spesifikasi
+yang selalu berlaku — periksa tanggalnya sebelum mengutip angka.
+
+| Dokumen | Isi |
+|---|---|
+| `docs/memory-leak-audit.md` | Audit kebocoran memori & efisiensi (2026-08-25) |
+| `docs/ram-safety-audit-2026-09-21.md` | Sweep keamanan RAM & free yang aman |
+| `docs/profiling-audit.md` | Analisis flamegraph CPU produksi |
+| `docs/profiling-harness.md` | Cara memakai profiler bawaan (termasuk batas retensinya) |
+| `docs/plugin-audit-2026-09-20.md` | Audit 829 plugin |
+| `docs/rust-migration-audit.md` | Evaluasi migrasi ke Rust (2026-08-29) |
+| `docs/superpowers/` | Rencana & spesifikasi desain per fitur |
+
+> Peringatan: `docs/plugin-audit-2026-09-20.md` dan dua dokumen
+> `docs/superpowers/plans/` memuat nilai `APIKEY_CUKI` secara verbatim, dan
+> satu spec memuat `TURSO_URL`. `.env` ter-ignore, tetapi `docs/` tidak.
+> `scripts/secret-guard.mjs` mendeteksinya; rotasi dan pembersihan adalah
+> keputusan maintainer.
