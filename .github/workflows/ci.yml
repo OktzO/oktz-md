@@ -47,13 +47,20 @@ jobs:
       # holds non-secret defaults (BRAT_FONT_URL, BRAT_EMOJI_URL) that
       # legitimately appear in src/lib/brat.js and emoji-map.js, so it
       # produced false positives rather than detections.
+      #
+      # The values are generated from /dev/urandom and MUST NOT be written as
+      # literals here. The guard scans TRACKED files for these values, and this
+      # file is tracked: a hardcoded marker makes the guard report this
+      # workflow as the leak, which fails the job on every single push. That
+      # is not hypothetical — it is what a literal here produced first.
       - name: Build a synthetic env file for the detector
         run: |
           set -euo pipefail
+          marker="cisyn-$(head -c 8 /dev/urandom | od -An -tx1 | tr -d ' \n')"
           {
-            echo "TURSO_URL=ci-synthetic-0001"
-            echo "APIKEY_CUKI=ci-synthetic-0002"
-            echo "GH_TOKEN=ci-synthetic-0003"
+            echo "TURSO_URL=$marker-url"
+            echo "APIKEY_CUKI=$marker-key"
+            echo "GH_TOKEN=$marker-token"
           } > "$RUNNER_TEMP/ci.env"
       - name: Assert .env is ignored and no env value is tracked
         run: node scripts/secret-guard.mjs --env-file "$RUNNER_TEMP/ci.env"
@@ -63,16 +70,27 @@ jobs:
         # points the detector at an env containing that same value, and asserts
         # the guard rejects it. If a future edit breaks the value scan, this
         # step fails instead of the pipeline passing quietly.
+        #
+        # The marker is generated at run time for a stronger reason than in the
+        # step above. If it were a literal in this file, the guard would fail on
+        # THIS FILE and the assertion would then pass no matter whether the
+        # value scan worked at all — the self-test would be satisfied by its own
+        # broken input. A self-test that cannot fail for the wrong reason is
+        # worse than no self-test, so the marker has to be absent from every
+        # tracked file for the assertion to mean anything.
         run: |
           set -euo pipefail
-          echo "ci-plant-marker-9f3a2b7c" > planted-selftest.md
+          marker="ciplant-$(head -c 8 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+          printf 'marker: %s\n' "$marker" > planted-selftest.md
           git add planted-selftest.md
-          echo "CI_PLANTED=ci-plant-marker-9f3a2b7c" >> "$RUNNER_TEMP/ci.env"
+          echo "CI_PLANTED=$marker" >> "$RUNNER_TEMP/ci.env"
           if node scripts/secret-guard.mjs --env-file "$RUNNER_TEMP/ci.env"; then
             echo "::error::secret guard passed a planted leak — the value scan is not working"
             exit 1
           fi
           echo "::notice::guard correctly rejected the planted value"
+          git reset -q planted-selftest.md
+          rm -f planted-selftest.md
 
   build:
     name: test + lint (node ${{ matrix.node }})
