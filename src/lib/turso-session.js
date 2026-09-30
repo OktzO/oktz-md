@@ -280,6 +280,61 @@ function warnRemote(msg) {
   else console.warn(`[turso-session] ${msg}`);
 }
 
+// Store key mirror untuk satu scope, berdiri sendiri dari loadState.
+//
+// loadState sengaja mengembalikan null ketika session_creds kosong supaya
+// pemanggil jatuh ke file lokal — kontrak itu tidak boleh dilanggar di sini.
+// Tapi target mirror key tidak boleh ikut hilang bersamanya: justru setelah wipe
+// itulah conditions yang paling butuh mirror hidup, karena session_creds kosong
+// sementara storage/ lokal juga baru. Kalau remoteKeys null, setiap keys.set
+// jatuh ke `if (!remoteKeys) return;` dan tidak ada satu pun key yang pernah
+// sampai ke Turso, tanpa warning apa pun.
+//
+// Tidak ada cache di sini: dipakai hanya sekali saat boot, dan path yang missing
+// jarang terjadi, jadi cache per-boot ini cukup.
+async function loadRemoteKeys(scope) {
+  const client = getTursoClient();
+  if (!client) return null;
+  const cache = new Map();
+  return {
+    get: async (type, ids) => {
+      if (!Array.isArray(ids) || ids.length === 0) return {};
+      const cacheKey = `${scope}:${type}`;
+      if (!cache.has(cacheKey)) cache.set(cacheKey, new Map());
+      const local = cache.get(cacheKey);
+      const missing = ids.filter((id) => !local.has(id));
+      if (missing.length > 0) {
+        const rs = await client.execute({
+          sql: `SELECT id, data FROM session_keys WHERE scope = ? AND category = ? AND id IN (${missing.map(() => '?').join(',')})`,
+          args: [scope, type, ...missing],
+        });
+        for (const row of rs.rows) local.set(row.id, JSON.parse(row.data, BufferJSON.reviver));
+        trimLocalCache(local, KEYS_CACHE_CAP);
+      }
+      const out = {};
+      for (const id of ids) if (local.has(id)) out[id] = local.get(id);
+      return out;
+    },
+    set: async (patch) => {
+      for (const [type, entries] of Object.entries(patch || {})) {
+        for (const [id, value] of Object.entries(entries || {})) {
+          if (value === null) {
+            await client.execute({
+              sql: 'DELETE FROM session_keys WHERE scope = ? AND category = ? AND id = ?',
+              args: [scope, type, id],
+            });
+          } else {
+            await client.execute({
+              sql: 'INSERT INTO session_keys (scope, category, id, data, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(scope, category, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at',
+              args: [scope, type, id, JSON.stringify(value, BufferJSON.replacer), Date.now()],
+            });
+          }
+        }
+      }
+    },
+  };
+}
+
 async function loadState(scope) {
   try {
   const client = getTursoClient();
@@ -291,7 +346,8 @@ async function loadState(scope) {
   });
   if (!credsRs.rows || credsRs.rows.length === 0) {
     // WAJIB null, bukan initAuthCreds(): state fabricated bikin connection.js
-    // skip fallback file lokal, jadi sesi WA hanya hidup di Turso.
+    // skip fallback file lokal, jadi sesi WA hanya hidup di Turso. Kontrak ini
+    // dijaga test: null berarti pemanggil harus jatuh ke file lokal.
     return null;
   }
   const creds = JSON.parse(credsRs.rows[0].creds, BufferJSON.reviver);
@@ -451,20 +507,31 @@ async function useDurableAuthState(scope, folder) {
   // sisa pairing gagal (registered:false tapi me/pairingCode terisi) bukan sesi sah
   const looksPaired = creds.registered === true || Boolean(creds.account);
 
-  // belum pernah paired di disk -> coba pulihkan dari mirror Turso
-  let remote = null;
-  if (!looksPaired) {
-    remote = await loadState(scope);
-    if (remote?.creds) {
-      const r = remote.creds;
-      if (r.registered === true || Boolean(r.account)) {
-        creds = r;
-        warnRemote('sesi dipulihkan dari Turso ke storage lokal');
-      }
+  // Mirror key harus hidup di boot manapun, tidak hanya saat creds lokal
+  // terlihat belum paired.
+  //
+  // Sebelumnya remote di-load HANYA di dalam `if (!looksPaired)`, dan remoteKeys
+  // diturunkan dari situ. Setelah wipe — atau setelah container replacement,
+  // karena storage/ gitignored — lokal baru pair sendiri sementara Turso sudah
+  // kosong, jadi loadState mengembalikan null, remoteKeys null selamanya, dan
+  // setiap keys.set jatuh ke `if (!remoteKeys) return;`. Mirror mati tanpa satu
+  // warning pun: bot tetap jalan dan prekeys tetap terkirim ke WhatsApp, tapi
+  // tidak ada key yang pernah sampai ke Turso, jadi pemulihannya mustahil.
+  // Itulah device 52, lalu 53, lalu 54.
+  //
+  // Creds tetap hanya diambil dari mirror ketika lokal belum paired — itu
+  // pemulihannya, dan receber creds remote di atas creds lokal yang sudah sah
+  // akan menimpa identitas yang baru saja di-pair.
+  const remote = looksPaired ? null : await loadState(scope);
+  if (!looksPaired && remote?.creds) {
+    const r = remote.creds;
+    if (r.registered === true || Boolean(r.account)) {
+      creds = r;
+      warnRemote('sesi dipulihkan dari Turso ke storage lokal');
     }
   }
 
-  const remoteKeys = remote?.state?.keys ?? remote?.keys ?? null;
+  const remoteKeys = await loadRemoteKeys(scope);
 
   const keys = {
     get: async (type, ids) => {

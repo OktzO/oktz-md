@@ -116,7 +116,7 @@ Isi `SPOTYLOADER_OK` di `beforeEach`:
 ```
 
 Test:
-1. `calls.length === 1` sesudah import — **ini yang gagal sekarang**, karena module scope menembak request
+1. `calls.length === 0` sesudah import — **ini yang gagal sekarang**, karena module scope menembak request. Ini assertion inti dari task ini: meng-import modul tidak boleh menembak jaringan. Setelah blok CLI di-guard, `process.argv[1]` saat test adalah path file test, bukan `src/scraper/spotify.js`, jadi blok itu tidak jalan dan `calls` tetap kosong.
 2. `downloadSpotify('https://open.spotify.com/track/x')` mengembalikan `{ title: 'Judul', artist: 'Artis', url: 'https://cdn/a.mp3', mime: 'audio/mpeg' }`
 3. body POST berisi `{ url: <input> }`
 4. response tanpa `downloadLink` → `downloadSpotify` menolak (assert.rejects)
