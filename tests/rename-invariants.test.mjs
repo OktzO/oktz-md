@@ -40,6 +40,19 @@ const WHITELIST = new Set([
 const GUARDED_MISSING_IMPORTS = new Set([
   "src/handler.js -> ./lib/ourin-sticker-reply.js",
   "src/handler.js -> ./lib/sticker-reply.js",
+  // src/lib/resolve.js memuat modul kapabilitas lewat import() di dalam
+  // fungsi panah, dan src/capabilities/ diisi bertahap di task-task yang menyusul
+  // berikutnya. Import-nya memang belum ada file-nya sekarang; begitu tiap
+  // modul kapabilitas dibuat, hapus barisnya supaya I1 langsung aktif lagi
+  // menjaga file yang hilang.
+  "src/lib/resolve.js -> ../capabilities/spotify.js",
+  "src/lib/resolve.js -> ../capabilities/pinterest.js",
+  "src/lib/resolve.js -> ../capabilities/douyin.js",
+  "src/lib/resolve.js -> ../capabilities/sfile.js",
+  "src/lib/resolve.js -> ../capabilities/videy.js",
+  "src/lib/resolve.js -> ../capabilities/youtube.js",
+  "src/lib/resolve.js -> ../capabilities/ytmusic.js",
+  "src/lib/resolve.js -> ../capabilities/hd.js",
 ]);
 const ASSET_KEY_RENAMES = new Map([
   ["ourin-daftar", "daftar"],
