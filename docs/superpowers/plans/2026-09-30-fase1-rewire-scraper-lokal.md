@@ -369,11 +369,11 @@ Isi:
 - [ ] **Step 16: Jalankan test facade, pastikan lulus**
 
 Run: `node --experimental-test-module-mocks --test tests/resolve-core.test.mjs`
-Expected: PASS 18 test (6 aggregator + 12 facade).
+Expected: PASS 19 test (6 aggregator + 13 facade), plus 9 breaker dan 8 cache.
 - [ ] **Step 17: Jalankan seluruh test suite**
 
 Run: `npm test`
-Expected: semua lulus. Total suite naik dari 684 (setelah Task 1) menjadi 717 — tambahan 33 test, yaitu 8 breaker + 7 cache + 18 resolve-core. Angka baseline di bagian header plan yang menyebut 678/696 salah: 678 itu baseline sebelum Task 1, dan 18 itu hanya hitungan `resolve-core`.
+Expected: semua lulus. Total suite naik dari 684 (setelah Task 1) menjadi 721 — tambahan 34 test, yaitu 9 breaker + 8 cache + 19 resolve-core. Angka baseline di bagian header plan yang menyebut 678/696 salah: 678 itu baseline sebelum Task 1, dan 18 itu hanya hitungan `resolve-core`.
 
 Tambahkan juga satu test yang belum ada di brief ini: **kalau semua backend gagal, `resolve()` tidak boleh membaca cache dan mengembalikan hasil lama.** Ini janji sentral spec ("tidak ada fallback ke data basi") dan saat ini tidak diuji. Bentuknya: kapabilitas `stable: true` yang sukses sekali (cache terisi), lalu dibuat gagal di panggilan kedua, lalu assert `resolve` melempar `CapabilityError` — bukan mengembalikan hasil pertama.
 
