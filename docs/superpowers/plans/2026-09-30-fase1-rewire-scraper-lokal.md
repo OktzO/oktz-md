@@ -151,7 +151,7 @@ Jangan ubah apa pun yang lain di file ini — header, Referer, Origin, dan URL e
 - [ ] **Step 4: Jalankan test, pastikan lulus**
 
 Run: `node --experimental-test-module-mocks --test tests/spotify-scraper-module.test.mjs`
-Expected: PASS 5 test.
+Expected: PASS 6 test (Task 1 fix round menambah satu).
 
 - [ ] **Step 5: Commit**
 
@@ -241,7 +241,7 @@ Jangan pakai `Map` polos: itu tumbuh unbounded dan bertentangan dengan batas RAM
 - [ ] **Step 4: Jalankan test breaker, pastikan lulus**
 
 Run: `node --test tests/circuit-breaker.test.mjs`
-Expected: PASS 8 test.
+Expected: PASS 9 test.
 
 - [ ] **Step 5: Tulis test cache yang gagal**
 
@@ -272,7 +272,7 @@ Expected: FAIL — `Cannot find module '../src/lib/capability-cache.js'`
 
 - [ ] **Step 8: Jalankan test cache, pastikan lulus**
 
-Expected: PASS 7 test.
+Expected: PASS 8 test.
 
 - [ ] **Step 9: Tulis test aggregator yang gagal**
 
