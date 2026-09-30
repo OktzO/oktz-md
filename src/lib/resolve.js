@@ -121,6 +121,19 @@ export function createResolver({
     return pilihan ? [pilihan.backend] : [];
   }
 
+  // Backend boleh mendeklarasikan `applies(args)`: ia menjawab "apakah backend
+  // ini melayani bentuk argumen ini", bukan "apakah hostnya hidup". Hasil
+  // `false` berarti backend itu tidak pernah dihubungi, jadi tidak boleh
+  // dihitung sebagai kegagalan — kalau tidak, satu kapabilitas dengan backend
+  // bercabang ({ url } / { q }) akan mengeluarkan backend lokalnya sendiri dari
+  // rotasi hanya karena lalu lintas memakai jalur yang memang tidak dilayaninya.
+  // Penaringan dilakukan sebelum `antrean()` supaya urutan tier dan bailout
+  // all-open tidak tersentuh.
+  const berlaku = (backends, args) =>
+    backends.filter(
+      (b) => typeof b.applies !== "function" || b.applies(args) !== false,
+    );
+
   async function muat(capability) {
     const loader = capabilities[capability];
     if (typeof loader !== "function") {
@@ -173,7 +186,19 @@ export function createResolver({
       }
     }
 
-    const daftar = antrean(cap.backends);
+    // Tidak ada satu pun backend yang mau melayani argumen ini. Keadaan ini
+    // dibedakan dari "semua backend gagal": di sana hostnya sudah dicoba dan
+    // menjawab, di sini tidak ada yang dihubungi sama sekali, jadi breaker
+    // harus tetap kosong.
+    const kandidat = berlaku(cap.backends, args);
+    if (kandidat.length === 0) {
+      throw new CapabilityError(
+        `tidak ada backend ${capability} yang melayani argumen ini`,
+        { capability, code: "no-applicable-backend" },
+      );
+    }
+
+    const daftar = antrean(kandidat);
     const localCount = daftar.filter((b) => b.kind === "local").length;
     const apiCount = daftar.length - localCount;
     // Local berbagi budget localMs, api memakai sisa totalMs. Jumlahnya tidak

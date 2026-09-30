@@ -46,8 +46,6 @@ async function handler(m, { sock, text }) {
       contentText += `   🔗 Link: ${t.url}\n\n`;
     });
 
-    contentText += `*Catatan*: Kamu bisa menyalin link lagu di atas dan menggunakan perintah \`.spdl <link>\` untuk mengunduhnya secara langsung! Atau tekan tombol di bawah ini untuk lagu pertama. 🚀`;
-
     let thumbnailBuffer = null;
     try {
       if (firstResult.cover) {
@@ -58,12 +56,27 @@ async function handler(m, { sock, text }) {
     }
 
     // `.spdl` hanya menerima link open.spotify.com/track/. Kalau hasil pencarian
-    // ternyata bukan itu, tombolnya jangan dibuat: caption di atas menjanjikan
-    // tombol dan link yang bisa diunduh, dan branch tanpa tombol sudah punya
-    // jalurnya sendiri di m.reply(contentText) di bawah.
+    // ternyata bukan itu, tombol dan saran `.spdl` sama-sama tidak boleh muncul.
+    // Cover yang gagal diambil juga membuat tombol tidak dikirim, padahal
+    // caption di bawah tetap ikut dibaca user.
     const bisaUnduh = /^https?:\/\/open\.spotify\.com\/track\//i.test(firstResult.url);
+    const pakaiTombol = bisaUnduh && Boolean(thumbnailBuffer);
 
-    if (thumbnailBuffer && bisaUnduh) {
+    // Caption dibangun setelah keputusannya, bukan sebelumnya: kalimat
+    // "tekan tombol di bawah ini" hanya sah kalau tombolnya benar-benar
+    // terlampir. Satu kondisi ini yang menentukan keduanya, supaya caption dan
+    // tombol tidak bisa berbeda.
+    const catatan = [
+      "*Catatan*:",
+      ...(bisaUnduh
+        ? ["Kamu bisa menyalin link lagu di atas dan menggunakan perintah `.spdl <link>` untuk mengunduhnya secara langsung!"]
+        : []),
+      ...(pakaiTombol ? ["Atau tekan tombol di bawah ini untuk lagu pertama."] : []),
+      "🚀",
+    ].join(" ");
+    contentText += catatan;
+
+    if (pakaiTombol) {
       const content = {
         buttonsMessage: {
           buttons: [

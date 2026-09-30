@@ -479,3 +479,178 @@ test('bailout: saat semua backend OPEN resolver tetap mencoba satu', async () =>
   );
   assert.equal(dipanggil[0], 'a2', 'yang dicoba adalah backend yang paling dekat ke pulih');
 });
+
+// ── applies: backend yang tidak berlaku untuk argumen ini ────────────────────
+//
+// Breaker menghitung backend yang gagal sebagai host yang salah. Backend yang
+// "tidak berlaku" bukan host mati — dia tidak pernah dihubungi sama sekali —
+// jadi harus dilewati tanpa satu pun failure tercatat, kalau tidak satu
+// kapabilitas dengan backend bercabang bisa meng-evict backend lokalnya sendiri
+// hanya karena lalu lintas memakai jalur yang tidak dilayaninya.
+
+test('applies false: backend dilewati tanpa dijalankan dan tanpa failure', async () => {
+  let dipanggil = [];
+  const cap = {
+    stable: false,
+    normalize: (r) => ({ v: r }),
+    backends: [
+      { name: 'hanya-url', kind: 'local', applies: (a) => typeof a?.url === 'string', run: async () => { dipanggil.push('hanya-url'); return { raw: 1 }; } },
+      { name: 'cadangan', kind: 'api', run: async () => { dipanggil.push('cadangan'); return { raw: 2 }; } },
+    ],
+  };
+  const resolver = createResolver({ capabilities: caps({ sel: cap }) });
+
+  const out = await resolver.resolve('sel', { q: 'bukan url' });
+
+  assert.equal(out.source, 'cadangan');
+  assert.deepEqual(dipanggil, ['cadangan'], 'backend tidak berlaku tidak boleh dijalankan');
+  assert.deepEqual(
+    resolver.breaker.snapshot().filter((s) => s.name === 'hanya-url'),
+    [],
+    'backend yang dilewati tidak boleh punya slot breaker',
+  );
+  assert.deepEqual(
+    resolver.breaker.snapshot().filter((s) => s.failures > 0),
+    [],
+    'tidak boleh ada kegagalan yang tercatat',
+  );
+});
+
+test('applies: backend tidak berlaku tidak pernah OPEN meski lalu lintas tidak cocok', async () => {
+  // Kalau applies diabaikan, 'hanya-url' dipanggil lima kali, gagal, dan
+  // OPEN di ambang ketiga — padahal tidak pernah menerima satu pun request.
+  const cap = {
+    stable: false,
+    normalize: (r) => ({ v: r }),
+    backends: [
+      { name: 'hanya-url', kind: 'local', applies: (a) => typeof a?.url === 'string', run: async () => { throw new Error('tidak boleh dipanggil'); } },
+      { name: 'hanya-q', kind: 'local', applies: (a) => typeof a?.q === 'string', run: async () => { throw new Error('q mati'); } },
+    ],
+  };
+  const resolver = createResolver({ capabilities: caps({ noncocok: cap }) });
+
+  for (let i = 0; i < 5; i += 1) {
+    await resolver.resolve('noncocok', { q: 'x' }).catch(() => {});
+  }
+
+  assert.equal(
+    resolver.breaker.isOpen('hanya-url'),
+    false,
+    'backend yang tidak berlaku tidak boleh OPEN',
+  );
+  const state = resolver.breaker.snapshot();
+  assert.equal(
+    state.filter((s) => s.name === 'hanya-url').length,
+    0,
+    'backend yang tidak berlaku tidak boleh punya slot breaker sama sekali',
+  );
+  assert.equal(state.find((s) => s.name === 'hanya-q')?.failures, 5, 'hanya yang benar-benar gagal yang dihitung');
+});
+
+test('applies: tanpa applies, backend dianggap selalu berlaku', async () => {
+  const cap = {
+    stable: false,
+    normalize: (r) => ({ v: r }),
+    backends: [{ name: 'a', kind: 'local', run: async () => ({ raw: 1 }) }],
+  };
+  const resolver = createResolver({ capabilities: caps({ biasa: cap }) });
+  const out = await resolver.resolve('biasa', { q: 'apa saja' });
+  assert.equal(out.source, 'a', 'argumen tidak boleh membuat backend tanpa applies dilewati');
+});
+
+test('semua backend tidak berlaku → code no-applicable-backend, bukan tumpukan kegagalan', async () => {
+  const cap = {
+    stable: false,
+    normalize: (r) => ({ v: r }),
+    backends: [
+      { name: 'a', kind: 'local', applies: () => false, run: async () => ({ raw: 1 }) },
+      { name: 'b', kind: 'api', applies: () => false, run: async () => ({ raw: 2 }) },
+    ],
+  };
+  const resolver = createResolver({ capabilities: caps({ kosong: cap }) });
+
+  await assert.rejects(
+    () => resolver.resolve('kosong', { q: 'x' }),
+    (error) => {
+      assert.ok(error instanceof CapabilityError);
+      assert.equal(error.code, 'no-applicable-backend');
+      assert.deepEqual(error.tried, [], 'tidak ada backend yang dicoba, jadi tidak ada yang gagal');
+      return true;
+    },
+  );
+  assert.deepEqual(resolver.breaker.snapshot(), [], 'breaker harus tetap kosong');
+});
+
+test('applies tidak merusak urutan tier: local tetap mencoba sebelum api', async () => {
+  const cap = {
+    stable: false,
+    normalize: (r) => ({ v: r }),
+    backends: [
+      { name: 'api-first', kind: 'api', applies: () => true, run: async () => ({ raw: 'api' }) },
+      { name: 'local-second', kind: 'local', applies: () => true, run: async () => ({ raw: 'local' }) },
+    ],
+  };
+  const resolver = createResolver({ capabilities: caps({ urut: cap }) });
+  const out = await resolver.resolve('urut', {});
+  assert.equal(
+    out.source,
+    'local-second',
+    'baitingkat harus tetap(local sebelum api) walau backend punya applies',
+  );
+});
+
+test('applies: local yang tidak berlaku tidak menghalangi jatuhnya ke api', async () => {
+  const cap = {
+    stable: false,
+    normalize: (r) => ({ v: r }),
+    backends: [
+      { name: 'lokal-url', kind: 'local', applies: (a) => typeof a?.url === 'string', run: async () => ({ raw: 1 }) },
+      { name: 'api-q', kind: 'api', run: async () => ({ raw: 2 }) },
+    ],
+  };
+  const resolver = createResolver({ capabilities: caps({ jatuh: cap }) });
+  const out = await resolver.resolve('jatuh', { q: 'x' });
+  assert.equal(out.source, 'api-q');
+  assert.deepEqual(
+    resolver.breaker.snapshot().filter((s) => s.name === 'lokal-url'),
+    [],
+    'backend local yang tidak berlaku tidak boleh dicatat',
+  );
+});
+
+// ── signal di aggregator ─────────────────────────────────────────────────────
+
+test('hit meneruskan signal ke request, dan abort benar-benar mencabutnya', async () => {
+  const controller = new AbortController();
+  let optsTerlihat = null;
+  let terputus = false;
+  const http = {
+    get: (_url, opts) =>
+      new Promise((_resolve, reject) => {
+        optsTerlihat = opts;
+        opts.signal.addEventListener('abort', () => {
+          terputus = true;
+          reject(new Error('dibatalkan'));
+        });
+      }),
+  };
+  const client = createAggregatorClient({ http, keyOf: () => '' });
+
+  const jalan = client.hit('nexray', '/x', { signal: controller.signal });
+  controller.abort();
+
+  await assert.rejects(() => jalan);
+  assert.equal(
+    optsTerlihat.signal,
+    controller.signal,
+    'signal pemanggil harus masuk ke config request aggregator',
+  );
+  assert.equal(terputus, true, 'abort harus benar-benar mencabut request aggregator');
+});
+
+test('hit tanpa signal tidak mengarang signal palsu di config', async () => {
+  const http = httpPalsu(async () => ({ status: 200, data: { ok: true } }));
+  const client = createAggregatorClient({ http, keyOf: () => '' });
+  await client.hit('nexray', '/x');
+  assert.equal(http.calls[0].opts.signal, undefined);
+});

@@ -51,7 +51,7 @@ export function createAggregatorClient({
   async function hit(
     name,
     path,
-    { params, method = "GET", data, timeout = DEFAULT_TIMEOUT_MS } = {},
+    { params, method = "GET", data, timeout = DEFAULT_TIMEOUT_MS, signal } = {},
   ) {
     const entry = AGGREGATORS[name];
     if (!entry) {
@@ -79,6 +79,10 @@ export function createAggregatorClient({
     const opts = {
       headers: entry.key ? { apikey: key } : {},
       timeout,
+      // Tanpa ini, budget resolver hanya menghentikan resolver menunggu:
+      // request ke tier api akan tetap jalan sampai timeout di atas, dan batas
+      // 8 detik yang dijanjikan resolver tidak benar-benar ditegakkan.
+      signal,
       ...(data === undefined ? {} : { data }),
     };
 

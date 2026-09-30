@@ -24,11 +24,11 @@ let hasilAggregator = () => {
 };
 
 const httpPalsu = {
-  async get(url) {
-    PANGGILAN_HTTP.push({ verb: "get", url });
+  async get(url, opts) {
+    PANGGILAN_HTTP.push({ verb: "get", url, opts });
     // GET hanya lewat `aggregator.hit`, jadi sama-sama harus bisa dikendalikan
     // test. `status` wajib ikut: aggregator menolak respons tanpa status 2xx.
-    if (url.includes("nexray.eu.cc")) return hasilAggregator(url);
+    if (url.includes("nexray.eu.cc")) return hasilAggregator(url, opts);
     throw new Error("GET ke sumber daya luar tidak diizinkan di test ini");
   },
   async post(url, body, config) {
@@ -91,13 +91,15 @@ test("normalize: bentuk unduhan satu lagu jadi empat field", () => {
 });
 
 test("normalize: bentuk pencarian jadi { tracks } dengan lima field per track", () => {
+  // `thumbnail` adalah nama field yang benar-benar dikirim agregator; `cover`
+  // hanya nama keluar dari normalize, bukan nama masuk.
   const keluar = kapspotify.normalize({
     tracks: [
       {
         title: "Grateful",
         artist: "Neffex",
         url: "https://open.spotify.com/track/abc",
-        cover: "https://cdn.example/c.jpg",
+        thumbnail: "https://cdn.example/c.jpg",
         duration: "3:45",
       },
     ],
@@ -319,16 +321,29 @@ test("nama backend per-host, bukan per-URL atau per-kueri", async () => {
     `backend unduhan lokal harus bernama spotyloader, dapat ${[...nama].join(", ")}`,
   );
 
-  // Argumen yang berbeda_total tapi nama sama: kalau nama diturunkan dari
-  // argumen, breaker akan allocating slot baru tiap permintaan dan host yang
-  // OPEN akan ter-evict lalu terlihat sehat lagi.
-  for (const q of ["satu", "dua", "tiga"]) {
-    await resolver.resolve("spotify", { q }).catch(() => {});
+  // Argumen berbeda total, termasuk yang tidak dilayani backend mana pun, tapi
+  // nama tetap sama. Kalau nama diturunkan dari argumen, breaker akan
+  // allocate slot baru tiap permintaan dan host yang OPEN akan ter-evict lalu
+  // terlihat sehat lagi.
+  const varian = [
+    { q: "satu" },
+    { q: "dua" },
+    { url: "https://open.spotify.com/track/abc" },
+    { url: "https://open.spotify.com/album/zzz" },
+    { q: "tiga" },
+  ];
+  for (const args of varian) {
+    await resolver.resolve("spotify", args).catch(() => {});
   }
+  const slot = new Set(resolver.breaker.snapshot().map((s) => s.name));
   assert.equal(
-    resolver.breaker.snapshot().length,
-    kapspotify.backends.length,
-    "slot breaker tidak boleh bertambah dari variasi argumen",
+    [...slot].every((n) => nama.has(n)),
+    true,
+    `slot breaker hanya boleh berisi nama host yang dideklarasikan: ${[...slot].join(", ")}`,
+  );
+  assert.ok(
+    slot.size <= nama.size,
+    `jumlah slot tidak boleh melebihi jumlah nama backend: ${slot.size} > ${nama.size}`,
   );
 });
 
@@ -440,8 +455,8 @@ test("pencarian: aggregator mati → CapabilityError, tidak dilayani apa-apa", a
       assert.ok(error instanceof CapabilityError);
       assert.deepEqual(
         error.tried.map((t) => t.name),
-        ["spotyloader", "nexray"],
-        "tidak boleh ada backend lain yang ikut dicoba",
+        ["nexray"],
+        "spotyloader tidak berlaku untuk { q }, jadi tidak boleh ikut dicoba",
       );
       return true;
     },
@@ -528,4 +543,99 @@ test("tiga plugin memakai resolver, bukan axios/aggregator langsung", () => {
     );
     assert.match(sumber, /resolver\.resolve\("spotify"/, `${file} harus resolve lewat resolver`);
   }
+});
+// ── applies: spotyloader tidak boleh terseret oleh lalu lintas pencarian ──────
+
+test("tiga pencarian tidak boleh menyusun breaker spotyloader", async () => {
+  // Breaker menghitung kegagalan backend sebagai kegagalan host. Backend yang
+  // tidak berlaku untuk { q } tidak pernah dihubungi, jadi tidak boleh
+  // menghitung kegagalan — kalau tidak, tiga ketikan `.spotify` sudah cukup
+  // untuk mengeluarkan spotyloader yang sehat dari rotasi selama 30 detik.
+  hasilAggregator = async () => {
+    throw new Error("nexray mati");
+  };
+  const resolver = resolverUji();
+  for (const q of ["satu", "dua", "tiga"]) {
+    await resolver.resolve("spotify", { q }).catch(() => {});
+  }
+
+  const state = resolver.breaker.snapshot();
+  assert.deepEqual(
+    state.filter((s) => s.name === "spotyloader"),
+    [],
+    "spotyloader tidak boleh punya slot breaker setelah tiga pencarian",
+  );
+  assert.equal(
+    resolver.breaker.isOpen("spotyloader"),
+    false,
+    "backend yang sehat harus tetap bisa dipakai",
+  );
+  assert.equal(
+    state.find((s) => s.name === "nexray")?.failures,
+    3,
+    "hanya aggregator yang benar-benar dipanggil yang boleh dihitung",
+  );
+});
+
+test("setelah tiga pencarian, unduhan tetap memakai spotyloader", async () => {
+  hasilAggregator = async () => {
+    throw new Error("nexray mati");
+  };
+  const resolver = resolverUji();
+  for (const q of ["satu", "dua", "tiga"]) await resolver.resolve("spotify", { q }).catch(() => {});
+
+  balasSpotyloader = async () => ({
+    data: { downloadLink: "https://cdn/a.mp3", post: { name: "J", artist: "A", mime: "audio/mpeg" } },
+  });
+  const keluar = await resolver.resolve("spotify", { url: "https://open.spotify.com/track/abc" });
+  assert.equal(keluar.source, "spotyloader", "pencarian sebelumnya tidak boleh mengganggu unduhan berikutnya");
+});
+
+test("argumen yang tidak dilayani backend mana pun → no-applicable-backend, breaker bersih", async () => {
+  const resolver = resolverUji();
+  await assert.rejects(
+    () => resolver.resolve("spotify", {}),
+    (error) => {
+      assert.ok(error instanceof CapabilityError);
+      assert.equal(error.code, "no-applicable-backend");
+      assert.deepEqual(error.tried, [], "tidak ada host yang gagal di sini");
+      return true;
+    },
+  );
+  assert.deepEqual(resolver.breaker.snapshot(), []);
+});
+
+test("signal diteruskan ke request aggregator, bukan hanya ke spotyloader", async () => {
+  const controller = new AbortController();
+  hasilAggregator = async () => ({ status: 200, data: { status: true, result: [] } });
+  await backendApi.run({ q: "neffex" }, { signal: controller.signal });
+  const call = PANGGILAN_HTTP.at(-1);
+  assert.equal(call.verb, "get");
+  assert.equal(
+    call.opts?.signal,
+    controller.signal,
+    "tier api juga harus menghormati budget resolver",
+  );
+});
+
+test("budget habis di tier api → request aggregator benar-benar dibatalkan", async () => {
+  let terputus = false;
+  let sinyal = null;
+  hasilAggregator = (url, opts) =>
+    new Promise((_, reject) => {
+      sinyal = opts?.signal ?? null;
+      opts?.signal?.addEventListener("abort", () => {
+        terputus = true;
+        reject(new Error("dibatalkan oleh budget"));
+      });
+    });
+  const resolver = createResolver({
+    capabilities: { spotify: () => kapspotify },
+    budget: { localMs: 60, totalMs: 160 },
+  });
+
+  await resolver.resolve("spotify", { q: "neffex" }).catch(() => {});
+
+  assert.ok(sinyal instanceof AbortSignal, "aggregator harus menerima AbortSignal");
+  assert.equal(terputus, true, "abort harus mencabut request aggregator");
 });
