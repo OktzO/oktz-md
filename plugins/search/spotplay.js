@@ -24,9 +24,9 @@ async function handler(m, { sock }) {
     const { data: cari } = await resolver.resolve("spotify", { q: query });
     const tracks = cari?.tracks ?? [];
 
-    // Backend lokal mencari lewat YT Music, dan hasilnya berupa tautan YouTube
-    // yang tidak punya ID track Spotify. Lewati saja daripada meneruskan ke
-    // backend unduhan yang pasti menolaknya.
+    // `.spotplay` hanya bisa memutar track Spotify: backend unduhannya
+    // menerima link open.spotify.com/track/ saja, jadi hasil lain dilewati di
+    // sini daripada diteruskan ke request yang pasti ditolak.
     const firstTrack = tracks.find((t) => /^https?:\/\/open\.spotify\.com\/track\//i.test(t.url));
 
     if (!firstTrack) {

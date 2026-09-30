@@ -1,5 +1,5 @@
 import { downloadSpotify } from "../scraper/spotify.js";
-import { createAggregatorClient } from "../lib/aggregator.js";
+import { aggregator } from "../lib/aggregator.js";
 
 // Judul dan metadata Spotify berubah, dan URL unduhan spotyloader kedaluwarsa
 // dalam hitungan menit. Cache resolver hanya hidup untuk `stable: true`, jadi
@@ -10,41 +10,7 @@ export const stable = false;
 // keduanya, dan menolak di sini membuang permintaan yang mungkin berhasil.
 const POLA_URL = /^https?:\/\/open\.spotify\.com\/(track|album|playlist)\//i;
 
-// Nama field aggregator lama berbeda dari scraper lokal, jadi keduanya dibaca.
-// Kalau tidak, pindah backend hanya diam-diam jadi "respons tanpa URL".
-const POLA_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
-
-// Klien tunggal: `hit` tidak menyimpan state per request, jadi satu instance
-// cukup dan tidak menambah memori seiring pemakaian. Pintu satu-satunya ke
-// domain agregator — plugin tidak boleh punya akses langsung.
-const agregator = createAggregatorClient();
-
-// ytmusic-api ditahan sebagai satu instance, bukan dibuat per panggilan:
-// initialize() mengambil konteks Innertube dari jaringan dan mengulangi
-// panggilan itu untuk setiap `.spotify` akan menambah satu round-trip di depan
-// hasil yang sudah ada. Modulnya sendiri dimuat saat pertama dipakai — `.spdl`
-// hanya butuh unduhan dan tidak boleh membayar ~40MB YT Music di kotak 1GB.
-let ytmusic = null;
-
-async function instanceYTMusic() {
-  if (!ytmusic) {
-    const { default: YTMusic } = await import("ytmusic-api");
-    const instance = new YTMusic();
-    await instance.initialize();
-    // Baru disimpan setelah initialize() berhasil, kalau tidak instance rusak
-    // akan dipakai selamanya tanpa pernah mencoba initialize lagi.
-    ytmusic = instance;
-  }
-  return ytmusic;
-}
-
-// search() mengembalikan daftar campur — entri ARTIST dan PLAYLIST datang lebih
-// dulu dan tidak punya videoId, jadi tidak bisa dipakai sebagai lagu.
-function adalahLagu(entri) {
-  return Boolean(entri?.videoId) || Boolean(entri?.url);
-}
-
-async function lewatSpotyloader({ url } = {}) {
+async function lewatSpotyloader({ url } = {}, ctx = {}) {
   if (typeof url !== "string" || url.trim() === "") {
     throw new Error("spotify butuh { url }: link track/album/playlist dari open.spotify.com");
   }
@@ -58,7 +24,7 @@ async function lewatSpotyloader({ url } = {}) {
   }
 
   try {
-    return await downloadSpotify(bersih);
+    return await downloadSpotify(bersih, { signal: ctx?.signal });
   } catch (error) {
     // Tiga kelas kegagalan lokal tidak sama akibatnya untuk backend cadangan.
     // `status` terisi berarti host menjawab dan permintaannya yang ditolak;
@@ -79,32 +45,18 @@ async function lewatSpotyloader({ url } = {}) {
   }
 }
 
-async function lewatYTMusic({ q } = {}) {
-  if (typeof q !== "string" || q.trim() === "") {
-    throw new Error("spotify butuh { q }: kata kunci pencarian");
-  }
-
-  const ytm = await instanceYTMusic();
-  const hasil = await ytm.search(q.trim());
-  const lagu = Array.isArray(hasil) ? hasil.filter(adalahLagu) : [];
-  if (!lagu.length) {
-    // Nol hasil itu kegagalan, bukan jawaban kosong. Backend yang hidup tapi
-    // tidak punya apa-apa harus melepas ke backend lain, bukan menutup
-    // pencarian dengan daftar kosong.
-    throw new Error("ytmusic tidak menemukan lagu untuk kueri ini");
-  }
-  return { tracks: lagu };
-}
-
+// Pencarian tidak punya backend lokal: spotyloader menerima URL, bukan kata
+// kunci, dan tidak ada scraper lokal lain di repo ini yang bisa mengubah judul
+// lagu menjadi ID track Spotify. Jadi `{ q }` hanya dilayani aggregator.
 async function lewatNexray(args = {}) {
   if (typeof args.url === "string" && POLA_URL.test(args.url.trim())) {
-    const body = await agregator.hit("nexray", "/downloader/spotify", {
+    const body = await aggregator.hit("nexray", "/downloader/spotify", {
       params: { url: args.url.trim() },
     });
     return body?.result;
   }
   if (typeof args.q === "string" && args.q.trim() !== "") {
-    const body = await agregator.hit("nexray", "/search/spotify", {
+    const body = await aggregator.hit("nexray", "/search/spotify", {
       params: { q: args.q.trim() },
     });
     return body?.result;
@@ -114,6 +66,8 @@ async function lewatNexray(args = {}) {
 
 // ── normalisasi ──────────────────────────────────────────────────────────────
 
+// Nama field agregator lama berbeda dari scraper lokal, jadi semuanya dibaca di
+// sini. Tanpa itu, pindah backend hanya diam-diam jadi "respons tanpa URL".
 function namaArtis(entri) {
   if (typeof entri.artist === "string") return entri.artist.trim();
   if (entri.artist?.name) return String(entri.artist.name).trim();
@@ -138,16 +92,9 @@ function urlCover(entri) {
   return "";
 }
 
-// YT Music memberi detik, agregator memberi teks "m:ss". Plugin mencetak apa
-// adanya ke daftar hasil, jadi kedua bentuk diseragamkan di sini supaya
-// "⏱️ undefined" tidak pernah muncul ke user.
+// Plugin mencetak nilai ini apa adanya, jadi durasi yang hilang harus tetap
+// string: "undefined" di daftar hasil terlihat seperti bug.
 function durasi(entri) {
-  const detik = Number(entri.duration_seconds ?? entri.seconds);
-  if (Number.isFinite(detik) && detik > 0) {
-    const m = Math.floor(detik / 60);
-    const s = Math.floor(detik % 60);
-    return `${m}:${s < 10 ? `0${s}` : s}`;
-  }
   if (typeof entri.duration === "string" && entri.duration) return entri.duration;
   if (typeof entri.duration === "number" && entri.duration > 0) {
     const m = Math.floor(entri.duration / 60);
@@ -160,20 +107,13 @@ function durasi(entri) {
 function trackCari(entri) {
   if (!entri || typeof entri !== "object") return null;
   const judul = String(entri.title ?? entri.name ?? "").trim();
-  const videoId = String(entri.videoId ?? "").trim();
+  const url = String(entri.url ?? "").trim();
 
-  // Hasil YT Music tidak punya ID track Spotify, dan mengarang ID berarti
-  // mengirim tautan rusak ke user. Satu-satunya tautan yang bisa dibuka
-  // dari sana adalah video YouTube-nya.
-  let url = String(entri.url ?? "").trim();
-  if (!url && POLA_VIDEO_ID.test(videoId)) url = `https://www.youtube.com/watch?v=${videoId}`;
-
-  // Tanpa tautan, entri tidak bisa dipakai user apa pun: tidak bisa
-  // diunduh dan tidak bisa dibuka. Syarat yang sama dipegang backend
-  // lewatYTMusic, tapi diulang di sini karena normalize adalah pintu terakhir
-  // sebelum respons tampil ke user — backend mana pun bisa mengembalikan
-  // daftar campuran.
-  if (!url) return null;
+  // Hasil pencarian dicetak sebagai daftar lagu, jadi entri tanpa judul atau
+  // tanpa tautan tidak bisa diidentifikasi dan tidak bisa diunduh. Ditolak di
+  // sini, bukan ditampilkan: normalize adalah pintu terakhir sebelum respons
+  // sampai ke user.
+  if (!judul || !url) return null;
   return {
     title: judul,
     artist: namaArtis(entri),
@@ -212,11 +152,10 @@ export function normalize(raw) {
 }
 
 export const backends = [
-  // Urutan di dalam tier lokal tidak menentukan apa pun — resolver menyusun
-  // ulang sendiri. Yang penting jumlah slot breaker: satu nama per host.
   { name: "spotyloader", kind: "local", run: lewatSpotyloader },
-  { name: "ytmusic", kind: "local", run: lewatYTMusic },
-  // Aggregator gratis adalah cadangan terakhir: sering mati, dan tidak pernah
-  // jadi pilihan pertama walau posisinya di array paling atas.
+  // `bertingkat` di resolve.js:98 adalah partisi yang stabil — lokal selalu
+  // lebih dulu, dan urutan array menentukan siapa yang mencoba duluan di dalam
+  // tier itu. Yang dipegang di sini bukan posisinya melainkan nama backend:
+  // satu nama per host, tidak pernah diturunkan dari argumen.
   { name: "nexray", kind: "api", run: lewatNexray },
 ];

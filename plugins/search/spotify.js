@@ -57,21 +57,22 @@ async function handler(m, { sock, text }) {
     } catch (e) {
     }
 
-    // Backend lokal mencari lewat YT Music, dan hasilnya tidak punya ID track
-    // Spotify. Tombol unduh disembunyikan kalau begitu: `.spdl` hanya menerima
-    // link open.spotify.com dan akan menolak tautan lain.
+    // `.spdl` hanya menerima link open.spotify.com/track/. Kalau hasil pencarian
+    // ternyata bukan itu, tombolnya jangan dibuat: caption di atas menjanjikan
+    // tombol dan link yang bisa diunduh, dan branch tanpa tombol sudah punya
+    // jalurnya sendiri di m.reply(contentText) di bawah.
     const bisaUnduh = /^https?:\/\/open\.spotify\.com\/track\//i.test(firstResult.url);
 
-    if (thumbnailBuffer) {
+    if (thumbnailBuffer && bisaUnduh) {
       const content = {
         buttonsMessage: {
-          buttons: bisaUnduh ? [
+          buttons: [
             {
               buttonId: `.spdl ${firstResult.url}`,
               buttonText: { displayText: '🎵 Unduh Lagu Pertama' },
               type: 1,
             }
-          ] : [],
+          ],
           locationMessage: {
             jpegThumbnail: thumbnailBuffer,
             name: firstResult.title,

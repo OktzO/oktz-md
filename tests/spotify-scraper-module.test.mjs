@@ -68,6 +68,24 @@ test("POST dikirim ke endpoint spotyloader dengan body { url } dan header terver
   assert.match(h["User-Agent"], /^Mozilla\/5\.0/);
 });
 
+test("signal diteruskan ke httpAxios, supaya budget resolver bisa memutus request", async () => {
+  // Tanpa ini, AbortController milik resolve.js hanya menghentikan resolver
+  // menunggu: POST-nya tetap jalan sampai timeout 15 detik milik httpAxios.
+  const controller = new AbortController();
+  await downloadSpotify("https://open.spotify.com/track/x", { signal: controller.signal });
+  assert.equal(
+    calls[0].config.signal,
+    controller.signal,
+    "AbortSignal harus masuk ke config post",
+  );
+});
+
+test("panggilan tanpa signal tetap jalan — signature lama tidak boleh pecah", async () => {
+  await downloadSpotify("https://open.spotify.com/track/x");
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].config.signal, undefined, "tanpa signal, axios tidak boleh dapat signal palsu");
+});
+
 test("respons tanpa downloadLink ditolak, bukan diloloskan sebagai data kosong", async () => {
   SPOTYLOADER_OK = { post: { name: "Judul" }, error: "track tidak ditemukan" };
   await assert.rejects(

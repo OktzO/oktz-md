@@ -1,7 +1,11 @@
 import { httpAxios as axios } from "../lib/http.js";
 import { pathToFileURL } from "node:url";
 
-async function downloadSpotify(spotifyUrl) {
+// `signal` opsional supaya pemanggil lama yang hanya mengirim URL tetap jalan,
+// tapi backend resolver boleh teruskannya: AbortController di resolve.js hanya
+// menghentikan resolver menunggu, dan tanpa signal di sini POST-nya tetap hidup
+// sampai timeout 15 detik milik httpAxios sambil memegang socket.
+async function downloadSpotify(spotifyUrl, { signal } = {}) {
   let response;
   try {
     response = await axios.post(
@@ -15,6 +19,7 @@ async function downloadSpotify(spotifyUrl) {
           Referer: "https://spotyloader.com/",
           Origin: "https://spotyloader.com",
         },
+        signal,
       },
     );
   } catch (error) {

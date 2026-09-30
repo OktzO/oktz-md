@@ -106,3 +106,8 @@ export function createAggregatorClient({
 
   return { hit };
 }
+
+// Satu instance dipakai bersama seluruh kapabilitas. `hit` tidak menyimpan
+// state per request, jadi klien per kapabilitas hanya mengulang pembacaan
+// config tanpa ada gunanya.
+export const aggregator = createAggregatorClient();
