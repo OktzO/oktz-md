@@ -49,6 +49,32 @@ test('tepat di ttlMs nilai masih hidup (batas inklusif)', () => {
   assert.equal(cache.get('bola', 'a'), 'v', 'umur == ttlMs belum boleh dianggap basi');
 });
 
+test('entri cache kebal dari mutasi, di sisi simpan maupun di sisi baca', () => {
+  const cache = createCapabilityCache({ now: jam().now });
+  cache.set('bola', 'a', { judul: 'asli', jumlah: 1 });
+
+  // Sisi simpan: pemanggil sering memodifikasi objek yang ia serahkan setelah
+  // resolve selesai.
+  const diserahkan = { judul: 'asli', jumlah: 1 };
+  cache.set('bola', 'b', diserahkan);
+  diserahkan.judul = 'dirusak';
+  assert.deepEqual(
+    cache.get('bola', 'b'),
+    { judul: 'asli', jumlah: 1 },
+    'mutasi setelah set tidak boleh menembus ke cache',
+  );
+
+  // Sisi baca: tanpa salinan di sini, siapa pun bisa merusak entri yang dipakai
+  // permintaan lain.
+  const dibaca = cache.get('bola', 'a');
+  dibaca.judul = 'dirusak juga';
+  assert.deepEqual(
+    cache.get('bola', 'a'),
+    { judul: 'asli', jumlah: 1 },
+    'mutasi hasil bacaan tidak boleh menembus ke cache',
+  );
+});
+
 test('bounded: 250 key ditahan, tidak lebih dari 200', () => {
   const cache = createCapabilityCache({ max: 200, ttlMs: 60_000, now: jam().now });
   for (let i = 0; i < 250; i += 1) cache.set('bola', `k${i}`, i);

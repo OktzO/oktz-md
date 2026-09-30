@@ -6,6 +6,7 @@ import {
 } from '../src/lib/aggregator.js';
 import { CapabilityError, createResolver } from '../src/lib/resolve.js';
 import { createBreaker } from '../src/lib/circuit-breaker.js';
+import { createCapabilityCache } from '../src/lib/capability-cache.js';
 
 // ── aggregator ──────────────────────────────────────────────────────────────
 
@@ -294,6 +295,73 @@ test('kapabilitas stable dengan key berbeda tidak berbagi cache', async () => {
   assert.equal(dipanggil, 2, 'key berbeda harus cache terpisah');
 });
 
+test('kegagalan total melempar CapabilityError, tidak pernah dilayani dari cache', async () => {
+  let jam = 1_700_000_000_000;
+  const sekarang = () => jam;
+  let hidup = true;
+
+  // Jejak urutan akses. Aturan global "tidak ada stale-data fallback" berdiri
+  // hanya di urutan baris: cache dibaca sebelum backend dijalankan, dan tidak
+  // dibaca lagi setelahnya. Jejak ini mengunci urutannya supaya refactor yang
+  // menambahkan cache.get di jalur kegagalan langsung ketahuan.
+  const jejak = [];
+
+  const cap = {
+    stable: true,
+    normalize: (r) => ({ v: r }),
+    backends: [
+      {
+        name: 'a',
+        kind: 'local',
+        run: async () => {
+          jejak.push('backend');
+          if (!hidup) throw new Error('backend mati');
+          return { raw: 1 };
+        },
+      },
+    ],
+  };
+
+  const nyata = createCapabilityCache({ ttlMs: 1000, now: sekarang });
+  const cache = {
+    get: (capability, key) => {
+      jejak.push('cache');
+      return nyata.get(capability, key);
+    },
+    set: (capability, key, value) => nyata.set(capability, key, value),
+    size: () => nyata.size(),
+    clear: () => nyata.clear(),
+  };
+
+  const resolver = createResolver({ capabilities: caps({ rapuh: cap }), cache, now: sekarang });
+
+  const pertama = await resolver.resolve('rapuh', { q: 1 });
+  assert.equal(pertama.meta.cached, false);
+  assert.equal(nyata.size(), 1, 'entri cache harus terisi setelah panggilan sukses');
+
+  hidup = false;
+  jam += 1001;
+
+  await assert.rejects(
+    () => resolver.resolve('rapuh', { q: 1 }),
+    (error) => {
+      assert.ok(error instanceof CapabilityError);
+      assert.deepEqual(
+        error.tried,
+        [{ name: 'a', reason: 'backend mati' }],
+        'alasan kegagalan asli harus sampai ke pemanggil, bukan hasil lama',
+      );
+      return true;
+    },
+  );
+
+  assert.deepEqual(
+    jejak,
+    ['cache', 'backend', 'cache', 'backend'],
+    'cache hanya boleh dibaca di jalur cepat: satu kali sebelum backend, nol kali setelah backend gagal',
+  );
+});
+
 test('budget: backend local yang hang tidak menahan resolve selamanya', async () => {
   let apiDipanggil = 0;
   const cap = {
@@ -319,6 +387,42 @@ test('budget: backend local yang hang tidak menahan resolve selamanya', async ()
     'backend api tetap harus sempat dipanggil setelah local hang',
   );
   assert.ok(elapsed < 1500, `resolve harus selesai di bawah budget, habis ${elapsed}ms`);
+});
+
+test('backend menerima signal yang benar-benar di-abort saat budget habis', async () => {
+  let signalDilihat = null;
+  const cap = {
+    stable: false,
+    normalize: (r) => ({ v: r }),
+    backends: [
+      {
+        name: 'macet',
+        kind: 'local',
+        run: async (_args, ctx) => {
+          signalDilihat = ctx?.signal;
+          return new Promise(() => {});
+        },
+      },
+      { name: 'cadangan', kind: 'api', run: async () => ({ raw: 'ok' }) },
+    ],
+  };
+  const resolver = createResolver({
+    capabilities: caps({ sinyal: cap }),
+    budget: { localMs: 80, totalMs: 400 },
+  });
+
+  await resolver.resolve('sinyal');
+
+  assert.ok(signalDilihat, 'backend harus menerima signal dari resolver');
+  assert.ok(
+    signalDilihat instanceof AbortSignal,
+    `ctx.signal harus AbortSignal, dapat ${signalDilihat?.constructor?.name}`,
+  );
+  assert.equal(
+    signalDilihat.aborted,
+    true,
+    'timeout harus memutus kerja lewat abort(), bukan hanya resolver berhenti menunggu',
+  );
 });
 
 test('breaker: backend yang OPEN tidak dipanggil lagi', async () => {

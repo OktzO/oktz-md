@@ -98,6 +98,24 @@ test('bounded: 100 nama berbeda tetap 64 slot, yang paling lama tidak dipakai te
   );
 });
 
+test('isOpen hanya membaca: 100 pembacaan tidak menghabiskan kapasitas breaker', () => {
+  const breaker = createBreaker({ max: 64, now: jam().now });
+  for (let i = 0; i < 100; i += 1) assert.equal(breaker.isOpen(`host-${i}`), false);
+  assert.equal(
+    breaker.snapshot().length,
+    0,
+    'isOpen tidak boleh membuat slot: resolve memanggilnya untuk setiap backend di setiap permintaan',
+  );
+
+  // Kapasitas efektif harus utuh setelah 100 pembacaan.
+  for (let i = 0; i < 64; i += 1) breaker.recordFailure(`nyata-${i}`);
+  assert.equal(
+    breaker.snapshot().length,
+    64,
+    '64 kegagalan pertama harus muat semuanya, jadi tidak ada slot yang terpakai oleh pembacaan',
+  );
+});
+
 test('nama berbeda punya state terpisah', () => {
   const breaker = createBreaker({ now: jam().now });
   for (let i = 0; i < 3; i += 1) breaker.recordFailure('a');
