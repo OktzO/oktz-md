@@ -601,12 +601,25 @@ const GROUP_META_CACHE_MAX_AGE_MS = 30 * 60 * 1000;
 
 function sweepGroupMetadataCache(cache, now = Date.now()) {
   if (!cache || cache.size <= GROUP_META_CACHE_MAX_SIZE) return 0;
+  const ageOf = (v) => (v?.timestamp || v?._ts || 0);
   let dropped = 0;
   for (const [k, v] of cache) {
-    const ts = v?.timestamp || v?._ts || 0;
-    if (now - ts > GROUP_META_CACHE_MAX_AGE_MS) {
+    if (now - ageOf(v) > GROUP_META_CACHE_MAX_AGE_MS) {
       cache.delete(k);
       dropped++;
+    }
+  }
+  // The age pass alone does not bound this map. GROUP_META_CACHE_MAX_SIZE used
+  // to be only the threshold for attempting a sweep, never a limit on the size,
+  // so a burst that fills the cache faster than 30 minutes of age accumulates
+  // grew without bound while every sweep returned 0. The size pass runs only
+  // when the age pass left the cache over the limit, which is why stale entries
+  // still go first: the age pass has already removed all of them by then.
+  if (cache.size > GROUP_META_CACHE_MAX_SIZE) {
+    const byAge = [...cache].sort((a, b) => ageOf(a[1]) - ageOf(b[1]));
+    while (cache.size > GROUP_META_CACHE_MAX_SIZE && byAge.length) {
+      const [key] = byAge.shift();
+      if (cache.delete(key)) dropped++;
     }
   }
   return dropped;

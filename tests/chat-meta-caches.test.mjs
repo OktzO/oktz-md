@@ -80,6 +80,58 @@ describe("groupMetadataCache age-sweep (>800 cap, drop since >30min)", () => {
     assert.equal(sweepGroupMetadataCache(cache, now), 0);
     assert.equal(cache.size, 100, "under-cap map untouched even with stale data");
   });
+
+  it("caps the cache even when every entry is fresh", () => {
+    // The age sweep alone cannot bound this. GROUP_META_CACHE_MAX_SIZE was only
+    // ever a threshold for *attempting* an age sweep, never a size limit, so a
+    // burst that fills the cache faster than 30 minutes of age accumulates grows
+    // without bound and the sweep returns 0 every time it runs.
+    const now = Date.now();
+    for (let i = 0; i < 5000; i++) {
+      cache.set(`fresh${i}@g.us`, {
+        data: { subject: `s${i}` },
+        timestamp: now - 1000,
+      });
+    }
+    assert.equal(cache.size, 5000);
+
+    const dropped = sweepGroupMetadataCache(cache, now);
+
+    assert.ok(
+      cache.size <= 800,
+      `cache must be capped by size, got ${cache.size} entries with every one fresh`,
+    );
+    assert.equal(dropped, 5000 - cache.size, "dropped count must match what was removed");
+  });
+
+  it("evicts the oldest when capping, keeping the most recent", () => {
+    const now = Date.now();
+    for (let i = 0; i < 1200; i++) {
+      // Oldest first, so "newest" is the highest index.
+      cache.set(`g${i}@g.us`, { data: { subject: `s${i}` }, timestamp: now - (1200 - i) * 1000 });
+    }
+    sweepGroupMetadataCache(cache, now);
+
+    assert.ok(cache.size <= 800, `got ${cache.size}`);
+    assert.ok(cache.has("g1199@g.us"), "the newest entry must survive");
+    assert.ok(!cache.has("g0@g.us"), "the oldest entry must be evicted first");
+  });
+
+  it("prefers evicting stale entries before fresh ones when over cap", () => {
+    const now = Date.now();
+    for (let i = 0; i < 300; i++) {
+      cache.set(`stale${i}@g.us`, { data: {}, timestamp: now - AGE_30M - 1000 });
+    }
+    for (let i = 0; i < 900; i++) {
+      cache.set(`fresh${i}@g.us`, { data: {}, timestamp: now - 1000 });
+    }
+    sweepGroupMetadataCache(cache, now);
+
+    assert.ok(cache.size <= 800, `got ${cache.size}`);
+    for (let i = 0; i < 300; i++) {
+      assert.ok(!cache.has(`stale${i}@g.us`), `stale${i} should go before a fresh entry`);
+    }
+  });
 });
 
 describe("stickerPackCache byte-cap (32MB default, evict oldest)", () => {
