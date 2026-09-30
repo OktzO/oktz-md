@@ -264,7 +264,12 @@ function getProgressiveHint(answer, attempts) {
     }).join('');
 }
 
-setInterval(() => {
+// Modul ini diimpor oleh banyak plugin dan oleh test runner. Tanpa unref,
+// interval 5-menit ini menahan event loop: proses tidak mau keluar walau semua
+// pekerjaan sudah selesai, jadi `node --test` menggantung sampai interval
+// pertama benar-benar lewat. Pola `if (t.unref) t.unref()` sudah dipakai
+// auto-anime, database, data-pruner, dan jadibot-manager.
+const gameSweeperInterval = setInterval(() => {
     const now = Date.now();
     const MAX_AGE = 10 * 60 * 1000;
     for (const [chatId, session] of gameSessions) {
@@ -286,5 +291,6 @@ setInterval(() => {
         }
     }
 }, 5 * 60 * 1000);
+if (gameSweeperInterval.unref) gameSweeperInterval.unref();
 
 export { loadData, getRandomItem, getItemByIndex, searchItem, getAllData, normalizeAnswer, checkAnswer, checkAnswerAdvanced, getSimilarity, getHint, isSurrender, createSession, setSessionTimer, getSession, endSession, hasActiveSession, getRemainingTime, formatRemainingTime, isReplyToGame, GAME_REWARD, getRandomReward, getProgressiveHint }
