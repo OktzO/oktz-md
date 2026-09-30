@@ -1,6 +1,7 @@
 import axios from "axios";
 import { generateWAMessageFromContent } from "onigis";
 import sharp from "sharp";
+import { resolver } from "../../src/lib/resolve.js";
 
 const pluginConfig = {
   name: "spotify",
@@ -26,20 +27,19 @@ async function handler(m, { sock, text }) {
   await m.react("🕕");
 
   try {
-    const res = await axios.get(`https://api.nexray.eu.cc/search/spotify?q=${encodeURIComponent(text)}`);
-    const data = res.data;
+    const { data } = await resolver.resolve("spotify", { q: text });
+    const hasil = (data?.tracks ?? []).slice(0, 5);
 
-    if (!data.status || !data.result || data.result.length === 0) {
+    if (hasil.length === 0) {
       await m.react("❌");
       return m.reply(`⚠️ *Maaf, lagu tidak ditemukan!* \n\nAku sudah mencari dengan kata kunci *${text}* tapi tidak ada hasil di Spotify. Coba gunakan judul yang lebih spesifik ya.`);
     }
 
-    const results = data.result.slice(0, 5);
-    const firstResult = results[0];
+    const firstResult = hasil[0];
 
     let contentText = `✨ *HASIL PENCARIAN SPOTIFY* ✨\n\nHalo! Aku berhasil menemukan beberapa lagu berdasarkan kata kunci *${text}*. Berikut adalah daftar teratasnya:\n\n`;
 
-    results.forEach((t, i) => {
+    hasil.forEach((t, i) => {
       contentText += `*${i + 1}. ${t.title}*\n`;
       contentText += `   🎤 Artis: ${t.artist}\n`;
       contentText += `   ⏱️ Durasi: ${t.duration}\n`;
@@ -50,21 +50,28 @@ async function handler(m, { sock, text }) {
 
     let thumbnailBuffer = null;
     try {
-      const imageResponse = await axios.get(firstResult.thumbnail, { responseType: "arraybuffer" });
-      thumbnailBuffer = await sharp(imageResponse.data).resize(300, 170).jpeg().toBuffer();
+      if (firstResult.cover) {
+        const imageResponse = await axios.get(firstResult.cover, { responseType: "arraybuffer" });
+        thumbnailBuffer = await sharp(imageResponse.data).resize(300, 170).jpeg().toBuffer();
+      }
     } catch (e) {
     }
+
+    // Backend lokal mencari lewat YT Music, dan hasilnya tidak punya ID track
+    // Spotify. Tombol unduh disembunyikan kalau begitu: `.spdl` hanya menerima
+    // link open.spotify.com dan akan menolak tautan lain.
+    const bisaUnduh = /^https?:\/\/open\.spotify\.com\/track\//i.test(firstResult.url);
 
     if (thumbnailBuffer) {
       const content = {
         buttonsMessage: {
-          buttons: [
+          buttons: bisaUnduh ? [
             {
               buttonId: `.spdl ${firstResult.url}`,
               buttonText: { displayText: '🎵 Unduh Lagu Pertama' },
               type: 1,
             }
-          ],
+          ] : [],
           locationMessage: {
             jpegThumbnail: thumbnailBuffer,
             name: firstResult.title,

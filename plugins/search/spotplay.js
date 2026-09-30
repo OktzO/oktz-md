@@ -1,5 +1,5 @@
-import axios from "axios";
 import te from "../../src/lib/error.js";
+import { resolver } from "../../src/lib/resolve.js";
 
 const pluginConfig = {
   name: "spotplay",
@@ -21,28 +21,27 @@ async function handler(m, { sock }) {
   await m.react("🕕");
 
   try {
-    const searchUrl = `https://my.izuka-api.xyz/api/search/spotify-search?query=${encodeURIComponent(query)}`;
-    const searchRes = await axios.get(searchUrl, { timeout: 30000 });
-    const searchData = searchRes.data;
+    const { data: cari } = await resolver.resolve("spotify", { q: query });
+    const tracks = cari?.tracks ?? [];
 
-    if (!searchData?.status || !searchData?.result || searchData.result.length === 0) {
+    // Backend lokal mencari lewat YT Music, dan hasilnya berupa tautan YouTube
+    // yang tidak punya ID track Spotify. Lewati saja daripada meneruskan ke
+    // backend unduhan yang pasti menolaknya.
+    const firstTrack = tracks.find((t) => /^https?:\/\/open\.spotify\.com\/track\//i.test(t.url));
+
+    if (!firstTrack) {
       await m.react("❌");
       return m.reply("❌ Lagu Spotify tidak ditemukan.");
     }
 
-    const firstTrack = searchData.result[0];
-    const dlUrl = `https://my.izuka-api.xyz/api/downloader/spotify?url=${encodeURIComponent(firstTrack.url)}`;
-    const dlRes = await axios.get(dlUrl, { timeout: 30000 });
-    const dlData = dlRes.data;
+    const { data: result } = await resolver.resolve("spotify", { url: firstTrack.url });
 
-    if (!dlData?.status || !dlData?.result?.download_url) {
+    if (!result?.url) {
       await m.react("❌");
       return m.reply("❌ Gagal mengambil link download lagu Spotify.");
     }
 
-    const result = dlData.result;
-
-    await sock.sendMedia(m.chat, result.download_url, null, m, {
+    await sock.sendMedia(m.chat, result.url, null, m, {
       type: "audio",
       mimetype: "audio/mpeg",
       ptt: false,

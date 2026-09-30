@@ -1,4 +1,4 @@
-import axios from "axios";
+import { resolver } from "../../src/lib/resolve.js";
 
 const pluginConfig = {
   name: "spotifydl",
@@ -22,20 +22,16 @@ async function handler(m, { sock }) {
   await m.react("🕕");
 
   try {
-    const apiUrl = `https://api.nexray.eu.cc/downloader/spotify?url=${encodeURIComponent(text)}`;
-    const res = await axios.get(apiUrl);
-    const data = res.data;
-
-    if (!data.status || !data.result || !data.result.url) {
+    const { data } = await resolver.resolve("spotify", { url: text });
+    if (!data?.url) {
       await m.react("❌");
       return m.reply("⚠️ *Gagal mengambil lagu!* \n\nServer tidak merespon dengan tautan unduhan yang valid.");
     }
 
-    const { title, artist, url } = data.result;
-    const filename = `${artist || "Spotify"} - ${title || "Audio"}.mp3`;
+    const filename = `${data.artist || "Spotify"} - ${data.title || "Audio"}.mp3`;
 
     await sock.sendMessage(m.chat, {
-      audio: { url: url },
+      audio: { url: data.url },
       mimetype: "audio/mpeg",
       fileName: filename,
       ptt: false
