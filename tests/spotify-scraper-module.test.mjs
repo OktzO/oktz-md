@@ -1,0 +1,101 @@
+import { test, beforeEach, mock } from "node:test";
+import assert from "node:assert";
+
+const calls = [];
+let SPOTYLOADER_OK;
+let jaringanMati = false;
+
+async function postPalsu(url, body, config) {
+  calls.push({ url, body, config });
+  if (jaringanMati) throw new Error("ECONNREFUSED spotyloader.com");
+  return { data: SPOTYLOADER_OK };
+}
+
+mock.module("../src/lib/http.js", {
+  namedExports: { httpAxios: { post: postPalsu } },
+});
+
+// Versi spotify.js SEBELUM task ini meng-import axios mentah, jadi mock di
+// ../src/lib/http.js saja tidak menyintercept request di module scope — test
+// jadi menembak spotyloader.com sungguhan. Mock axios juga menjaga test ini
+// offline dan membuat efek samping import benar-benar terlihat di `calls`.
+mock.module("axios", { defaultExport: { post: postPalsu } });
+
+const { downloadSpotify } = await import("../src/scraper/spotify.js");
+
+// Di-snapshot sebelum test apa pun jalan. Kalau blok CLI belum di-guard,
+// pemanggilan di module scope sudah tercatat di sini — dan reset `calls` di
+// beforeEach tidak boleh bisa menutupi itu.
+const callsSaatImport = calls.length;
+
+beforeEach(() => {
+  calls.length = 0;
+  jaringanMati = false;
+  SPOTYLOADER_OK = {
+    downloadLink: "https://cdn/a.mp3",
+    post: { name: "Judul", artist: "Artis", mime: "audio/mpeg" },
+  };
+});
+
+test("import modul tidak menembak request", () => {
+  assert.equal(
+    callsSaatImport,
+    0,
+    `import harus bebas efek samping, dapat ${callsSaatImport} request`,
+  );
+});
+
+test("downloadSpotify mengembalikan judul, artis, url, dan mime", async () => {
+  const out = await downloadSpotify("https://open.spotify.com/track/x");
+  assert.deepEqual(out, {
+    title: "Judul",
+    artist: "Artis",
+    url: "https://cdn/a.mp3",
+    mime: "audio/mpeg",
+  });
+});
+
+test("POST dikirim ke endpoint spotyloader dengan body { url } dan header terverifikasi", async () => {
+  await downloadSpotify("https://open.spotify.com/track/x");
+  assert.equal(calls.length, 1);
+  const call = calls[0];
+  assert.equal(call.url, "https://spotyloader.com/api/spotify/track");
+  assert.deepEqual(call.body, { url: "https://open.spotify.com/track/x" });
+  const h = call.config.headers;
+  assert.equal(h["Content-Type"], "application/json");
+  assert.equal(h.Referer, "https://spotyloader.com/");
+  assert.equal(h.Origin, "https://spotyloader.com");
+  assert.match(h["User-Agent"], /^Mozilla\/5\.0/);
+});
+
+test("respons tanpa downloadLink ditolak, bukan diloloskan sebagai data kosong", async () => {
+  SPOTYLOADER_OK = { post: { name: "Judul" }, error: "track tidak ditemukan" };
+  await assert.rejects(
+    () => downloadSpotify("https://open.spotify.com/track/x"),
+    (error) => {
+      assert.ok(error instanceof Error);
+      // Pesan harus menyebut responsnya, kalau tidak user cuma lihat "gagal".
+      assert.match(error.message, /downloadLink/);
+      assert.match(error.message, /track tidak ditemukan/);
+      return true;
+    },
+  );
+});
+
+test("error dari post dilempar, bukan ditelan ke console.error", async () => {
+  jaringanMati = true;
+  const original = console.error;
+  const ditelan = [];
+  console.error = (...args) => {
+    ditelan.push(args.map(String).join(" "));
+  };
+  try {
+    await assert.rejects(
+      () => downloadSpotify("https://open.spotify.com/track/x"),
+      /ECONNREFUSED spotyloader\.com/,
+    );
+  } finally {
+    console.error = original;
+  }
+  assert.deepEqual(ditelan, [], `error tidak boleh ditelan lewat console.error: ${ditelan}`);
+});

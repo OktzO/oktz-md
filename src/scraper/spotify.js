@@ -1,8 +1,10 @@
-import axios from "axios";
+import { httpAxios as axios } from "../lib/http.js";
+import { pathToFileURL } from "node:url";
 
 async function downloadSpotify(spotifyUrl) {
+  let response;
   try {
-    const response = await axios.post(
+    response = await axios.post(
       "https://spotyloader.com/api/spotify/track",
       { url: spotifyUrl },
       {
@@ -15,20 +17,36 @@ async function downloadSpotify(spotifyUrl) {
         },
       },
     );
-
-    const data = response.data;
-    if (data.downloadLink) {
-      console.log(
-        `Judul  : ${data.post.name}\nArtis  : ${data.post.artist}\nFormat : ${data.post.mime}\nLink   : ${data.downloadLink}`,
-      );
-    } else {
-      console.log("[!] Gagal mendapatkan link:", data);
-    }
   } catch (error) {
-    console.error(error.response ? error.response.data : error.message);
+    // Yang berguna untuk user sering ada di error.response.data (balasan
+    // spotyloader), bukan di error.message — jadi dibungkus, bukan di-log.
+    const detail = error.response?.data ?? error.message ?? String(error);
+    throw new Error(
+      `spotyloader gagal: ${typeof detail === "string" ? detail : JSON.stringify(detail)}`,
+    );
   }
+
+  const data = response.data;
+  if (!data?.downloadLink) {
+    throw new Error(
+      `spotyloader tidak mengembalikan downloadLink: ${JSON.stringify(data)}`,
+    );
+  }
+
+  return {
+    title: data.post.name,
+    artist: data.post.artist,
+    url: data.downloadLink,
+    mime: data.post.mime,
+  };
 }
 
-downloadSpotify(
-  process.argv[2] || "https://open.spotify.com/track/1XabvPK1VQEH4YqzDovs46",
-);
+export { downloadSpotify };
+
+// Pemanggilan CLI hanya boleh jalan kalau file ini dieksekusi langsung. Tanpa
+// guard ini, satu plugin yang meng-import modul ini menembak request HTTP ke
+// spotyloader setiap kali dimuat.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const url = process.argv[2];
+  if (url) downloadSpotify(url).then((r) => console.log(r)).catch((e) => console.error(e.message));
+}
