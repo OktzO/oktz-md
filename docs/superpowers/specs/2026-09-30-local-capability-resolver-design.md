@@ -84,13 +84,13 @@ const CAPABILITIES = {
 
 ```js
 // src/capabilities/spotify.js
-import { hitAggregator } from '../lib/aggregator.js';
+import { aggregator } from '../lib/aggregator.js';
 
 export const stable = false;              // true hanya untuk hasil deterministik <60det
 export const normalize = (raw) => ({ id: raw.id, title: raw.title, url: raw.url });
 export const backends = [
   { name: 'ytmusic', kind: 'local', run: (a) => spotifySearch(a.q) },
-  { name: 'neoxr',   kind: 'api',   run: (a) => hitAggregator('neoxr', '/api/spotify', a) },
+  { name: 'neoxr',   kind: 'api',   run: (a) => aggregator.hit('neoxr', '/api/spotify', a) },
 ];
 ```
 
@@ -99,7 +99,7 @@ Tiap modul kapabilitas mengekspor tiga hal: `backends`, `normalize`, dan `stable
 - Tiap backend wajib punya `name` (untuk log & circuit breaker), `kind` (`'local'` | `'api'`), dan `run(args)`.
 - `normalize` memaksa satu bentuk data keluar supaya plugin tidak perlu tahu backend mana yang menjawab.
 - `stable` menentukan boleh tidaknya hasil di-cache (lihat 3.4). Default `false` — harus di-set eksplisit.
-- `hitAggregator` berasal dari `src/lib/aggregator.js` (baru, kecil): satu helper yang memanggil endpoint agregator memakai `httpAxios`, yang melempar `AggregatorError` kalau key kosong / host mati. Semua panggilan agregator di dalam `src/capabilities/` lewat sini — tidak boleh ada `axios` langsung ke domain agregator.
+- `aggregator` berasal dari `src/lib/aggregator.js` (baru, kecil): satu-satunya pintu ke API agregator. Dibuat lewat `createAggregatorClient({ http, keyOf })` yang mengembalikan `{ hit }`, default `export const aggregator = createAggregatorClient()`. `hit` memakai `httpAxios` dan melempar `AggregatorError` kalau nama agregator tidak dikenal, key-nya kosong, atau host balas non-2xx. Semua panggilan agregator di dalam `src/capabilities/` lewat sini — tidak boleh ada `axios` langsung ke domain agregator.
 
 ### 2.3 Kontrak hasil
 
@@ -117,7 +117,9 @@ throw new CapabilityError('Spotify sedang tidak bisa dihubungi.', { capability, 
 
 ### 2.4 Injeksi untuk test
 
-`resolve()` dan circuit breaker tidak di-bind ke state modul. State-nya dibuat lewat `createResolver()`, yang mengembalikan objek `{ resolve, breakers }`. Default `const resolver = createResolver()` dipakai runtime; test bikin instance sendiri dengan `overrides` untuk mengganti kapabilitas/backend palsu.
+`resolve()` dan circuit breaker tidak di-bind ke state modul. State-nya dibuat lewat `createResolver({ capabilities, breaker, cache, now, budget })`, yang mengembalikan objek `{ resolve, breaker, cache, capabilities }`. Default `export const resolver = createResolver()` dipakai runtime; test bikin instance sendiri dengan `overrides` untuk mengganti kapabilitas/backend palsu.
+
+`budget` menerima `{ localMs, totalMs }` supaya test bisa mengecilkan budget tanpa menunggu detik sungguhan.
 
 Ini mencerminkan `createUploadProviders(overrides)` di `src/lib/upload-providers.js:192` — pola yang sudah terbukti di repo ini.
 
