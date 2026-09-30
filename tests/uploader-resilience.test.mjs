@@ -92,12 +92,16 @@ describe("uploadImage harus redundan, bukan satu host", () => {
       },
     ];
 
-    const t0 = Date.now();
+    // No wall-clock assertion here. The slow provider is a 900ms timer, so
+    // "elapsed < 500" only ever measured how busy the event loop was when the
+    // file ran alongside the rest of the suite, and it could fail on a loaded
+    // runner without anything being wrong. The behaviour under test is stated
+    // directly below: the fast result is returned and the slow host is still
+    // unfinished, which is what actually distinguishes "does not wait" from
+    // "waits", and it holds under any load.
     const url = await uploadImage(Buffer.from("x"), "image.jpg", { providers });
-    const elapsed = Date.now() - t0;
 
     assert.equal(url, "https://ok.test/fast.jpg");
-    assert.ok(elapsed < 500, `harus selesai cepat, took ${elapsed}ms`);
     assert.equal(slowFinished, false, "host lambat tidak boleh ikut menunggu");
   });
 
