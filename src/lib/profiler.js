@@ -13,6 +13,137 @@ import { logger } from "./logger.js";
 
 const OUT_DIR = path.join(process.cwd(), "storage", "profiling");
 
+// ── Retensi artefak ──────────────────────────────────────────
+//
+// Setiap cpu-*.cpuprofile dan heap-*.heapsnapshot ditulis sekali dan tidak
+// pernah dihapus. 25 file 135MB sudah menumpuk di mesin yang tidak pernah
+// menjalankan profiler lewat command, jadi penumpukan bukan konsekuensi pemakaian
+// — hanya konsekuensi tidak adanya kebijakan.
+//
+// Tiga batas sekaligus karena satu saja bisa dikelabui: umurnya (file terbaru
+// bisa besar), jumlahnya (file kecil tapi banyak), dan total byte-nya (beberapa
+// snapshot besar saja sudah 100MB+). Batas jumlah dan ukuran dihitung ulang
+// setelah batas umur diterapkan, jadi storage/ yang sempit tidak menunggu satu
+// siklus penuh untuk membersihkannya.
+const RETENTION_MAX_FILES = 25;
+const RETENTION_MAX_BYTES = 256 * 1024 * 1024;
+const RETENTION_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+
+const RETENTION_KEEP = /\.(cpuprofile|heapsnapshot)$/;
+
+/**
+ * Pure planner —(retensi) logikanya dipisah dari fs supaya bisa diuji tanpa
+ * menulis ke disk. Mengembalikan file yang harus dihapus, yang dipertahankan,
+ * dan byte yang dibebaskan.
+ *
+ * Urutan: umur dulu, lalu jumlah, lalu ukuran. Setelah batas umur diterapkan,
+ * jumlah dan ukuran dihitung terhadap sisa. File yang baru saja ditulis
+ * (mtime >= now - 1s) tidak pernah ikut terhapus supaya resonate dari
+ * pemanggil yang baru menulis tidak menghapus hasilnya sendiri.
+ *
+ * @param {{name:string,bytes:number,mtimeMs:number}[]} files
+ * @param {{now?:number,maxFiles?:number,maxBytes?:number,maxAgeMs?:number}} [opts]
+ */
+function planRetention(files, opts = {}) {
+  const {
+    now = Date.now(),
+    maxFiles = RETENTION_MAX_FILES,
+    maxBytes = RETENTION_MAX_BYTES,
+    maxAgeMs = RETENTION_MAX_AGE_MS,
+  } = opts;
+
+  if (!Array.isArray(files) || files.length === 0) {
+    return { remove: [], keep: [], bytesFreed: 0 };
+  }
+
+  const justWritten = now - 1000;
+  // Tertua dulu, supaya "buang yang tertua" dan "buang yang terbesar" sama-sama
+  // berujung pada file yang memang paling tidak berguna.
+  const sorted = [...files].sort((a, b) => a.mtimeMs - b.mtimeMs);
+
+  const remove = new Set();
+  const survivors = [];
+  for (const f of sorted) {
+    if (f.mtimeMs <= justWritten && f.mtimeMs < now - maxAgeMs) {
+      remove.add(f);
+    } else {
+      survivors.push(f);
+    }
+  }
+
+  // Batas jumlah: buang yang tertua lebih dulu.
+  while (survivors.length > maxFiles) {
+    const oldest = survivors.shift();
+    if (oldest && !remove.has(oldest)) remove.add(oldest);
+  }
+
+  // Batas ukuran: buang yang terbesar lebih dulu. Yang tertua sudah tersaring
+  // di atas, jadi ini hanya menyisir sisa yang masih melebihi ceiling.
+  let total = survivors.reduce((sum, f) => sum + (f.bytes || 0), 0);
+  if (total > maxBytes) {
+    const bySize = [...survivors].sort((a, b) => (b.bytes || 0) - (a.bytes || 0));
+    for (const f of bySize) {
+      if (total <= maxBytes) break;
+      if (remove.has(f)) continue;
+      remove.add(f);
+      total -= f.bytes || 0;
+    }
+  }
+
+  const removeList = [...remove];
+  const keep = files.filter((f) => !remove.has(f));
+  return {
+    remove: removeList,
+    keep,
+    bytesFreed: removeList.reduce((sum, f) => sum + (f.bytes || 0), 0),
+  };
+}
+
+/**
+ * Terapkan retensi ke OUT_DIR. Tidak pernah melempar: gagal memuat direktori
+ * atau gagal menghapus satu file hanya dilaporkan, karena profil yang sedang
+ * disimpan tidak boleh hilang karena file lama tidak bisa dihapus.
+ */
+function applyRetention() {
+  let plan;
+  try {
+    if (!fs.existsSync(OUT_DIR)) return { removed: 0, bytesFreed: 0 };
+    const now = Date.now();
+    const files = fs
+      .readdirSync(OUT_DIR, { withFileTypes: true })
+      .filter((e) => e.isFile() && RETENTION_KEEP.test(e.name))
+      .map((e) => {
+        const full = path.join(OUT_DIR, e.name);
+        let st;
+        try { st = fs.statSync(full); } catch { return null; }
+        return { name: e.name, bytes: st.size, mtimeMs: st.mtimeMs, full };
+      })
+      .filter(Boolean);
+
+    plan = planRetention(files, { now });
+    for (const f of plan.remove) {
+      try {
+        fs.unlinkSync(f.full);
+      } catch (e) {
+        logger.warn?.("PROFILER", `retensi gagal hapus ${f.name}: ${e.message}`);
+      }
+    }
+  } catch (e) {
+    logger.warn?.("PROFILER", `retensi dilewati: ${e.message}`);
+    return { removed: 0, bytesFreed: 0 };
+  }
+  if (plan && plan.remove.length) {
+    logger.system(
+      "PROFILER",
+      `retensi · hapus ${plan.remove.length} artefak lama · ${formatMB(plan.bytesFreed)} dibebaskan`,
+    );
+  }
+  return {
+    removed: plan ? plan.remove.length : 0,
+    bytesFreed: plan ? plan.bytesFreed : 0,
+  };
+}
+
 // Safety thresholds (host Pterodactyl 512MB heap / 1GB total RAM).
 // Nilai idle di panel (2026-08-30, memory monitor): rss 290-375MB,
 // heapTotal 185-195MB.
@@ -142,6 +273,7 @@ async function startCpuProfile({ name = "window", durationMs, trigger = "command
   );
 
   ensureOutDir();
+  applyRetention();
 
   const session = new inspector.Session();
   try {
@@ -202,6 +334,7 @@ async function stopCpuProfile() {
 
     const filePath = path.join(OUT_DIR, `cpu-${timestamp()}-${name}.cpuprofile`);
     fs.writeFileSync(filePath, JSON.stringify(profile));
+    applyRetention();
     logger.system(
       "PROFILER",
       `CPU profiling STOP · ${name} · ${(elapsedMs / 1000).toFixed(1)}s · trigger ${trigger} · ${filePath}`,
@@ -295,6 +428,8 @@ function takeHeapSnapshot({ label = "snap", trigger = "command" } = {}) {
       path.join(OUT_DIR, `heap-${timestamp()}-${cleanLabel}.heapsnapshot`),
     );
     const size = fs.statSync(filePath).size;
+    // Satu snapshot bisa 100MB+, dan ini file yang paling cepat memenuhi disk.
+    applyRetention();
     logger.system(
       "PROFILER",
       `Heap snapshot DONE · ${cleanLabel} · ${formatMB(size)} · ${filePath} · trigger ${trigger}`,
@@ -335,4 +470,9 @@ export {
   HEAP_SNAP_PROJECTED_CEILING_MAX,
   HEAP_SNAP_TRANSIENT_MULTIPLIER,
   CPU_MAX_DURATION_MS,
+  planRetention,
+  applyRetention,
+  RETENTION_MAX_FILES,
+  RETENTION_MAX_BYTES,
+  RETENTION_MAX_AGE_MS,
 };
