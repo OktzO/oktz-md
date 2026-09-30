@@ -22,6 +22,7 @@
 - Test: `npm test` (node:test). Lint: `npm run lint` (hanya memindai `plugins/`).
 - **Path dari `tests/` satu level ke atas, bukan dua.** `tests/` ada di root repo, jadi `../src/...` benar dan `../../src/...` keluar dari repo. Ini yang sudah dipakai `tests/wink.test.mjs`.
 - **Saat mocking, mock transport yang benar-benar dipakai kode yang diuji.** Kalau modul target meng-`import axios` mentah, mock `axios` — bukan `httpAxios` dari `src/lib/http.js`. Mocking wrapper yang tidak dipakai tidak hanya membuat test hijau palsu, tapi juga membiarkan test menembak jaringan sungguhan.
+- **Setiap task yang membuat modul kapabilitas wajib mencabut barisnya dari `GUARDED_MISSING_IMPORTS` di `tests/rename-invariants.test.mjs`.** Invariant I1 di sana memindai semua import relatif termasuk `import()` dinamis dan menolak yang file-nya belum ada. Task 2 membuka jalan dengan menambah 8 entri ke escape hatch itu; setiap modul yang benar-benar ada harus mencabut barisnya, kalau tidak jaring pengaman itu mati diam untuk sisa repo.
 
 ## Review Focus
 
@@ -368,11 +369,12 @@ Isi:
 
 Run: `node --experimental-test-module-mocks --test tests/resolve-core.test.mjs`
 Expected: PASS 18 test (6 aggregator + 12 facade).
-
 - [ ] **Step 17: Jalankan seluruh test suite**
 
 Run: `npm test`
-Expected: semua lulus, tidak ada test lama yang regresi.
+Expected: semua lulus. Total suite naik dari 684 (setelah Task 1) menjadi 717 — tambahan 33 test, yaitu 8 breaker + 7 cache + 18 resolve-core. Angka baseline di bagian header plan yang menyebut 678/696 salah: 678 itu baseline sebelum Task 1, dan 18 itu hanya hitungan `resolve-core`.
+
+Tambahkan juga satu test yang belum ada di brief ini: **kalau semua backend gagal, `resolve()` tidak boleh membaca cache dan mengembalikan hasil lama.** Ini janji sentral spec ("tidak ada fallback ke data basi") dan saat ini tidak diuji. Bentuknya: kapabilitas `stable: true` yang sukses sekali (cache terisi), lalu dibuat gagal di panggilan kedua, lalu assert `resolve` melempar `CapabilityError` — bukan mengembalikan hasil pertama.
 
 - [ ] **Step 18: Commit**
 
