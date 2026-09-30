@@ -3,11 +3,11 @@ import assert from "node:assert";
 
 const calls = [];
 let SPOTYLOADER_OK;
-let jaringanMati = false;
+let galat = null;
 
 async function postPalsu(url, body, config) {
   calls.push({ url, body, config });
-  if (jaringanMati) throw new Error("ECONNREFUSED spotyloader.com");
+  if (galat) throw galat;
   return { data: SPOTYLOADER_OK };
 }
 
@@ -30,7 +30,7 @@ const callsSaatImport = calls.length;
 
 beforeEach(() => {
   calls.length = 0;
-  jaringanMati = false;
+  galat = null;
   SPOTYLOADER_OK = {
     downloadLink: "https://cdn/a.mp3",
     post: { name: "Judul", artist: "Artis", mime: "audio/mpeg" },
@@ -83,7 +83,9 @@ test("respons tanpa downloadLink ditolak, bukan diloloskan sebagai data kosong",
 });
 
 test("error dari post dilempar, bukan ditelan ke console.error", async () => {
-  jaringanMati = true;
+  galat = Object.assign(new Error("ECONNREFUSED spotyloader.com"), {
+    code: "ECONNREFUSED",
+  });
   const original = console.error;
   const ditelan = [];
   console.error = (...args) => {
@@ -92,10 +94,40 @@ test("error dari post dilempar, bukan ditelan ke console.error", async () => {
   try {
     await assert.rejects(
       () => downloadSpotify("https://open.spotify.com/track/x"),
-      /ECONNREFUSED spotyloader\.com/,
+      (error) => {
+        assert.match(error.message, /ECONNREFUSED spotyloader\.com/);
+        // Tidak ada respons HTTP ⇒ tidak ada status. Kehilangan status inilah
+        // yang membuat resolver tidak bisa membedakan DNS gagal dari 500.
+        assert.equal(error.status, undefined);
+        return true;
+      },
     );
   } finally {
     console.error = original;
   }
   assert.deepEqual(ditelan, [], `error tidak boleh ditelan lewat console.error: ${ditelan}`);
+});
+
+test("error upstream menyimpan cause asli dan status HTTP", async () => {
+  const asli = Object.assign(new Error("Request failed with status code 403"), {
+    code: "ERR_BAD_REQUEST",
+    // Body kosong: persis yang Cloudflare balas saat memblokir. Kalau `??`
+    // dipakai di sini, user dapat pesan "spotyloader gagal: " tanpa isi.
+    response: { status: 403, data: "" },
+  });
+  galat = asli;
+
+  await assert.rejects(
+    () => downloadSpotify("https://open.spotify.com/track/x"),
+    (error) => {
+      // Status HTTP harus terbaca langsung supaya consumer bisa memilih
+      // backend fallback berdasarkan bentuk kegagalan, bukan tebakan.
+      assert.equal(error.status, 403);
+      assert.equal(error.cause, asli, "error asli harus utuh di cause");
+      assert.equal(error.cause.code, "ERR_BAD_REQUEST", "code asli harus terjangkau");
+      // Body kosong harus jatuh ke error.message, bukan jadi pesan kosong.
+      assert.match(error.message, /spotyloader gagal: Request failed with status code 403/);
+      return true;
+    },
+  );
 });

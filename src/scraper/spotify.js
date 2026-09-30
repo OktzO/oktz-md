@@ -18,12 +18,18 @@ async function downloadSpotify(spotifyUrl) {
       },
     );
   } catch (error) {
-    // Yang berguna untuk user sering ada di error.response.data (balasan
-    // spotyloader), bukan di error.message — jadi dibungkus, bukan di-log.
-    const detail = error.response?.data ?? error.message ?? String(error);
-    throw new Error(
+    // `||` bukan `??`: upstream yang diblokir (Cloudflare) balas body kosong,
+    // dan `??` akan memberi user pesan "spotyloader gagal: " tanpa isi. `cause`
+    // + `status` disimpan supaya consumer bisa membedakan timeout, 4xx, dan DNS
+    // gagal saat memilih backend fallback — tanpa respons HTTP tidak ada status
+    // sama sekali, dan bukan default 500 (itu menyamarkan DNS gagal).
+    const detail = error.response?.data || error.message || String(error);
+    const wrapped = new Error(
       `spotyloader gagal: ${typeof detail === "string" ? detail : JSON.stringify(detail)}`,
+      { cause: error },
     );
+    if (error.response?.status !== undefined) wrapped.status = error.response.status;
+    throw wrapped;
   }
 
   const data = response.data;
