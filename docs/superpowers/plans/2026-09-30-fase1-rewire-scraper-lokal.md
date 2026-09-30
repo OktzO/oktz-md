@@ -23,6 +23,7 @@
 - **Path dari `tests/` satu level ke atas, bukan dua.** `tests/` ada di root repo, jadi `../src/...` benar dan `../../src/...` keluar dari repo. Ini yang sudah dipakai `tests/wink.test.mjs`.
 - **Saat mocking, mock transport yang benar-benar dipakai kode yang diuji.** Kalau modul target meng-`import axios` mentah, mock `axios` — bukan `httpAxios` dari `src/lib/http.js`. Mocking wrapper yang tidak dipakai tidak hanya membuat test hijau palsu, tapi juga membiarkan test menembak jaringan sungguhan.
 - **Setiap task yang membuat modul kapabilitas wajib mencabut barisnya dari `GUARDED_MISSING_IMPORTS` di `tests/rename-invariants.test.mjs`.** Invariant I1 di sana memindai semua import relatif termasuk `import()` dinamis dan menolak yang file-nya belum ada. Task 2 membuka jalan dengan menambah 8 entri ke escape hatch itu; setiap modul yang benar-benar ada harus mencabut barisnya, kalau tidak jaring pengaman itu mati diam untuk sisa repo.
+- **Nama backend di circuit breaker bersifat per-host, tidak pernah per-URL atau per-user.** Breaker punya 64 slot LRU. Kalau suatu kapabilitas memakai URL atau user sebagai nama, satu host yang sehat bisa ter-evict dan langsung dianggap `CLOSED` — breaker diam-diam kehilangan daya tepat ketika paling dibutuhkan. Nama yang benar: nama backend yang dideklarasikan di `backends`, misalnya `'ilovepin'`, `'neoxr'`, `'ytdl-native'`.
 
 ## Review Focus
 
