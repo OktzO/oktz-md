@@ -20,6 +20,8 @@
 - **Budget waktu 8 detik berlaku untuk resolusi metadata saja** — bukan untuk transfer byte media. `resolve()` mengembalikan URL; pengiriman file tetap lewat `sock.sendMessage` tanpa budget.
 - Komentar kode dalam bahasa Indonesia, menjelaskan **kenapa** — mengikuti konvensi repo.
 - Test: `npm test` (node:test). Lint: `npm run lint` (hanya memindai `plugins/`).
+- **Path dari `tests/` satu level ke atas, bukan dua.** `tests/` ada di root repo, jadi `../src/...` benar dan `../../src/...` keluar dari repo. Ini yang sudah dipakai `tests/wink.test.mjs`.
+- **Saat mocking, mock transport yang benar-benar dipakai kode yang diuji.** Kalau modul target meng-`import axios` mentah, mock `axios` — bukan `httpAxios` dari `src/lib/http.js`. Mocking wrapper yang tidak dipakai tidak hanya membuat test hijau palsu, tapi juga membiarkan test menembak jaringan sungguhan.
 
 ## Review Focus
 
@@ -99,7 +101,7 @@ import { test, mock } from 'node:test';
 import assert from 'node:assert';
 
 const calls = [];
-mock.module('../../src/lib/http.js', {
+mock.module('../src/lib/http.js', {
   namedExports: {
     httpAxios: {
       post: async (url, body) => { calls.push({ url, body }); return { data: SPOTYLOADER_OK }; },
@@ -107,7 +109,7 @@ mock.module('../../src/lib/http.js', {
   },
 });
 
-const { downloadSpotify } = await import('../../src/scraper/spotify.js');
+const { downloadSpotify } = await import('../src/scraper/spotify.js');
 ```
 
 Isi `SPOTYLOADER_OK` di `beforeEach`:
@@ -201,7 +203,7 @@ Peta agregator → key, untuk `keyOf` di `aggregator.js` (dari `config.js:326`):
 // tests/circuit-breaker.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { createBreaker } from '../../src/lib/circuit-breaker.js';
+import { createBreaker } from '../src/lib/circuit-breaker.js';
 ```
 
 Test dengan `now` fake (bilangan bulat yang dikontrol manual, bukan `Date.now()` langsung — test harus deterministik):
@@ -217,7 +219,7 @@ Test dengan `now` fake (bilangan bulat yang dikontrol manual, bukan `Date.now()`
 - [ ] **Step 2: Jalankan, pastikan gagal**
 
 Run: `node --test tests/circuit-breaker.test.mjs`
-Expected: FAIL — `Cannot find module '../../src/lib/circuit-breaker.js'`
+Expected: FAIL — `Cannot find module '../src/lib/circuit-breaker.js'`
 
 - [ ] **Step 3: Implementasikan `createBreaker` di `src/lib/circuit-breaker.js`**
 
@@ -243,7 +245,7 @@ Expected: PASS 8 test.
 
 ```js
 // tests/capability-cache.test.mjs
-import { createCapabilityCache } from '../../src/lib/capability-cache.js';
+import { createCapabilityCache } from '../src/lib/capability-cache.js';
 ```
 
 1. `set('bola', 'a', 'v')` lalu `get('bola', 'a')` → `'v'`
@@ -256,7 +258,7 @@ import { createCapabilityCache } from '../../src/lib/capability-cache.js';
 
 - [ ] **Step 6: Jalankan, pastikan gagal**
 
-Expected: FAIL — `Cannot find module '../../src/lib/capability-cache.js'`
+Expected: FAIL — `Cannot find module '../src/lib/capability-cache.js'`
 
 - [ ] **Step 7: Implementasikan `createCapabilityCache` di `src/lib/capability-cache.js`**
 
@@ -274,7 +276,7 @@ Expected: PASS 7 test.
 
 ```js
 // tests/resolve-core.test.mjs
-import { AggregatorError, createAggregatorClient } from '../../src/lib/aggregator.js';
+import { AggregatorError, createAggregatorClient } from '../src/lib/aggregator.js';
 ```
 
 1. `hit('neoxr', '/api/sfile', { params: { url: 'u' } })` memanggil `http.get` dengan URL `https://api.neoxr.eu/api/sfile?url=u` dan header `apikey` berisi key dari `keyOf('neoxr')`
@@ -286,7 +288,7 @@ import { AggregatorError, createAggregatorClient } from '../../src/lib/aggregato
 
 - [ ] **Step 10: Jalankan, pastikan gagal**
 
-Expected: FAIL — `Cannot find module '../../src/lib/aggregator.js'`
+Expected: FAIL — `Cannot find module '../src/lib/aggregator.js'`
 
 - [ ] **Step 11: Implementasikan `src/lib/aggregator.js`**
 
@@ -336,7 +338,7 @@ Test:
 
 - [ ] **Step 14: Jalankan, pastikan gagal**
 
-Expected: FAIL — `Cannot find module '../../src/lib/resolve.js'`
+Expected: FAIL — `Cannot find module '../src/lib/resolve.js'`
 
 - [ ] **Step 15: Implementasikan `src/lib/resolve.js`**
 
@@ -415,7 +417,7 @@ Letakkan validasi di dalam backend `local` sebagai guard, sebelum memanggil scra
 
 - [ ] **Step 2: Jalankan, pastikan gagal**
 
-Expected: FAIL — `Cannot find module '../../src/capabilities/spotify.js'`
+Expected: FAIL — `Cannot find module '../src/capabilities/spotify.js'`
 
 - [ ] **Step 3: Implementasikan `src/capabilities/spotify.js`**
 
@@ -499,7 +501,7 @@ Test #2 — Review Focus #3, guard validasi:
 
 - [ ] **Step 2: Jalankan, pastikan gagal**
 
-Expected: FAIL — `Cannot find module '../../src/capabilities/pinterest.js'`
+Expected: FAIL — `Cannot find module '../src/capabilities/pinterest.js'`
 
 - [ ] **Step 3: Implementasikan `src/capabilities/pinterest.js`**
 
@@ -695,7 +697,7 @@ Test #3 — `format` default `'mp3'` kalau `args.format` tidak diberikan; `'mp4'
 
 - [ ] **Step 2: Jalankan, pastikan gagal**
 
-Expected: FAIL — `Cannot find module '../../src/capabilities/youtube.js'`
+Expected: FAIL — `Cannot find module '../src/capabilities/youtube.js'`
 
 - [ ] **Step 3: Implementasikan `src/capabilities/youtube.js`**
 
@@ -768,7 +770,7 @@ Nama field yang benar (dari `play2.js:985-995`): `track.name || track.title` unt
 
 - [ ] **Step 2: Jalankan, pastikan gagal**
 
-Expected: FAIL — `Cannot find module '../../src/capabilities/ytmusic.js'`
+Expected: FAIL — `Cannot find module '../src/capabilities/ytmusic.js'`
 
 - [ ] **Step 3: Implementasikan `src/capabilities/ytmusic.js`**
 
