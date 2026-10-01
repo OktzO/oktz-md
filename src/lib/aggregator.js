@@ -28,11 +28,12 @@ const DEFAULT_TIMEOUT_MS = 5000;
 // memeriksa `typeof error.status === "number"` untuk membedakan upstream
 // 4xx/5xx dari kegagalan koneksi atau DNS.
 export class AggregatorError extends Error {
-  constructor(message, { aggregator, status, cause } = {}) {
+  constructor(message, { aggregator, status, cause, envName } = {}) {
     super(message);
     this.name = "AggregatorError";
     this.aggregator = aggregator;
     if (typeof status === "number") this.status = status;
+    if (envName) this.envName = envName;
     if (cause !== undefined) this.cause = cause;
   }
 }
@@ -40,6 +41,31 @@ export class AggregatorError extends Error {
 function defaultKeyOf(name) {
   const entry = AGGREGATORS[name];
   return entry?.key ? config.APIkey[entry.key] : "";
+}
+
+// Nama env untuk satu aggregator, atau `null` kalau host itu tidak butuh key.
+// Satu-satunya tempat di repo ini yang memetakan host ke nama env, supaya
+// plugin tidak perlu menyebut nama host aggregator sama sekali hanya untuk
+// menjelaskan key yang kurang.
+export function envNameOf(name) {
+  const key = AGGREGATORS[name]?.key;
+  return key ? `APIKEY_${String(key).toUpperCase()}` : null;
+}
+
+/**
+ * Terjemahkan kegagalan aggregator "API key … belum diisi" yang tercatat di
+ * `tried` resolver menjadi nama env yang harus diisi user.
+ *
+ * Plugin butuh ini supaya bisa tetap jujur soal key yang kosong tanpa
+ * mentioning host aggregators: pemanggilan aggregator hanya boleh lewat
+ * `hit`, dan nama host tidak boleh bocor ke layer plugin.
+ */
+export function missingEnvNameOf(error) {
+  for (const entry of error?.tried ?? []) {
+    const cocok = /APIKEY_[A-Z0-9_]+/.exec(entry?.reason ?? "");
+    if (cocok) return cocok[0];
+  }
+  return null;
 }
 
 export function createAggregatorClient({
@@ -60,14 +86,18 @@ export function createAggregatorClient({
       });
     }
 
-    // Key dicek sebelum ada request: .env di deployment sering masih template,
+// Key dicek sebelum ada request: .env di deployment sering masih template,
     // dan request tanpa key hanya membuang satu timeout untuk jawaban 401 yang
-    // sudah bisa diprediksi di lokal.
+    // sudah bisa diprediksi di lokal. Nama env ikut ditulis ke pesan supaya
+    // lapisan atas bisa menunjuk user ke baris .env yang tepat tanpa perlu tahu
+    // host mana yang gagal — lihat `missingEnvNameOf`.
     const key = entry.key ? String(keyOf(name) ?? "") : "";
     if (entry.key && key === "") {
-      throw new AggregatorError(`API key ${entry.key} belum diisi, ${name} dilewati`, {
-        aggregator: name,
-      });
+      const env = envNameOf(name);
+      throw new AggregatorError(
+        `API key ${entry.key} belum diisi, set ${env} di .env; ${name} dilewati`,
+        { aggregator: name, envName: env },
+      );
     }
 
     const target = new URL(entry.base + (path.startsWith("/") ? path : `/${path}`));

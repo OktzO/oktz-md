@@ -1776,3 +1776,411 @@ test("plugin douyin: permukaan perintah dan reaksi tidak berubah", () => {
   assert.match(sumber, /type: "video"/);
   assert.match(sumber, /type: "audio"/);
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Sfile
+//
+// Bentuk lokal dibaca dari src/scraper/sfiledl.js: nama fieldnya `file_name`
+// dan `size_from_text` — bukan `filename` dan `size` seperti yang diasumsikan
+// di brief — dan `download_url` boleh `null` pada tiga jalur keluar yang berbeda
+// (tanpa `og:url`, tanpa `#download`, dan regex gate yang tidak cocok). Bentuk
+// aggregator dibaca dari plugin sebelum Phase 1: `neoxr/api/sfile` dibaca lewat
+// `res.data.url`, `res.data.filename`, dan `res.data.mime`.
+// ═════════════════════════════════════════════════════════════════════════════
+
+const HAL_SFILE = [
+  '<html><head><meta property="og:url" content="https://sfile.mobi/abc123" />' +
+    '<meta property="og:description" content="uploaded by planetvdn on 22 January 2026" /></head>' +
+    "<body><h1>Spotify PREMIUM_9.1.14.864</h1><p>100.42 MB</p>" +
+    "<span>1.2k downloads</span></body></html>",
+  '<html><body><a id="download" href="https://sfile.mobi/gate/abc123">Download</a></body></html>',
+  '<html><body><script>var u="https:\\/\\/download0426.sfile.co\\/downloadfile\\/2200881\\/724157\\/' +
+    '99f1f1d69f8fd931e1447af03be9cec0\\/spotify-premium_9.1.14.864.apk?k=8a782a007c623b62889412b2f5a49424";' +
+    "</script></body></html>",
+];
+
+const SFILE_UNDUHAN =
+  "https://download0426.sfile.co/downloadfile/2200881/724157/99f1f1d69f8fd931e1447af03be9cec0/" +
+  "spotify-premium_9.1.14.864.apk?k=8a782a007c623b62889412b2f5a49424";
+
+let halamanSfile = () => {
+  throw new Error("sfile.mobi tidak boleh dipanggil: upstream mati");
+};
+
+const getDouyin = httpPalsu.get;
+httpPalsu.get = async (url, opts) => {
+  // Dicocokkan ke host, bukan ke seluruh string: URL aggregator neoxr untuk
+  // kapabilitas ini memuat "sfile.mobi" di query string-nya, jadi pencocokan
+  // substring akan mengarahkan request aggregator ke stub halaman sfile.
+  const host = new URL(String(url)).hostname;
+  if (host.endsWith("sfile.mobi") || host.endsWith("sfile.co")) {
+    PANGGILAN_HTTP.push({ verb: "get", url, opts });
+    return halamanSfile(url, opts);
+  }
+  if (host === "api.neoxr.eu") {
+    PANGGILAN_HTTP.push({ verb: "get", url, opts });
+    return hasilAggregator(url, opts);
+  }
+  return getDouyin(url, opts);
+};
+
+// `aggregator.hit` menolak neoxr sebelum ada request kalau key kosong, jadi
+// key dipin di sini. Nilainya dikembalikan apa adanya di setiap respons —
+// hanya yang dibaca test adalah hostname, pathname, dan param.
+const configUji = (await import("../config.js")).default;
+configUji.APIkey.neoxr = "k-neoxr-untuk-test";
+
+const kapsfile = await import("../src/capabilities/sfile.js");
+
+const sfileLokal = kapsfile.backends.find((b) => b.kind === "local");
+const sfileApi = kapsfile.backends.find((b) => b.kind === "api");
+
+function resolverSfile(opsi = {}) {
+  return createResolver({ capabilities: { sfile: () => kapsfile }, ...opsi });
+}
+
+/**
+ * Bentuk amplop neoxr yang sebenarnya. `f()` di plugin lama mengembalikan
+ * body respons apa adanya, dan plugin itu membaca `res.data.url` — jadi `data`
+ * adalah field di dalam body, bukan field HTTP axios. Stub di test memakai
+ * `{ status, data }` sebagai respons HTTP axios, jadi body neoxr ada dua lapis.
+ */
+function neoxrSfile(body) {
+  return async () => ({ status: 200, data: { data: body } });
+}
+
+beforeEach(() => {
+  halamanSfile = () => {
+    throw new Error("sfile.mobi tidak boleh dipanggil: upstream mati");
+  };
+});
+
+/** Tiga request sfile() memang dijalankan berurutan; ini urutan itu. */
+function sfileLokalSukses(hal = HAL_SFILE, catat = null) {
+  let i = 0;
+  halamanSfile = async (url, opts) => {
+    if (catat) catat(url);
+    return { data: hal[i++] ?? hal[hal.length - 1], headers: {} };
+  };
+}
+
+// ── normalisasi bentuk ────────────────────────────────────────────────────────
+
+test("normalize: bentuk scraper lokal dengan nama field aslinya", () => {
+  // Nama field lokal adalah `file_name` dan `size_from_text`. Test ini gagal
+  // kalau normalize mengira bentuk lokal memakai nama yang sama dengan
+  // aggregator — asumsi yang membuat Task 3 sempat hampir salah di kapabilitas
+  // spotify.
+  const keluar = kapsfile.normalize({
+    file_name: "Spotify PREMIUM_9.1.14.864",
+    size_from_text: "100.42 MB",
+    author_name: "Planetvdn",
+    upload_date: "22 January 2026",
+    download_count: "1",
+    download_url: SFILE_UNDUHAN,
+  });
+  assert.deepEqual(keluar, {
+    filename: "Spotify PREMIUM_9.1.14.864",
+    url: SFILE_UNDUHAN,
+    size: "100.42 MB",
+    mime: "",
+  });
+});
+
+test("normalize: bentuk aggregator neoxr jadi empat field yang sama", () => {
+  // Plugin sebelum Phase 1 memakai `url`, `filename`, dan `mime`; `size` tidak
+  // pernah dikirim host itu. Field yang tidak ada harus jadi string kosong,
+  // bukan `undefined` yang tercetak di UI.
+  assert.deepEqual(
+    kapsfile.normalize({
+      url: SFILE_UNDUHAN,
+      filename: "Spotify PREMIUM_9.1.14.864",
+      mime: "application/vnd.android.package-archive",
+    }),
+    {
+      filename: "Spotify PREMIUM_9.1.14.864",
+      url: SFILE_UNDUHAN,
+      size: "",
+      mime: "application/vnd.android.package-archive",
+    },
+  );
+});
+
+test("normalize: download_url null melempar, bukan jadi record kosong", () => {
+  // `sfile()` mengembalikan `download_url: null` pada tiga jalur keluar yang
+  // berbeda. Tanpa penolakan, plugin akan menjalankan sendMedia dengan `undefined`
+  // lalu memberi centang hijau ke user yang tidak menerima apa-apa.
+  assert.throws(
+    () => kapsfile.normalize({ file_name: "x", size_from_text: "1 MB", download_url: null }),
+    /URL|unduhan/i,
+  );
+});
+
+test("normalize: respons kosong dan nilai non-objek melempar", () => {
+  for (const nilai of [null, undefined, {}, "teks", 7, true]) {
+    assert.throws(() => kapsfile.normalize(nilai), /tidak dikenali|URL|unduhan/i, `nilai: ${String(nilai)}`);
+  }
+});
+
+test("normalize: URL download non-http ditolak", () => {
+  assert.throws(
+    () => kapsfile.normalize({ file_name: "x", download_url: "ftp://download.sfile.co/a.apk" }),
+    /URL|unduhan/i,
+  );
+});
+
+// ── guard URL ─────────────────────────────────────────────────────────────────
+
+test("guard: host selain sfile ditolak tanpa satu pun request", async () => {
+  for (const url of [
+    "https://sfile.mobi.evil.example/abc",
+    "https://notsfile.mobi/abc",
+    "https://example.com/sfile.mobi",
+  ]) {
+    await assert.rejects(
+      () => sfileLokal.run({ url }),
+      (error) => {
+        assert.match(error.message, /sfile\.mobi/);
+        return true;
+      },
+      `harus ditolak: ${url}`,
+    );
+  }
+  assert.deepEqual(PANGGILAN_HTTP, [], "guard harus jalan sebelum scraper");
+});
+
+test("guard: aggregator tidak dihubungi untuk link yang gagal guard", async () => {
+  hasilAggregator = neoxrSfile({ url: SFILE_UNDUHAN, filename: "a.apk" });
+  const resolver = resolverSfile();
+  await assert.rejects(() => resolver.resolve("sfile", { url: "https://notsfile.mobi/abc" }));
+  assert.deepEqual(
+    PANGGILAN_HTTP.filter((c) => new URL(String(c.url)).hostname === "api.neoxr.eu"),
+    [],
+    "aggregator tidak boleh dihubungi untuk link yang gagal guard",
+  );
+  assert.deepEqual(
+    resolver.breaker.snapshot().map((s) => s.name),
+    ["sfile-mobi"],
+  );
+});
+
+test("guard: link sfile.mobi dan sfile.co diterima", async () => {
+  for (const url of [
+    "https://sfile.mobi/abc123",
+    "https://www.sfile.mobi/abc123",
+    "https://sfile.co/abc123",
+  ]) {
+    sfileLokalSukses();
+    const keluar = await sfileLokal.run({ url });
+    assert.equal(keluar.download_url, SFILE_UNDUHAN, `harus diterima: ${url}`);
+  }
+});
+
+// ── wiring resolver ──────────────────────────────────────────────────────────
+
+test("stable false: URL unduhan sfile berbau token sekali pakai", () => {
+  assert.equal(kapsfile.stable, false, "dari cache tidak boleh ada: URL gate sambil kedaluwarsa");
+});
+
+test("minimal satu backend local dan satu api sebagai cadangan", () => {
+  const lokal = kapsfile.backends.filter((b) => b.kind === "local");
+  const api = kapsfile.backends.filter((b) => b.kind !== "local");
+  assert.equal(lokal.length, 1);
+  assert.equal(api.length, 1);
+  assert.equal(lokal[0].name, "sfile-mobi");
+  assert.equal(api[0].name, "neoxr");
+  assert.equal(new Set(kapsfile.backends.map((b) => b.name)).size, kapsfile.backends.length);
+});
+
+test("unduhan: scraper lokal dulu, aggregator tidak boleh diakses lebih awal", async () => {
+  const dipanggil = [];
+  sfileLokalSukses(undefined, (url) => dipanggil.push(new URL(String(url)).hostname));
+  hasilAggregator = async () => {
+    dipanggil.push("neoxr");
+    return neoxrSfile({ url: SFILE_UNDUHAN, filename: "a.apk" })();
+  };
+
+  const keluar = await resolverSfile().resolve("sfile", { url: "https://sfile.mobi/abc123" });
+
+  assert.equal(keluar.source, "sfile-mobi");
+  assert.equal(keluar.data.filename, "Spotify PREMIUM_9.1.14.864");
+  assert.equal(keluar.data.size, "100.42 MB");
+  assert.equal(dipanggil.includes("neoxr"), false, "aggregator tidak boleh diakses sebelum host lokal");
+});
+
+test("unduhan: gate sfile memblokir → aggregator jadi cadangan", async () => {
+  // `#download` hilang: scraper mengembalikan `download_url: null`, normalize
+  // melempar, dan aggregator harus dapat giliran.
+  sfileLokalSukses([HAL_SFILE[0], HAL_SFILE[2]]);
+  hasilAggregator = neoxrSfile({
+    url: SFILE_UNDUHAN,
+    filename: "a.apk",
+    mime: "application/vnd.android.package-archive",
+  });
+
+  const keluar = await resolverSfile().resolve("sfile", { url: "https://sfile.mobi/abc123" });
+
+  assert.equal(keluar.source, "neoxr");
+  assert.equal(keluar.data.url, SFILE_UNDUHAN);
+  assert.equal(keluar.data.mime, "application/vnd.android.package-archive");
+});
+
+test("semua backend gagal → CapabilityError, bukan URL lama dari cache", async () => {
+  sfileLokalSukses([HAL_SFILE[0], HAL_SFILE[2]]);
+  hasilAggregator = neoxrSfile({ message: "not found" });
+
+  await assert.rejects(
+    () => resolverSfile().resolve("sfile", { url: "https://sfile.mobi/abc123" }),
+    (error) => {
+      assert.ok(error instanceof CapabilityError);
+      assert.deepEqual(error.tried.map((t) => t.name), ["sfile-mobi", "neoxr"]);
+      return true;
+    },
+  );
+});
+
+test("argumen kosong → no-applicable-backend, breaker bersih", async () => {
+  const resolver = resolverSfile();
+  await assert.rejects(
+    () => resolver.resolve("sfile", {}),
+    (error) => {
+      assert.equal(error.code, "no-applicable-backend");
+      assert.deepEqual(error.tried, []);
+      return true;
+    },
+  );
+  assert.deepEqual(resolver.breaker.snapshot(), []);
+});
+
+// ── aggregator: URL harus dikunci persis ──────────────────────────────────────
+
+test("neoxr: pathname harus persis /api/sfile dan param url", async () => {
+  // Konvensi per host di repo ini: neoxr, izuka, cuki, siputzx, dan azbry
+  // semuanya memakai prefix `/api`; hanya nexray yang tidak.
+  hasilAggregator = neoxrSfile({ url: SFILE_UNDUHAN, filename: "a.apk" });
+
+  await sfileApi.run({ url: "https://sfile.mobi/abc123" });
+
+  const [req] = PANGGILAN_HTTP.map((c) => new URL(c.url));
+  assert.equal(req.origin, "https://api.neoxr.eu");
+  assert.equal(req.pathname, "/api/sfile");
+  assert.equal(req.searchParams.get("url"), "https://sfile.mobi/abc123");
+  assert.deepEqual([...req.searchParams.keys()], ["url"], "apikey lewat header, bukan query");
+});
+
+test("neoxr: setiap literal path aggregator di kapabilitas ini berawalan /api", () => {
+  const kode = fs
+    .readFileSync(path.join(process.cwd(), "src/capabilities/sfile.js"), "utf8")
+    .split("\n")
+    .filter((baris) => !/^\s*(\/\/|\/\*|\*)/.test(baris))
+    .join("\n");
+  const literalPath = [...kode.matchAll(/["'`]\/[^"'`\s]*["'`]/g)].map((m) => m[0].slice(1, -1));
+  assert.ok(literalPath.length >= 1, `path aggregator harus detectable, dapat ${literalPath.length}`);
+  const salah = literalPath.filter((p) => !p.startsWith("/api/"));
+  assert.deepEqual(salah, [], `path tanpa /api: ${salah.join(", ")}`);
+});
+
+// ── budget: abort harus sampai ke lapisan HTTP ───────────────────────────────
+
+test("signal diteruskan ke ketiga request scraper lokal", async () => {
+  const controller = new AbortController();
+  sfileLokalSukses();
+  await sfileLokal.run({ url: "https://sfile.mobi/abc123" }, { signal: controller.signal });
+
+  const lokal = PANGGILAN_HTTP.filter((c) => String(c.url).includes("sfile"));
+  assert.equal(lokal.length, 3, "sfile() memang tiga request berurutan");
+  for (const call of lokal) {
+    assert.equal(call.opts?.signal, controller.signal, `request ${call.url} harus menerima signal`);
+  }
+});
+
+test("budget habis → request scraper lokal benar-benar dibatalkan", async () => {
+  let terputus = false;
+  halamanSfile = (url, opts) =>
+    new Promise((_resolve, reject) => {
+      opts?.signal?.addEventListener("abort", () => {
+        terputus = true;
+        reject(new Error("dibatalkan oleh budget"));
+      });
+    });
+
+  await resolverSfile({ budget: { localMs: 60, totalMs: 400 } })
+    .resolve("sfile", { url: "https://sfile.mobi/abc123" })
+    .catch(() => {});
+
+  assert.equal(terputus, true, "abort harus mencabut request scraper lokal");
+});
+
+test("signal diteruskan ke request aggregator", async () => {
+  const controller = new AbortController();
+  hasilAggregator = neoxrSfile({ url: SFILE_UNDUHAN, filename: "a.apk" });
+  await sfileApi.run({ url: "https://sfile.mobi/abc123" }, { signal: controller.signal });
+  assert.equal(PANGGILAN_HTTP.at(-1).opts?.signal, controller.signal);
+});
+
+// ── plugin sudah tidak bicara langsung ke agregator ──────────────────────────
+
+test("plugin sfiledl tidak menyebut domain agregator lagi", () => {
+  const pola = /nexray|neoxr|izuka|cuki|siputzx|azbry/i;
+  const ketemu = [];
+  fs.readFileSync(path.join(process.cwd(), "plugins/download/sfiledl.js"), "utf8")
+    .split("\n")
+    .forEach((baris, i) => {
+      if (pola.test(baris)) ketemu.push(`plugins/download/sfiledl.js:${i + 1}: ${baris.trim()}`);
+    });
+  assert.deepEqual(ketemu, [], `domain agregator masih ada:\n${ketemu.join("\n")}`);
+});
+
+test("plugin sfiledl memakai resolver, dan guard URL-nya dipertahankan", () => {
+  const sumber = fs.readFileSync(path.join(process.cwd(), "plugins/download/sfiledl.js"), "utf8");
+  // Plugin ini memakai gaya kutip tunggal, seperti file aslinya. PenAssertion di
+  // sini sengaja tidak mengunci gaya kutip plugin lain.
+  assert.match(sumber, /import \{ resolver \} from '..\/..\/src\/lib\/resolve\.js'/);
+  assert.match(sumber, /resolver\.resolve\('sfile'/);
+  assert.doesNotMatch(
+    sumber,
+    /axios\.(get|post)\(\s*[`"']https?:\/\//,
+    "masih menembak host luar lewat axios",
+  );
+  assert.doesNotMatch(sumber, /api\.neoxr|apikey=/, "URL aggregator lama harus hilang");
+  // Guard plugin adalah lapis kedua. Plugin ini sudah punya guard `includes`
+  // dari sebelum Phase 1; ia tidak boleh hilang, dan penolakannya harus terjadi
+  // sebelum resolve.
+  assert.match(sumber, /hostSfile\(url\)/, "guard host level plugin harus ada");
+  assert.ok(
+    sumber.indexOf("hostSfile(url)") < sumber.indexOf("resolver.resolve('sfile'"),
+    "guard harus mendahului panggilan resolver",
+  );
+  assert.match(sumber, /name: 'sfiledl'/);
+  assert.match(sumber, /alias: \['sfile', 'sfiledownload'\]/);
+  assert.match(sumber, /category: 'download'/);
+  assert.match(sumber, /cooldown: 15/);
+});
+
+
+test("neoxr: key aggregator kosong → gagal tanpa request, bukan 401 dari server", async () => {
+  // `aggregator.hit` memeriksa key sebelum ada request (src/lib/aggregator.js:
+  // key dicek sebelum ada request). Konsekuensinya untuk kapabilitas ini: key
+  // kosong berarti cadanganAggregator tidak bisa dipakai sama sekali, dan itu
+  // harus terlihat sebagai kegagalan backend yang jujur, bukan sebagai
+  // "semua backend gagal" tanpa penjelasan.
+  configUji.APIkey.neoxr = "";
+  const resolver = resolverSfile();
+  sfileLokalSukses([HAL_SFILE[0], HAL_SFILE[2]]);
+
+  await assert.rejects(
+    () => resolver.resolve("sfile", { url: "https://sfile.mobi/abc123" }),
+    (error) => {
+      assert.deepEqual(error.tried.map((t) => t.name), ["sfile-mobi", "neoxr"]);
+      // Pesan aggregator menyebut nama env, bukan hanya nama host: plugin
+      // membutuhkannya untuk menjelaskan ke user tanpa tahu host mana.
+      assert.match(error.tried[1].reason, /API key neoxr belum diisi, set APIKEY_NEOXR di \.env/);
+      return true;
+    },
+  );
+  assert.deepEqual(
+    PANGGILAN_HTTP.filter((c) => new URL(String(c.url)).hostname === "api.neoxr.eu"),
+    [],
+    "key kosong tidak boleh menghasilkan request apa pun",
+  );
+});

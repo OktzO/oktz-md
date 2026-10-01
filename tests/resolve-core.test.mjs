@@ -3,6 +3,8 @@ import assert from 'node:assert';
 import {
   AggregatorError,
   createAggregatorClient,
+  envNameOf,
+  missingEnvNameOf,
 } from '../src/lib/aggregator.js';
 import { CapabilityError, createResolver } from '../src/lib/resolve.js';
 import { createBreaker } from '../src/lib/circuit-breaker.js';
@@ -653,4 +655,59 @@ test('hit tanpa signal tidak mengarang signal palsu di config', async () => {
   const client = createAggregatorClient({ http, keyOf: () => '' });
   await client.hit('nexray', '/x');
   assert.equal(http.calls[0].opts.signal, undefined);
+});
+// ── peta host → env: satu-satunya tempat yang tahu keduanya ────────────────────
+//
+// Plugin tidak boleh menyebut host aggregator (semua akses aggregator lewat
+// `hit`), tapi plugin tetap harus jujur saat key aggregator kosong. Jembatannya
+// dua fungsi ini: `envNameOf` memetakan host ke nama env, dan
+// `missingEnvNameOf` membacanya kembali dari kegagalan yang sudah tercatat.
+
+test('envNameOf: host berkey dipetakan ke nama env .env', () => {
+  assert.equal(envNameOf('neoxr'), 'APIKEY_NEOXR');
+  assert.equal(envNameOf('cuki'), 'APIKEY_CUKI');
+});
+
+test('envNameOf: host tanpa key mengembalikan null, bukan nama env karangan', () => {
+  // Host tanpa key tidak punya baris .env sama sekali; mengarang `APIKEY_NEXRAY`
+  // akan mengarahkan owner ke baris yang tidak pernah dibaca.
+  for (const host of ['nexray', 'izuka', 'siputzx', 'azbry', 'tidak-ada']) {
+    assert.equal(envNameOf(host), null, `harus null: ${host}`);
+  }
+});
+
+test('AggregatorError key kosong membawa envName', async () => {
+  const client = createAggregatorClient({ http: httpPalsu(async () => ({ status: 200, data: {} })), keyOf: () => '' });
+  await assert.rejects(
+    () => client.hit('neoxr', '/api/sfile', { params: { url: 'u' } }),
+    (error) => {
+      assert.equal(error.envName, 'APIKEY_NEOXR');
+      assert.match(error.message, /APIKEY_NEOXR/, 'pesan harus menyebut baris .env yang harus diisi');
+      return true;
+    },
+  );
+});
+
+test('missingEnvNameOf membaca env dari tried resolver', () => {
+  const error = new CapabilityError('semua backend sfile gagal', {
+    capability: 'sfile',
+    tried: [
+      { name: 'sfile-mobi', reason: 'normalisasi gagal: tanpa URL' },
+      { name: 'neoxr', reason: 'API key neoxr belum diisi, set APIKEY_NEOXR di .env; neoxr dilewati' },
+    ],
+  });
+  assert.equal(missingEnvNameOf(error), 'APIKEY_NEOXR');
+});
+
+test('missingEnvNameOf: kegagalan tanpa masalah key mengembalikan null', () => {
+  const error = new CapabilityError('semua backend sfile gagal', {
+    capability: 'sfile',
+    tried: [
+      { name: 'sfile-mobi', reason: 'sfile.mobi timeout' },
+      { name: 'neoxr', reason: 'neoxr menjawab 502' },
+    ],
+  });
+  assert.equal(missingEnvNameOf(error), null, 'key kosong bukan penyebabnya');
+  assert.equal(missingEnvNameOf(new Error('biasa')), null);
+  assert.equal(missingEnvNameOf(undefined), null);
 });

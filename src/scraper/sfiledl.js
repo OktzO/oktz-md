@@ -1,13 +1,17 @@
 import { httpAxios as axios } from '../lib/http.js'
 import * as cheerio from 'cheerio'
-async function sfile(url) {
+// `signal` opsional supaya pemanggil yang hanya mengirim URL tetap jalan, tapi
+// backend resolver boleh teruskannya: tanpa ini, budget resolver hanya
+// menghentikan resolve() menunggu, sementara ketiga request ini tetap hidup
+// sampai timeout 15 detik milik httpAxios sambil memegang socket.
+async function sfile(url, { signal } = {}) {
   const headers = {
     'user-agent': 'Mozilla/5.0 (Linux; Android 10; K)',
     accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'accept-language': 'id-ID,id;q=0.9,en;q=0.8'
   }
 
-  const r1 = await axios.get(url, { headers })
+  const r1 = await axios.get(url, { headers, signal })
   const cookie = (r1.headers['set-cookie'] || []).map(v => v.split(';')[0]).join('; ')
   if (cookie) headers.cookie = cookie
 
@@ -41,7 +45,7 @@ async function sfile(url) {
   }
 
   headers.referer = url
-  const r2 = await axios.get(pageurl, { headers })
+  const r2 = await axios.get(pageurl, { headers, signal })
   $ = cheerio.load(r2.data)
 
   const gateUrl = $('#download').attr('href')
@@ -57,7 +61,7 @@ async function sfile(url) {
   }
 
   headers.referer = pageurl
-  const r3 = await axios.get(gateUrl, { headers })
+  const r3 = await axios.get(gateUrl, { headers, signal })
 
   const scripts = cheerio
     .load(r3.data)('script')

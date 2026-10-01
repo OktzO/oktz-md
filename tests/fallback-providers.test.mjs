@@ -38,6 +38,23 @@ for (const key of [
   if (process.env[key] === undefined) process.env[key] = 'test-dummy-key';
 }
 
+// `httpAxios` di src/lib/http.js dibangun dari `axios.create(...)`, jadi ia
+// bukan instance yang sama dengan stub di atas: tanpa stub di sini, setiap plugin
+// yang sudah pindah ke resolver menembak jaringan sungguhan lewat httpAxios.
+// Stub dibuat terpisah supaya `installRoutes` bisa mengarahkan keduanya.
+const httpAxiosStub = {
+  ...realAxios.default,
+  get: async () => {
+    throw new Error('httpAxios tidak di-stub untuk test ini');
+  },
+  post: async () => {
+    throw new Error('httpAxios tidak di-stub untuk test ini');
+  },
+};
+mock.module('../src/lib/http.js', {
+  namedExports: { httpAxios: httpAxiosStub, f: async () => null },
+});
+
 /**
  * Stub axios.get berdasarkan host. Setiap entri = [regex, handler].
  * Handler mengembalikan { status, body } — throw berarti network error.
@@ -61,6 +78,10 @@ function installRoutes(list) {
   };
   axiosStub.get = handle;
   axiosStub.post = handle;
+  // httpAxios mengikuti tabel yang sama supaya plugin yang sudah pindah ke
+  // resolver tetap tidak menyentuh jaringan di file test ini.
+  httpAxiosStub.get = handle;
+  httpAxiosStub.post = handle;
 }
 
 function hostOf(url) {
@@ -615,9 +636,19 @@ describe('tanpa padanan nexray — key kosong harus jujur (neoxr / covenant)', (
   // dikirim (dicek live). covenant: api.covenant.sbs DNS gagal.
   // Nexray tidak punya endpoint chord / sfile / melolo, jadi tidak ada
   // fallback — tapi plugin tidak boleh diam atau pesan generik.
+  // `m.text` di produksi sungguhan adalah teks SETELAH nama command
+  // (`withoutPrefix.slice(result.command.length).trim()`, src/lib/serialize.js
+  // parseCommand) — bukan "sfiledl https://…". Fixture di bawah karena itu
+  // menulis `text` eksplisit seperti kasus melolo; fixture lama menyertakan nama
+  // command dan hanya lolos karena guard plugin sfiledl dulu memakai `includes`.
   const cases = [
     ['../plugins/search/chords.js', 'chords', 'APIKEY_NEOXR', { args: ['komang'] }],
-    ['../plugins/download/sfiledl.js', 'sfiledl', 'APIKEY_NEOXR', { args: ['https://sfile.mobi/x'] }],
+    [
+      '../plugins/download/sfiledl.js',
+      'sfiledl',
+      'APIKEY_NEOXR',
+      { args: ['https://sfile.mobi/x'], text: 'https://sfile.mobi/x' },
+    ],
     ['../plugins/search/melolo.js', 'melolo', 'APIKEY_COVENANT', { args: ['fantasy'], text: 'fantasy' }],
   ];
 
