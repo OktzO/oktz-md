@@ -90,6 +90,14 @@ export function normalize(raw) {
   return {
     filename: String(raw.file_name ?? raw.filename ?? "").trim(),
     url,
+    // PERMUKAAN YANG TIDAK DIPAKAI. `plugins/download/sfiledl.js` hanya
+    // mengonsumsi `filename`, `url`, dan `mime` — `size` tidak pernah dibaca
+    // plugin mana pun. Dibiarkan karena normalize adalah tempat satu-satunya
+    // yang menyamakan `size_from_text` (teks siap tampil dari halaman sfile)
+    // dengan `size` numerik dari aggregator, jadi membuangnya di sini berarti
+    // kedua bentuk kehilangan satu-satunya tempat di mana nama field itu
+    // diterjemahkan. Kalau suatu saat plugin butuh, ia ada di sini; jangan
+    // tambah field baru tanpa konsumen.
     size: String(raw.size_from_text ?? raw.size ?? "").trim(),
     mime: String(raw.mime ?? "").trim(),
   };

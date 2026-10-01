@@ -19,6 +19,27 @@ const pluginConfig = {
     isEnabled: true
 }
 
+/**
+ * Host Videy dicek per label, sama seperti yang dilakukan kapabilitas dan
+ * seperti guard plugin `sfiledl`/`douyindl` dari Task 5 dan Task 6:
+ * `videy.co.evil.example` dan `notvidey.co` lolos `includes`/regex longgar
+ * tapi bukan Videy. Guard plugin ada supaya user dapat jawabannya sebelum
+ * kapabilitas sempat mencatat kegagalan host.
+ *
+ * Sub-domain ikut diterima karena halaman videy dilayani dari `www.videy.co`.
+ */
+function hostVidey(url) {
+    let parsed
+    try {
+        parsed = new URL(String(url).trim())
+    } catch {
+        return false
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
+    const host = parsed.hostname.toLowerCase()
+    return host === 'videy.co' || host.endsWith('.videy.co')
+}
+
 async function handler(m, { sock }) {
     const url = m.text?.trim()
 
@@ -30,10 +51,7 @@ async function handler(m, { sock }) {
         )
     }
 
-    // Guard ini pemeriksaan substring, jadi `videy.co.evil.example` lolos di sini.
-    // Ia sengaja dipertahankan sebagai lapis pertama — lapisan kedua, guard host
-    // di kapabilitas, yang menolak itu per label host sebelum ada request CDN.
-    if (!url.match(/videy\.co/i)) {
+    if (!hostVidey(url)) {
         return m.reply(`❌ URL tidak valid. Gunakan link dari videy.co`)
     }
 

@@ -1632,6 +1632,71 @@ test("unduhan: aggregator hidup tapi nihil → CapabilityError, bukan URL basi",
   );
 });
 
+// ── amplop `status` azbry tidak boleh hilang ─────────────────────────────────
+//
+// `lewatAzbry` pernah mengembalikan `body.result` apa adanya. `status` azbry ada
+// satu level di atas `result`, jadi begitu amplop itu dibuang, tidak ada lagi
+// yang bisa membacanya: `normalize` hanya punya `result`, dan `result` tidak
+// pernah punya `status`. Plugin sebelum Phase 1 mensyaratkan
+// `res.data?.status && res.data?.result` (plugins/download/douyindl.js) —
+// pemeriksaan itu hilang di rewire.
+
+test("backend aggregator wajib menolak status false, meski result-nya penuh", async () => {
+  // `result` sengaja lengkap: kalau pemeriksaan status hilang, bentuk ini
+  // normalize-nya sukses dan `video` sampai ke plugin.
+  const body = {
+    status: false,
+    msg: "gagal",
+    result: { platform: "Douyin", title: "Judul Douyin", video: SNAP_VIDEO, audio: SNAP_AUDIO },
+  };
+  hasilAggregator = async () => ({ status: 200, data: body });
+
+  await assert.rejects(
+    () => douyinApi.run({ url: "https://v.douyin.com/abc/" }),
+    /aggregator menandai gagal/,
+    "status false adalah kegagalan, bukan data",
+  );
+});
+
+test("status aggregator yang hilang total juga gagal", async () => {
+  // Bentuk tanpa `status` sama sekali bukan mungkin, tapi `hit` tidak menjamin
+  // host menjawab sesuai skema, jadi backend tidak boleh menebak `false` berarti
+  // baik. Plugin lama juga menolak apa pun yang bukan `status` truthy.
+  for (const body of [undefined, null, {}, { result: { platform: "Douyin", video: SNAP_VIDEO } }]) {
+    hasilAggregator = async () => ({ status: 200, data: body });
+    await assert.rejects(
+      () => douyinApi.run({ url: "https://v.douyin.com/abc/" }),
+      /aggregator menandai gagal/,
+      `harus gagal: ${JSON.stringify(body)}`,
+    );
+  }
+});
+
+test("status false yang tetap membawa video → tidak ada yang dikirim ke user", async () => {
+  balasSnap = async () => {
+    const e = new Error("Request failed with status code 503");
+    e.response = { status: 503 };
+    throw e;
+  };
+  hasilAggregator = async () => ({
+    status: 200,
+    data: {
+      status: false,
+      msg: "gagal",
+      result: { platform: "Douyin", title: "Judul Douyin", video: SNAP_VIDEO, audio: SNAP_AUDIO },
+    },
+  });
+
+  await assert.rejects(
+    () => resolverDouyin().resolve("douyin", { url: "https://v.douyin.com/abc/" }),
+    (error) => {
+      assert.ok(error instanceof CapabilityError);
+      assert.deepEqual(error.tried.map((t) => t.name), ["snapvideotools", "azbry"]);
+      return true;
+    },
+  );
+});
+
 test("argumen kosong → no-applicable-backend, breaker bersih", async () => {
   const resolver = resolverDouyin();
   await assert.rejects(
@@ -1659,7 +1724,13 @@ test("azbry: pathname harus persis /api/downloader/douyin dan param url", async 
   assert.equal(req.origin, "https://api.azbry.com");
   assert.equal(req.pathname, "/api/downloader/douyin");
   assert.equal(req.searchParams.get("url"), "https://v.douyin.com/abc/");
+  // Berbeda dengan neoxr: azbry tidak punya key sama sekali (`AGGREGATORS.azbry.key`
+  // = null), jadi memang tidak ada apikey yang boleh ikut terkirim. Ini sebabnya
+  // assertion ini tetap sah meski bentuknya sama persis dengan assertion neoxr
+  // yang lama. Bedanya: azbry memang tidak punya key.
+  assert.equal(req.searchParams.has("apikey"), false);
   assert.deepEqual([...req.searchParams.keys()], ["url"], "param lain tidak boleh ikut terkirim");
+  assert.ok(!("apikey" in (PANGGILAN_HTTP[0].opts?.headers ?? {})));
 });
 
 test("azbry: setiap literal path aggregator di kapabilitas ini berawalan /api", () => {
@@ -1669,7 +1740,15 @@ test("azbry: setiap literal path aggregator di kapabilitas ini berawalan /api", 
     .filter((baris) => !/^\s*(\/\/|\/\*|\*)/.test(baris))
     .join("\n");
   const literalPath = [...kode.matchAll(/["'`]\/[^"'`\s]*["'`]/g)].map((m) => m[0].slice(1, -1));
-  assert.ok(literalPath.length >= 1, `path aggregator harus detectable, dapat ${literalPath.length}`);
+  // `length >= 1` tidak bisa gagal di sini: regex di atas menangkap SEMUA string
+  // literal yang diawali "/", jadi isinya pasti ada. Yang bisa gagal — dan yang
+  // sebenarnya bermakna — adalah path yang benar-benar dipakai `aggregator.hit`
+  // ikut di-scan. Kalau path itu dipindah ke variabel atau konstanta, `salah`
+  // jadi kosong dan seluruh test ini hijau tanpa memeriksa apa pun.
+  assert.ok(
+    literalPath.includes("/api/downloader/douyin"),
+    `path yang dipakai aggregator.hit harus terdeteksi, dapat: ${literalPath.join(", ")}`,
+  );
   const salah = literalPath.filter((p) => !p.startsWith("/api/"));
   assert.deepEqual(salah, [], `path tanpa /api: ${salah.join(", ")}`);
 });
@@ -2065,7 +2144,18 @@ test("neoxr: pathname harus persis /api/sfile dan param url", async () => {
   assert.equal(req.origin, "https://api.neoxr.eu");
   assert.equal(req.pathname, "/api/sfile");
   assert.equal(req.searchParams.get("url"), "https://sfile.mobi/abc123");
-  assert.deepEqual([...req.searchParams.keys()], ["url"], "apikey lewat header, bukan query");
+  // neoxr membaca key dari query string (dicek live: `apikey` di header dijawab
+  // `Parameter "apikey" is required in the request query string.`), jadi key
+  // WAJIB ada di query. Dikirim juga sebagai header supaya host yang membaca di
+  // sana tetap jalan — yang diuji di sini adalah query, karena itulah yang
+  // benar-benar dibaca.
+  assert.equal(req.searchParams.get("apikey"), "k-neoxr-untuk-test", "key harus sampai ke query string");
+  assert.deepEqual(
+    [...req.searchParams.keys()].sort(),
+    ["apikey", "url"],
+    "param lain tidak boleh ikut terkirim",
+  );
+  assert.equal(PANGGILAN_HTTP[0].opts?.headers?.apikey, "k-neoxr-untuk-test", "header tetap dikirim");
 });
 
 test("neoxr: setiap literal path aggregator di kapabilitas ini berawalan /api", () => {
@@ -2075,7 +2165,15 @@ test("neoxr: setiap literal path aggregator di kapabilitas ini berawalan /api", 
     .filter((baris) => !/^\s*(\/\/|\/\*|\*)/.test(baris))
     .join("\n");
   const literalPath = [...kode.matchAll(/["'`]\/[^"'`\s]*["'`]/g)].map((m) => m[0].slice(1, -1));
-  assert.ok(literalPath.length >= 1, `path aggregator harus detectable, dapat ${literalPath.length}`);
+  // `length >= 1` tidak bisa gagal di sini: regex di atas menangkap SEMUA string
+  // literal yang diawali "/", jadi isinya pasti ada. Yang bisa gagal — dan yang
+  // sebenarnya bermakna — adalah path yang benar-benar dipakai `aggregator.hit`
+  // ikut di-scan. Kalau path itu dipindah ke variabel atau konstanta, `salah`
+  // jadi kosong dan seluruh test ini hijau tanpa memeriksa apa pun.
+  assert.ok(
+    literalPath.includes("/api/sfile"),
+    `path yang dipakai aggregator.hit harus terdeteksi, dapat: ${literalPath.join(", ")}`,
+  );
   const salah = literalPath.filter((p) => !p.startsWith("/api/"));
   assert.deepEqual(salah, [], `path tanpa /api: ${salah.join(", ")}`);
 });
@@ -2493,6 +2591,67 @@ test("semua backend gagal → CapabilityError, bukan URL lama dari cache", async
   );
 });
 
+// ── amplop `status` harus bertahan melewati backend ───────────────────────────
+//
+// Test `normalize` di atas hanya membuktikan `normalize` melempar. Itu tidak
+// bisa menangkap backend yang membuang amplop SEBELUM `normalize` melihatnya,
+// dan itulah perubahan yang paling menentukan di kapabilitas ini.
+
+test("backend aggregator wajib mengembalikan amplop, bukan body.data", async () => {
+  // `lewatNeoxr` sengaja mengembalikan body aggregator utuh: `status` ada satu
+  // level di atas `data`, dan plugin sebelum Phase 1 menolak `!data.status`.
+  // Kalau backend mengembalikan `body.data`, respons `{ status: false, data: { url } }`
+  // menjadi `{ url }` — `normalize` tidak punya apa pun untuk diperiksa dan
+  // plugin mengirim video yang dianggap berhasil.
+  //
+  // URL-nya sengaja menunjuk domain lain supaya jelas bahwa yang diuji adalah
+  // "backend tidak menghasilkan URL yang bisa dipakai", bukan jaring.
+  hasilAggregator = neoxrVidey({
+    status: false,
+    error: "expired",
+    data: { url: "https://evil.example/bad.mp4" },
+  });
+
+  const keluar = await videyApi.run({ url: "https://videy.co/v?id=7ZH1ZRIF" });
+
+  assert.equal(
+    keluar?.status,
+    false,
+    `backend tidak boleh membuang amplop status: ${JSON.stringify(keluar)}`,
+  );
+  assert.throws(
+    () => kapvidey.normalize(keluar),
+    /aggregator menandai gagal/,
+    "keluaran backend tidak boleh bisa dipakai langsung sebagai { url }",
+  );
+});
+
+test("status false yang tetap membawa URL → tidak menghasilkan apa pun yang bisa dikirim", async () => {
+  // Bentuk yang sama, diuji sampai lewat resolver: dengan CDN 404 dan
+  // aggregator yang menolak, tidak boleh ada hasil resolve sama sekali. Bentuk
+  // plugin-nya (tidak ada `sendMedia`, tidak ada centang hijau) dipin di
+  // tests/videy-plugin.test.mjs.
+  balasCdn = async () => {
+    const e = new Error("Request failed with status code 404");
+    e.response = { status: 404 };
+    throw e;
+  };
+  hasilAggregator = neoxrVidey({
+    status: false,
+    error: "expired",
+    data: { url: "https://evil.example/bad.mp4" },
+  });
+
+  await assert.rejects(
+    () => resolverVidey().resolve("videy", { url: "https://videy.co/v?id=7ZH1ZRIF" }),
+    (error) => {
+      assert.ok(error instanceof CapabilityError);
+      assert.deepEqual(error.tried.map((t) => t.name), ["cdn-videy", "neoxr"]);
+      return true;
+    },
+  );
+});
+
 test("argumen kosong → no-applicable-backend, breaker bersih", async () => {
   const resolver = resolverVidey();
   await assert.rejects(
@@ -2519,7 +2678,18 @@ test("neoxr: pathname harus persis /api/videy dan param url", async () => {
   assert.equal(req.origin, "https://api.neoxr.eu");
   assert.equal(req.pathname, "/api/videy");
   assert.equal(req.searchParams.get("url"), "https://videy.co/v?id=7ZH1ZRIF");
-  assert.deepEqual([...req.searchParams.keys()], ["url"], "apikey lewat header, bukan query");
+  // neoxr membaca key dari query string (dicek live: `apikey` di header dijawab
+  // `Parameter "apikey" is required in the request query string.`), jadi key
+  // WAJIB ada di query. Dikirim juga sebagai header supaya host yang membaca di
+  // sana tetap jalan — yang diuji di sini adalah query, karena itulah yang
+  // benar-benar dibaca.
+  assert.equal(req.searchParams.get("apikey"), "k-neoxr-untuk-test", "key harus sampai ke query string");
+  assert.deepEqual(
+    [...req.searchParams.keys()].sort(),
+    ["apikey", "url"],
+    "param lain tidak boleh ikut terkirim",
+  );
+  assert.equal(PANGGILAN_HTTP[0].opts?.headers?.apikey, "k-neoxr-untuk-test", "header tetap dikirim");
 });
 
 test("neoxr: setiap literal path aggregator di kapabilitas ini berawalan /api", () => {
@@ -2529,7 +2699,15 @@ test("neoxr: setiap literal path aggregator di kapabilitas ini berawalan /api", 
     .filter((baris) => !/^\s*(\/\/|\/\*|\*)/.test(baris))
     .join("\n");
   const literalPath = [...kode.matchAll(/["'`]\/[^"'`\s]*["'`]/g)].map((m) => m[0].slice(1, -1));
-  assert.ok(literalPath.length >= 1, `path aggregator harus detectable, dapat ${literalPath.length}`);
+  // `length >= 1` tidak bisa gagal di sini: regex di atas menangkap SEMUA string
+  // literal yang diawali "/", jadi isinya pasti ada. Yang bisa gagal — dan yang
+  // sebenarnya bermakna — adalah path yang benar-benar dipakai `aggregator.hit`
+  // ikut di-scan. Kalau path itu dipindah ke variabel atau konstanta, `salah`
+  // jadi kosong dan seluruh test ini hijau tanpa memeriksa apa pun.
+  assert.ok(
+    literalPath.includes("/api/videy"),
+    `path yang dipakai aggregator.hit harus terdeteksi, dapat: ${literalPath.join(", ")}`,
+  );
   const salah = literalPath.filter((p) => !p.startsWith("/api/"));
   assert.deepEqual(salah, [], `path tanpa /api: ${salah.join(", ")}`);
 });
@@ -2600,7 +2778,7 @@ test("plugin videy tidak menyebut domain agregator lagi", () => {
   assert.deepEqual(ketemu, [], `domain agregator masih ada:\n${ketemu.join("\n")}`);
 });
 
-test("plugin videy memakai resolver, dan guard URL lamanya dipertahankan", () => {
+test("plugin videy memakai resolver, dan guard host-nya lebih ketat dari `includes`", () => {
   const sumber = fs.readFileSync(path.join(process.cwd(), "plugins/download/videy.js"), "utf8");
   // Plugin ini memakai gaya kutip tunggal, seperti file aslinya.
   assert.match(sumber, /import \{ resolver \} from '..\/..\/src\/lib\/resolve\.js'/);
@@ -2612,13 +2790,22 @@ test("plugin videy memakai resolver, dan guard URL lamanya dipertahankan", () =>
   );
   assert.doesNotMatch(sumber, /api\.neoxr|apikey=/, "URL aggregator lama harus hilang");
   assert.doesNotMatch(sumber, /from '\.\.\/\.\.\/src\/lib\/http\.js'/, "helper HTTP lama harus hilang");
-  // Guard plugin adalah lapis pertama dan harus tetap ada seperti sebelum Phase 1;
-  // penolakannya harus terjadi sebelum resolve.
-  assert.match(sumber, /url\.match\(\/videy\\\.co\/i\)/);
+  // Guard plugin adalah lapis pertama dan harus tetap ada. Versi lama
+  // (`url.match(/videy\.co/i)`) adalah pemeriksaan substring, jadi
+  // `videy.co.evil.example` lolos; Task 5 dan Task 6 sudah menaikkan `douyindl`
+  // dan `sfiledl` ke pencocokan batas label host, dan ketiga plugin harus seragam.
+  assert.match(sumber, /host === 'videy\.co' \|\| host\.endsWith\('\.videy\.co'\)/, "guard harus cek batas label host");
+  assert.doesNotMatch(
+    sumber,
+    /url\.match\(\/videy|includes\('videy\.co'\)|includes\("videy\.co"\)/,
+    "guard plugin tidak boleh kembali ke substring",
+  );
   assert.ok(
-    sumber.indexOf("url.match(/videy\\.co/i)") < sumber.indexOf("resolver.resolve('videy'"),
+    sumber.indexOf("if (!hostVidey(url))") < sumber.indexOf("resolver.resolve('videy'"),
     "guard harus mendahului panggilan resolver",
   );
+  // Pesan yang dilihat user tidak berubah; yang longgar hanya isi validasinya.
+  assert.match(sumber, /❌ URL tidak valid\. Gunakan link dari videy\.co/);
 });
 
 test("permukaan plugin videy tetap sama: config, pesan, dan reaksi", () => {

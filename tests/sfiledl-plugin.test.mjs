@@ -57,7 +57,48 @@ const config = (await import("../config.js")).default;
 const neoxrAsli = config.APIkey.neoxr;
 config.APIkey.neoxr = keyNeoxr;
 
-const sfiledl = await import("../plugins/download/sfiledl.js");
+// ── sentinel import ───────────────────────────────────────────────────────────
+//
+// Blok ini yang membuat berkas ini tidak bisa hijau tanpa isi.
+//
+// Berkas ini mengimpor `../config.js` (untuk menyematkan key neoxr) SEBELUM
+// mengimpor plugin, dan rantai impor itu config.js → database.js → logger.js →
+// lid.js. `src/lib/lid.js:61` memasang `process.on("uncaughtException", …)` yang
+// menelan semua error, termasuk `ERR_MODULE_NOT_FOUND`. Akibatnya plugin yang
+// gagal diimpor tidak menggagalkan berkas: proses keluar 0 dan node:test
+// melaporkan `pass 1` dengan nol test di dalamnya.
+//
+// Karena itu impor plugin TIDAK boleh dibiarkan gagal telanjang di top-level.
+// Kalau `await import` di situ melempar, modul berkas ini tidak pernah selesai
+// dievaluasi dan `test()` di bawah tidak pernah terdaftar — sentinel yang
+// diletakkan setelah impor (bentuk yang paling wajar) justru tidak pernah ikut
+// jalan. Kesalahannya ditangkap, lalu assertion-nya yang menggagalkan.
+//
+// PERBAIKAN YANG BENAR ADA DI PRODUKSI, BUKAN DI SINI: modul pustaka tidak
+// boleh memasang penelan `uncaughtException` saat diimpor. `index.js:411` sudah
+// punya `setupAntiCrash` yang menghitung kegagalan, jadi handler di lid.js
+// perlu ditinjau di sana — lihat task triase terpisah. Yang di sini hanya
+// memastikan berkas ini tidak bisa hijau tanpa isi.
+//
+// tests/douyindl-plugin.test.mjs tidak kena karena tidak pernah mengimpor
+// `config.js`, jadi ia gagal keras dan blok ini tidak dibutuhkannya.
+let sfiledl = null;
+let galatImporPlugin = null;
+try {
+  sfiledl = await import("../plugins/download/sfiledl.js");
+} catch (error) {
+  galatImporPlugin = error;
+}
+
+test("sentinel: plugin benar-benar terimpor (bukan berkas kosong yang hijau)", () => {
+  assert.equal(
+    galatImporPlugin,
+    null,
+    `impor plugin gagal: ${galatImporPlugin?.message ?? galatImporPlugin}`,
+  );
+  assert.equal(typeof sfiledl?.handler, "function");
+  assert.equal(typeof sfiledl?.config?.name, "string");
+});
 
 function pesanPengguna(text) {
   const balasan = [];

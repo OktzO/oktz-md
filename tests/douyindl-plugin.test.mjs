@@ -175,3 +175,28 @@ test("semua backend gagal → pesan jujur, bukan centang hijau", async () => {
   assert.equal(reaksi.at(-1), "☢");
   assert.match(balasan.at(-1) ?? "", /Gagal mengambil data Douyin/);
 });
+
+test("aggregator status false tapi result-nya penuh → tidak ada video yang dikirim", async () => {
+  // azbry menjawab 200 dengan `status: false` sambil tetap mengisi `result`.
+  // Plugin sebelum Phase 1 menolak bentuk ini (res.data?.status &&
+  // res.data?.result); kalau pemeriksaan itu hilang, `result` yang penuh
+  // diteruskan apa adanya dan user menerima video dari scraping yang gagal.
+  snapSukses({ video: false, audio: false });
+  balasAggregator = async () => ({
+    status: 200,
+    data: {
+      status: false,
+      msg: "gagal",
+      result: { platform: "Douyin", title: "Dari aggregator", video: VIDEO, audio: AUDIO },
+    },
+  });
+  const { balasan, reaksi, m } = pesanPengguna("https://v.douyin.com/abc123/");
+  const sock = sockPalsu();
+
+  await douyindl.handler(m, { sock });
+
+  assert.deepEqual(sock.terkirim, [], "status false bukan scraping yang sukses");
+  assert.equal(reaksi.includes("✅"), false, "centang hijau hanya sah kalau video benar-benar terkirim");
+  assert.equal(reaksi.at(-1), "☢");
+  assert.equal(balasan.length > 0, true, "user harus tetap diberi jawaban");
+});

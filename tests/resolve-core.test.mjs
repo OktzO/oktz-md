@@ -34,22 +34,59 @@ const kunci = {
   cuki: 'k-cuki',
 };
 
-test('hit neoxr menyusun URL dengan params dan mengirim header apikey', async () => {
-  const http = httpPalsu(async () => ({ status: 200, data: { ok: true } }));
-  const client = createAggregatorClient({
-    http,
-    keyOf: (name) => kunci[name] ?? '',
+// neoxr dan cuki membaca key dari QUERY STRING, bukan dari header. Bukti live
+// (curl, di luar test):
+//
+//   curl -H "apikey: X" 'https://api.neoxr.eu/api/sfile?url=…'
+//     → {"status":false,"msg":"Parameter \"apikey\" is required in the request query string."}
+//   curl 'https://api.neoxr.eu/api/sfile?url=…&apikey=X'
+//     → {"status":false,"msg":"Sorry, apikey is not registered."}
+//
+// Pesan kedua membuktikan query dibaca dan nilainya yang salah; yang pertama
+// membuktikan header sama sekali tidak dibaca. Key di header saja berarti
+// seluruh tier neoxr mati di produksi — dan pre-Phase-1 sudah benar: semua
+// pemanggil lama di repo ini menulis `&apikey=${…}` ke query.
+const HOST_BACA_KEY_DARI_QUERY = {
+  neoxr: 'https://api.neoxr.eu/api/sfile',
+  cuki: 'https://api.cuki.biz.id/api/sfile',
+};
+
+for (const [name, base] of Object.entries(HOST_BACA_KEY_DARI_QUERY)) {
+  test(`hit ${name} menaruh apikey di query string, bukan hanya di header`, async () => {
+    const http = httpPalsu(async () => ({ status: 200, data: { ok: true } }));
+    const client = createAggregatorClient({
+      http,
+      keyOf: (nama) => kunci[nama] ?? '',
+    });
+
+    const out = await client.hit(name, '/api/sfile', { params: { url: 'u' } });
+
+    assert.equal(http.calls.length, 1);
+    const req = new URL(http.calls[0].url);
+    const want = new URL(base);
+    assert.equal(req.origin, want.origin);
+    assert.equal(req.pathname, want.pathname);
+    // Dipakai `sort()` supaya yang dipin adalah himpunan param-nya, bukan
+    // urutan penulisan — dan `apikey` ikut dipin, karena itulah bug-nya.
+    assert.deepEqual(
+      [...req.searchParams.keys()].sort(),
+      ['apikey', 'url'],
+      `query harus memuat apikey: ${req.search}`,
+    );
+    assert.equal(req.searchParams.get('url'), 'u');
+    assert.equal(
+      req.searchParams.get('apikey'),
+      kunci[name],
+      'key hanya di header tidak dibaca host ini',
+    );
+    // Header tetap dikirim: host yang mengabaikan header asing tidak terpengaruh,
+    // dan ini mencocokkan pemanggilan axios lama di repo ini.
+    assert.equal(http.calls[0].opts.headers.apikey, kunci[name]);
+    assert.deepEqual(out, { ok: true });
   });
+}
 
-  const out = await client.hit('neoxr', '/api/sfile', { params: { url: 'u' } });
-
-  assert.equal(http.calls.length, 1);
-  assert.equal(http.calls[0].url, 'https://api.neoxr.eu/api/sfile?url=u');
-  assert.equal(http.calls[0].opts.headers.apikey, kunci.neoxr);
-  assert.deepEqual(out, { ok: true });
-});
-
-test('aggregator tanpa key tidak mengirim header key sama sekali', async () => {
+test('aggregator tanpa key tidak mengirim key sama sekali — header maupun query', async () => {
   const http = httpPalsu(async () => ({ status: 200, data: { ok: true } }));
   const client = createAggregatorClient({
     http,
@@ -62,6 +99,11 @@ test('aggregator tanpa key tidak mengirim header key sama sekali', async () => {
   assert.ok(
     !('apikey' in headers),
     `nexray tidak punya key, header tidak boleh ada. dapat: ${JSON.stringify(headers)}`,
+  );
+  const req = new URL(http.calls[0].url);
+  assert.ok(
+    !req.searchParams.has('apikey'),
+    `nexray tidak punya key, query tidak boleh punya apikey. dapat: ${req.search}`,
   );
 });
 

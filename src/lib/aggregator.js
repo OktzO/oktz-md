@@ -2,16 +2,29 @@ import config from "../../config.js";
 import { httpAxios } from "./http.js";
 
 // Peta aggregator ke key API. key: null berarti host ini benar-benar tidak
-// butuh key dan header key tidak boleh dikirim sama sekali.
+// butuh key dan key tidak boleh dikirim sama sekali.
 //
 // Daftar ini sengaja pendek. Agregator gratis adalah sumber daya cadangan
 // yang paling sering mati, jadi hanya host yang masih hidup dan punya endpoint
 // yang benar-benar dipakai saja yang dicatat di sini.
+//
+// `keyIn` menandai tempat host membaca key-nya. neoxr dan cuki membacanya dari
+// query string — dibuktikan live dengan curl, bukan dari dokumentasi:
+//
+//   curl -H "apikey: X" 'https://api.neoxr.eu/api/sfile?url=…'
+//     → {"status":false,"msg":"Parameter \"apikey\" is required in the request query string."}
+//   curl 'https://api.neoxr.eu/api/sfile?url=…&apikey=X'
+//     → {"status":false,"msg":"Sorry, apikey is not registered."}
+//
+// Yang kedua membuktikan query dibaca dan nilainya yang salah; yang pertama
+// membuktikan header sama sekali tidak dibaca. Jadi default-nya query, dan
+// hanya `"header"` yang dikecualikan, untuk host yang memang cuma membaca
+// header.
 const AGGREGATORS = {
-  neoxr: { base: "https://api.neoxr.eu", key: "neoxr" },
+  neoxr: { base: "https://api.neoxr.eu", key: "neoxr", keyIn: "query" },
   nexray: { base: "https://api.nexray.eu.cc", key: null },
   izuka: { base: "https://my.izuka-api.xyz", key: null },
-  cuki: { base: "https://api.cuki.biz.id", key: "cuki" },
+  cuki: { base: "https://api.cuki.biz.id", key: "cuki", keyIn: "query" },
   siputzx: { base: "https://api.siputzx.my.id", key: null },
   azbry: { base: "https://api.azbry.com", key: null },
 };
@@ -57,7 +70,7 @@ export function envNameOf(name) {
  * `tried` resolver menjadi nama env yang harus diisi user.
  *
  * Plugin butuh ini supaya bisa tetap jujur soal key yang kosong tanpa
- * mentioning host aggregators: pemanggilan aggregator hanya boleh lewat
+ * menyebut nama host aggregator: pemanggilan aggregator hanya boleh lewat
  * `hit`, dan nama host tidak boleh bocor ke layer plugin.
  */
 export function missingEnvNameOf(error) {
@@ -86,7 +99,7 @@ export function createAggregatorClient({
       });
     }
 
-// Key dicek sebelum ada request: .env di deployment sering masih template,
+    // Key dicek sebelum ada request: .env di deployment sering masih template,
     // dan request tanpa key hanya membuang satu timeout untuk jawaban 401 yang
     // sudah bisa diprediksi di lokal. Nama env ikut ditulis ke pesan supaya
     // lapisan atas bisa menunjuk user ke baris .env yang tepat tanpa perlu tahu
@@ -104,6 +117,13 @@ export function createAggregatorClient({
     for (const [nama, nilai] of Object.entries(params ?? {})) {
       if (nilai === undefined || nilai === null) continue;
       target.searchParams.set(nama, String(nilai));
+    }
+    // neoxr dan cuki membacanya dari query, bukan dari header (lihat bukti curl
+    // di AGGREGATORS). Header tetap dikirim juga: host yang mengabaikan header
+    // asing tidak terpengaruh, dan ini bentuk yang dipakai pemanggil axios lama
+    // di repo ini. Yang wajib ada adalah yang di query.
+    if (entry.key && entry.keyIn !== "header") {
+      target.searchParams.set("apikey", key);
     }
 
     const opts = {

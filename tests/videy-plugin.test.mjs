@@ -47,7 +47,48 @@ const config = (await import("../config.js")).default;
 const neoxrAsli = config.APIkey.neoxr;
 config.APIkey.neoxr = keyNeoxr;
 
-const videy = await import("../plugins/download/videy.js");
+// ── sentinel import ───────────────────────────────────────────────────────────
+//
+// Blok ini yang membuat berkas ini tidak bisa hijau tanpa isi.
+//
+// Berkas ini mengimpor `../config.js` (untuk menyematkan key neoxr) SEBELUM
+// mengimpor plugin, dan rantai impor itu config.js → database.js → logger.js →
+// lid.js. `src/lib/lid.js:61` memasang `process.on("uncaughtException", …)` yang
+// menelan semua error, termasuk `ERR_MODULE_NOT_FOUND`. Akibatnya plugin yang
+// gagal diimpor tidak menggagalkan berkas: proses keluar 0 dan node:test
+// melaporkan `pass 1` dengan nol test di dalamnya.
+//
+// Karena itu impor plugin TIDAK boleh dibiarkan gagal telanjang di top-level.
+// Kalau `await import` di situ melempar, modul berkas ini tidak pernah selesai
+// dievaluasi dan `test()` di bawah tidak pernah terdaftar — sentinel yang
+// diletakkan setelah impor (bentuk yang paling wajar) justru tidak pernah ikut
+// jalan. Kesalahannya ditangkap, lalu assertion-nya yang menggagalkan.
+//
+// PERBAIKAN YANG BENAR ADA DI PRODUKSI, BUKAN DI SINI: modul pustaka tidak
+// boleh memasang penelan `uncaughtException` saat diimpor. `index.js:411` sudah
+// punya `setupAntiCrash` yang menghitung kegagalan, jadi handler di lid.js
+// perlu ditinjau di sana — lihat task triase terpisah. Yang di sini hanya
+// memastikan berkas ini tidak bisa hijau tanpa isi.
+//
+// tests/douyindl-plugin.test.mjs tidak kena karena tidak pernah mengimpor
+// `config.js`, jadi ia gagal keras dan blok ini tidak dibutuhkannya.
+let videy = null;
+let galatImporPlugin = null;
+try {
+  videy = await import("../plugins/download/videy.js");
+} catch (error) {
+  galatImporPlugin = error;
+}
+
+test("sentinel: plugin benar-benar terimpor (bukan berkas kosong yang hijau)", () => {
+  assert.equal(
+    galatImporPlugin,
+    null,
+    `impor plugin gagal: ${galatImporPlugin?.message ?? galatImporPlugin}`,
+  );
+  assert.equal(typeof videy?.handler, "function");
+  assert.equal(typeof videy?.config?.name, "string");
+});
 
 function pesanPengguna(text) {
   const balasan = [];
@@ -116,7 +157,16 @@ test("guard plugin: tanpa argumen menjawab usage, tanpa menyentuh resolve", asyn
 
 test("guard plugin: host palsu ditolak sebelum menyentuh resolve", async () => {
   cdnHidup();
-  for (const url of ["https://example.com/video.mp4", "halo"]) {
+  for (const url of [
+    "https://example.com/video.mp4",
+    "halo",
+    // Label host, bukan substring: ketiganya lolos `url.match(/videy\.co/i)` yang
+    // lama, dan tanpa guard per label guard kapabilitas yang menolak — yang
+    // berarti satu `run` lokal dan satu kegagalan di breaker untuk semua orang.
+    "https://videy.co.evil.example/v?id=7ZH1ZRIF",
+    "https://notvidey.co/v?id=7ZH1ZRIF",
+    "https://example.com/videy.co",
+  ]) {
     const { balasan, reaksi, m } = pesanPengguna(url);
     await videy.handler(m, { sock: sockPalsu() });
 
@@ -124,6 +174,16 @@ test("guard plugin: host palsu ditolak sebelum menyentuh resolve", async () => {
     assert.deepEqual(reaksi, [], `tidak boleh menyentuh resolve: ${url}`);
     assert.deepEqual(PANGGILAN, [], `tidak boleh ada request: ${url}`);
   }
+});
+
+test("guard plugin: sub-domain videy tetap diterima", async () => {
+  // Halaman videy dilayani dari `www.videy.co`, jadi versi ketat jangan
+  // memotong pemakaian nyata.
+  cdnHidup();
+  const { balasan, m } = pesanPengguna("https://www.videy.co/v?id=7ZH1ZRIF");
+  await videy.handler(m, { sock: sockPalsu() });
+
+  assert.doesNotMatch(balasan.at(-1) ?? "", /URL tidak valid/, "sub-domain sah tidak boleh ditolak guard");
 });
 
 test("link sah meneruskan dan video terkirim dari CDN", async () => {
@@ -204,8 +264,11 @@ test("semua backend gagal tanpa masalah key → pesan error umum, bukan key", as
   httpPalsu.get = async (url, opts) => {
     PANGGILAN.push({ verb: "get", url, opts });
     if (new URL(String(url)).hostname === "api.neoxr.eu") {
-      // Host hidup dan menjawab 200, tapi menandai dirinya gagal.
-      return { status: 200, data: { status: false, error: "expired" } };
+      // Host hidup dan menjawab 200, tapi menandai dirinya gagal — DAN tetap
+      // membawa URL. Plugin sebelum Phase 1 menolak `!data.status` tepat untuk
+      // bentuk ini, jadi memuat `url` di sini adalah bagian dari yang diuji:
+      // tanpa penolakan status, video terkirim dan reaksi akhirnya `✅`.
+      return { status: 200, data: { status: false, error: "expired", data: { url: VIDEO } } };
     }
     return asli(url, opts);
   };
@@ -219,6 +282,7 @@ test("semua backend gagal tanpa masalah key → pesan error umum, bukan key", as
 
   assert.deepEqual(sock.terkirim, [], "tidak boleh ada file yang diklaim terkirim");
   assert.equal(reaksi.at(-1), "☢");
+  assert.equal(reaksi.includes("✅"), false, "centang hijau hanya sah kalau video benar-benar terkirim");
   assert.equal(balasan.some((t) => /APIKEY_/.test(t)), false, "key bukan penyebabnya");
 });
 
