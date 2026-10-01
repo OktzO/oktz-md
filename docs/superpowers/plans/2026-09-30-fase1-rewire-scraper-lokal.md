@@ -24,6 +24,16 @@
 - **Saat mocking, mock transport yang benar-benar dipakai kode yang diuji.** Kalau modul target meng-`import axios` mentah, mock `axios` — bukan `httpAxios` dari `src/lib/http.js`. Mocking wrapper yang tidak dipakai tidak hanya membuat test hijau palsu, tapi juga membiarkan test menembak jaringan sungguhan.
 - **Setiap task yang membuat modul kapabilitas wajib mencabut barisnya dari `GUARDED_MISSING_IMPORTS` di `tests/rename-invariants.test.mjs`.** Invariant I1 di sana memindai semua import relatif termasuk `import()` dinamis dan menolak yang file-nya belum ada. Task 2 membuka jalan dengan menambah 8 entri ke escape hatch itu; setiap modul yang benar-benar ada harus mencabut barisnya, kalau tidak jaring pengaman itu mati diam untuk sisa repo.
 - **Nama backend di circuit breaker bersifat per-host, tidak pernah per-URL atau per-user.** Breaker punya 64 slot LRU. Kalau suatu kapabilitas memakai URL atau user sebagai nama, satu host yang sehat bisa ter-evict dan langsung dianggap `CLOSED` — breaker diam-diam kehilangan daya tepat ketika paling dibutuhkan. Nama yang benar: nama backend yang dideklarasikan di `backends`, misalnya `'ilovepin'`, `'neoxr'`, `'ytdl-native'`.
+- **Path agregator wajib `/api` — kecuali nexray.** Base URL di `src/lib/aggregator.js` tidak menyertakan prefix itu, jadi `aggregator.hit` menempelkan path apa adanya. Rekamannya di repo ini, 7 panggilan langsung plus 6 method provider:
+  | Agregator | Base | Prefix wajib |
+  |---|---|---|
+  | `neoxr` | `https://api.neoxr.eu` | `/api/…` |
+  | `izuka` | `https://my.izuka-api.xyz` | `/api/…` |
+  | `cuki` | `https://api.cuki.biz.id` | `/api/…` |
+  | `siputzx` | `https://api.siputzx.my.id` | `/api/…` |
+  | `azbry` | `https://api.azbry.com` | `/api/…` |
+  | `nexray` | `https://api.nexray.eu.cc` | **tanpa** `/api` |
+  Setiap kapabilitas yang memakai `api` wajib punya test yang mengassert URL aggregator lengkapnya, bukan cuma "dipanggil". Bug ini lolos 72 test di Task 4 karena responder diuji sudah meloloskan URL apa pun yang mengandung `azbry.com`.
 
 ## Review Focus
 
