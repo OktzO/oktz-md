@@ -2184,3 +2184,460 @@ test("neoxr: key aggregator kosong → gagal tanpa request, bukan 401 dari serve
     "key kosong tidak boleh menghasilkan request apa pun",
   );
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Videy
+//
+// Dua bentuk yang disagreed di sini dibaca dari sumber yang nyata, bukan dari
+// brief. Bentuk aggregator dibaca dari plugin sebelum Phase 1
+// (git show 5ea7567^:plugins/download/videy.js): `f()` mengembalikan body apa
+// adanya dan plugin membaca `res.data.status && res.data.data.url`, jadi
+// amplop neoxr adalah `{ status, data: { url } }` — bukan `{ title, thumbnail,
+// formats }` seperti duga brief. Bentuk lokal TIDAK berasal dari
+// src/scraper/videy.js: default export file itu mengunggah file lokal ke
+// videy.co (`fs.existsSync(file)` lalu POST multipart dengan maxBodyLength
+// Infinity), sedangkan plugin ini menerima link berbagi dan butuh URL video
+// langsung. Jadi resolve lokal dibangun dari permukaan yang dipakai sendiri oleh
+// frontend videy, bukan dari uploader itu.
+// ═════════════════════════════════════════════════════════════════════════════
+
+const VIDEO_VIDEY = "https://cdn.videy.co/7ZH1ZRIF.mp4";
+
+/** Bentuk yang benar-benar dikirim frontend videy: `cdn.videy.co/<id>.<ext>`. */
+function cdnVideySukses(ext = "mp4") {
+  return async () => ({
+    status: 206,
+    headers: { "content-type": "video/mp4" },
+    data: Buffer.from([0x00]),
+  });
+}
+
+let balasCdn = () => {
+  throw new Error("cdn.videy.co tidak boleh dipanggil: upstream mati");
+};
+// `hasilAggregator` sengaja dipakai ulang dari harness paling atas, bukan
+// dideklarasikan ulang: satu variabel untuk semua kapabilitas di berkas ini.
+
+const getSfile = httpPalsu.get;
+httpPalsu.get = async (url, opts) => {
+  // Dicocokkan ke host, bukan ke seluruh string: URL aggregator neoxr untuk
+  // kapabilitas ini memuat "videy.co" di query string-nya, jadi pencocokan
+  // substring akan mengarahkan request aggregator ke stub CDN.
+  const host = new URL(String(url)).hostname;
+  if (host === "cdn.videy.co") {
+    PANGGILAN_HTTP.push({ verb: "get", url, opts });
+    return balasCdn(url, opts);
+  }
+  if (host === "api.neoxr.eu") {
+    PANGGILAN_HTTP.push({ verb: "get", url, opts });
+    return hasilAggregator(url, opts);
+  }
+  return getSfile(url, opts);
+};
+
+/**
+ * Bentuk amplop neoxr yang sebenarnya. `f()` di plugin lama mengembalikan body
+ * respons apa adanya, dan plugin itu membaca `res.data.status` lalu
+ * `res.data.data.url` — jadi `data` adalah field di dalam body neoxr, bukan
+ * field HTTP axios, dan hanya ada SATU lapis `data`. Stub di test memakai
+ * `{ status, data }` sebagai respons HTTP axios, jadi body neoxr dikirim apa
+ * adanya dan `aggregator.hit` yang membungkusnya.
+ */
+function neoxrVidey(body) {
+  return async () => ({ status: 200, data: body });
+}
+
+const kapvidey = await import("../src/capabilities/videy.js");
+
+const videyLokal = kapvidey.backends.find((b) => b.kind === "local");
+const videyApi = kapvidey.backends.find((b) => b.kind === "api");
+
+function resolverVidey(opsi = {}) {
+  return createResolver({ capabilities: { videy: () => kapvidey }, ...opsi });
+}
+
+beforeEach(() => {
+  balasCdn = () => {
+    throw new Error("cdn.videy.co tidak boleh dipanggil: upstream mati");
+  };
+  // Blok sfile di atas mengosongkan key neoxr di salah satu testnya dan tidak
+  // memulihkannya, jadi test setelah blok itu — termasuk blok ini — akan gagal
+  // dengan "API key neoxr belum diisi" yang bukan apa pun soal videy. Dipin di
+  // sini, persis seperti yang dilakukan blok sfile saat mengatur harness-nya.
+  configUji.APIkey.neoxr = "k-neoxr-untuk-test";
+});
+
+// ── normalisasi bentuk ────────────────────────────────────────────────────────
+
+test("normalize: bentuk scraper lokal jadi { url }", () => {
+  // Field lokal adalah `id` dan `ext` hasil aturan frontend videy; yang
+  // dibutuhkan plugin hanya `url`.
+  assert.deepEqual(
+    kapvidey.normalize({ id: "7ZH1ZRIF", ext: "mp4", url: VIDEO_VIDEY }),
+    { url: VIDEO_VIDEY },
+  );
+});
+
+test("normalize: bentuk aggregator neoxr jadi { url } yang sama", () => {
+  // Plugin sebelum Phase 1 membaca `res.data.data.url`, jadi amplop `data` ada
+  // di dalam body dan harus dibuka di sini, bukan di backend.
+  assert.deepEqual(
+    kapvidey.normalize({ status: true, data: { url: VIDEO_VIDEY } }),
+    { url: VIDEO_VIDEY },
+  );
+});
+
+test("normalize: status false adalah kegagalan walau URL-nya ada", () => {
+  // Plugin lama menolak `!data.status`. Amplop `status` harus tetap berpengaruh:
+  // membawanya sebagai `body.data` saja membuat `{ status: false, data: { url } }`
+  // lolos dan plugin mengirim video dari respons error.
+  assert.throws(
+    () => kapvidey.normalize({ status: false, data: { url: VIDEO_VIDEY } }),
+    /status|gagal/i,
+  );
+});
+
+test("normalize: respons tanpa URL melempar — plugin tidak boleh mengirim apa-apa", () => {
+  // Sama seperti bentuk brief (`formats: []`): array kosong berarti plugin
+  // menjalankan sendMedia dengan tidak ada file lalu tetap memberi centang hijau.
+  for (const nilai of [
+    {},
+    { status: true, data: {} },
+    { status: true, data: { url: null } },
+    { status: true, data: { url: "" } },
+    { url: "ftp://cdn.videy.co/7ZH1ZRIF.mp4" },
+  ]) {
+    assert.throws(
+      () => kapvidey.normalize(nilai),
+      /tidak dikenali|URL|video/i,
+      `nilai: ${JSON.stringify(nilai)}`,
+    );
+  }
+});
+
+test("normalize: nilai non-objek dan null melempar", () => {
+  for (const nilai of [null, undefined, "teks", 7, true]) {
+    assert.throws(() => kapvidey.normalize(nilai), /tidak dikenali|URL|video/i);
+  }
+});
+
+// ── guard URL ─────────────────────────────────────────────────────────────────
+
+test("guard: link yang bukan videy.co ditolak tanpa satu pun request", async () => {
+  for (const url of [
+    "https://videy.co.evil.example/v?id=7ZH1ZRIF",
+    "https://notvidey.co/v?id=7ZH1ZRIF",
+    "https://example.com/videy.co",
+    "halo",
+  ]) {
+    await assert.rejects(
+      () => videyLokal.run({ url }),
+      (error) => {
+        assert.match(error.message, /videy\.co/);
+        return true;
+      },
+      `harus ditolak: ${url}`,
+    );
+  }
+  assert.deepEqual(PANGGILAN_HTTP, [], "guard harus jalan sebelum request CDN");
+});
+
+test("guard: aggregator tidak dihubungi untuk link yang gagal guard", async () => {
+  hasilAggregator = neoxrVidey({ status: true, data: { url: VIDEO_VIDEY } });
+  const resolver = resolverVidey();
+  await assert.rejects(() =>
+    resolver.resolve("videy", { url: "https://notvidey.co/v?id=7ZH1ZRIF" }),
+  );
+  assert.deepEqual(
+    PANGGILAN_HTTP.filter((c) => new URL(String(c.url)).hostname === "api.neoxr.eu"),
+    [],
+    "aggregator tidak boleh dihubungi untuk link yang gagal guard",
+  );
+  assert.deepEqual(
+    resolver.breaker.snapshot(),
+    [],
+    "link salah host bukan kegagalan host mana pun",
+  );
+});
+
+test("guard: link tanpa id dilewati tanpa menyentuh breaker", async () => {
+  // `https://videy.co/` lolos guard host tapi tidak punya `?id=`, jadi backend
+  // lokal tidak bisa dipakai. Kalau ini dihitung kegagalan, tiga user yang
+  // mengirim link beranda akan membuka breaker cdn-videy untuk semua orang —
+  // termasuk yang sedang mengunduh link yang sebenarnya hidup.
+  balasCdn = cdnVideySukses();
+  hasilAggregator = neoxrVidey({ status: true, data: { url: VIDEO_VIDEY } });
+  const resolver = resolverVidey();
+
+  await resolver.resolve("videy", { url: "https://videy.co/" });
+
+  assert.deepEqual(
+    PANGGILAN_HTTP.filter((c) => new URL(String(c.url)).hostname === "cdn.videy.co"),
+    [],
+    "tanpa id tidak ada yang bisa diprobe",
+  );
+  // `neoxr` boleh muncul di snapshot karena resolve-nya memang sukses, tapi
+  // `cdn-videy` tidak boleh muncul sama sekali dan tidak ada host yang boleh
+  // terbuka — backend yang dilewati `applies` tidak pernah menyentuh breaker.
+  const breaker = resolver.breaker.snapshot();
+  assert.deepEqual(
+    breaker.filter((s) => s.name === "cdn-videy"),
+    [],
+    "backend yang dilewati tidak boleh masuk breaker",
+  );
+  assert.equal(
+    breaker.some((s) => s.openedAt !== null || s.failures > 0),
+    false,
+    "tidak boleh ada kegagalan yang tercatat",
+  );
+});
+
+test("guard: id dengan bentuk aneh ditolak sebelum masuk ke path CDN", async () => {
+  // Id masuk ke pathname CDN. Tanpa batas karakter, `?id=../x` bisa menulis
+  // keluar dari `cdn.videy.co` — dan request sia-sia ke host lain.
+  for (const id of ["../secret", "a b", "x".repeat(200), "%2e%2e%2f"]) {
+    balasCdn = cdnVideySukses();
+    await assert.rejects(
+      () => videyLokal.run({ url: `https://videy.co/v?id=${id}` }),
+      /id|tidak dikenal/i,
+      `harus ditolak: ${id}`,
+    );
+  }
+  assert.deepEqual(
+    PANGGILAN_HTTP.filter((c) => new URL(String(c.url)).hostname === "cdn.videy.co"),
+    [],
+    "id buruk tidak boleh sampai ke jaringan",
+  );
+});
+
+// ── wiring resolver ──────────────────────────────────────────────────────────
+
+test("stable false: tautan media videy bisa kedaluwarsa dan dihapus kapan saja", () => {
+  assert.equal(kapvidey.stable, false, "dari cache tidak boleh ada: URL CDN bisa mati");
+});
+
+test("minimal satu backend local dan satu api sebagai cadangan", () => {
+  const lokal = kapvidey.backends.filter((b) => b.kind === "local");
+  const api = kapvidey.backends.filter((b) => b.kind !== "local");
+  assert.equal(lokal.length, 1);
+  assert.equal(api.length, 1);
+  // Nama per-host, bukan per-URL: `?id=` berbeda tiap link, jadi nama per-URL
+  // akan menghabiskan satu dari 64 slot LRU breaker per permintaan.
+  assert.equal(lokal[0].name, "cdn-videy");
+  assert.equal(api[0].name, "neoxr");
+  assert.equal(new Set(kapvidey.backends.map((b) => b.name)).size, kapvidey.backends.length);
+});
+
+test("unduhan: CDN videy dulu, aggregator tidak boleh diakses lebih awal", async () => {
+  const dipanggil = [];
+  balasCdn = async (url) => {
+    dipanggil.push(new URL(String(url)).hostname);
+    return { status: 206, headers: { "content-type": "video/mp4" }, data: Buffer.from([0x00]) };
+  };
+  hasilAggregator = async () => {
+    dipanggil.push("neoxr");
+    return neoxrVidey({ status: true, data: { url: VIDEO_VIDEY } })();
+  };
+
+  const keluar = await resolverVidey().resolve("videy", { url: "https://videy.co/v?id=7ZH1ZRIF" });
+
+  assert.equal(keluar.source, "cdn-videy");
+  assert.deepEqual(keluar.data, { url: VIDEO_VIDEY });
+  assert.equal(dipanggil.includes("neoxr"), false, "aggregator tidak boleh diakses sebelum host lokal");
+});
+
+test("unduhan: aturan ekstensi mengikuti frontend videy", async () => {
+  // Diambil dari frontend videy (`cdn.videy.co/${id}.${ext}`): mp4 kecuali id
+  // 9 karakter berakhiran "2", yang mov. Salah di sini menghasilkan URL 404.
+  const probe = async (id) => {
+    PANGGILAN_HTTP.length = 0;
+    balasCdn = cdnVideySukses();
+    await videyLokal.run({ url: `https://videy.co/v?id=${id}` });
+    return new URL(String(PANGGILAN_HTTP[0].url)).pathname;
+  };
+  assert.equal(await probe("7ZH1ZRIF"), "/7ZH1ZRIF.mp4");
+  assert.equal(await probe("AbCdEfGh"), "/AbCdEfGh.mp4");
+  assert.equal(await probe("7ZH1ZRIF2"), "/7ZH1ZRIF2.mov");
+  assert.equal(await probe("7ZH1ZRIF1"), "/7ZH1ZRIF1.mp4");
+});
+
+test("unduhan: link sudah mati di CDN → aggregator jadi cadangan", async () => {
+  balasCdn = async () => {
+    const e = new Error("Request failed with status code 404");
+    e.response = { status: 404 };
+    throw e;
+  };
+  hasilAggregator = neoxrVidey({ status: true, data: { url: VIDEO_VIDEY } });
+
+  const keluar = await resolverVidey().resolve("videy", { url: "https://videy.co/v?id=7ZH1ZRIF" });
+
+  assert.equal(keluar.source, "neoxr");
+  assert.deepEqual(keluar.data, { url: VIDEO_VIDEY });
+});
+
+test("semua backend gagal → CapabilityError, bukan URL lama dari cache", async () => {
+  balasCdn = async () => {
+    const e = new Error("Request failed with status code 404");
+    e.response = { status: 404 };
+    throw e;
+  };
+  hasilAggregator = neoxrVidey({ status: false, error: "expired" });
+
+  await assert.rejects(
+    () => resolverVidey().resolve("videy", { url: "https://videy.co/v?id=7ZH1ZRIF" }),
+    (error) => {
+      assert.ok(error instanceof CapabilityError);
+      assert.deepEqual(error.tried.map((t) => t.name), ["cdn-videy", "neoxr"]);
+      return true;
+    },
+  );
+});
+
+test("argumen kosong → no-applicable-backend, breaker bersih", async () => {
+  const resolver = resolverVidey();
+  await assert.rejects(
+    () => resolver.resolve("videy", {}),
+    (error) => {
+      assert.equal(error.code, "no-applicable-backend");
+      assert.deepEqual(error.tried, []);
+      return true;
+    },
+  );
+  assert.deepEqual(resolver.breaker.snapshot(), []);
+});
+
+// ── aggregator: URL harus dikunci persis ──────────────────────────────────────
+
+test("neoxr: pathname harus persis /api/videy dan param url", async () => {
+  // Konvensi per host di repo ini: neoxr, izuka, cuki, siputzx, dan azbry
+  // semuanya memakai prefix `/api`; hanya nexray yang tidak.
+  hasilAggregator = neoxrVidey({ status: true, data: { url: VIDEO_VIDEY } });
+
+  await videyApi.run({ url: "https://videy.co/v?id=7ZH1ZRIF" });
+
+  const [req] = PANGGILAN_HTTP.map((c) => new URL(c.url));
+  assert.equal(req.origin, "https://api.neoxr.eu");
+  assert.equal(req.pathname, "/api/videy");
+  assert.equal(req.searchParams.get("url"), "https://videy.co/v?id=7ZH1ZRIF");
+  assert.deepEqual([...req.searchParams.keys()], ["url"], "apikey lewat header, bukan query");
+});
+
+test("neoxr: setiap literal path aggregator di kapabilitas ini berawalan /api", () => {
+  const kode = fs
+    .readFileSync(path.join(process.cwd(), "src/capabilities/videy.js"), "utf8")
+    .split("\n")
+    .filter((baris) => !/^\s*(\/\/|\/\*|\*)/.test(baris))
+    .join("\n");
+  const literalPath = [...kode.matchAll(/["'`]\/[^"'`\s]*["'`]/g)].map((m) => m[0].slice(1, -1));
+  assert.ok(literalPath.length >= 1, `path aggregator harus detectable, dapat ${literalPath.length}`);
+  const salah = literalPath.filter((p) => !p.startsWith("/api/"));
+  assert.deepEqual(salah, [], `path tanpa /api: ${salah.join(", ")}`);
+});
+
+// ── budget: abort harus sampai ke lapisan HTTP ───────────────────────────────
+
+test("probe CDN dibatasi: satu byte dan respons kecil, bukan unduhan penuh", async () => {
+  // Bahaya yang nyata di kapabilitas ini bukan "baca tanpa batas", tapi kebalikannya:
+  // uploader di src/scraper/videy.js memakai maxBodyLength/maxContentLength
+  // Infinity untuk mengirim file milik user. Jalur resolve tidak boleh mewarisi
+  // konfigurasi itu — kalau tidak, satu probe bisa menarik video 2GB ke kotak 1GB.
+  balasCdn = cdnVideySukses();
+  await videyLokal.run({ url: "https://videy.co/v?id=7ZH1ZRIF" });
+
+  const probe = PANGGILAN_HTTP.at(-1);
+  assert.equal(new URL(String(probe.url)).hostname, "cdn.videy.co");
+  assert.match(probe.opts?.headers?.Range ?? "", /bytes=0-0/, "hanya minta satu byte");
+  const batas = probe.opts?.maxContentLength;
+  assert.equal(typeof batas, "number", "harus ada batas eksplisit, bukan batas bawaan yang longgar");
+  assert.ok(batas > 0 && batas <= 64 * 1024, `batas terlalu longgar: ${batas}`);
+  assert.ok(
+    probe.opts?.maxContentLength !== Infinity && probe.opts?.maxBodyLength !== Infinity,
+    "batas Infinity dari uploader tidak boleh bocor ke jalur resolve",
+  );
+});
+
+test("signal diteruskan ke probe CDN", async () => {
+  const controller = new AbortController();
+  balasCdn = cdnVideySukses();
+  await videyLokal.run({ url: "https://videy.co/v?id=7ZH1ZRIF" }, { signal: controller.signal });
+  assert.equal(PANGGILAN_HTTP.at(-1).opts?.signal, controller.signal);
+});
+
+test("signal diteruskan ke request aggregator, bukan hanya ke CDN", async () => {
+  const controller = new AbortController();
+  hasilAggregator = neoxrVidey({ status: true, data: { url: VIDEO_VIDEY } });
+  await videyApi.run({ url: "https://videy.co/v?id=7ZH1ZRIF" }, { signal: controller.signal });
+  assert.equal(PANGGILAN_HTTP.at(-1).opts?.signal, controller.signal);
+});
+
+test("budget habis di tier lokal → probe CDN benar-benar dibatalkan", async () => {
+  let terputus = false;
+  balasCdn = (url, opts) =>
+    new Promise((_resolve, reject) => {
+      opts?.signal?.addEventListener("abort", () => {
+        terputus = true;
+        reject(new Error("dibatalkan oleh budget"));
+      });
+    });
+
+  await resolverVidey({ budget: { localMs: 60, totalMs: 400 } })
+    .resolve("videy", { url: "https://videy.co/v?id=7ZH1ZRIF" })
+    .catch(() => {});
+
+  assert.equal(terputus, true, "abort harus mencabut probe CDN");
+});
+
+// ── plugin sudah tidak bicara langsung ke agregator ──────────────────────────
+
+test("plugin videy tidak menyebut domain agregator lagi", () => {
+  const pola = /nexray|neoxr|izuka|cuki|siputzx|azbry/i;
+  const ketemu = [];
+  fs.readFileSync(path.join(process.cwd(), "plugins/download/videy.js"), "utf8")
+    .split("\n")
+    .forEach((baris, i) => {
+      if (pola.test(baris)) ketemu.push(`plugins/download/videy.js:${i + 1}: ${baris.trim()}`);
+    });
+  assert.deepEqual(ketemu, [], `domain agregator masih ada:\n${ketemu.join("\n")}`);
+});
+
+test("plugin videy memakai resolver, dan guard URL lamanya dipertahankan", () => {
+  const sumber = fs.readFileSync(path.join(process.cwd(), "plugins/download/videy.js"), "utf8");
+  // Plugin ini memakai gaya kutip tunggal, seperti file aslinya.
+  assert.match(sumber, /import \{ resolver \} from '..\/..\/src\/lib\/resolve\.js'/);
+  assert.match(sumber, /resolver\.resolve\('videy'/);
+  assert.doesNotMatch(
+    sumber,
+    /axios\.(get|post)\(\s*[`"']https?:\/\//,
+    "masih menembak host luar lewat axios",
+  );
+  assert.doesNotMatch(sumber, /api\.neoxr|apikey=/, "URL aggregator lama harus hilang");
+  assert.doesNotMatch(sumber, /from '\.\.\/\.\.\/src\/lib\/http\.js'/, "helper HTTP lama harus hilang");
+  // Guard plugin adalah lapis pertama dan harus tetap ada seperti sebelum Phase 1;
+  // penolakannya harus terjadi sebelum resolve.
+  assert.match(sumber, /url\.match\(\/videy\\\.co\/i\)/);
+  assert.ok(
+    sumber.indexOf("url.match(/videy\\.co/i)") < sumber.indexOf("resolver.resolve('videy'"),
+    "guard harus mendahului panggilan resolver",
+  );
+});
+
+test("permukaan plugin videy tetap sama: config, pesan, dan reaksi", () => {
+  const sumber = fs.readFileSync(path.join(process.cwd(), "plugins/download/videy.js"), "utf8");
+  assert.match(sumber, /name: 'videy'/);
+  assert.match(sumber, /alias: \['vdl', 'videydownload', 'videydl'\]/);
+  assert.match(sumber, /category: 'download'/);
+  assert.match(sumber, /cooldown: 10/);
+  assert.match(sumber, /energi: 1/);
+  // Semua pesan dan reaksi yang sudah ada sebelum Phase 1 harus tetap hidup.
+  for (const bagian of [
+    /🎬 \*ᴠɪᴅᴇʏ ᴅᴏᴡɴʟᴏᴀᴅ\*/,
+    /Masukkan URL videy\.co/,
+    /❌ URL tidak valid\. Gunakan link dari videy\.co/,
+    /❌ Gagal mengambil video\. Link tidak valid atau sudah expired\./,
+  ]) {
+    assert.match(sumber, bagian, `pesan hilang: ${bagian}`);
+  }
+  for (const emoji of ["🕕", "✅", "❌", "☢"]) {
+    assert.ok(sumber.includes(emoji), `reaksi hilang: ${emoji}`);
+  }
+});
