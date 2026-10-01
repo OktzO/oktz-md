@@ -1,4 +1,4 @@
-import axios from "axios";
+import { httpAxios as axios } from "../lib/http.js";
 import qs from "qs";
 const headers = {
   "User-Agent":
@@ -10,12 +10,17 @@ const headers = {
   Referer: "https://ilovepin.net/id",
 };
 
-async function scrapePinterest(pinUrl) {
+// `signal` opsional supaya pemanggil yang hanya mengirim URL tetap jalan, tapi
+// backend resolver boleh teruskannya: AbortController di resolve.js hanya
+// menghentikan resolver menunggu, dan tanpa signal di sini dua request ini
+// tetap hidup sampai timeout 15 detik milik httpAxios sambil memegang socket.
+async function scrapePinterest(pinUrl, { signal } = {}) {
   try {
     const mainPage = await axios.get("https://ilovepin.net/id", {
       headers: {
         "User-Agent": headers["User-Agent"],
       },
+      signal,
     });
     const rawCookies = mainPage.headers["set-cookie"];
     const cookieString = rawCookies ? rawCookies.join("; ") : "";
@@ -33,6 +38,7 @@ async function scrapePinterest(pinUrl) {
           "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
           Cookie: cookieString,
         },
+        signal,
       },
     );
 

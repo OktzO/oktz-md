@@ -639,3 +639,615 @@ test("budget habis di tier api → request aggregator benar-benar dibatalkan", a
   assert.ok(sinyal instanceof AbortSignal, "aggregator harus menerima AbortSignal");
   assert.equal(terputus, true, "abort harus mencabut request aggregator");
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Pinterest
+//
+// Scraping pinterest (src/scraper/pindl.js) memakai `httpAxios` supaya signal
+// budget resolver benar-benar sampai ke request dan supaya transport-nya bisa
+// dikendalikan di sini. Dua handler di bawah membungkus handler milik blok
+// spotify tanpa mengubahnya: GET/POST yang tidak menyasar ilovepin.net
+// diteruskan apa adanya, jadi blok Task 3 tidak ikut berubah.
+// ═════════════════════════════════════════════════════════════════════════════
+
+let balasIlovepin = () => {
+  throw new Error("ilovepin tidak boleh dipanggil: upstream mati");
+};
+let balasProxy = () => {
+  throw new Error("proxy ilovepin tidak boleh dipanggil: upstream mati");
+};
+
+const getSpotify = httpPalsu.get;
+httpPalsu.get = async (url, opts) => {
+  if (String(url).includes("ilovepin.net")) {
+    PANGGILAN_HTTP.push({ verb: "get", url, opts });
+    return balasIlovepin(url, opts);
+  }
+  // azbry masuk lewat `aggregator.hit` → GET juga, tapi harness blok spotify
+  // hanya mengarahkan GET ke nexray.
+  if (String(url).includes("azbry.com")) {
+    PANGGILAN_HTTP.push({ verb: "get", url, opts });
+    return hasilAggregator(url, opts);
+  }
+  return getSpotify(url, opts);
+};
+
+const postSpotify = httpPalsu.post;
+httpPalsu.post = async (url, body, config) => {
+  if (String(url).includes("ilovepin.net")) {
+    PANGGILAN_HTTP.push({ verb: "post", url, config });
+    return balasProxy(url, body, config);
+  }
+  return postSpotify(url, body, config);
+};
+
+const kappinterest = await import("../src/capabilities/pinterest.js");
+
+const pinLokal = kappinterest.backends.find((b) => b.kind === "local");
+const pinApi = kappinterest.backends.find((b) => b.kind === "api");
+
+function resolverPin(opsi = {}) {
+  return createResolver({
+    capabilities: { pinterest: () => kappinterest },
+    ...opsi,
+  });
+}
+
+/** Bentuk yang benar-benar dikirim ilovepin.net, bukan bentuk kiriman plugin. */
+function balasanProxy(mediaItems) {
+  return async () => ({
+    data: {
+      api: {
+        status: "OK",
+        title: "Judul pin",
+        description: "  deskripsi  ",
+        userInfo: { name: "H", username: "heyeeog", userAvatar: "https://x/a.jpg" },
+        mediaStats: { likesCount: "1K", sharesCount: "40K" },
+        mediaItems,
+      },
+    },
+  });
+}
+
+const VIDEO_ILOVEPIN = {
+  type: "Video",
+  mediaQuality: "HD",
+  mediaRes: "720x1280",
+  mediaExtension: "MP4",
+  mediaFileSize: "2.16 MB",
+  mediaUrl: "https://s15.mcontent.app/v3/videoProcess/1/720p",
+};
+const VIDEO_ILOVEPIN_KECIL = {
+  type: "Video",
+  mediaQuality: "SD",
+  mediaRes: "486x864",
+  mediaExtension: "MP4",
+  mediaFileSize: "1.16 MB",
+  mediaUrl: "https://s15.mcontent.app/v3/videoProcess/1/486p",
+};
+const GAMBAR_ILOVEPIN = {
+  type: "Image",
+  mediaExtension: "JPG",
+  mediaFileSize: "1.20 MB",
+  mediaUrl: "https://i.pinimg.com/originals/a.jpg",
+};
+
+beforeEach(() => {
+  balasIlovepin = () => {
+    throw new Error("ilovepin tidak boleh dipanggil: upstream mati");
+  };
+  balasProxy = () => {
+    throw new Error("proxy ilovepin tidak boleh dipanggil: upstream mati");
+  };
+});
+
+// ── normalisasi bentuk ────────────────────────────────────────────────────────
+
+test("normalize: aggregator video jadi satu entri media video", () => {
+  const keluar = kappinterest.normalize({
+    type: "video",
+    videos: [{ url: "https://x/a720p.mp4" }],
+  });
+  assert.deepEqual(keluar, {
+    type: "video",
+    media: [{ type: "video", url: "https://x/a720p.mp4" }],
+  });
+});
+
+test("normalize: gambar aggregator memilih entri 'orig', bukan yang pertama", () => {
+  const keluar = kappinterest.normalize({
+    type: "image",
+    images: [
+      { name: "small", url: "https://x/s.jpg" },
+      { name: "orig", url: "https://x/o.jpg" },
+    ],
+  });
+  assert.deepEqual(keluar, {
+    type: "image",
+    media: [{ type: "image", url: "https://x/o.jpg" }],
+  });
+});
+
+test("normalize: aggregator yang hanya mengirim `download` tetap jadi media gambar", () => {
+  assert.deepEqual(kappinterest.normalize({ type: "image", download: "https://x/d.jpg" }), {
+    type: "image",
+    media: [{ type: "image", url: "https://x/d.jpg" }],
+  });
+});
+
+test("normalize: gambar kosong tanpa download melempar, bukan media kosong", () => {
+  // Plugin mengirim file apa yang ada di `media` lalu tetap memberi centang
+  // hijau kalau ada satu pun yang terkirim. media: [] lolos berarti user melihat
+  // "berhasil" padahal tidak menerima apa-apa, jadi respons kosong harus
+  // diperlakukan sebagai kegagalan supaya backend lain sempat mencoba.
+  assert.throws(
+    () => kappinterest.normalize({ type: "image", images: [] }),
+    /tanpa (media|URL)/i,
+  );
+  assert.throws(
+    () => kappinterest.normalize({ type: "video", videos: [], download: "" }),
+    /tanpa (media|URL)/i,
+  );
+});
+
+test("normalize: bentuk scraper lokal jadi { type, media } dan hanya kualitas terbaik", () => {
+  // Scraper lokal mengirim `media` yang sudah diurutkan dari ukuran terbesar dan
+  // bisa berisi lima_VARIAN video untuk satu pin. Plugin mengirim semua entri
+  // mediaList-nya, jadi seluruh varian ikut terkirim kalau normalize tidak
+  // memilih satu.
+  const keluar = kappinterest.normalize({
+    title: "Judul pin",
+    description: "  deskripsi  ",
+    author: { name: "H", username: "heyeeog", avatar: "https://x/a.jpg" },
+    stats: { likes: "1K", shares: "40K" },
+    media: [
+      { type: "video", quality: "HD", size: "2.16 MB", url: VIDEO_ILOVEPIN.mediaUrl },
+      { type: "video", quality: "SD (486x864)", size: "1.16 MB", url: VIDEO_ILOVEPIN_KECIL.mediaUrl },
+    ],
+  });
+  assert.deepEqual(keluar, {
+    type: "video",
+    media: [{ type: "video", url: VIDEO_ILOVEPIN.mediaUrl }],
+  });
+});
+
+test("normalize: gambar dari scraper lokal jadi satu entri image", () => {
+  assert.deepEqual(
+    kappinterest.normalize({
+      title: "Judul",
+      media: [{ type: "image", quality: "Original", size: "1.2 MB", url: GAMBAR_ILOVEPIN.mediaUrl }],
+    }),
+    { type: "image", media: [{ type: "image", url: GAMBAR_ILOVEPIN.mediaUrl }] },
+  );
+});
+
+test("normalize: pin tanpa media (hanya audio) melempar, bukan media kosong", () => {
+  // src/scraper/pindl.js:50-91 memakai else-if, jadi pin yang isinya cuma audio
+  // berakhir dengan `media: []`. Itu gagal, bukan pin kosong.
+  assert.throws(
+    () =>
+      kappinterest.normalize({
+        title: "_audio_",
+        media: [],
+      }),
+    /tanpa (media|URL)/i,
+  );
+});
+
+test("normalize: pencarian kosong tetap sah, dibedakan dari unduhan gagal", () => {
+  // Daftar kosong di pencarian berarti "tidak ada yang cocok" — plugin lalu
+  // bilang tidak ditemukan. Unduhan yang tidak punya media berarti gagal, jadi
+  // keduanya tidak boleh memakai jalur yang sama.
+  assert.deepEqual(kappinterest.normalize({ pins: [] }), { pins: [] });
+  assert.deepEqual(kappinterest.normalize([]), { pins: [] });
+});
+
+test("normalize: hasil pencarian aggregator jadi { pins } dengan tiga field", () => {
+  // Bentuk yang benar-benar dikirim aggregator: array di `result`, dan tiap
+  // entri bisa menaruh URL gambarnya di `image` atau `images_url`.
+  const keluar = kappinterest.normalize([
+    { image: "https://i.pinimg.com/originals/a.jpg", title: "Zhao Lusi", link: "https://pin.it/abc" },
+    { images_url: "https://i.pinimg.com/originals/b.jpg" },
+  ]);
+  assert.deepEqual(keluar, {
+    pins: [
+      { title: "Zhao Lusi", image: "https://i.pinimg.com/originals/a.jpg", link: "https://pin.it/abc" },
+      { title: "", image: "https://i.pinimg.com/originals/b.jpg", link: "" },
+    ],
+  });
+});
+
+test("normalize: entri pencarian tanpa URL gambar dibuang, bukan jadi url kosong", () => {
+  // Kedua plugin mengunduh URL itu sendiri; entri tanpa URL hanya menambah satu
+  // request yang pasti ditolak.
+  const keluar = kappinterest.normalize({
+    pins: [{ title: "Tanpa gambar" }, { image: "https://i.pinimg.com/originals/b.jpg" }],
+  });
+  assert.equal(keluar.pins.length, 1);
+  assert.equal(keluar.pins[0].image, "https://i.pinimg.com/originals/b.jpg");
+});
+
+test("normalize(null) dan nilai non-objek melempar", () => {
+  for (const nilai of [null, undefined, "teks", 7, true]) {
+    assert.throws(() => kappinterest.normalize(nilai), /tidak dikenali/);
+  }
+});
+
+test("normalize: respons tanpa type dan tanpa media tidak ditebak diam-diam", () => {
+  assert.throws(
+    () => kappinterest.normalize({ foo: 1 }),
+    /tidak dikenali/,
+  );
+});
+
+// ── guard URL ─────────────────────────────────────────────────────────────────
+
+test("guard: link Pinterest salah format ditolak tanpa satu pun request HTTP", async () => {
+  await assert.rejects(
+    () => pinLokal.run({ url: "https://example.com/bukan-pinterest" }),
+    (error) => {
+      assert.ok(error instanceof Error);
+      // Pesan wajib menyebut format yang diterima: tanpa itu user hanya melihat
+      // "gagal" dan tidak tahu apa yang harus diketik.
+      assert.match(error.message, /pin\.it|pinterest\.com\/pin/);
+      return true;
+    },
+  );
+  assert.deepEqual(PANGGILAN_HTTP, [], "guard harus jalan sebelum scraper, bukan sesudahnya");
+});
+
+test("guard: aggregator tidak dihubungi untuk link yang gagal guard", async () => {
+  // Tanpa `applies` di backend api, penolakan guard di backend lokal akan
+  // diteruskan ke aggregator: satu request yang pasti ditolak plus satu
+  // kegagalan host untuk host yang tidak salah apa-apa. Yang tetap dihitung
+  // kegagalan hanya backend yang benar-benar dipanggil.
+  const resolver = resolverPin();
+  await assert.rejects(() => resolver.resolve("pinterest", { url: "https://example.com/bukan-pinterest" }));
+
+  assert.deepEqual(
+    PANGGILAN_HTTP.filter((c) => String(c.url).includes("azbry.com")),
+    [],
+    "aggregator tidak boleh dihubungi untuk link yang gagal guard",
+  );
+  assert.deepEqual(
+    resolver.breaker.snapshot().map((s) => s.name),
+    ["ilovepin"],
+    "slot breaker hanya boleh berisi host yang benar-benar dihubungi",
+  );
+});
+
+test("guard: resolve() melempar CapabilityError dan tetap tanpa request", async () => {
+  const resolver = resolverPin();
+  await assert.rejects(
+    () => resolver.resolve("pinterest", { url: "https://example.com/bukan-pinterest" }),
+    (error) => {
+      assert.ok(error instanceof CapabilityError);
+      assert.equal(error.capability, "pinterest");
+      assert.ok(error.tried.length > 0, "backend yang dicoba harus tercatat");
+      assert.match(error.tried[0].reason, /pin\.it|pinterest\.com\/pin/);
+      return true;
+    },
+  );
+  assert.deepEqual(PANGGILAN_HTTP, []);
+});
+
+test("guard: bentuk link yang sah diterima — sub-domain, pin.it, huruf besar", async () => {
+  const sah = [
+    "https://pinterest.com/pin/87186942777228203/",
+    "https://id.pinterest.com/pin/87186942777228203/",
+    "https://ru.pinterest.com/pin/87186942777228203/?nic_v3=1",
+    "https://www.pinterest.co.uk/pin/87186942777228203/",
+    "https://pin.it/3abcd",
+    "HTTPS://PIN.IT/3abcd",
+  ];
+  for (const url of sah) {
+    balasIlovepin = async () => ({ headers: { "set-cookie": ["s=1"] } });
+    balasProxy = balasanProxy([GAMBAR_ILOVEPIN]);
+    const keluar = await pinLokal.run({ url });
+    assert.equal(keluar.media.length, 1, `harus diterima: ${url}`);
+  }
+});
+
+test("guard: halaman Pinterest yang bukan pin ditolak", async () => {
+  for (const url of [
+    "https://pinterest.com/heyeeog/",
+    "https://id.pinterest.com/search/pins/?q=cewe",
+    "https://pin.it.evil.example/3abcd",
+  ]) {
+    await assert.rejects(() => pinLokal.run({ url }), /pin\.it|pinterest\.com\/pin/);
+  }
+  assert.deepEqual(PANGGILAN_HTTP, []);
+});
+
+// ── wiring resolver ──────────────────────────────────────────────────────────
+
+test("stable false: pin bisa dihapus kapan saja dan URL unduhan bisa kedaluwarsa", () => {
+  assert.equal(
+    kappinterest.stable,
+    false,
+    "dari cache tidak boleh ada: pin dihapus owner-nya dan URL ilovepin basi",
+  );
+});
+
+test("minimal satu backend local dan satu api sebagai cadangan", () => {
+  const lokal = kappinterest.backends.filter((b) => b.kind === "local");
+  const api = kappinterest.backends.filter((b) => b.kind !== "local");
+  assert.ok(lokal.length >= 1, `backend local minimal satu, dapat ${lokal.length}`);
+  assert.ok(api.length >= 1, "harus ada cadangan aggregator, scraper lokal bisa mati");
+  assert.equal(lokal[0].name, "ilovepin");
+  assert.equal(api[0].name, "azbry");
+  assert.equal(new Set(kappinterest.backends.map((b) => b.name)).size, kappinterest.backends.length);
+});
+
+test("nama backend per-host, bukan per-URL atau per-kueri", async () => {
+  const resolver = resolverPin();
+  const nama = new Set(kappinterest.backends.map((b) => b.name));
+  const varian = [
+    { q: "satu" },
+    { q: "dua" },
+    { url: "https://pin.it/a" },
+    { url: "https://pin.it/b" },
+    { url: "https://example.com/bukan-pinterest" },
+  ];
+  for (const args of varian) await resolver.resolve("pinterest", args).catch(() => {});
+  const slot = new Set(resolver.breaker.snapshot().map((s) => s.name));
+  assert.ok(
+    [...slot].every((n) => nama.has(n)),
+    `slot breaker hanya boleh berisi nama host yang dideklarasikan: ${[...slot].join(", ")}`,
+  );
+  assert.ok(slot.size <= nama.size, `jumlah slot melebihi jumlah nama: ${slot.size}`);
+});
+
+test("unduhan: scraper lokal dulu, aggregator tidak boleh diakses lebih awal", async () => {
+  const dipanggil = [];
+  balasIlovepin = async () => {
+    dipanggil.push("ilovepin:get");
+    return { headers: { "set-cookie": ["s=1"] } };
+  };
+  balasProxy = async () => {
+    dipanggil.push("ilovepin:post");
+    return { data: { api: { status: "OK", mediaItems: [VIDEO_ILOVEPIN, VIDEO_ILOVEPIN_KECIL] } } };
+  };
+  hasilAggregator = async () => {
+    dipanggil.push("azbry");
+    return { status: 200, data: { status: true, result: { type: "image", images: [{ name: "orig", url: "https://x/o.jpg" }] } } };
+  };
+
+  const keluar = await resolverPin().resolve("pinterest", { url: "https://pin.it/abc" });
+
+  assert.deepEqual(dipanggil, ["ilovepin:get", "ilovepin:post"], "aggregator tidak boleh diakses sebelum host lokal");
+  assert.equal(keluar.source, "ilovepin");
+  assert.deepEqual(keluar.data, {
+    type: "video",
+    media: [{ type: "video", url: VIDEO_ILOVEPIN.mediaUrl }],
+  });
+});
+
+test("unduhan: scraper lokal gagal → aggregator jadi cadangan", async () => {
+  balasIlovepin = async () => ({ headers: {} });
+  balasProxy = async () => {
+    throw new Error("ilovepinproxy 502");
+  };
+  hasilAggregator = async () => ({
+    status: 200,
+    data: { status: true, result: { type: "image", images: [{ name: "small", url: "https://x/s.jpg" }, { name: "orig", url: "https://x/o.jpg" }] } },
+  });
+
+  const keluar = await resolverPin().resolve("pinterest", { url: "https://pin.it/abc" });
+  assert.equal(keluar.source, "azbry");
+  assert.deepEqual(keluar.data.media, [{ type: "image", url: "https://x/o.jpg" }]);
+});
+
+test("unduhan: pin yang dihapus dari aggregator → CapabilityError, bukan media basi", () => {
+  balasIlovepin = async () => ({ headers: {} });
+  balasProxy = async () => ({ data: { api: { status: "OK", title: "x", mediaItems: [] } } });
+  hasilAggregator = async () => ({
+    status: 200,
+    data: { status: true, result: { type: "image", images: [] } },
+  });
+
+  return assert.rejects(
+    () => resolverPin().resolve("pinterest", { url: "https://pin.it/abc" }),
+    (error) => {
+      assert.ok(error instanceof CapabilityError);
+      assert.deepEqual(error.tried.map((t) => t.name), ["ilovepin", "azbry"]);
+      return true;
+    },
+  );
+});
+
+test("pencarian: { q } tidak pernah menyentuh scraper lokal", async () => {
+  hasilAggregator = async () => ({
+    status: 200,
+    data: {
+      status: true,
+      result: [
+        { image: "https://i.pinimg.com/originals/a.jpg", title: "cewe", link: "https://pin.it/1" },
+        { images_url: "https://i.pinimg.com/originals/b.jpg" },
+      ],
+    },
+  });
+
+  const keluar = await resolverPin().resolve("pinterest", { q: "cewe cantik indonesia" });
+
+  assert.equal(keluar.source, "azbry");
+  assert.equal(keluar.data.pins.length, 2);
+  assert.equal(keluar.data.pins[0].image, "https://i.pinimg.com/originals/a.jpg");
+  assert.equal(keluar.data.pins[1].image, "https://i.pinimg.com/originals/b.jpg");
+  assert.deepEqual(
+    PANGGILAN_HTTP.filter((c) => String(c.url).includes("ilovepin.net")),
+    [],
+    "pencarian tidak boleh menembak scraper lokal: dia hanya menerima link pin",
+  );
+});
+
+test("pencarian: aggregator hidup tapi nihil → pins kosong, plugin bisa bilang tidak ditemukan", async () => {
+  hasilAggregator = async () => ({ status: 200, data: { status: true, result: [] } });
+  const keluar = await resolverPin().resolve("pinterest", { q: "tidak ada ini" });
+  assert.equal(keluar.source, "azbry");
+  assert.deepEqual(keluar.data, { pins: [] });
+});
+
+test("pencarian: aggregator mati → CapabilityError tanpa mencoba scraper lokal", async () => {
+  hasilAggregator = async () => {
+    throw new Error("getaddrinfo ENOTFOUND api.azbry.com");
+  };
+  await assert.rejects(
+    () => resolverPin().resolve("pinterest", { q: "cewe" }),
+    (error) => {
+      assert.ok(error instanceof CapabilityError);
+      assert.deepEqual(error.tried.map((t) => t.name), ["azbry"]);
+      return true;
+    },
+  );
+});
+
+test("tiga pencarian tidak boleh menyusun breaker scraper lokal", async () => {
+  // Backend yang tidak berlaku untuk { q } tidak pernah dihubungi, jadi tidak
+  // boleh menghitung kegagalan: kalau tidak, tiga ketikan `.pap` sudah cukup
+  // untuk mengeluarkan scraper yang sehat dari rotasi selama 30 detik.
+  hasilAggregator = async () => {
+    throw new Error("azbry mati");
+  };
+  const resolver = resolverPin();
+  for (const q of ["satu", "dua", "tiga"]) await resolver.resolve("pinterest", { q }).catch(() => {});
+
+  const state = resolver.breaker.snapshot();
+  assert.deepEqual(
+    state.filter((s) => s.name === "ilovepin"),
+    [],
+    "scraper lokal tidak boleh punya slot breaker setelah tiga pencarian",
+  );
+  assert.equal(state.find((s) => s.name === "azbry")?.failures, 3);
+});
+
+test("setelah tiga pencarian, unduhan tetap memakai scraper lokal", async () => {
+  hasilAggregator = async () => {
+    throw new Error("azbry mati");
+  };
+  const resolver = resolverPin();
+  for (const q of ["satu", "dua", "tiga"]) await resolver.resolve("pinterest", { q }).catch(() => {});
+
+  balasIlovepin = async () => ({ headers: {} });
+  balasProxy = balasanProxy([GAMBAR_ILOVEPIN]);
+  const keluar = await resolver.resolve("pinterest", { url: "https://pin.it/abc" });
+  assert.equal(keluar.source, "ilovepin", "pencarian sebelumnya tidak boleh mengganggu unduhan berikutnya");
+});
+
+test("argumen kosong → no-applicable-backend, breaker bersih", async () => {
+  const resolver = resolverPin();
+  await assert.rejects(
+    () => resolver.resolve("pinterest", {}),
+    (error) => {
+      assert.ok(error instanceof CapabilityError);
+      assert.equal(error.code, "no-applicable-backend");
+      assert.deepEqual(error.tried, []);
+      return true;
+    },
+  );
+  assert.deepEqual(resolver.breaker.snapshot(), []);
+});
+
+// ── budget: abort harus sampai ke lapisan HTTP ───────────────────────────────
+
+test("signal diteruskan ke request scraper lokal", async () => {
+  const controller = new AbortController();
+  balasIlovepin = async () => ({ headers: {} });
+  balasProxy = balasanProxy([GAMBAR_ILOVEPIN]);
+  await pinLokal.run({ url: "https://pin.it/abc" }, { signal: controller.signal });
+
+  const get = PANGGILAN_HTTP.find((c) => c.verb === "get" && c.url.includes("ilovepin.net"));
+  const post = PANGGILAN_HTTP.find((c) => c.verb === "post" && c.url.includes("ilovepin.net"));
+  assert.equal(get?.opts?.signal, controller.signal, "request pertama harus menerima AbortSignal");
+  assert.equal(post?.config?.signal, controller.signal, "request kedua harus menerima AbortSignal");
+});
+
+test("signal diteruskan ke request aggregator, bukan hanya ke scraper lokal", async () => {
+  const controller = new AbortController();
+  hasilAggregator = async () => ({ status: 200, data: { status: true, result: [] } });
+  await pinApi.run({ q: "cewe" }, { signal: controller.signal });
+  assert.equal(
+    PANGGILAN_HTTP.at(-1).opts?.signal,
+    controller.signal,
+    "tier api juga harus menghormati budget resolver",
+  );
+});
+
+test("budget habis di tier lokal → request scraper lokal benar-benar dibatalkan", async () => {
+  // Request yang menggantung di sini hanya bisa berhenti kalau signal benar-benar
+  // sampai ke lapisan HTTP; kalau tidak, resolve() selesai duluan sementara
+  // socket ke ilovepin.net masih hidup sampai timeout httpAxios.
+  let terputus = false;
+  balasIlovepin = async (url, opts) =>
+    new Promise((_, reject) => {
+      opts?.signal?.addEventListener("abort", () => {
+        terputus = true;
+        reject(new Error("dibatalkan oleh budget"));
+      });
+    });
+
+  const resolver = resolverPin({ budget: { localMs: 60, totalMs: 400 } });
+  await resolver.resolve("pinterest", { url: "https://pin.it/abc" }).catch(() => {});
+  assert.equal(terputus, true, "abort harus mencabut request scraper lokal");
+});
+
+// ── plugin sudah tidak bicara langsung ke agregator ──────────────────────────
+
+const PLUGIN_PINTEREST = [
+  "plugins/download/pindl.js",
+  "plugins/search/pin.js",
+  "plugins/search/pap.js",
+];
+
+test("tiga plugin tidak menyebut domain agregator lagi", () => {
+  const pola = /nexray|neoxr|izuka|cuki|siputzx|azbry/i;
+  const ketemu = [];
+  for (const file of PLUGIN_PINTEREST) {
+    fs.readFileSync(path.join(process.cwd(), file), "utf8")
+      .split("\n")
+      .forEach((baris, i) => {
+        if (pola.test(baris)) ketemu.push(`${file}:${i + 1}: ${baris.trim()}`);
+      });
+  }
+  assert.deepEqual(ketemu, [], `domain agregator masih ada:\n${ketemu.join("\n")}`);
+});
+
+test("tiga plugin memakai resolver dan tidak memanggil axios ke host aggregator", () => {
+  for (const file of PLUGIN_PINTEREST) {
+    const sumber = fs.readFileSync(path.join(process.cwd(), file), "utf8");
+    assert.match(sumber, /from "\.\.\/\.\.\/src\/lib\/resolve\.js"/, `${file} harus mengimpor resolver`);
+    assert.match(sumber, /resolver\.resolve\("pinterest"/, `${file} harus resolve lewat resolver`);
+    assert.doesNotMatch(
+      sumber,
+      /axios\.(get|post)\(\s*[`"']https?:\/\/api\./,
+      `${file} masih menembak aggregator lewat axios`,
+    );
+  }
+});
+
+test("pindl: guard level plugin dipertahankan, bukan diganti guard yang lebih longgar", () => {
+  const sumber = fs.readFileSync(path.join(process.cwd(), "plugins/download/pindl.js"), "utf8");
+  assert.match(
+    sumber,
+    /url\.includes\("pinterest"\)\s*&&\s*!url\.includes\("pin\.it"\)/,
+    "guard plugin adalah lapis kedua dan tidak boleh dilonggarkan",
+  );
+  assert.match(sumber, /for \(const media of mediaList\)/, "plugin harus iterate data.media");
+  assert.doesNotMatch(sumber, /res\.data\.result/, "blok parsing aggregator lama harus hilang");
+});
+
+test("pap: ekspansi query tetap milik plugin, satu resolve per query", () => {
+  const sumber = fs.readFileSync(path.join(process.cwd(), "plugins/search/pap.js"), "utf8");
+  assert.match(sumber, /for \(const q of queries\)/, "loop per query harus tetap ada");
+  assert.match(sumber, /resolver\.resolve\("pinterest", \{ q \}\)/, "setiap query harus lewat resolver");
+  assert.match(sumber, /cewe:\s*\[/, "peta QUERIES tidak boleh hilang");
+  assert.doesNotMatch(sumber, /__setDeps/, "hook DI sudah tidak dipakai test mana pun");
+});
+
+test("pin: album tetap dibangun dari buffer, bukan dari URL mentah", () => {
+  const sumber = fs.readFileSync(path.join(process.cwd(), "plugins/search/pin.js"), "utf8");
+  assert.match(sumber, /responseType:\s*"arraybuffer"/, "gambar Pinterest harus diunduh jadi buffer");
+  assert.match(sumber, /Referer:\s*"https:\/\/www\.pinterest\.com\/"/, "tanpa Referer Pinterest balas 403");
+  assert.match(sumber, /expectedImageCount:\s*mediaList\.length/, "album harus tetap dikirim");
+  assert.doesNotMatch(sumber, /from "\.\.\/\.\.\/src\/lib\/http\.js"/, "f() tidak lagi dipakai untuk aggregator");
+});

@@ -4,6 +4,7 @@ import path from "path";
 import { queueFFmpeg } from "./../../src/lib/ffmpeg.js";
 import { f } from "../../src/lib/http.js";
 import te from "../../src/lib/error.js";
+import { resolver } from "../../src/lib/resolve.js";
 const pluginConfig = {
   name: "pindl",
   alias: ["pinterestdl", "pindownload", "pintdl"],
@@ -35,26 +36,16 @@ async function handler(m, { sock }) {
   }
   m.react("🕕");
   try {
-    const res = await axios.get(`https://api.azbry.com/api/download/pinterest?url=${encodeURIComponent(url)}`);
-    if (!res.data || !res.data.status || !res.data.result) {
-      throw new Error("Gagal mengambil data dari API Pinterest.");
-    }
+    // Scraper lokal lebih dulu, aggregator jadi cadangan: `data.media` sudah
+    // dinormalisasi ke bentuk yang langsung dikonsumsi loop di bawah, jadi parser
+    // aggregator lama tidak lagi perlu hidup di plugin ini.
+    const { data } = await resolver.resolve("pinterest", { url });
+    const mediaList = Array.isArray(data?.media) ? data.media : [];
 
-    const data = res.data.result;
-    const mediaList = [];
-
-    if (data.type === 'video') {
-        const vidUrl = data.videos?.[0]?.url || data.download;
-        if (vidUrl) mediaList.push({ type: 'video', url: vidUrl });
-    }
-
-    if (data.images && data.images.length > 0) {
-        const orig = data.images.find(img => img.name === 'orig') || data.images[data.images.length - 1];
-        if (orig && orig.url) mediaList.push({ type: 'image', url: orig.url });
-    } else if (data.type === 'image' && data.download) {
-        mediaList.push({ type: 'image', url: data.download });
-    }
-
+    // `normalize` sudah menolak respons tanpa media, jadi daftar di sini tidak
+    // mungkin kosong setelah resolve berhasil. Pemeriksaan tetap dijaga karena
+    // ✅ di bawah dihitung dari file yang benar-benar terkirim, dan daftar kosong
+    // berarti tidak ada satu pun file untuk dikirim.
     if (mediaList.length === 0) {
       throw new Error("Tidak ada media ditemukan");
     }
@@ -68,6 +59,9 @@ async function handler(m, { sock }) {
     for (const media of mediaList) {
       if (media.type === "video") {
         let masterUrl = media.url;
+        // HLS hanya ada di URL aggregator yang berakhiran .mp4; URL scraper lokal
+        // berakhiran /720p dan langsung bisa dibaca ffmpeg, jadi rewrite di
+        // bawah dilewati dan ffmpeg memakai URL itu apa adanya.
         if (masterUrl.includes('.mp4')) {
             masterUrl = masterUrl.replace(/720p|480p|360p|240p/g, 'hls').replace('.mp4', '.m3u8');
         }

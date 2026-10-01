@@ -45,7 +45,6 @@ const GUARDED_MISSING_IMPORTS = new Set([
   // berikutnya. Import-nya memang belum ada file-nya sekarang; begitu tiap
   // modul kapabilitas dibuat, hapus barisnya supaya I1 langsung aktif lagi
   // menjaga file yang hilang.
-  "src/lib/resolve.js -> ../capabilities/pinterest.js",
   "src/lib/resolve.js -> ../capabilities/douyin.js",
   "src/lib/resolve.js -> ../capabilities/sfile.js",
   "src/lib/resolve.js -> ../capabilities/videy.js",

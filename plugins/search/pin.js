@@ -6,7 +6,7 @@ import {
 import axios from "axios";
 import crypto from "crypto";
 import te from "../../src/lib/error.js";
-import { f } from "../../src/lib/http.js";
+import { resolver } from "../../src/lib/resolve.js";
 
 const pluginConfig = {
   name: "pin",
@@ -36,13 +36,12 @@ async function handler(m, { sock }) {
   await m.react("🕕");
 
   try {
-    // cuki.biz.id mati (401) — pindah ke azbry (sama seperti pindl.js)
-    const data = await f(
-      `https://api.azbry.com/api/search/pinterest?q=${encodeURIComponent(query)}`,
-    );
-
-    const results = (data?.result || [])
-      .map((item) => item?.image || item?.images_url)
+    // Pencarian lewat resolver, bukan aggregator langsung: kapabilitas yang
+    // memilih backend dan menormalisasi bentuk respons, sementara breaker di
+    // dalamnya yang menyingkirkan host yang sedang mati supaya tidak dicoba lagi.
+    const { data } = await resolver.resolve("pinterest", { q: query });
+    const results = (data?.pins ?? [])
+      .map((pin) => pin?.image)
       .filter(Boolean)
       .slice(0, 10);
     if (results.length === 0) {
