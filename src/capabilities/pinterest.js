@@ -46,15 +46,19 @@ async function lewatIlovepin(args = {}, ctx = {}) {
 
 async function lewatAzbry(args = {}, ctx = {}) {
   const signal = ctx?.signal;
+  // Prefix `/api` bukan detail gaya: `AGGREGATORS.azbry.base` hanya berisi host
+  // dan `aggregator.hit` menempelkan path apa adanya. Tujuh panggilan langsung
+  // dan enam metode AzbryApiProvider di repo ini semuanya memakai `/api` lebih
+  // dulu; tanpa itu host menjawab 404. (Nexray justru tidak perlu prefix.)
   if (typeof args.url === "string" && args.url.trim() !== "") {
-    const body = await aggregator.hit("azbry", "/download/pinterest", {
+    const body = await aggregator.hit("azbry", "/api/download/pinterest", {
       params: { url: args.url.trim() },
       signal,
     });
     return body?.result;
   }
   if (typeof args.q === "string" && args.q.trim() !== "") {
-    const body = await aggregator.hit("azbry", "/search/pinterest", {
+    const body = await aggregator.hit("azbry", "/api/search/pinterest", {
       params: { q: args.q.trim() },
       signal,
     });
@@ -83,7 +87,14 @@ function dariLokal(media) {
   // Hanya satu entri yang diteruskan: plugin mengirim semua yang ada di
   // mediaList, dan satu pin video punya sampai lima varian kualitas. Lima
   // file video ke user bukan hasil yang lebih baik, hanya lima kali kerja.
-  const jenis = terbaik.type === "video" ? "video" : "image";
+  const jenis = terbaik.type;
+  // Type tidak dikenal tidak boleh ditebak jadi gambar: plugin akan mengirim
+  // .mp3 atau .webm sebagai gambar dan user menerima file rusak yang dilaporkan
+  // sukses. Scraper lokal sekarang hanya menaruh video dan image di `media`,
+  // tapi normalize adalah pintu terakhir dan menolak, bukan menebak.
+  if (jenis !== "video" && jenis !== "image") {
+    throw new Error(`pinterest: tipe media "${jenis}" dari scraper lokal tidak dikenal`);
+  }
   return { type: jenis, media: [{ type: jenis, url: String(terbaik.url).trim() }] };
 }
 
@@ -117,8 +128,10 @@ function dariAggregator(raw) {
 function pinCari(entri) {
   if (!entri || typeof entri !== "object") return null;
   // `image` dan `images_url` adalah nama yang benar-benar dikirim host; `link`
-  // dipakai untuk tahu pin mana asalannya dan tidak ada di semua host.
-  const gambar = String(entri.image ?? entri.images_url ?? "").trim();
+  // dipakai untuk tahu pin mana asalannya dan tidak ada di semua host. `||`
+  // bukan `??`: host yang mengirim `image: ""` menyisakan `images_url` yang
+  // justru berisi URL, dan `??` akan memblokirnya.
+  const gambar = String(entri.image || entri.images_url || "").trim();
   if (!/^https?:\/\//i.test(gambar)) return null;
   return {
     title: String(entri.title ?? entri.name ?? entri.description ?? "").trim(),

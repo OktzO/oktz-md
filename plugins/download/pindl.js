@@ -5,6 +5,49 @@ import { queueFFmpeg } from "./../../src/lib/ffmpeg.js";
 import { f } from "../../src/lib/http.js";
 import te from "../../src/lib/error.js";
 import { resolver } from "../../src/lib/resolve.js";
+
+// Batas body video yang ditarik lewat axios biasa. Di kotak 1GB dengan batas RSS
+// 550MB, menarik video tanpa batas bisa membuat proses dibunuh memory-monitor —
+// gagal dengan pesan jauh lebih murah daripada bot ikut mati.
+const BATAS_BODY_VIDEO = 64 * 1024 * 1024;
+
+/**
+ * Terjemahkan URL video menjadi rencana unduhan.
+ *
+ * URL aggregator berakhiran .mp4 dan sebenarnya sebuah master HLS, jadi ditulis
+ * ulang ke .m3u8 supaya audio dan video bisa diambil terpisah. URL dari scraper
+ * lokal berakhiran /720p dan isinya file langsung: membacanya sebagai manifest
+ * berarti menarik seluruh video ke memori hanya supaya bisa di-`split("\n")`.
+ */
+function rencanaVideo(url) {
+  const asal = String(url ?? "");
+  const masterUrl = asal.includes(".mp4")
+    ? asal.replace(/720p|480p|360p|240p/g, "hls").replace(".mp4", ".m3u8")
+    : asal;
+  return { masterUrl, hls: masterUrl.includes(".m3u8") };
+}
+
+/**
+ * Host Pinterest dicek per label, sama seperti yang dilakukan kapabilitas:
+ * `notpinterest.com` dan `pin.it.evil.example` bukan Pinterest dan tetap lolos
+ * `includes`. Guard plugin ada supaya user dapat jawabannya sebelum kapabilitas
+ * sempat mencatat kegagalan host — tiga link palsu dari satu user sudah cukup
+ * membuka breaker scraper yang sehat selama 30 detik untuk semua orang.
+ */
+function hostPinterest(url) {
+  let parsed;
+  try {
+    parsed = new URL(String(url).trim());
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+  const host = parsed.hostname.toLowerCase();
+  if (host === "pin.it") return true;
+  if (!host.split(".").includes("pinterest")) return false;
+  return /^\/pin\//i.test(parsed.pathname);
+}
+
 const pluginConfig = {
   name: "pindl",
   alias: ["pinterestdl", "pindownload", "pintdl"],
@@ -31,7 +74,9 @@ async function handler(m, { sock }) {
         `> \`${m.prefix}pindl https://pinterest.com/pin/xxx\``,
     );
   }
-  if (!url.includes("pinterest") && !url.includes("pin.it")) {
+  // Syarat `pinterest`/`pin.it` yang longgar dipertahankan sebagai layar pertama;
+  // yang menentukan benar atau tidak adalah `hostPinterest`.
+  if ((!url.includes("pinterest") && !url.includes("pin.it")) || !hostPinterest(url)) {
     return m.reply("❌ URL tidak valid. Gunakan link Pinterest.");
   }
   m.react("🕕");
@@ -58,13 +103,7 @@ async function handler(m, { sock }) {
 
     for (const media of mediaList) {
       if (media.type === "video") {
-        let masterUrl = media.url;
-        // HLS hanya ada di URL aggregator yang berakhiran .mp4; URL scraper lokal
-        // berakhiran /720p dan langsung bisa dibaca ffmpeg, jadi rewrite di
-        // bawah dilewati dan ffmpeg memakai URL itu apa adanya.
-        if (masterUrl.includes('.mp4')) {
-            masterUrl = masterUrl.replace(/720p|480p|360p|240p/g, 'hls').replace('.mp4', '.m3u8');
-        }
+        const { masterUrl, hls } = rencanaVideo(media.url);
 
         const tempDir = path.join(process.cwd(), "temp");
         if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
@@ -75,39 +114,49 @@ async function handler(m, { sock }) {
         const outputFile = path.join(tempDir, `${timestamp}_final.mp4`);
 
         try {
-            const resHls = await axios.get(masterUrl, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Referer': 'https://www.pinterest.com/'
-                }
-            });
-            const text = resHls.data;
-            const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
-
-            const baseUrl = masterUrl.substring(0, masterUrl.lastIndexOf("/") + 1);
             let videoStreamUrl = null;
             let audioStreamUrl = null;
-            let lastBandwidth = 0;
 
-            for (let i = 0; i < lines.length; i++) {
-              if (lines[i].startsWith("#EXT-X-STREAM-INF")) {
-                const bwMatch = lines[i].match(/BANDWIDTH=(\d+)/);
-                const bw = bwMatch ? parseInt(bwMatch[1]) : 0;
-                if (bw > lastBandwidth) {
-                  lastBandwidth = bw;
-                  const u = lines[i + 1];
-                  videoStreamUrl = u?.startsWith("http") ? u : baseUrl + u;
+            // Hanya manifest HLS yang perlu diurai. Untuk file langsung, ffmpeg
+            // menarik URL-nya sendiri secara streaming: kalau axios ikut menarik
+            // lebih dulu, video penuh masuk proses sebelum ffmpeg sempat jalan.
+            if (hls) {
+                const resHls = await axios.get(masterUrl, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'Referer': 'https://www.pinterest.com/'
+                    },
+                    maxContentLength: BATAS_BODY_VIDEO
+                });
+                const text = resHls.data;
+                const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+
+                const baseUrl = masterUrl.substring(0, masterUrl.lastIndexOf("/") + 1);
+                let lastBandwidth = 0;
+
+                for (let i = 0; i < lines.length; i++) {
+                  if (lines[i].startsWith("#EXT-X-STREAM-INF")) {
+                    const bwMatch = lines[i].match(/BANDWIDTH=(\d+)/);
+                    const bw = bwMatch ? parseInt(bwMatch[1]) : 0;
+                    if (bw > lastBandwidth) {
+                      lastBandwidth = bw;
+                      const u = lines[i + 1];
+                      videoStreamUrl = u?.startsWith("http") ? u : baseUrl + u;
+                    }
+                  }
+                  if (lines[i].startsWith("#EXT-X-MEDIA") && lines[i].includes("TYPE=AUDIO")) {
+                    const mUrl = lines[i].match(/URI="([^"]+)"/);
+                    if (mUrl) audioStreamUrl = mUrl[1].startsWith("http") ? mUrl[1] : baseUrl + mUrl[1];
+                  }
                 }
-              }
-              if (lines[i].startsWith("#EXT-X-MEDIA") && lines[i].includes("TYPE=AUDIO")) {
-                const mUrl = lines[i].match(/URI="([^"]+)"/);
-                if (mUrl) audioStreamUrl = mUrl[1].startsWith("http") ? mUrl[1] : baseUrl + mUrl[1];
-              }
             }
 
             const ffmpegHdr = `-user_agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" -headers "Referer: https://www.pinterest.com/"`;
 
-            if (!videoStreamUrl) {
+            // Tanpa manifest (atau tanpa varian video di dalamnya), ffmpeg
+            // memakai URL itu apa adanya; video dan audio terpisah hanya perlu
+            // digabung kalau keduanya benar-benar ada di manifest.
+            if (!hls || !videoStreamUrl) {
                 await queueFFmpeg(`ffmpeg -y ${ffmpegHdr} -i "${masterUrl}" -c copy "${outputFile}"`);
             } else {
                 await queueFFmpeg(`ffmpeg -y ${ffmpegHdr} -i "${videoStreamUrl}" -c copy "${videoTemp}"`);
@@ -118,7 +167,17 @@ async function handler(m, { sock }) {
                     fs.renameSync(videoTemp, outputFile);
                 }
             }
-            
+
+            // File hasil ffmpeg dibaca utuh untuk dikirim, jadi ukurannya diperiksa
+            // lebih dulu: video raksasa akan mendorong proses melewati batas RSS
+            // 550MB, dan gagal dengan pesan lebih baik daripada bot ikut mati.
+            const ukuran = fs.statSync(outputFile).size;
+            if (ukuran > BATAS_BODY_VIDEO) {
+              throw new Error(
+                `video ${Math.round(ukuran / 1024 / 1024)} MB melebihi batas ${BATAS_BODY_VIDEO / 1024 / 1024} MB`,
+              );
+            }
+
             await sock.sendMedia(m.chat, fs.readFileSync(outputFile), null, m, {
                 type: "video",
                 contextInfo: { forwardingScore: 99, isForwarded: true }
@@ -128,13 +187,16 @@ async function handler(m, { sock }) {
         } catch (err) {
             console.error("[PinDL HLS Error]:", err.message);
             try {
-                // Fallback: Pinterest memblokir generic axios (403), jadi download manual pakai User-Agent
+                // Fallback: Pinterest memblokir generic axios (403), jadi download manual pakai User-Agent.
+                // Batas ukuran wajib: instance axios ini maxContentLength-nya -1,
+                // dan satu video besar bisa membuat proses melewati batas 550MB.
                 const fallbackBuffer = await axios.get(media.url, { 
                     responseType: 'arraybuffer',
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                         'Referer': 'https://www.pinterest.com/'
-                    }
+                    },
+                    maxContentLength: BATAS_BODY_VIDEO
                 });
                 await sock.sendMedia(m.chat, Buffer.from(fallbackBuffer.data), null, m, {
                   type: "video",
@@ -214,4 +276,4 @@ async function handler(m, { sock }) {
     m.reply(te(m.prefix, m.command, m.pushName));
   }
 }
-export { pluginConfig as config, handler };
+export { rencanaVideo, pluginConfig as config, handler };

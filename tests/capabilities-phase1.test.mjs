@@ -1251,3 +1251,69 @@ test("pin: album tetap dibangun dari buffer, bukan dari URL mentah", () => {
   assert.match(sumber, /expectedImageCount:\s*mediaList\.length/, "album harus tetap dikirim");
   assert.doesNotMatch(sumber, /from "\.\.\/\.\.\/src\/lib\/http\.js"/, "f() tidak lagi dipakai untuk aggregator");
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Temuan review Task 4
+//
+// Di sini dikunci dua hal yang sebelumnya tidak pernah dicek: path aggregator
+// yang lupa prefix /api, dan dua tebakan diam-diam di normalize. Uji level
+// plugin (guard dan jalur unduhan video) ada di tests/pindl-plugin.test.mjs.
+// ═════════════════════════════════════════════════════════════════════════════
+
+
+// ── Critical: prefix /api pada host azbry ────────────────────────────────────
+
+test("azbry: pathname harus persis /api/download/pinterest dan /api/search/pinterest", async () => {
+  // `AGGREGATORS.azbry.base` di src/lib/aggregator.js hanya berisi host, dan
+  // `aggregator.hit` menempelkan path apa adanya. Tujuh panggilan langsung dan
+  // enam metode AzbryApiProvider di repo ini semuanya memakai /api lebih dulu,
+  // jadi path yang lupa /api akan dijawab 404 — fallback yang justru jadi
+  // alasan kapabilitas ini ada. Routing test lain berbasis substring tidak
+  // bisa membedakan path benar dari path salah, jadi pathname dikunci di sini.
+  hasilAggregator = async () => ({ status: 200, data: { status: true, result: [] } });
+
+  await pinApi.run({ url: "https://pin.it/abc" });
+  await pinApi.run({ q: "cewe cantik indonesia" });
+
+  const [unduh, cari] = PANGGILAN_HTTP.map((c) => new URL(c.url));
+  assert.equal(unduh.origin, "https://api.azbry.com");
+  assert.equal(unduh.pathname, "/api/download/pinterest");
+  assert.equal(unduh.searchParams.get("url"), "https://pin.it/abc");
+  assert.equal(cari.pathname, "/api/search/pinterest");
+  assert.equal(cari.searchParams.get("q"), "cewe cantik indonesia");
+});
+
+test("azbry: prefix /api adalah aturan host, bukan tebakan per kapabilitas", () => {
+  // Nexray memang tanpa prefix (`https://api.nexray.eu.cc/downloader/v2/...`),
+  // jadi ini tidak bisa disimpulkan dari base URL: harus ditulis per host.
+  assert.match(
+    kappinterest.backends.find((b) => b.name === "azbry").name,
+    /^[a-z0-9-]+$/,
+  );
+  const sumber = fs.readFileSync(path.join(process.cwd(), "src/capabilities/pinterest.js"), "utf8");
+  assert.doesNotMatch(
+    sumber,
+    /aggregator\.hit\("azbry", "\/(?!api\/)/,
+    "path aggregator tidak boleh tanpa /api",
+  );
+});
+
+// ── Minor: normalize jangan menebak diam-diam ────────────────────────────────
+
+test("normalize: image kosong dari host tidak memblokir images_url", () => {
+  // `??` hanya bereaksi pada null/undefined, jadi string kosong memblokir
+  // images_url yang justru berisi URL. Plugin sebelum Phase 1 memakai `||`.
+  const keluar = kappinterest.normalize({ pins: [{ image: "", images_url: "https://x/b.jpg" }] });
+  assert.equal(keluar.pins.length, 1);
+  assert.equal(keluar.pins[0].image, "https://x/b.jpg");
+});
+
+test("normalize: entri media dengan type tak dikenal dilempar, bukan ditebak jadi gambar", () => {
+  // Audio — dan apa pun yang tidak dikenal — tidak boleh jadi
+  // `{ type: "image" }`: plugin akan mengirim .mp3 sebagai gambar dan user
+  // menerima file rusak yang dilaporkan sukses.
+  assert.throws(
+    () => kappinterest.normalize({ media: [{ type: "audio", url: "https://x/a.mp3" }] }),
+    /tidak dikenal|tanpa media/i,
+  );
+});
