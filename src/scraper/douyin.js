@@ -1,6 +1,14 @@
-import axios from "axios";
+// `httpAxios`, bukan axios lepas: instance ini yang membawa timeout 15 detik,
+// batas body 25MB, dan keep-alive. axios default punya `maxContentLength: -1`
+// (tanpa batas), jadi satu respons host rusak bisa menarik isi penuh ke memori
+// di kotak 1GB. Pola yang sama dipakai src/scraper/spotify.js.
+import { httpAxios as axios } from "../lib/http.js";
 
-async function DouyinDL(douyinUrl) {
+// `signal` opsional supaya pemanggil lama yang hanya mengirim URL tetap jalan,
+// tapi backend resolver boleh teruskannya: AbortController di resolve.js hanya
+// menghentikan resolver menunggu, dan tanpa signal di sini POST-nya tetap hidup
+// sampai timeout 15 detik milik httpAxios sambil memegang socket.
+async function DouyinDL(douyinUrl, { signal } = {}) {
   const response = await axios.post(
     "https://snapvideotools.com/api/snap",
     { text: douyinUrl },
@@ -14,6 +22,7 @@ async function DouyinDL(douyinUrl) {
         Referer: "https://snapvideotools.com/",
         Origin: "https://snapvideotools.com",
       },
+      signal,
     },
   );
 

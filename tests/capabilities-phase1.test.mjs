@@ -1326,3 +1326,453 @@ test("normalize: entri media dengan type tak dikenal dilempar, bukan ditebak jad
     /tidak dikenal|tanpa media/i,
   );
 });
+// ═════════════════════════════════════════════════════════════════════════════
+// Douyin
+//
+// Dua bentuk yang disagreed di sini bukan tebakan. Bentuk lokal dibaca dari
+// src/scraper/douyin.js: `DouyinDL` mengembalikan objek yang SELALU ada —
+// `{ status: false, error }` saat gagal, `{ status: true, video: null }` saat
+// host menjawab tanpa media video. Bentuk aggregator dibaca dari plugin
+// sebelum Phase 1: `res.data.status && res.data.result`, lalu `result.platform`,
+// `result.title`, `result.video`, `result.audio`. Keduanya dinormalisasi ke
+// empat field yang benar-benar dikonsumsi plugin.
+// ═════════════════════════════════════════════════════════════════════════════
+
+let balasSnap = () => {
+  throw new Error("snapvideotools tidak boleh dipanggil: upstream mati");
+};
+
+const postPinterest = httpPalsu.post;
+httpPalsu.post = async (url, body, config) => {
+  if (String(url).includes("snapvideotools.com")) {
+    PANGGILAN_HTTP.push({ verb: "post", url, config });
+    return balasSnap(url, body, config);
+  }
+  return postPinterest(url, body, config);
+};
+
+const kapdouyin = await import("../src/capabilities/douyin.js");
+
+const douyinLokal = kapdouyin.backends.find((b) => b.kind === "local");
+const douyinApi = kapdouyin.backends.find((b) => b.kind === "api");
+
+function resolverDouyin(opsi = {}) {
+  return createResolver({ capabilities: { douyin: () => kapdouyin }, ...opsi });
+}
+
+/** Bentuk yang benar-benar dikirim snapvideotools.com, bukan bentuk keluar plugin. */
+const SNAP_VIDEO = "https://v3.douyinvod.com/abc/video.mp4";
+const SNAP_AUDIO = "https://v3.douyinvod.com/abc/audio.mp3";
+
+// `DouyinDL` membaca `response.data.data`, jadi amplop host ada dua lapis:
+// `data` (badan respons) lalu `data` (hasil scraping). Menulis satu lapis saja
+// membuat scraper melihat `undefined` dan melaporkan "Data tidak ditemukan" —
+// persis gejala yang akan muncul kalaubingkuk fixture ini dipakai.
+function snapSukses(mediaUrls = [
+  { type: "video", url: SNAP_VIDEO },
+  { type: "audio", url: SNAP_AUDIO },
+]) {
+  balasSnap = async () => ({
+    data: { data: { title: "Judul Douyin", platformName: "Douyin", mediaUrls } },
+  });
+}
+
+/** Bentuk yang benar-benar dikirim azbry /downloader/douyin. */
+const AZBRY = {
+  status: 200,
+  data: {
+    status: true,
+    result: {
+      platform: "Douyin",
+      title: "Judul Douyin",
+      video: SNAP_VIDEO,
+      audio: SNAP_AUDIO,
+    },
+  },
+};
+
+beforeEach(() => {
+  balasSnap = () => {
+    throw new Error("snapvideotools tidak boleh dipanggil: upstream mati");
+  };
+});
+
+// ── normalisasi bentuk ────────────────────────────────────────────────────────
+
+test("normalize: bentuk scraper lokal jadi empat field", () => {
+  const keluar = kapdouyin.normalize({
+    status: true,
+    title: "Judul Douyin",
+    platform: "Douyin",
+    video: SNAP_VIDEO,
+    audio: SNAP_AUDIO,
+  });
+  assert.deepEqual(keluar, {
+    title: "Judul Douyin",
+    platform: "Douyin",
+    video: SNAP_VIDEO,
+    audio: SNAP_AUDIO,
+  });
+});
+
+test("normalize: bentuk aggregator punya field yang sama persis", () => {
+  // Kegagalan Phase 4 ada di sini kalau nama field aggregator dan lokal
+  // disamakan di normalize: dikunci ke bentuk yang benar-benar dikirim host,
+  // bukan ke bentuk kiriman plugin.
+  assert.deepEqual(
+    kapdouyin.normalize({
+      platform: "Douyin",
+      title: "Judul Douyin",
+      video: SNAP_VIDEO,
+      audio: SNAP_AUDIO,
+    }),
+    { title: "Judul Douyin", platform: "Douyin", video: SNAP_VIDEO, audio: SNAP_AUDIO },
+  );
+});
+
+test("normalize: status false adalah kegagalan, bukan data kosong", () => {
+  // `DouyinDL` tidak melempar saat gagal — ia mengembalikan objek yang isinya
+  // cuma `error`. Kalau normalize menerimanya, plugin akan mengirim tidak ada
+  // file lalu tetap memberi centang hijau.
+  assert.throws(
+    () => kapdouyin.normalize({ status: false, error: "Data tidak ditemukan" }),
+    /tidak ditemukan/i,
+  );
+});
+
+test("normalize: video null melempar — plugin tidak boleh mengirim apa-apa", () => {
+  //snapvideotools menjawab 200 dengan `mediaUrls` tanpa entri video. Objeknya
+  //ada dan `status`-nya `true`, jadi tanpa pemeriksaan ini backend dianggap
+  //berhasil dan aggregator tidak pernah diberi giliran.
+  assert.throws(
+    () =>
+      kapdouyin.normalize({
+        status: true,
+        title: "Tanpa video",
+        platform: "Douyin",
+        video: null,
+        audio: SNAP_AUDIO,
+      }),
+    /video/i,
+  );
+});
+
+test("normalize: audio null tetap sah, post tanpa trek audio itu nyata", () => {
+  assert.deepEqual(
+    kapdouyin.normalize({
+      status: true,
+      title: "Tanpa audio",
+      platform: "Douyin",
+      video: SNAP_VIDEO,
+      audio: null,
+    }),
+    { title: "Tanpa audio", platform: "Douyin", video: SNAP_VIDEO, audio: "" },
+  );
+});
+
+test("normalize: URL media yang bukan http(s) ditolak, bukan diteruskan", () => {
+  assert.throws(
+    () =>
+      kapdouyin.normalize({
+        status: true,
+        title: "x",
+        platform: "Douyin",
+        video: "data:video/mp4;base64,AAAA",
+        audio: "",
+      }),
+    /video/i,
+  );
+});
+
+test("normalize(null), normalize({}) dan nilai non-objek melempar", () => {
+  for (const nilai of [null, undefined, {}, "teks", 7, true]) {
+    assert.throws(() => kapdouyin.normalize(nilai), /tidak dikenali|video/i, `nilai: ${String(nilai)}`);
+  }
+});
+
+// ── guard URL ─────────────────────────────────────────────────────────────────
+
+test("guard: host yang bukan Douyin ditolak tanpa satu pun request", async () => {
+  for (const url of [
+    "https://douyin.com.evil.example/video/1",
+    "https://notdouyin.com/video/1",
+    "https://example.com/?u=douyin.com",
+    "https://v.douyin.com.evil.example/abc/",
+  ]) {
+    await assert.rejects(
+      () => douyinLokal.run({ url }),
+      (error) => {
+        // Pesan wajib menyebut format yang diterima: tanpa itu user hanya
+        // melihat "gagal" dan tidak tahu apa yang harus diketik.
+        assert.match(error.message, /douyin\.com|iesdouyin\.com/);
+        return true;
+      },
+      `harus ditolak: ${url}`,
+    );
+  }
+  assert.deepEqual(PANGGILAN_HTTP, [], "guard harus jalan sebelum scraper, bukan sesudahnya");
+});
+
+test("guard: link Douyin yang sah diterima — subdomain, iesdouyin, huruf besar", async () => {
+  const sah = [
+    "https://v.douyin.com/abc123/",
+    "https://www.douyin.com/video/7123456789",
+    "https://www.iesdouyin.com/share/video/7123456789/",
+    "HTTPS://V.DOUYIN.COM/ABC123/",
+  ];
+  for (const url of sah) {
+    snapSukses();
+    const keluar = await douyinLokal.run({ url });
+    assert.equal(keluar.video, SNAP_VIDEO, `harus diterima: ${url}`);
+  }
+});
+
+test("guard: aggregator tidak dihubungi untuk link yang gagal guard", async () => {
+  // Tanpa `applies` di backend api, penolakan guard diteruskan ke aggregator:
+  // satu request yang pasti ditolak plus satu kegagalan untuk host yang tidak
+  // salah apa-apa. Yang tetap dihitung kegagalan hanya backend yang benar-benar
+  // dipanggil.
+  hasilAggregator = async () => AZBRY;
+  const resolver = resolverDouyin();
+  await assert.rejects(() => resolver.resolve("douyin", { url: "https://douyin.com.evil.example/v/1" }));
+  assert.deepEqual(
+    PANGGILAN_HTTP.filter((c) => String(c.url).includes("azbry.com")),
+    [],
+    "aggregator tidak boleh dihubungi untuk link yang gagal guard",
+  );
+  assert.deepEqual(
+    resolver.breaker.snapshot().map((s) => s.name),
+    ["snapvideotools"],
+    "slot breaker hanya boleh berisi host yang benar-benar dihubungi",
+  );
+});
+
+test("guard: resolve() melempar CapabilityError dan tetap tanpa request", async () => {
+  await assert.rejects(
+    () => resolverDouyin().resolve("douyin", { url: "https://notdouyin.com/video/1" }),
+    (error) => {
+      assert.ok(error instanceof CapabilityError);
+      assert.equal(error.capability, "douyin");
+      assert.deepEqual(error.tried.map((t) => t.name), ["snapvideotools"]);
+      assert.match(error.tried[0].reason, /douyin\.com/);
+      return true;
+    },
+  );
+  assert.deepEqual(PANGGILAN_HTTP, []);
+});
+
+// ── wiring resolver ──────────────────────────────────────────────────────────
+
+test("stable false: URL snapvideotools kedaluwarsa dan post bisa dihapus", () => {
+  assert.equal(kapdouyin.stable, false, "dari cache tidak boleh ada: tautan unduhan berumur pendek");
+});
+
+test("minimal satu backend local dan satu api sebagai cadangan", () => {
+  const lokal = kapdouyin.backends.filter((b) => b.kind === "local");
+  const api = kapdouyin.backends.filter((b) => b.kind !== "local");
+  assert.equal(lokal.length, 1, `backend local minimal satu, dapat ${lokal.length}`);
+  assert.equal(api.length, 1, "harus ada cadangan aggregator, snapvideotools bisa mati");
+  assert.equal(api[0].name, "azbry");
+  assert.deepEqual(
+    kapdouyin.backends.map((b) => b.name).sort(),
+    [...new Set(kapdouyin.backends.map((b) => b.name))].sort(),
+    "nama backend wajib unik per host",
+  );
+});
+
+test("nama backend per-host: label host, bukan nama perintah atau per-URL", () => {
+  for (const n of kapdouyin.backends.map((b) => b.name)) {
+    assert.match(n, /^[a-z0-9][a-z0-9-]*$/, `nama backend bukan label host yang wajar: ${n}`);
+  }
+  assert.ok(
+    kapdouyin.backends.some((b) => b.name === "snapvideotools"),
+    `backend lokal harus bernama host snapvideotools, dapat ${kapdouyin.backends.map((b) => b.name).join(", ")}`,
+  );
+});
+
+test("unduhan: scraper lokal dulu, aggregator tidak boleh diakses lebih awal", async () => {
+  const dipanggil = [];
+  balasSnap = async () => {
+    dipanggil.push("snapvideotools");
+    return { data: { data: { title: "Judul", platformName: "Douyin", mediaUrls: [{ type: "video", url: SNAP_VIDEO }] } } };
+  };
+  hasilAggregator = async () => {
+    dipanggil.push("azbry");
+    return AZBRY;
+  };
+
+  const keluar = await resolverDouyin().resolve("douyin", { url: "https://v.douyin.com/abc/" });
+
+  assert.deepEqual(dipanggil, ["snapvideotools"]);
+  assert.equal(keluar.source, "snapvideotools");
+  assert.equal(keluar.data.video, SNAP_VIDEO);
+});
+
+test("unduhan: scraper lokal gagal → aggregator jadi cadangan", async () => {
+  snapSukses([{ type: "audio", url: SNAP_AUDIO }]);
+  hasilAggregator = async () => AZBRY;
+
+  const keluar = await resolverDouyin().resolve("douyin", { url: "https://v.douyin.com/abc/" });
+
+  assert.equal(keluar.source, "azbry");
+  assert.equal(keluar.data.video, SNAP_VIDEO);
+});
+
+test("unduhan: aggregator hidup tapi nihil → CapabilityError, bukan URL basi", async () => {
+  snapSukses([{ type: "audio", url: SNAP_AUDIO }]);
+  hasilAggregator = async () => ({ status: 200, data: { status: true, result: { platform: "Douyin" } } });
+
+  await assert.rejects(
+    () => resolverDouyin().resolve("douyin", { url: "https://v.douyin.com/abc/" }),
+    (error) => {
+      assert.ok(error instanceof CapabilityError);
+      assert.deepEqual(error.tried.map((t) => t.name), ["snapvideotools", "azbry"]);
+      return true;
+    },
+  );
+});
+
+test("argumen kosong → no-applicable-backend, breaker bersih", async () => {
+  const resolver = resolverDouyin();
+  await assert.rejects(
+    () => resolver.resolve("douyin", {}),
+    (error) => {
+      assert.equal(error.code, "no-applicable-backend");
+      assert.deepEqual(error.tried, []);
+      return true;
+    },
+  );
+  assert.deepEqual(resolver.breaker.snapshot(), []);
+});
+
+// ── aggregator: URL harus dikunci persis ──────────────────────────────────────
+
+test("azbry: pathname harus persis /api/downloader/douyin dan param url", async () => {
+  // Routing berbasis substring tidak bisa membedakan path benar dari path
+  // salah, dan path yang lupa `/api` dijawab 404 — fallback yang justru jadi
+  // alasan kapabilitas ini ada.
+  hasilAggregator = async () => AZBRY;
+
+  await douyinApi.run({ url: "https://v.douyin.com/abc/" });
+
+  const [req] = PANGGILAN_HTTP.map((c) => new URL(c.url));
+  assert.equal(req.origin, "https://api.azbry.com");
+  assert.equal(req.pathname, "/api/downloader/douyin");
+  assert.equal(req.searchParams.get("url"), "https://v.douyin.com/abc/");
+  assert.deepEqual([...req.searchParams.keys()], ["url"], "param lain tidak boleh ikut terkirim");
+});
+
+test("azbry: setiap literal path aggregator di kapabilitas ini berawalan /api", () => {
+  const kode = fs
+    .readFileSync(path.join(process.cwd(), "src/capabilities/douyin.js"), "utf8")
+    .split("\n")
+    .filter((baris) => !/^\s*(\/\/|\/\*|\*)/.test(baris))
+    .join("\n");
+  const literalPath = [...kode.matchAll(/["'`]\/[^"'`\s]*["'`]/g)].map((m) => m[0].slice(1, -1));
+  assert.ok(literalPath.length >= 1, `path aggregator harus detectable, dapat ${literalPath.length}`);
+  const salah = literalPath.filter((p) => !p.startsWith("/api/"));
+  assert.deepEqual(salah, [], `path tanpa /api: ${salah.join(", ")}`);
+});
+
+// ── budget: abort harus sampai ke lapisan HTTP ───────────────────────────────
+
+test("signal diteruskan ke request scraper lokal", async () => {
+  const controller = new AbortController();
+  snapSukses();
+  await douyinLokal.run({ url: "https://v.douyin.com/abc/" }, { signal: controller.signal });
+  assert.equal(PANGGILAN_HTTP.at(-1).config?.signal, controller.signal);
+});
+
+test("budget habis → request scraper lokal benar-benar dibatalkan", async () => {
+  let terputus = false;
+  balasSnap = (url, body, config) =>
+    new Promise((_resolve, reject) => {
+      config?.signal?.addEventListener("abort", () => {
+        terputus = true;
+        reject(new Error("dibatalkan oleh budget"));
+      });
+    });
+
+  await resolverDouyin({ budget: { localMs: 60, totalMs: 400 } })
+    .resolve("douyin", { url: "https://v.douyin.com/abc/" })
+    .catch(() => {});
+
+  assert.equal(terputus, true, "abort harus mencabut request scraper lokal, bukan hanya resolver");
+});
+
+test("signal diteruskan ke request aggregator", async () => {
+  const controller = new AbortController();
+  hasilAggregator = async () => AZBRY;
+  await douyinApi.run({ url: "https://v.douyin.com/abc/" }, { signal: controller.signal });
+  assert.equal(PANGGILAN_HTTP.at(-1).opts?.signal, controller.signal);
+});
+
+// ── plugin sudah tidak bicara langsung ke agregator ──────────────────────────
+
+const PLUGIN_DOUYIN = ["plugins/download/douyindl.js"];
+
+test("plugin douyin tidak menyebut domain agregator lagi", () => {
+  const pola = /nexray|neoxr|izuka|cuki|siputzx|azbry/i;
+  const ketemu = [];
+  for (const file of PLUGIN_DOUYIN) {
+    fs.readFileSync(path.join(process.cwd(), file), "utf8")
+      .split("\n")
+      .forEach((baris, i) => {
+        if (pola.test(baris)) ketemu.push(`${file}:${i + 1}: ${baris.trim()}`);
+      });
+  }
+  assert.deepEqual(ketemu, [], `domain agregator masih ada:\n${ketemu.join("\n")}`);
+});
+
+test("plugin douyin memakai resolver, bukan axios/aggregator langsung", () => {
+  for (const file of PLUGIN_DOUYIN) {
+    const sumber = fs.readFileSync(path.join(process.cwd(), file), "utf8");
+    assert.match(
+      sumber,
+      /from "\.\.\/\.\.\/src\/lib\/resolve\.js"/,
+      `${file} harus mengimpor resolver`,
+    );
+    assert.match(sumber, /resolver\.resolve\("douyin"/, `${file} harus resolve lewat resolver`);
+    assert.doesNotMatch(
+      sumber,
+      /axios\.(get|post)\(\s*[`"']https?:\/\//,
+      `${file} masih menembak host luar lewat axios`,
+    );
+    assert.doesNotMatch(sumber, /douyinFetch/, "blok parsing aggregator lama harus hilang");
+  }
+});
+
+test("plugin douyin: guard host bertahan, dan lebih ketat dari `includes`", () => {
+  // Guard plugin adalah lapis kedua dan tidak boleh dilonggarkan: tanpa itu
+  // guard kapabilitas yang menolak, dan tiga link palsu dari satu user sudah
+  // cukup menyusun breaker host yang sehat.
+  const sumber = fs.readFileSync(path.join(process.cwd(), "plugins/download/douyindl.js"), "utf8");
+  assert.match(sumber, /host\.endsWith\("\.douyin\.com"\)/, "guard harus cek batas label host");
+  assert.match(sumber, /host\.endsWith\("\.iesdouyin\.com"\)/);
+  assert.match(
+    sumber,
+    /if \(!hostDouyin\(text\)\)/,
+    "penolakan guard harus terjadi sebelum resolve",
+  );
+  assert.ok(
+    sumber.indexOf("hostDouyin(text)") < sumber.indexOf('resolver.resolve("douyin"'),
+    "guard harus mendahului panggilan resolver",
+  );
+});
+
+test("plugin douyin: permukaan perintah dan reaksi tidak berubah", () => {
+  const sumber = fs.readFileSync(path.join(process.cwd(), "plugins/download/douyindl.js"), "utf8");
+  assert.match(sumber, /name: "douyindl"/);
+  assert.match(sumber, /alias: \["douyin", "dydl"\]/);
+  assert.match(sumber, /category: "download"/);
+  assert.match(sumber, /cooldown: 10/);
+  assert.match(sumber, /energi: 1/);
+  for (const reaksi of ['"🕕"', '"✅"', '"☢"', '"❌"']) {
+    assert.match(sumber, new RegExp(`m\\.react\\(${reaksi}\\)`), `reaksi ${reaksi} harus tetap ada`);
+  }
+  // Dua media tetap dikirim seperti sebelumnya: video dengan caption, audio
+  // tanpa caption. `normalize` menjamin `video` terisi, jadi blok
+  // `if (data.video)` bukan lagi syarat yang bisa dilewati diam-diam.
+  assert.match(sumber, /type: "video"/);
+  assert.match(sumber, /type: "audio"/);
+});
