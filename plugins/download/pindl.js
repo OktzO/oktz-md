@@ -6,10 +6,23 @@ import { f } from "../../src/lib/http.js";
 import te from "../../src/lib/error.js";
 import { resolver } from "../../src/lib/resolve.js";
 
-// Batas body video yang ditarik lewat axios biasa. Di kotak 1GB dengan batas RSS
-// 550MB, menarik video tanpa batas bisa membuat proses dibunuh memory-monitor —
-// gagal dengan pesan jauh lebih murah daripada bot ikut mati.
+// Batas body video yang ditarik lewat axios biasa, dan juga batas file yang
+// boleh dibaca utuh untuk dikirim (sock.sendMedia menerima Buffer). Di kotak 1GB
+// dengan batas RSS 550MB, menarik video tanpa batas bisa membuat proses dibunuh
+// memory-monitor — gagal dengan pesan jauh lebih murah daripada bot ikut mati.
+//
+// Yang TIDAK memakai batas ini: jalur GIF. `f()` tidak punya batas ukuran — ia
+// memakai undici, bukan `httpAxios` yang batasnya 25MB — jadi satu GIF raksasa
+// bisa masuk penuh ke memori. Yang membatasinya cuma timeout 15 detik di `f()`,
+// jadi risikonya nyata tapi kecil: GIF besar gagal di 15 detik, bukan melambat
+// sampai menabrak plafon RSS. Menutupnya berarti mengubah `f()` atau mengganti
+// transport cabang GIF, dan keduanya jauh lebih luas dari lengkung ini.
 const BATAS_BODY_VIDEO = 64 * 1024 * 1024;
+
+/** Batas bersifat inklusif: file tepat sebesar batas masih boleh dikirim. */
+export function terlaluBesar(ukuran) {
+  return ukuran > BATAS_BODY_VIDEO;
+}
 
 /**
  * Terjemahkan URL video menjadi rencana unduhan.
@@ -74,8 +87,9 @@ async function handler(m, { sock }) {
         `> \`${m.prefix}pindl https://pinterest.com/pin/xxx\``,
     );
   }
-  // Syarat `pinterest`/`pin.it` yang longgar dipertahankan sebagai layar pertama;
-  // yang menentukan benar atau tidak adalah `hostPinterest`.
+  // Yang menentukan benar atau tidak adalah `hostPinterest`. Syarat `includes`
+  // di bawah tidak mengubah hasil — `hostPinterest` menyiratkan keduanya — dan
+  // hanya menyaring teks tanpa struktur URL lebih dulu sebelum `new URL()` dipanggil.
   if ((!url.includes("pinterest") && !url.includes("pin.it")) || !hostPinterest(url)) {
     return m.reply("❌ URL tidak valid. Gunakan link Pinterest.");
   }
@@ -172,10 +186,15 @@ async function handler(m, { sock }) {
             // lebih dulu: video raksasa akan mendorong proses melewati batas RSS
             // 550MB, dan gagal dengan pesan lebih baik daripada bot ikut mati.
             const ukuran = fs.statSync(outputFile).size;
-            if (ukuran > BATAS_BODY_VIDEO) {
-              throw new Error(
+            if (terlaluBesar(ukuran)) {
+              // Ditandai supaya catch di bawah tahu ini bukan masalah jaringan:
+              // unduhan manual akan berhenti di batas yang sama, jadi mengulangnya
+              // hanya membuat user menunggu pull 64MB yang pasti gagal.
+              const gagal = new Error(
                 `video ${Math.round(ukuran / 1024 / 1024)} MB melebihi batas ${BATAS_BODY_VIDEO / 1024 / 1024} MB`,
               );
+              gagal.terlaluBesar = true;
+              throw gagal;
             }
 
             await sock.sendMedia(m.chat, fs.readFileSync(outputFile), null, m, {
@@ -186,7 +205,14 @@ async function handler(m, { sock }) {
 
         } catch (err) {
             console.error("[PinDL HLS Error]:", err.message);
-            try {
+            if (err?.terlaluBesar) {
+                // Bukan jaringan yang rusak, jadi tidak ada yang perlu dicoba lagi:
+                // unduhan manual memakai batas yang sama dan pasti gagal. Alasan
+                // sebenarnya diteruskan apa adanya supaya user tidak membaca pesan
+                // axios yang tidak menjelaskan apa pun.
+                lastError = err.message;
+            } else {
+              try {
                 // Fallback: Pinterest memblokir generic axios (403), jadi download manual pakai User-Agent.
                 // Batas ukuran wajib: instance axios ini maxContentLength-nya -1,
                 // dan satu video besar bisa membuat proses melewati batas 550MB.
@@ -202,10 +228,11 @@ async function handler(m, { sock }) {
                   type: "video",
                   contextInfo: { forwardingScore: 99, isForwarded: true },
                 });
-            sentCount += 1;
-            } catch (fallbackErr) {
+                sentCount += 1;
+              } catch (fallbackErr) {
                 console.error("[PinDL Fallback Error]:", fallbackErr.message);
                 lastError = fallbackErr.message;
+              }
             }
         } finally {
             if (fs.existsSync(videoTemp)) fs.unlinkSync(videoTemp);

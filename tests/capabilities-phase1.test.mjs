@@ -1283,19 +1283,28 @@ test("azbry: pathname harus persis /api/download/pinterest dan /api/search/pinte
   assert.equal(cari.searchParams.get("q"), "cewe cantik indonesia");
 });
 
-test("azbry: prefix /api adalah aturan host, bukan tebakan per kapabilitas", () => {
+test("azbry: setiap literal path aggregator di kapabilitas ini berawalan /api", () => {
+  // Cakupan test ini sengaja sempit dan disebutkan apa adanya: dia memeriksa
+  // literal yang ditulis di dalam berkas kapabilitas ini, bukan aturan per host.
+  // Yang menegakkan aturan per host adalah test pathname di atas, karena ia
+  // membaca URL yang benar-benar dibangun.
+  //
+  // Yang diperiksa di sini adalah setiap literal yang diawali "/" pada baris
+  // kode, bukan hanya yang menempel pada `aggregator.hit`: memindahkan path ke
+  // variabel, memakai template literal, atau menambah endpoint ketiga tidak akan
+  // lolos diam-diam. Baris komentar dilewati supaya `/api` yang disebut di
+  // dalam penjelasan tidak ikut terhitung.
   // Nexray memang tanpa prefix (`https://api.nexray.eu.cc/downloader/v2/...`),
-  // jadi ini tidak bisa disimpulkan dari base URL: harus ditulis per host.
-  assert.match(
-    kappinterest.backends.find((b) => b.name === "azbry").name,
-    /^[a-z0-9-]+$/,
-  );
-  const sumber = fs.readFileSync(path.join(process.cwd(), "src/capabilities/pinterest.js"), "utf8");
-  assert.doesNotMatch(
-    sumber,
-    /aggregator\.hit\("azbry", "\/(?!api\/)/,
-    "path aggregator tidak boleh tanpa /api",
-  );
+  // jadi prefix ini harus ditulis eksplisit per host.
+  const kode = fs
+    .readFileSync(path.join(process.cwd(), "src/capabilities/pinterest.js"), "utf8")
+    .split("\n")
+    .filter((baris) => !/^\s*(\/\/|\/\*|\*)/.test(baris))
+    .join("\n");
+  const literalPath = [...kode.matchAll(/["'`]\/[^"'`\s]*["'`]/g)].map((m) => m[0].slice(1, -1));
+  assert.ok(literalPath.length >= 2, `path aggregator harus detectable, dapat ${literalPath.length}`);
+  const salah = literalPath.filter((p) => !p.startsWith("/api/"));
+  assert.deepEqual(salah, [], `path tanpa /api: ${salah.join(", ")}`);
 });
 
 // ── Minor: normalize jangan menebak diam-diam ────────────────────────────────

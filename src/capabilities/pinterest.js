@@ -48,7 +48,7 @@ async function lewatAzbry(args = {}, ctx = {}) {
   const signal = ctx?.signal;
   // Prefix `/api` bukan detail gaya: `AGGREGATORS.azbry.base` hanya berisi host
   // dan `aggregator.hit` menempelkan path apa adanya. Tujuh panggilan langsung
-  // dan enam metode AzbryApiProvider di repo ini semuanya memakai `/api` lebih
+  // dan lima metode AzbryApiProvider di repo ini semuanya memakai `/api` lebih
   // dulu; tanpa itu host menjawab 404. (Nexray justru tidak perlu prefix.)
   if (typeof args.url === "string" && args.url.trim() !== "") {
     const body = await aggregator.hit("azbry", "/api/download/pinterest", {

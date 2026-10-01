@@ -2,7 +2,6 @@ import { test, beforeEach, mock } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
-import { CapabilityError } from "../src/lib/resolve.js";
 
 // ── harness ───────────────────────────────────────────────────────────────────
 //
@@ -187,5 +186,82 @@ test("guard plugin: pin.it tetap diterima", async () => {
     balasan.some((t) => /tidak valid/i.test(t)),
     false,
     "pin.it adalah pemendek resmi dan harus diterima",
+  );
+});
+
+// ── Lindungan RAM: setiap lubang punya coverage sendiri ──────────────────────
+//
+// Batas 64MB adalah perubahan perilaku yang disetujui karena plafon RSS 550MB,
+// jadi ambangnya diuji langsung (fungsi murni), sedangkan *pemasangannya* diuji
+// lewat sumber: jalur video tidak bisa dijalankan tanpa ffmpeg sungguhan, jadi
+// tidak ada cara lain mengujinya tanpa memalsukan lebih banyak daripada yang
+// hilang.
+
+const BATAS = 64 * 1024 * 1024;
+
+test("terlaluBesar: tepat di batas masih boleh, satu byte di atasnya ditolak", () => {
+  assert.equal(pindl.terlaluBesar(BATAS), false, "batas harus inklusif, bukan eksklusif");
+  assert.equal(pindl.terlaluBesar(BATAS + 1), true);
+  assert.equal(pindl.terlaluBesar(0), false);
+});
+
+test("pindl: kedua pengambilan video lewat axios dibatasi ukurannya", () => {
+  // Pemeriksaan hanya pada satu call site tidak cukup: menghapus batas dari
+  // pengambilan manifest akan lolos kalau yang diuji cuma fallback.
+  const src = fs.readFileSync(path.join(process.cwd(), "plugins/download/pindl.js"), "utf8");
+  const bagian = src.split("axios.get(media.url");
+  assert.equal(bagian.length, 2, "harus ada tepat dua pengambilan video lewat axios");
+
+  assert.match(
+    bagian[0],
+    /axios\.get\(masterUrl[\s\S]*?maxContentLength: BATAS_BODY_VIDEO/,
+    "pengambilan manifest HLS juga harus dibatasi ukurannya",
+  );
+  assert.match(
+    bagian[1],
+    /maxContentLength: BATAS_BODY_VIDEO/,
+    "unduhan manual harus dibatasi ukurannya",
+  );
+});
+
+test("pindl: file hasil ffmpeg diperiksa ukurannya sebelum dibaca ke memori", () => {
+  // `sendMedia` menerima Buffer, jadi file yang sudah diproses ffmpeg dibaca utuh.
+  // Pemeriksaan harus ada DAN harus mendahului pembacaan itu; salah satu saja
+  // tidak berguna.
+  const src = fs.readFileSync(path.join(process.cwd(), "plugins/download/pindl.js"), "utf8");
+  // Titik panggil, bukan definisi: `terlaluBesar` dideklarasikan di atas handler.
+  const cek = src.indexOf("if (terlaluBesar(ukuran))");
+  const baca = src.indexOf("fs.readFileSync(outputFile)");
+
+  const ukur = src.indexOf("fs.statSync(outputFile).size");
+
+  assert.ok(ukur > -1, "ukuran file hasil ffmpeg harus dibaca dari statSync");
+  assert.ok(cek > -1, "pemeriksaan ukuran harus ada");
+  assert.ok(baca > -1, "pembacaan file hasil ffmpeg harus ada");
+  assert.ok(
+    ukur < cek,
+    "yang diperiksa harus ukuran file hasil ffmpeg, bukan angka lain",
+  );
+  assert.ok(cek < baca, "pemeriksaan harus mendahului fs.readFileSync, bukan sesudahnya");
+});
+
+test("pindl: galat ukuran tidak diulang lewat fallback yang pasti gagal lagi", () => {
+  // Fallback mengunduh ulang URL yang sama dengan batas yang sama, jadi user
+  // akan menunggu satu pull 64MB yang pasti gagal lalu membaca pesan axios
+  // bahasa Inggris. Galat ukuran harus langsung jadi alasan gagal.
+  const src = fs.readFileSync(path.join(process.cwd(), "plugins/download/pindl.js"), "utf8");
+  const idx = src.indexOf("} catch (err) {", src.indexOf("await queueFFmpeg"));
+  assert.ok(idx > -1, "blok catch jalur video harus ada");
+
+  const blok = src.slice(idx, idx + 700);
+  assert.match(
+    blok,
+    /terlaluBesar/,
+    "fallback harus dilewati kalau galatnya pemeriksaan ukuran",
+  );
+  assert.match(
+    src,
+    /terlaluBesar\?: true|\.terlaluBesar = true/,
+    "galat ukuran harus ditandai supaya bisa dibedakan dari galat jaringan",
   );
 });
