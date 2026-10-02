@@ -887,7 +887,14 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 ```
 
-Rekursif daftarkan semua `.js` di `plugins/`. Untuk tiap file, baca isinya dan assert tidak mengandung `api.neoxr.eu`, `api.nexray.`, `my.izuka-api.xyz`, `api.cuki.biz.id`, `api.siputzx.my.id`, `api.azbry.com`.
+Rekursif daftarkan semua `.js` di `plugins/`. Untuk tiap file, baca isinya dan cari `api.neoxr.eu`, `api.nexray.`, `my.izuka-api.xyz`, `api.cuki.biz.id`, `api.siputzx.my.id`, `api.azbry.com`.
+
+**Ini ratchet, bukan gate kosong — dan itu disengaja.** Pada 2026-09-30 masih ada 93 plugin di luar 17 target Fase 1 yang memakai agregator; itu backlog Fase 2-6 dan boleh ada. Test tidak boleh menuntut nol, karena itu akan gagal dan jadi tidak bermakna. Tapi juga **tidak boleh** hanya memeriksa 17 file Fase 1, karena itu membuat 93 file lain bebas bocor tanpa terdeteksi.
+
+Buat satu `Set` berisi path plugin yang **diharapkan masih** memakai agregator, di-hardcode di test. Lalu:
+
+- plugin yang memakainya tapi **tidak ada** di `Set` → gagal (kebocoran baru)
+- plugin yang **tidak** memakainya tapi ada di `Set` → gagal juga, supaya daftar itu ikut menyusut dan tidak usang (plugin yang sudah dimigrasi harus dihapus dari `Set`)
 
 Kumpulkan **semua** nama file yang melanggar lalu assert sekali di akhir dengan daftar lengkap — jangan assert di dalam loop, supaya pesan kegagalan menunjukkan seluruh sisa dalam satu kali jalan.
 
