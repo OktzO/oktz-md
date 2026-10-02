@@ -13,10 +13,12 @@ export const stable = false;
 // sama, jadi semua dinormalkan ke satu bentuk kanonik sebelum masuk scraper atau
 // aggregator. `SaveTube.download` (src/scraper/youtube.js:53) sudah menyodorkan
 // bentuk kanonik ke hostnya, tapi `extractVideoId` di src/scraper/ytdl.js:12 hanya
-// bisa membaca sebagian dari bentuk itu — `/shorts/<id>`, `/live/<id>`, dan
-// `youtu.be/<id>?t=…` tidak terbaca, dan `ytdl` menjawab `{ status: false }` untuk
-// semuanya. Menormalkan di sini juga berarti aggregator menerima URL yang pasti
-// bisa dibaca, bukan bentuk yang harus ditebak ulang di host lain.
+// bisa membaca sebagian dari bentuk itu — `/shorts/<id>` dan `/live/<id>` tidak
+// terbaca sama sekali, dan `ytdl` menjawab `{ status: false }` untuk keduanya
+// tanpa satu pun request. `m.` dan `music.` kebetulan ikut terbaca karena regex-nya
+// tidak dianchor, bukan karena sengaja keduanya. Menormalkan di sini juga berarti
+// aggregator menerima URL yang pasti bisa dibaca, bukan bentuk yang harus ditebak
+// ulang di host lain.
 //
 // Host dicocokkan dari batas label, bukan dengan `includes`: `youtube.com.evil.example`
 // adalah domain lain yang tetap memuat "youtube.com", dan meneruskannya ke scraper
@@ -92,8 +94,8 @@ function target(args) {
   return kanonikDari(id);
 }
 
-// Dua kapabilitas, tapi hanya dua: plugin menyebut `format` dan scraper hanya
-// menerima mp3/mp4. Aturan yang sama dipakai `ytdl` sendiri di
+// Dua format, dan hanya dua: plugin menyebut `format`, dan scraper hanya menerima
+// mp3 atau mp4. Aturan yang sama dipakai `ytdl` sendiri di
 // src/scraper/ytdl.js:79, jadi bentuk lain tidak pernah diam-diam jadi mp3.
 function formatDiminta(args) {
   return String(args?.format ?? "").toLowerCase() === "mp4" ? "mp4" : "mp3";
@@ -188,10 +190,11 @@ async function lewatAzbry(args = {}, ctx = {}) {
 
 // ── normalisasi ───────────────────────────────────────────────────────────────
 //
-// Lima backend, empat nama field untuk hal yang sama: `dl` (ytdl), `url`
-// (SaveTube), `download_url` (izuka mp3), `download` (azbry), dan `video_normal[].url`
-// (izuka mp4). Tidak satu pun menyebut thumbnail dengan nama yang sama, jadi
-// `normalize` adalah satu-satunya tempat yang boleh menyamakannya.
+// Empat backend, lima nama field untuk hal yang sama: `dl` (ytdl), `url` (SaveTube),
+// `download_url` (izuka mp3), `download` (azbry), dan `video_normal[].url` (izuka
+// mp4). Thumbnail punya masalah ketiga: hanya SaveTube yang mengirimnya, jadi field
+// itu akan kosong untuk tiga backend lain. `normalize` adalah satu-satunya tempat
+// yang boleh menyamakannya.
 
 function urlUnduhan(isi) {
   for (const nama of ["dl", "download_url", "download"]) {
@@ -269,10 +272,10 @@ export function normalize(raw) {
 // ID video untuk diprobe. Hasil `false` tidak dihitung sebagai kegagalan dan
 // tidak menyentuh breaker.
 //
-// `ytdl-native` dan `youtube-fallback` terpisah karena format yang mereka
-// proses benar-benar berbeda: scraper pertama mengonversi ke mp3, scraper kedua meminta
-// URL video. Satu backend yang bercabang di dalam `run` akan memakai satu slot
-// breaker untuk dua kegagalan yang tidak berkaitan.
+// `ytdl-native` dan `youtube-fallback` terpisah karena format yang mereka proses
+// benar-benar berbeda: scraper pertama mengonversi ke mp3, scraper kedua meminta URL
+// video. Satu backend yang bercabang di dalam `run` akan memakai satu slot breaker
+// untuk dua kegagalan yang tidak berkaitan.
 export const backends = [
   {
     name: "ytdl-native",
