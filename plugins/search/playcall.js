@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import te from "../../src/lib/error.js";
-import ytdl from "../../src/scraper/ytdl.js";
+import { resolver } from "../../src/lib/resolve.js";
 
 const pluginConfig = {
   name: "playcall",
@@ -22,22 +22,11 @@ const pluginConfig = {
   isEnabled: false,
 };
 
-async function downloadAudio(videoUrl) {
-  try {
-    const { data } = await axios.get(
-      `https://my.izuka-api.xyz/api/downloader/ytmp3?url=${encodeURIComponent(videoUrl)}`,
-      { timeout: 60000 }
-    );
-    const download = data?.result?.download_url;
-    if (download) return download;
-  } catch { }
-
-  const fallback = await ytdl(videoUrl, "mp3");
-  if (fallback?.status && fallback?.dl) return fallback.dl;
-
-  throw new Error("Gagal mendapatkan URL audio");
+async function downloadAudio(videoUrl, deps = {}) {
+  const run = deps.resolve ?? ((capability, args) => resolver.resolve(capability, args));
+  const { data } = await run("youtube", { url: String(videoUrl).trim(), format: "mp3" });
+  return data.url;
 }
-
 
 async function handler(m, { sock, text }) {
   const query = (text || m.text || "").trim();
@@ -78,6 +67,8 @@ async function handler(m, { sock, text }) {
     const video = search.videos[0];
     const audioUrl = await downloadAudio(video.url);
 
+    // Audio harus ada di sistem berkas: pemutar VoIP menerima path, bukan URL,
+    // dan mengunduh ke memori dulu akan menahan satu lagu penuh selama menelepon.
     const audioRes = await axios.get(audioUrl, {
       responseType: "arraybuffer",
       timeout: 60000,
@@ -121,7 +112,11 @@ async function handler(m, { sock, text }) {
       if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
     } catch { }
     await m.react("☢");
-    console.log(err)
+    // Alasan sebenarnya ada di `CapabilityError.tried`, bukan di `.message`.
+    const rincian = Array.isArray(err?.tried)
+      ? err.tried.map((t) => `${t.name}: ${t.reason}`).join(" | ")
+      : String(err?.message ?? err);
+    console.error(`[PlayCall] gagal — ${rincian}`);
     m.reply(te(m.prefix, m.command, m.pushName));
   }
 }

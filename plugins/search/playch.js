@@ -7,6 +7,7 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import config from "../../config.js";
 import te from "../../src/lib/error.js";
+import { resolver } from "../../src/lib/resolve.js";
 
 const run = promisify(exec);
 const pluginConfig = {
@@ -68,6 +69,12 @@ function generateWaveform(audioBuf, samples = 64) {
   return waveform;
 }
 
+async function downloadAudio(videoUrl, deps = {}) {
+  const runResolve = deps.resolve ?? ((capability, args) => resolver.resolve(capability, args));
+  const { data } = await runResolve("youtube", { url: String(videoUrl).trim(), format: "mp3" });
+  return data.url;
+}
+
 async function handler(m, { sock }) {
   const raw = m.text?.trim() || "";
   let chId = config?.saluran?.id;
@@ -95,12 +102,11 @@ async function handler(m, { sock }) {
     if (!video) return m.reply(`❌ Video tidak ditemukan`);
 
     const ytChannel = video.author?.name || video.author?.username || "Unknown";
-    
-    const res = await axios.get(`https://api.azbry.com/api/download/ytmp3?url=${encodeURIComponent(video.url)}`, { timeout: 60000 });
-    const data = res.data;
-    if (!data.status || !data.result || !data.result.download) {
-       throw new Error("Gagal mengambil audio dari API");
-    }
+
+    // Unduhan audio lewat kapabilitas: scraper lokal dulu, aggregator cadangan.
+    // `normalize` menolak respons tanpa URL, jadi `audioUrl` di sini tidak mungkin
+    // kosong — versi lama melempar "Gagal mengambil audio dari API" sendiri.
+    const audioUrl = await downloadAudio(video.url);
 
     let info = `🎵 *NOW PLAYING (SALURAN)*\n\n`;
     info += `📌 *Judul:* ${video.title}\n\n`;
@@ -122,7 +128,7 @@ async function handler(m, { sock }) {
 
     m.react("🎵");
 
-    const audioRes = await axios.get(data.result.download, { responseType: "arraybuffer", timeout: 60000 });
+    const audioRes = await axios.get(audioUrl, { responseType: "arraybuffer", timeout: 60000 });
     const mp3Buf = Buffer.from(audioRes.data);
 
     if (mp3Buf.length < 50000) throw new Error("Audio terlalu kecil");
@@ -140,7 +146,11 @@ async function handler(m, { sock }) {
     m.react("✅");
     m.reply(`✅ *${title}* berhasil dikirim ke saluran`);
   } catch (e) {
-    console.error("[PlayCh]", e);
+    // Alasan sebenarnya ada di `CapabilityError.tried`, bukan di `.message`.
+    const rincian = Array.isArray(e?.tried)
+      ? e.tried.map((t) => `${t.name}: ${t.reason}`).join(" | ")
+      : String(e?.message ?? e);
+    console.error(`[PlayCh] gagal — ${rincian}`);
     m.react("☢");
     m.reply(te(m.prefix, m.command, m.pushName));
   }

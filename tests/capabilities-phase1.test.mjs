@@ -2828,3 +2828,272 @@ test("permukaan plugin videy tetap sama: config, pesan, dan reaksi", () => {
     assert.ok(sumber.includes(emoji), `reaksi hilang: ${emoji}`);
   }
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Task 8 — kapabilitas `youtube` (lima plugin)
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Yang diuji di sini adalah bagian yang tidak butuh transport axios: nama
+// backend, `stable`, path aggregator yang harus dikunci persis, dan permukaan
+// lima plugin. Backend lokal `ytdl-native`/`youtube-fallback` memanggil axios
+// langsung lewat src/scraper/ytdl.js dan src/scraper/youtube.js, jadi
+// pengujiannya harus mock `axios` — dan `axios` sudah dimock di berkas lain.
+// Semua pengujian short-link dan scraper lokal ada di
+// tests/youtube-capability.test.mjs, yang menguji kedua backend lokal secara
+// langsung.
+//
+// Blok ini tidak memakai `mock.module` baru, jadi blok-blok Task 3 sampai Task 7
+// di atas tidak tersentuh.
+
+const getYoutube = httpPalsu.get;
+httpPalsu.get = async (url, opts) => {
+  const host = new URL(String(url)).hostname;
+  // Host yang dipakai kapabilitas ini. Dicocokkan ke host, bukan ke substring:
+  // URL aggregator memuat "youtube.com/watch?v=…" di query string-nya.
+  if (host === "my.izuka-api.xyz" || host === "api.azbry.com") {
+    PANGGILAN_HTTP.push({ verb: "get", url, opts });
+    return hasilAggregator(url, opts);
+  }
+  return getYoutube(url, opts);
+};
+
+const kapyoutube = await import("../src/capabilities/youtube.js");
+
+const PLUGIN_YOUTUBE = [
+  "plugins/download/ytmp3.js",
+  "plugins/download/ytmp4.js",
+  "plugins/search/playvid.js",
+  "plugins/search/playcall.js",
+  "plugins/search/playch.js",
+];
+
+test("kapabilitas youtube: stable false, URL unduhan YouTube punya masa berlaku pendek", () => {
+  assert.equal(kapyoutube.stable, false, "dari cache tidak boleh ada: URL YouTube bisa mati");
+});
+
+test("kapabilitas youtube: nama per-host, unik, dan ada dua tier", () => {
+  const lokal = kapyoutube.backends.filter((b) => b.kind === "local");
+  const api = kapyoutube.backends.filter((b) => b.kind !== "local");
+  assert.deepEqual(lokal.map((b) => b.name).sort(), ["youtube-fallback", "ytdl-native"]);
+  assert.deepEqual(api.map((b) => b.name).sort(), ["azbry", "izuka"]);
+  assert.equal(
+    new Set(kapyoutube.backends.map((b) => b.name)).size,
+    kapyoutube.backends.length,
+    "nama ganda akan berbagi satu slot breaker untuk dua host berbeda",
+  );
+  // Per-URL atau per-user akan menghabiskan LRU breaker 64 slot per permintaan.
+  for (const backend of kapyoutube.backends) {
+    // `ytdl-native` juga 11 karakter, jadi yang diuji bukan panjangnya:
+    // nama backend tidak boleh memuat URL, path, nomor video, atau alamat Junction.
+    assert.doesNotMatch(backend.name, /https?:|[/?@]|\d{4,}/, `nama bukan per-host: ${backend.name}`);
+  }
+});
+
+// ── aggregator: URL harus dikunci persis ──────────────────────────────────────
+//
+// Tiga path yang tercatat di repo ini, semuanya dibaca plugin sebelum Phase 1:
+// `plugins/download/ytmp3.js:23` dan `plugins/search/playcall.js:28` memakai
+// `/api/downloader/ytmp3`, `plugins/download/ytmp4.js:19` dan
+// `plugins/search/playvid.js:27` memakai `/api/downloader/ytmp4`, dan
+// `plugins/search/playch.js:99` memakai `/api/download/ytmp3`. Melewatkan `/api`
+// dijawab 404, jadi path-nya di sini dikunci, bukan cuma "aggregator dipanggil".
+
+const backendIzuka = kapyoutube.backends.find((b) => b.name === "izuka");
+const backendAzbry = kapyoutube.backends.find((b) => b.name === "azbry");
+
+/** Jalankan satu backend aggregator dan kembalikan URL request yang benar-benar keluar. */
+async function reqAggregator(backend, body, args) {
+  PANGGILAN_HTTP.length = 0;
+  hasilAggregator = async () => ({ status: 200, data: body });
+  await backend.run(args);
+  return PANGGILAN_HTTP.map((c) => new URL(String(c.url))).at(-1);
+}
+
+const IZUKA_MP3_BODY = { status: true, result: { download_url: "https://cdn.example/a.mp3", title: "Lagu" } };
+const IZUKA_MP4_BODY = {
+  status: true,
+  result: { title: "Video", video_normal: [{ ext: "mp4", quality: "720", url: "https://cdn.example/v.mp4" }] },
+};
+const AZBRY_MP3_BODY = { status: true, result: { download: "https://cdn.example/a.mp3", title: "Lagu" } };
+
+test("izuka mp3: pathname /api/downloader/ytmp3 dan hanya param url", async () => {
+  const req = await reqAggregator(backendIzuka, IZUKA_MP3_BODY, { url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", format: "mp3" });
+  assert.equal(req.origin, "https://my.izuka-api.xyz");
+  assert.equal(req.pathname, "/api/downloader/ytmp3");
+  assert.equal(req.searchParams.get("url"), "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+  // izuka tidak punya key di AGGREGATORS (src/lib/aggregator.js:26), jadi query
+  // yang hanya berisi `url` adalah hasil yang benar. `apikey` karangan akan
+  // menjadi parameter asing yang tidak pernah dibaca host ini.
+  assert.deepEqual([...req.searchParams.keys()], ["url"], "param lain tidak boleh ikut terkirim");
+});
+
+test("izuka mp4: pathname /api/downloader/ytmp4, bukan endpoint mp3", async () => {
+  const req = await reqAggregator(backendIzuka, IZUKA_MP4_BODY, { url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", format: "mp4" });
+  assert.equal(req.pathname, "/api/downloader/ytmp4");
+  assert.equal(req.origin, "https://my.izuka-api.xyz");
+  assert.deepEqual([...req.searchParams.keys()], ["url"]);
+});
+
+test("azbry mp3: pathname /api/download/ytmp3 (download, bukan downloader)", async () => {
+  // Path azbry berbeda satu kata dari izuka; tertukar di sini berarti mp3 dari
+  // channelCfg salah host dan salah bentuk respons.
+  const req = await reqAggregator(backendAzbry, AZBRY_MP3_BODY, { url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", format: "mp3" });
+  assert.equal(req.origin, "https://api.azbry.com");
+  assert.equal(req.pathname, "/api/download/ytmp3");
+  assert.deepEqual([...req.searchParams.keys()], ["url"]);
+});
+
+test("short link diteruskan ke aggregator sebagai URL kanonik", async () => {
+  const req = await reqAggregator(backendIzuka, IZUKA_MP3_BODY, { url: "https://youtu.be/dQw4w9WgXcQ", format: "mp3" });
+  assert.equal(
+    req.searchParams.get("url"),
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    "short link harus menjadi watch?v=<id> juga di aggregator",
+  );
+});
+
+test("semua path aggregator di kapabilitas ini berawalan /api", () => {
+  const kode = fs
+    .readFileSync(path.join(process.cwd(), "src/capabilities/youtube.js"), "utf8")
+    .split("\n")
+    .filter((baris) => !/^\s*(\/\/|\/\*|\*)/.test(baris))
+    .join("\n");
+  // `"/"` adalah pemisah path di `pathname.split("/")`, bukan path aggregator,
+  // jadi dikecualikan supaya pemindaian tidak melapor terus-menerus.
+  const literalPath = [...kode.matchAll(/["'`]\/[^"'`\s]*["'`]/g)]
+    .map((m) => m[0].slice(1, -1))
+    .filter((p) => p !== "/");
+  assert.ok(
+    literalPath.includes("/api/downloader/ytmp3"),
+    `path yang dipakai aggregator.hit harus terdeteksi, dapat: ${literalPath.join(", ")}`,
+  );
+  const salah = literalPath.filter((p) => !p.startsWith("/api/"));
+  assert.deepEqual(salah, [], `path tanpa /api: ${salah.join(", ")}`);
+});
+
+// ── plugin sudah tidak bicara langsung ke agregator ──────────────────────────
+
+test("lima plugin youtube tidak menyebut domain agregator lagi", () => {
+  const pola = /nexray|neoxr|izuka|cuki|siputzx|azbry/i;
+  const ketemu = [];
+  for (const file of PLUGIN_YOUTUBE) {
+    fs.readFileSync(path.join(process.cwd(), file), "utf8")
+      .split("\n")
+      .forEach((baris, i) => {
+        if (pola.test(baris)) ketemu.push(`${file}:${i + 1}: ${baris.trim()}`);
+      });
+  }
+  assert.deepEqual(ketemu, [], `domain agregator masih ada:\n${ketemu.join("\n")}`);
+});
+
+test("lima plugin youtube memakai resolver youtube dengan format yang tepat", () => {
+  const diharapkan = {
+    "plugins/download/ytmp3.js": "mp3",
+    "plugins/download/ytmp4.js": "mp4",
+    "plugins/search/playvid.js": "mp4",
+    "plugins/search/playcall.js": "mp3",
+    "plugins/search/playch.js": "mp3",
+  };
+  for (const [file, format] of Object.entries(diharapkan)) {
+    const sumber = fs.readFileSync(path.join(process.cwd(), file), "utf8");
+    assert.match(sumber, /from "\.\.\/\.\.\/src\/lib\/resolve\.js"|from '\.\.\/\.\.\/src\/lib\/resolve\.js'/, `${file}: resolver belum diimpor`);
+    // Panggilan ada di dalam helper supaya plugin bisa disuntik di test; yang
+    // diuji adalah kapabilitas dan format yang diteruskan ke sana.
+    assert.match(sumber, /resolver\.resolve\(/, `${file}: belum memakai resolver`);
+    assert.match(sumber, /run\w*\("youtube"|run\w*\('youtube'/, `${file}: kapabilitas yang dipanggil bukan youtube`);
+    assert.match(sumber, new RegExp(`format: "${format}"`), `${file}: format harus ${format}`);
+    // `playcall` dan `playch` masih mengunduh media ke berkas dengan axios, jadi
+    // yang dilarang adalah axios ke URL absolut — memuat `audioUrl` lokal sah.
+    assert.doesNotMatch(
+      sumber,
+      /axios\.(get|post)\(\s*[`"']https?:\/\//,
+      `${file}: masih menembak host luar lewat axios`,
+    );
+    assert.doesNotMatch(sumber, /apikey=/, `${file}: URL aggregator lama harus hilang`);
+  }
+});
+
+test("ytmp3 dan ytmp4: guard URL dipertahankan dan mendahului resolver", () => {
+  for (const file of ["plugins/download/ytmp3.js", "plugins/download/ytmp4.js"]) {
+    const sumber = fs.readFileSync(path.join(process.cwd(), file), "utf8");
+    // Pesan user tidak berubah; yang berubah hanya isi validasinya, dari
+    // substring ke batas label host.
+    assert.match(sumber, /❌ URL harus YouTube/, `${file}: pesan guard hilang`);
+    assert.match(sumber, /host === "youtu\.be" \|\| host === "youtube\.com" \|\| host\.endsWith\("\.youtube\.com"\)/, `${file}: guard harus cek batas label host`);
+    assert.doesNotMatch(
+      sumber,
+      /url\.includes\("youtube\.com"\)|url\.includes\('youtube\.com'\)/,
+      `${file}: guard plugin tidak boleh kembali ke substring`,
+    );
+    assert.ok(
+      sumber.indexOf("if (!hostYoutube(url))") < sumber.indexOf("await get"),
+      `${file}: guard harus mendahului panggilan resolver`,
+    );
+  }
+});
+
+test("pesan dan reaksi kelima plugin youtube tetap hidup", () => {
+  const wajib = {
+    "plugins/download/ytmp3.js": [
+      /ytmp3 https:\/\/youtube\.com\/watch\?v=xxx/,
+      /❌ URL harus YouTube/,
+      /Gagal mengunduh audio\./,
+    ],
+    "plugins/download/ytmp4.js": [
+      /ytmp4 https:\/\/youtube\.com\/watch\?v=xxx/,
+      /❌ URL harus YouTube/,
+      /Gagal mengunduh video\./,
+    ],
+    "plugins/search/playvid.js": [
+      /playvid <judul video>/,
+      /Sedang mengunduh video, harap tunggu sebentar ya/,
+      /fitur putar videonya sedang ada kendala/,
+    ],
+    "plugins/search/playcall.js": [
+      /PANGGILAN MUSIK \(PLAYCALL\)/,
+      /LAYANAN BELUM SIAP/,
+      /MEMULAI PANGGILAN/,
+      /TERHUBUNG/,
+      /PANGGILAN BERAKHIR/,
+    ],
+    "plugins/search/playch.js": [
+      /PLAY SALURAN/,
+      /❌ Saluran belum diatur/,
+      /NOW PLAYING \(SALURAN\)/,
+      /berhasil dikirim ke saluran/,
+    ],
+  };
+  for (const [file, bagian] of Object.entries(wajib)) {
+    const sumber = fs.readFileSync(path.join(process.cwd(), file), "utf8");
+    for (const pola of bagian) assert.match(sumber, pola, `${file}: pesan hilang ${pola}`);
+  }
+  // Reaksi tidak boleh hilang di salah satu pun plugin: centang hijau tanpa file
+  // yang terkirim adalah kebohongan yang paling merusak.
+  const reaksiHarusAda = {
+    "plugins/download/ytmp3.js": ["🕕", "✅", "❌"],
+    "plugins/download/ytmp4.js": ["🕕", "✅", "❌"],
+    "plugins/search/playvid.js": ["🕕", "✅", "❌"],
+    "plugins/search/playcall.js": ["🕕", "📞", "❌", "☢"],
+    "plugins/search/playch.js": ["🔎", "🎵", "✅", "☢"],
+  };
+  for (const [file, emoji] of Object.entries(reaksiHarusAda)) {
+    const sumber = fs.readFileSync(path.join(process.cwd(), file), "utf8");
+    for (const e of emoji) assert.ok(sumber.includes(e), `${file}: reaksi hilang ${e}`);
+  }
+});
+
+test("ytmp3 tidak lagi mengunduh audio ke memori sebagai jalur utama", async () => {
+  // `fallbackToMp3Buffer` menarik seluruh audio ke satu Buffer. Sebelum Phase 1
+  // jalur itu hanya tersentuh kalau aggregator gagal; setelah rewire scraper lokal
+  // jalan pertama, jadi jalur buffer jadi jalur utama dan kotak 1GB menarik
+  // video 2 jam setiap kali `.ytmp3` dipakai.
+  // Komentar dibuang dulu: nama fungsi lama memang masih disebut di komentar
+  // yang menjelaskan kenapa cabangnya dihapus, dan yang dilarang adalah kodenya.
+  const sumber = fs
+    .readFileSync(path.join(process.cwd(), "plugins/download/ytmp3.js"), "utf8")
+    .split("\n")
+    .filter((baris) => !/^\s*(\/\/|\/\*|\*)/.test(baris))
+    .join("\n");
+  assert.doesNotMatch(sumber, /fallbackToMp3Buffer/, "unduhan penuh tidak boleh jadi jalur plugin");
+  assert.doesNotMatch(sumber, /isFallback/, "cabang fallback harus hilang bersama pemanggilnya");
+});

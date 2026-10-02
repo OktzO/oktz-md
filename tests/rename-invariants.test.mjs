@@ -44,9 +44,7 @@ const GUARDED_MISSING_IMPORTS = new Set([
   // fungsi panah, dan src/capabilities/ diisi bertahap di task-task yang menyusul
   // berikutnya. Import-nya memang belum ada file-nya sekarang; begitu tiap
   // modul kapabilitas dibuat, hapus barisnya supaya I1 langsung aktif lagi
-  // menjaga file yang hilang. Sisa baris di bawah hanya untuk youtube, ytmusic,
-  // dan hd.
-  "src/lib/resolve.js -> ../capabilities/youtube.js",
+  // menjaga file yang hilang. Sisa baris di bawah hanya untuk ytmusic dan hd.
   "src/lib/resolve.js -> ../capabilities/ytmusic.js",
   "src/lib/resolve.js -> ../capabilities/hd.js",
 ]);

@@ -39,7 +39,7 @@ describe("upstream failure diagnostics", () => {
     assert.strictEqual(mod.describeConvertFailure(null).length > 0, true);
   });
 
-  it("ytmp3 mencatat kegagalan API izuka, bukan menelan error di catch kosong", async () => {
+  it("ytmp3 mencatat kegagalan aggregator per backend, bukan menelan error di catch kosong", async () => {
     const mod = await import("../plugins/download/ytmp3.js");
     assert.strictEqual(
       typeof mod.getAudioDownload,
@@ -47,14 +47,34 @@ describe("upstream failure diagnostics", () => {
       "getAudioDownload harus di-export agar bisa diuji",
     );
 
+    // Bentuk kegagalan yang sebenarnya sekarang: `CapabilityError` hanya
+    // menyatakan "semua backend youtube gagal" di `.message`, sedangkan HTTP 500
+    // dari aggregator ada di `tried`. Kalau plugin hanya mencetak `.message`,
+    // diagnosis ini hilang — persis bug yang test ini dibuat.
+    const galat = Object.assign(new Error("semua backend youtube gagal"), {
+      name: "CapabilityError",
+      tried: [{ name: "izuka", reason: "izuka menjawab 500" }],
+    });
+
     const cap = captureConsoleError();
     try {
-      await mod.getAudioDownload("https://youtu.be/abc", {
-        httpGet: async () => {
-          throw new Error("Request failed with status code 500");
+      await mod.handler(
+        {
+          text: "https://youtu.be/dQw4w9WgXcQ",
+          chat: "chat@s.whatsapp.net",
+          prefix: ".",
+          command: "ytmp3",
+          pushName: "Tester",
+          reply: async () => {},
+          react: async () => {},
         },
-        ytdlFn: async () => ({ status: false, mess: "Gagal konversi (upstream error 128)" }),
-      });
+        {
+          sock: { async sendMedia() {} },
+          resolve: async () => {
+            throw galat;
+          },
+        },
+      );
     } catch {
       /* lemma: lempar error adalah perilaku yang diharapkan */
     } finally {
@@ -64,7 +84,11 @@ describe("upstream failure diagnostics", () => {
     const joined = cap.lines.join("\n");
     assert.ok(
       joined.includes("500"),
-      `kegagalan izuka harus tercatat di log, dapat: ${joined || "(kosong)"}`,
+      `kegagalan aggregator harus tercatat di log, dapat: ${joined || "(kosong)"}`,
+    );
+    assert.ok(
+      joined.includes("izuka"),
+      `nama backend-nya juga harus tercatat, dapat: ${joined || "(kosong)"}`,
     );
   });
 
