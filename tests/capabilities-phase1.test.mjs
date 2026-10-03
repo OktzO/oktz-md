@@ -2,6 +2,7 @@ import { test, beforeEach, mock } from "node:test";
 import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
+import FormData from "form-data";
 import { CapabilityError, createResolver } from "../src/lib/resolve.js";
 
 // ── harness ───────────────────────────────────────────────────────────────────
@@ -3534,4 +3535,680 @@ test("permukaan plugin applemusic tetap sama: config dan pesan", () => {
       sumber.includes("└ 🔗"),
     "pesan hasil dan penanda baris tidak boleh berubah",
   );
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Task 10 — kapabilitas `hd` (plugin `hd2` imglarger dan `hd3` unblur)
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Backend lokal di blok ini adalah scraper sungguhan (`src/scraper/hd.js` lewat
+// `httpAxios` yang sudah dimock di berkas ini), jadi alur upload → CheckStatus →
+// URL diuji tanpa satu pun request ke jaringan. Yang butuh mock modul terpisah
+// adalah `src/scraper/hdvid.js` — ia memakai `axios` polos, bukan `httpAxios` —
+// dan itu ada di tests/hd-unblur-local.test.mjs.
+//
+// Bentuk respons di bawah diturunkan dari kode repo sendiri, bukan dari probe
+// jaringan — dan bagian yang tidak bisa diturunkan ditandai apa adanya.
+//
+// Dari `src/scraper/hd.js`:
+//   `upload(filePath)` mengembalikan `data.data`, jadi bentuk yang dilihat
+//     kapabilitas adalah `{ code, imageId, type }` — `code` di level TERATAS.
+//     Bandingkan `src/scraper/imglarger.js:84` yang membaca `upload?.data?.code`
+//     dari respons yang belum dibuka amplopnya; itulah yang membedakan keduanya.
+//   `get(code)` juga mengembalikan `data.data`, jadi yang terlihat adalah
+//     `{ downloadUrls, filesize, status, … }`.
+//   `status` bernilai `"success"` atau `"waiting"` — dibuktikan
+//     `src/scraper/imglarger.js:70` yang membandingkan `data.status ===
+//     "success"`.
+//
+// Yang TIDAK bisa diverifikasi dari repo dan tidak boleh diklaim sebagai fakta:
+// nilai persis `downloadUrls` saat `status: "waiting"` (apakah URL akar host
+// atau apa adanya). Yang dikunci di sini hanya perilaku yang benar dengan
+// sendirinya: `waiting` adalah kegagalan, apa pun isi array-nya.
+//
+// Dari `src/scraper/hdvid.js:75-85`: polling mengembalikan `{ …result }` dengan
+// `result.res_url`, dan `pollEnhanceTask` sudah melempar sendiri kalau `res_url`
+// kosong — jadi `res_url` adalah satu-satunya nama yang bisa muncul dari sana.
+//
+// Bentuk agregator berasal dari plugin lama sebelum Phase 1, keduanya bisa dibaca
+// di `git show ff397d2^:plugins/tools/hd2.js` dan `hd3.js`: `result` berupa
+// string URL untuk imglarger, dan `result.output_url[0]` untuk unblur.
+
+const kapListrik = await import("../src/capabilities/hd.js");
+
+const hdImglarger = kapListrik.backends.find((b) => b.name === "photoai-imglarger");
+const hdUnblur = kapListrik.backends.find((b) => b.name === "fgsi-enchantvideo");
+const hdIzuka = kapListrik.backends.find((b) => b.name === "izuka");
+
+function resolverHd(opsi = {}) {
+  return createResolver({ capabilities: { hd: () => kapListrik }, ...opsi });
+}
+
+const KODE_UPLOAD = { code: 200, data: { code: "lgIhxcRf", imageId: "1791017793415", type: 13 }, msg: "Success" };
+const SELESAI = {
+  code: 200,
+  data: {
+    downloadUrls: ["https://photoai.imglarger.com/upscaler/lgIhxcRf.jpg"],
+    filesize: 1190,
+    imagemimetype: "jpg",
+    originalfilename: "lgIhxcRf.jpg",
+    status: "success",
+  },
+  msg: "Success",
+};
+const MASIH_PROSES = {
+  code: 200,
+  data: {
+    // Bentuk `waiting` yang paling merusak: statusnya belum selesai tapi
+    // `downloadUrls` tetap terisi. Isi URL-nya di sini adalah kasus yang paling
+    // buruk, bukan hasil yang sudah dibuktikan host benar-benar mengirimnya —
+    // yang diuji adalah bahwa status yang jadi acuan, bukan isi array.
+    downloadUrls: ["https://photoai.imglarger.com/"],
+    filesize: 0,
+    imagemimetype: "jpg",
+    status: "waiting",
+  },
+  msg: "Success",
+};
+
+const PANGGILAN_IZUKA = [];
+const PANGGILAN_UPLOAD = [];
+// `form-data` menyimpan stream di dalam `DelayedStream`, jadi `getBuffer()`
+// melempar untuk field gambar. Yang direkam adalah `append`-nya, supaya nama
+// field, opsi, dan jenis nilainya bisa diperiksa tanpa memaksa stream jadi Buffer.
+const PANGGILAN_FORM = [];
+const appendAsli = FormData.prototype.append;
+FormData.prototype.append = function appendRekaman(nama, nilai, opsi) {
+  PANGGILAN_FORM.push({ nama, nilai, opsi });
+  return appendAsli.call(this, nama, nilai, opsi);
+};
+
+/** Stub transport: bedakan dua host scraper lokal dan aggregator izuka. */
+function balasHd(url, opts) {
+  const alamat = String(url);
+  if (alamat.includes("photoai.imglarger.com/api/PhoAi/Upload")) {
+    PANGGILAN_UPLOAD.push({ url: alamat, opts });
+    return KODE_UPLOAD;
+  }
+  if (alamat.includes("photoai.imglarger.com/api/PhoAi/CheckStatus")) {
+    PANGGILAN_UPLOAD.push({ url: alamat, opts });
+    return LevelImglarger;
+  }
+  if (alamat.includes("my.izuka-api.xyz")) {
+    PANGGILAN_IZUKA.push({ url: alamat, opts });
+    return IzukaBadal;
+  }
+  throw new Error(`host tak terduga di test ini: ${alamat}`);
+}
+
+let LevelImglarger = SELESAI;
+let IzukaBadal = { status: true, result: "https://cdn.example/naik.jpg" };
+
+beforeEach(() => {
+  PANGGILAN_UPLOAD.length = 0;
+  PANGGILAN_IZUKA.length = 0;
+  PANGGILAN_FORM.length = 0;
+  LevelImglarger = SELESAI;
+  IzukaBadal = { status: true, result: "https://cdn.example/naik.jpg" };
+  // Stub ini HANYA-chief untuk dua host di atas. Host lain tetap mendapat
+  // tripwire yang dipasang `beforeEach` pertama, karena hook top-level berlaku
+  // ke SELURUH test di berkas ini — bukan hanya yang ditulis setelahnya. Tanpa
+  // penjaga itu, blok ini diam-diam melemahkan jaring pengaman blok Task 3-9.
+  balasSpotyloader = async (url, opts) => {
+    const alamat = String(url);
+    if (alamat.includes("photoai.imglarger.com") || alamat.includes("my.izuka-api.xyz")) {
+      return { status: 200, data: balasHd(alamat, opts) };
+    }
+    throw new Error("http tidak boleh dipanggil: upstream mati");
+  };
+});
+
+// ── file sementara untuk pengujian ────────────────────────────────────────────
+//
+// Backend lokal dan aggregator sama-sama butuh file di disk: `upload(filePath)`
+// dan `createEnhanceTask(filePath)` menerima path, dan FormData ke izuka harus
+// mengalirkan bytes dari disk. Berkas ini dibuat sekali dan dihapus di akhir.
+
+const MEDIA_UJI = path.join(process.cwd(), "tmp", "hd-uji.jpg");
+fs.mkdirSync(path.join(process.cwd(), "tmp"), { recursive: true });
+fs.writeFileSync(MEDIA_UJI, Buffer.from("bukan jpeg sungguhan, tapi cukup untuk FormData", "utf8"));
+process.on("exit", () => {
+  try {
+    fs.unlinkSync(MEDIA_UJI);
+  } catch {}
+});
+
+// ── normalisasi bentuk ────────────────────────────────────────────────────────
+
+test("normalize: bentuk lokal get(code) dengan downloadUrls jadi { url }", () => {
+  const keluar = kapListrik.normalize(SELESAI.data);
+  assert.deepEqual(keluar, { url: "https://photoai.imglarger.com/upscaler/lgIhxcRf.jpg" });
+});
+
+test("normalize: status waiting beserta downloadUrls terisi TIDAK boleh lolos", () => {
+  // Bentuk paling merusak di kapabilitas ini: `get(code)` adalah SATU panggilan
+  // CheckStatus tanpa polling, jadi host yang masih mengolah menjawab
+  // `status: "waiting"` sementara `downloadUrls` tetap terisi. Menerimanya
+  // berarti plugin mengirim URL yang belum di-render sambil tetap memberi
+  // centang hijau. Statusnya yang jadi acuan, bukan isi arraynya.
+  assert.throws(
+    () => kapListrik.normalize(MASIH_PROSES.data),
+    /belum selesai/,
+    "status waiting harus jadi kegagalan, bukan URL apa adanya",
+  );
+});
+
+test("normalize: bentuk agregator imglarger — result berupa string URL", () => {
+  // Plugin lama membaca `data.result` dan memakainya
+  // langsung sebagai `document.url`, jadi `result` di sini adalah string.
+  assert.deepEqual(kapListrik.normalize({ status: true, result: "https://cdn.example/naik.jpg" }), {
+    url: "https://cdn.example/naik.jpg",
+  });
+});
+
+test("normalize: bentuk agregator unblur — result.output_url[0]", () => {
+  // Plugin lama hd3 menuntut `data.result.output_url[0]`; ini bentuk
+  // yang harus jadi `{ url }` yang sama supaya plugin tidak perlu tahu backend
+  // mana yang menjawab.
+  assert.deepEqual(
+    kapListrik.normalize({ status: true, result: { output_url: ["https://cdn.example/jelas.jpg", "https://cdn.example/lain.jpg"] } }),
+    { url: "https://cdn.example/jelas.jpg" },
+  );
+});
+
+test("normalize: bentuk pollEnhanceTask memakai res_url", () => {
+  // src/scraper/hdvid.js:77-85 melempar kalau `result.res_url` kosong, jadi itu
+  // satu-satunya nama field yang bisa muncul dari jalur unblur lokal.
+  assert.deepEqual(
+    kapListrik.normalize({ taskId: "t1", createdAt: "2026-10-03", res_url: "https://cdn.example/hd.mp4" }),
+    { url: "https://cdn.example/hd.mp4" },
+  );
+});
+
+test("normalize: bentuk { url }, { data: { url } }, dan { result: { url } } satu bentuk", () => {
+  for (const bentuk of [
+    { url: "https://cdn.example/a.jpg" },
+    { data: { url: "https://cdn.example/a.jpg" } },
+    { result: { url: "https://cdn.example/a.jpg" } },
+  ]) {
+    assert.deepEqual(kapListrik.normalize(bentuk), { url: "https://cdn.example/a.jpg" }, `gagal: ${JSON.stringify(bentuk)}`);
+  }
+});
+
+test("normalize: nilai yang bukan URL http dilolak, termasuk path lokal dan string kosong", () => {
+  // `sendMedia` dengan `file:///...` atau `javascript:` bukan enhancement.
+  for (const buruk of [
+    { url: "file:///etc/passwd" },
+    { url: "/tmp/hasil.jpg" },
+    { result: "" },
+    { downloadUrls: [null] },
+    { url: "   " },
+  ]) {
+    assert.throws(() => kapListrik.normalize(buruk), /tanpa URL hasil/, `lolos: ${JSON.stringify(buruk)}`);
+  }
+});
+
+test("normalize: nilai non-objek, null, dan bentuk tanpa URL melempar", () => {
+  for (const buruk of [null, undefined, "https://cdn.example/a.jpg", 7, {}, { status: true }, { filesize: 10 }]) {
+    assert.throws(() => kapListrik.normalize(buruk), /tidak dikenali|tanpa URL hasil/, `lolos: ${JSON.stringify(buruk)}`);
+  }
+});
+
+test("normalize: amplop status false ditolak walau URL-nya ada", () => {
+  assert.throws(
+    () => kapListrik.normalize({ status: false, msg: "kuota habis", result: "https://evil.example/bogus.jpg" }),
+    /menandai gagal/,
+  );
+});
+
+// ── wiring resolver dan dispatch kind ─────────────────────────────────────────
+
+test("stable false: file hasil enhancement berumur pendek dan tidak boleh dicache", () => {
+  assert.equal(kapListrik.stable, false, "URL hasil render tidak boleh keluar dari cache");
+});
+
+test("nama backend per-host, unik, dan dua backend lokal lalu satu api", () => {
+  const lokal = kapListrik.backends.filter((b) => b.kind === "local");
+  const api = kapListrik.backends.filter((b) => b.kind !== "local");
+  assert.deepEqual(lokal.map((b) => b.name).sort(), ["fgsi-enchantvideo", "photoai-imglarger"]);
+  assert.deepEqual(api.map((b) => b.name), ["izuka"]);
+  assert.equal(
+    new Set(kapListrik.backends.map((b) => b.name)).size,
+    kapListrik.backends.length,
+    "nama ganda berbagi satu slot breaker untuk dua host berbeda",
+  );
+  for (const backend of kapListrik.backends) {
+    assert.doesNotMatch(backend.name, /https?:|[/?@]|\d{4,}/, `nama bukan per-host: ${backend.name}`);
+  }
+});
+
+test("kind di luar dua yang dikenal ditolak, dan pesannya menyebut keduanya", async () => {
+  // Dipanggil langsung supaya pesan yang dilihat operator ada di test. Lewat
+  // resolver, tidak ada backend yang berlaku dan yang muncul adalah
+  // `no-applicable-backend` — diuji terpisah di bawah.
+  await assert.rejects(
+    () => hdImglarger.run({ kind: " sharpen ", media: MEDIA_UJI }),
+    (error) => {
+      assert.match(error.message, /imglarger/);
+      assert.match(error.message, /unblur/);
+      return true;
+    },
+  );
+  await assert.rejects(() => hdUnblur.run({ kind: null, media: MEDIA_UJI }), /imglarger[\s\S]*unblur/);
+  await assert.rejects(() => hdIzuka.run({ kind: "sharpen", media: MEDIA_UJI }), /imglarger[\s\S]*unblur/);
+});
+
+test("kind yang dikenal dibaca longgar: huruf besar dan spasi excess tetap dilayani", () => {
+  for (const backend of kapListrik.backends) {
+    assert.equal(backend.applies({ kind: "IMGLARGER", media: MEDIA_UJI }), backend.name !== "fgsi-enchantvideo");
+    assert.equal(backend.applies({ kind: " unblur ", media: MEDIA_UJI }), backend.name !== "photoai-imglarger");
+  }
+});
+
+test("media tanpa path yang bisa dibaca tidak cocok dengan backend mana pun", () => {
+  for (const backend of kapListrik.backends) {
+    assert.equal(backend.applies({ kind: "imglarger" }), false, backend.name);
+    assert.equal(backend.applies({ kind: "imglarger", media: "   " }), false, backend.name);
+    assert.equal(backend.applies({ kind: "unblur" }), false, backend.name);
+  }
+});
+
+test("argumen kosong → no-applicable-backend, breaker bersih", async () => {
+  const resolver = resolverHd();
+  await assert.rejects(
+    () => resolver.resolve("hd", {}),
+    (error) => {
+      assert.equal(error.code, "no-applicable-backend");
+      assert.deepEqual(resolver.breaker.snapshot(), []);
+      return true;
+    },
+  );
+});
+
+// `{}` di atas belum membuktikan apa pun soal `applies`: tidak ada kind sama
+// sekali, jadi setiap backend ditolak karena media kosong. Kasus ini lebih
+// tajam — media ADA dan valid, hanya `kind` yang tidak dikenal. Kalau `applies`
+// tidak ada, ketiga backend akan-contacted dan ikut dicatat sebagai kegagalan,
+// yaitu persis kelas bug yang `applies` diciptakan untuk mencegah.
+test("kind yang tidak dikenal: tidak ada backend yang dihubungi, breaker tetap bersih", async () => {
+  const resolver = resolverHd();
+  await assert.rejects(
+    () => resolver.resolve("hd", { kind: "sharpen", media: MEDIA_UJI }),
+    (error) => {
+      assert.equal(error.code, "no-applicable-backend");
+      assert.deepEqual(error.tried, [], "backend yang tidak berlaku tidak boleh masuk daftar percobaan");
+      return true;
+    },
+  );
+  assert.deepEqual(PANGGILAN_UPLOAD, [], "tidak boleh ada request ke host mana pun");
+  assert.deepEqual(PANGGILAN_IZUKA, [], "tidak boleh ada request ke aggregator");
+  assert.deepEqual(resolver.breaker.snapshot(), [], "kind asing bukan kegagalan host");
+});
+
+// `.hd3` tidak boleh membuka breaker `photoai-imglarger` hanya karena
+// `resolve('hd', {kind:'unblur'})` tidak menyentuh host itu — backend yang tidak
+// berlaku tidak pernah dihubungi, jadi tidak bisa gagal.
+test("unblur tidak pernah menyentuh imglarger, jadi breaker-nya tidak terganggu", async () => {
+  LevelImglarger = MASIH_PROSES; // kalau dihubungi, ini akan jadi kegagalan
+  IzukaBadal = { status: true, result: { output_url: ["https://cdn.example/jelas.jpg"] } };
+
+  const resolver = resolverHd();
+  const keluar = await resolver.resolve("hd", { kind: "unblur", media: MEDIA_UJI });
+
+  assert.equal(keluar.source, "izuka", "imglarger tidak berlaku untuk kind unblur");
+  assert.deepEqual(keluar.data, { url: "https://cdn.example/jelas.jpg" });
+  assert.deepEqual(PANGGILAN_UPLOAD, [], "host imglarger tidak boleh dihubungi");
+  // Breaker yang terbuka menandai `photoai-imglarger` bermasalah, padahal host
+  // itu tidak pernah dihubungi sama sekali.
+  const terbuka = resolver.breaker.snapshot().filter((s) => s.name === "photoai-imglarger");
+  assert.deepEqual(terbuka, [], "backend yang tidak berlaku tidak boleh dihitung sebagai kegagalan");
+});
+
+// ── backend lokal imglarger: scraper sungguhan lewat transport palsu ──────────
+
+test("imglarger lokal: upload lalu CheckStatus mengembalikan URL hasil", async () => {
+  const keluar = await resolverHd().resolve("hd", { kind: "imglarger", media: MEDIA_UJI });
+
+  assert.equal(keluar.source, "photoai-imglarger");
+  assert.deepEqual(keluar.data, { url: "https://photoai.imglarger.com/upscaler/lgIhxcRf.jpg" });
+  // Urutan dua request itu juga bagian dari kontrak: `get(code)` tanpa `code`
+  // dari `upload` tidak akan pernah dipanggil.
+  assert.deepEqual(
+    PANGGILAN_UPLOAD.map((c) => new URL(c.url).pathname),
+    ["/api/PhoAi/Upload", "/api/PhoAi/CheckStatus"],
+  );
+  assert.deepEqual(PANGGILAN_IZUKA, [], "backend lokal tidak boleh menyentuh aggregator");
+});
+
+test("imglarger lokal: host masih mengolah → kegagalan, aggregator jadi cadangan", async () => {
+  LevelImglarger = MASIH_PROSES;
+
+  const keluar = await resolverHd().resolve("hd", { kind: "imglarger", media: MEDIA_UJI });
+
+  assert.equal(keluar.source, "izuka", "aggregator harus dipakai saat host lokal belum selesai");
+  assert.deepEqual(keluar.data, { url: "https://cdn.example/naik.jpg" });
+});
+
+test("imglarger lokal: file yang tidak ada berhenti sebelum request", async () => {
+  await assert.rejects(
+    () => resolverHd().resolve("hd", { kind: "imglarger", media: path.join(process.cwd(), "tmp", "tidak-ada.jpg") }),
+    (error) => {
+      assert.ok(error instanceof CapabilityError);
+      assert.deepEqual(error.tried.map((t) => t.name), ["photoai-imglarger", "izuka"]);
+      return true;
+    },
+  );
+  assert.deepEqual(PANGGILAN_UPLOAD, [], "tidak boleh ada request untuk file yang tidak ada");
+});
+
+test("ctx.signal tidak bisa sampai ke scraper lokal, dan itu dibiarkan terang-terangan", async () => {
+  // `upload(filePath)` dan `get(code)` di src/scraper/hd.js tidak menerima
+  // opsi, jadi `aggregator.hit`-style `signal` tidak punya jalan masuk. Test ini
+  // mengunci kenyataan itu sebagai catatan TERANG: kalau scraper suatu saat
+  // sudah menerima signal, test ini harus ikut berubah. Bandingkan
+  // src/capabilities/youtube.js, yang mencatat hal yang sama untuk SaveTube.
+  const controller = new AbortController();
+  await hdImglarger.run({ kind: "imglarger", media: MEDIA_UJI }, { signal: controller.signal });
+
+  assert.equal(PANGGILAN_UPLOAD.length, 2);
+  for (const panggilan of PANGGILAN_UPLOAD) {
+    assert.equal(panggilan.opts?.signal, undefined, "scraper lokal tidak menerima signal; dokumentasi harus diperbarui");
+  }
+});
+
+// Bukti yang tidak bisa dipalsukan oleh assertion "signal ada di opts": kalau
+// `signal` benar-benar sampai ke transport, `abort()` memanggil listener-nya.
+// Request di sini sengaja menggantung, jadi tanpa signal yang sampai ke
+// `httpAxios` promise-nya tidak akan pernah batal.
+//
+// Punya batas waktu sendiri supaya kegagalan dilaporkan sebagai SATU test merah
+// dengan pesan jelas. Tanpa itu, promise yang menggantung membuat node:test
+// menguras event loop dan membatalkan seluruh test setelahnya — 15 test lain
+// ikut mati karena satu bug, dan penyebabnya tidak terlihat.
+test("signal aggregator benar-benar membatalkan request, bukan sekadar ada di opts", async () => {
+  balasSpotyloader = (url, opts) => {
+    const alamat = String(url);
+    PANGGILAN_IZUKA.push({ url: alamat, opts });
+    if (alamat.includes("photoai.imglarger.com")) return { status: 200, data: LevelImglarger };
+    return new Promise((resolve, reject) => {
+      opts?.signal?.addEventListener("abort", () => reject(new Error("dibatalkan oleh signal")));
+    });
+  };
+
+  const controller = new AbortController();
+  const jalan = hdIzuka.run({ kind: "imglarger", media: MEDIA_UJI }, { signal: controller.signal });
+  controller.abort();
+
+  // Jam dijaga TIDAK di-unref dan selalu dibersihkan: kalau signal tidak
+  // sampai, `jalan` menggantung selamanya. Tanpa jam yang menahan event loop,
+  // node:test menguras loop dan membatalkan 15 test berikutnya — penyebabnya
+  // jadi tidak terlihat di antara kegagalan yang tidak terkait.
+  let jam;
+  try {
+    const batasWaktu = new Promise((_, reject) => {
+      jam = setTimeout(() => reject(new Error("signal tidak mencapai transport: request tidak pernah batal")), 2000);
+    });
+    await assert.rejects(
+      () => Promise.race([jalan, batasWaktu]),
+      /dibatalkan oleh signal/,
+      "signal tidak mencapai transport: request menggantung dan tidak pernah batal",
+    );
+  } finally {
+    clearTimeout(jam);
+  }
+
+  assert.equal(
+    PANGGILAN_IZUKA.at(-1).opts?.signal,
+    controller.signal,
+    "backend wajib meneruskan ctx.signal ke lapisan HTTP",
+  );
+});
+
+// ── amplop `status` harus bertahan melewati backend ───────────────────────────
+
+test("backend izuka wajib mengembalikan amplop, bukan body.result", async () => {
+  // Bentuk amplopnya pasti dari plugin lama, bukan dari probe: kedua plugin
+  // lama membaca `data.status` sebelum memakai `data.result`.
+  // Kalau backend mengembalikan `body.result`, `status: false` yang masih
+  // membawa URL akan lolos ke `normalize` dan dikirim sebagai hasil.
+  IzukaBadal = { status: false, msg: "kuota habis", result: "https://evil.example/bogus.jpg" };
+
+  const keluar = await hdIzuka.run({ kind: "imglarger", media: MEDIA_UJI });
+
+  assert.equal(keluar?.status, false, `amplop dibuang: ${JSON.stringify(keluar)}`);
+  assert.throws(() => kapListrik.normalize(keluar), /menandai gagal/);
+});
+
+test("status false yang tetap membawa URL → tidak ada hasil yang bisa dikirim", async () => {
+  // Tier lokal harus gagal lebih dulu, kalau tidak test ini hanya membuktikan
+  // bahwa backend lokal menang dan tidak pernah menyentuh amplop sama sekali.
+  LevelImglarger = MASIH_PROSES;
+  IzukaBadal = { status: false, msg: "kuota habis", result: "https://evil.example/bogus.jpg" };
+
+  await assert.rejects(
+    () => resolverHd().resolve("hd", { kind: "imglarger", media: MEDIA_UJI }),
+    (error) => {
+      assert.ok(error instanceof CapabilityError);
+      assert.deepEqual(error.tried.map((t) => t.name), ["photoai-imglarger", "izuka"]);
+      assert.match(error.tried.at(-1).reason, /menandai gagal/);
+      return true;
+    },
+  );
+});
+
+// ── aggregator: URL harus dikunci persis ──────────────────────────────────────
+
+test("izuka imglarger: POST persis ke /api/tools/imglarger, tanpa key", async () => {
+  await hdIzuka.run({ kind: "imglarger", media: MEDIA_UJI });
+
+  assert.equal(PANGGILAN_IZUKA.length, 1);
+  // URL LENGAP dikunci, bukan hanya pathname-nya: `AGGREGATORS.izuka.base` hanya
+  // berisi host dan `aggregator.hit` menempelkan path apa adanya, jadi satu
+  // karakter `/` yang hilang membuat host membalas 404 — cadangan yang lalu
+  // menjadi sumber utama kegagalan. Ini persis bug Critical yang lolos di Task 4.
+  assert.equal(
+    String(PANGGILAN_IZUKA[0].url),
+    "https://my.izuka-api.xyz/api/tools/imglarger",
+    "URL lengkap harus sama dengan yang plugins/tools/hd2.js:56 panggil sebelum Phase 1",
+  );
+  const req = new URL(PANGGILAN_IZUKA[0].url);
+  assert.equal(req.origin, "https://my.izuka-api.xyz");
+  assert.equal(req.pathname, "/api/tools/imglarger");
+  assert.deepEqual([...req.searchParams.keys()], [], "endpoint ini tidak punya parameter query");
+  const opts = PANGGILAN_IZUKA[0].opts;
+  assert.equal(opts.method, undefined, "aggregator.hit memakai method sebagai argumen, bukan di dalam opts");
+  assert.equal(opts.headers?.apikey, undefined, "izuka tidak punya key di AGGREGATORS");
+  // Bukti method-nya benar-benar POST, bukan hanya "opts tidak punya method":
+  // `httpAxios.post` adalah satu-satunya handler yang menerima FormData, dan
+  // `httpPalsu.get` di berkas ini menolak semua host selain nexray — jadi
+  // request yang tercatat di sini sudah lewat jalur POST.
+  assert.equal(PANGGILAN_HTTP.at(-1).verb, "post");
+});
+
+test("izuka unblur: URL persis /api/tools/unblur, bukan endpoint imglarger", async () => {
+  // Dua endpoint hidup berdampingan di host yang sama; tertukar berarti gambar
+  // tetap buram (atau salah efek) tanpa satu pesan pun.
+  IzukaBadal = { status: true, result: { output_url: ["https://cdn.example/jelas.jpg"] } };
+  await hdIzuka.run({ kind: "unblur", media: MEDIA_UJI });
+
+  assert.equal(
+    String(PANGGILAN_IZUKA[0].url),
+    "https://my.izuka-api.xyz/api/tools/unblur",
+    "URL lengkap harus sama dengan yang plugins/tools/hd3.js:50 panggil sebelum Phase 1",
+  );
+  const req = new URL(PANGGILAN_IZUKA[0].url);
+  assert.equal(req.pathname, "/api/tools/unblur");
+  assert.equal(req.origin, "https://my.izuka-api.xyz");
+});
+
+test("method POST dan field multipart persis seperti plugin lama", async () => {
+  await hdIzuka.run({ kind: "imglarger", media: MEDIA_UJI });
+
+  const form = PANGGILAN_IZUKA[0].opts?.data;
+  assert.ok(form && typeof form.append === "function", "body harus FormData");
+  // Field `type` dan `scale` bukan karangan: plugin lama hd2:53-54
+  // mengirim keduanya ke endpoint yang sama, dan menghilangkannya mengubahnya
+  // jadi parameter lain.
+  assert.deepEqual(
+    PANGGILAN_FORM.map((c) => c.nama),
+    ["image", "type", "scale"],
+    `field multipart tidak sama dengan plugin lama: ${PANGGILAN_FORM.map((c) => c.nama).join(", ")}`,
+  );
+  assert.deepEqual(
+    PANGGILAN_FORM.slice(1).map((c) => c.nilai),
+    ["upscale", "2"],
+  );
+  assert.deepEqual(
+    PANGGILAN_FORM[0].opsi,
+    { filename: "image.jpg", contentType: "image/jpeg" },
+    "nama dan contentType harus sama seperti plugins/tools/hd2.js:52",
+  );
+});
+
+test("unblur tidak mengirim field type/scale, mengikuti plugin lama", async () => {
+  await hdIzuka.run({ kind: "unblur", media: MEDIA_UJI });
+
+  assert.deepEqual(
+    PANGGILAN_FORM.map((c) => c.nama),
+    ["image"],
+    `unblur hanya mengirim image: ${PANGGILAN_FORM.map((c) => c.nama).join(", ")}`,
+  );
+});
+
+test("gambar dikirim sebagai stream dari disk, bukan Buffer penuh", async () => {
+  // Batas keras: file milik user dibaca ke RAM setiap kali ada yang salah. Yang
+  // boleh dipegang modul ini adalah stream, dan `form-data` yang mengalirkan
+  // bytes-nya.
+  await hdIzuka.run({ kind: "imglarger", media: MEDIA_UJI });
+
+  const gambar = PANGGILAN_FORM[0].nilai;
+  assert.ok(gambar, "harus ada isi multipart untuk field image");
+  assert.equal(Buffer.isBuffer(gambar), false, "gambar tidak boleh dibaca penuh ke memori");
+  assert.equal(typeof gambar.pipe, "function", "isi field image harus stream");
+
+  const kode = fs.readFileSync(path.join(process.cwd(), "src/capabilities/hd.js"), "utf8");
+  assert.doesNotMatch(kode, /readFileSync|readFile\(/, "backend lokal tidak boleh membaca file penuh");
+});
+
+test("timeout aggregator mengikuti timeout lama plugin, dan sinyal diteruskan", async () => {
+  const controller = new AbortController();
+  await hdIzuka.run({ kind: "imglarger", media: MEDIA_UJI }, { signal: controller.signal });
+
+  const opts = PANGGILAN_IZUKA[0].opts;
+  assert.equal(opts?.signal, controller.signal, "signal wajib sampai ke HTTP");
+  // 60 detik bukan angka baru: `timeout: 60000` di kedua plugin lama adalah
+  // batas yang sudah dipakai produksi. Default aggregator 5
+  // detik akan memotong setiap enhancement yang memang butuh waktu.
+  assert.equal(opts?.timeout, 60_000, "timeout harus mengikuti batas lama plugin");
+});
+
+test("path agregator di kapabilitas ini semuanya berawalan /api", () => {
+  const kode = fs
+    .readFileSync(path.join(process.cwd(), "src/capabilities/hd.js"), "utf8")
+    .split("\n")
+    .filter((baris) => !/^\s*(\/\/|\/\*|\*)/.test(baris))
+    .join("\n");
+  const literalPath = [...kode.matchAll(/["'`]\/[^"'`\s]*["'`]/g)].map((m) => m[0].slice(1, -1)).filter((p) => p !== "/");
+  assert.ok(
+    literalPath.includes("/api/tools/imglarger") && literalPath.includes("/api/tools/unblur"),
+    `kedua path harus terdeteksi, dapat: ${literalPath.join(", ")}`,
+  );
+  const salah = literalPath.filter((p) => !p.startsWith("/api/"));
+  assert.deepEqual(salah, [], `path tanpa /api: ${salah.join(", ")}`);
+});
+
+// ── budget ────────────────────────────────────────────────────────────────────
+
+test("budget habis di tier lokal → aggregator tetap sempat dipanggil", async () => {
+  // Host lokal yang tidak menjawab dalam budget. Karena `upload()` tidak
+  // menerima signal, request lokal tidak bisa benar-benar dibatalkan — resolver
+  // menyerah sesuai budgetnya dan pindah backend, dan itulah yang diuji di
+  // sini: tier api tetap mendapat giliran.
+  balasSpotyloader = (url, opts) => {
+    if (String(url).includes("my.izuka-api.xyz")) {
+      PANGGILAN_IZUKA.push({ url, opts });
+      return { status: 200, data: IzukaBadal };
+    }
+    return new Promise(() => {});
+  };
+
+  const keluar = await resolverHd({ budget: { localMs: 40, totalMs: 600 } }).resolve("hd", {
+    kind: "imglarger",
+    media: MEDIA_UJI,
+  });
+
+  assert.equal(keluar.source, "izuka");
+  assert.deepEqual(keluar.data, { url: "https://cdn.example/naik.jpg" });
+  assert.equal(PANGGILAN_IZUKA.length, 1, "aggregator harus tetap dipanggil setelah tier lokal kehabisan waktu");
+});
+
+// ── plugin sudah tidak bicara langsung ke agregator ──────────────────────────
+
+test("hd2 dan hd3 tidak menyebut domain agregator, axios, atau FormData lagi", () => {
+  for (const berkas of ["plugins/tools/hd2.js", "plugins/tools/hd3.js"]) {
+    const sumber = fs.readFileSync(path.join(process.cwd(), berkas), "utf8");
+    assert.doesNotMatch(sumber, /izuka|nexray|neoxr/i, `${berkas} harus lewat aggregator.hit di kapabilitas`);
+    assert.doesNotMatch(sumber, /axios/i, `${berkas} tidak boleh bicara ke transport`);
+    assert.doesNotMatch(sumber, /FormData/, `${berkas} tidak boleh merakit body multipart sendiri`);
+  }
+});
+
+test("hd2 dan hd3 memakai resolver hd dengan kind yang tepat", () => {
+  const hd2 = fs.readFileSync(path.join(process.cwd(), "plugins/tools/hd2.js"), "utf8");
+  const hd3 = fs.readFileSync(path.join(process.cwd(), "plugins/tools/hd3.js"), "utf8");
+  for (const [berkas, sumber] of [["hd2", hd2], ["hd3", hd3]]) {
+    assert.match(sumber, /from ['"]\.\.\/\.\.\/src\/lib\/resolve\.js['"]/, `${berkas} harus mengimpor resolver`);
+    assert.match(sumber, /resolve\(\s*['"]hd['"]\s*,\s*\{\s*kind\s*:/, `${berkas} harus lewat resolve('hd', { kind … })`);
+  }
+  assert.match(hd2, /kind:\s*['"]imglarger['"]/, "hd2 memakai imglarger");
+  assert.match(hd3, /kind:\s*['"]unblur['"]/, "hd3 memakai unblur");
+});
+
+test("hd2 dan hd3 mengupload dari file sementara dan membersihkannya", async () => {
+  // Upload butuh path (`upload(filePath)`), sementara plugin hanya punya Buffer
+  // dari `m.download()`. Berkas sementara harus dihapus apa pun hasilnya —
+  // HD adalah fitur yang dipakai sering, dan sisa gambar user menumpuk di disk.
+  for (const berkas of ["plugins/tools/hd2.js", "plugins/tools/hd3.js"]) {
+    const sumber = fs.readFileSync(path.join(process.cwd(), berkas), "utf8");
+    assert.match(sumber, /writeFile\(/, `${berkas} harus menulis berkas sementara`);
+    assert.match(sumber, /unlink\(/, `${berkas} harus menghapus berkas sementara`);
+    assert.match(sumber, /finally/, `${berkas} pembersihan harus di finally`);
+  }
+});
+
+test("pesan dan permukaan kedua plugin tetap hidup", () => {
+  const hd2 = fs.readFileSync(path.join(process.cwd(), "plugins/tools/hd2.js"), "utf8");
+  const hd3 = fs.readFileSync(path.join(process.cwd(), "plugins/tools/hd3.js"), "utf8");
+  // Config di-pin nilai demi nilai: nama, alias, kategori, cooldown, energi.
+  assert.match(hd2, /name:\s*"hd2"/);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify([...hd2.matchAll(/alias:\s*\[([^\]]*)\]/g)].flatMap((m) => [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1])))),
+    ["enhance2", "upscale2", "aienhancer"],
+  );
+  assert.match(hd2, /cooldown:\s*30/);
+  assert.match(hd2, /energi:\s*2/);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify([...hd3.matchAll(/alias:\s*\[([^\]]*)\]/g)].flatMap((m) => [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1])))),
+    ["enhance3", "upscale3", "unblur"],
+  );
+  assert.match(hd3, /cooldown:\s*20/);
+  assert.match(hd3, /energi:\s*2/);
+  // Reaksi dan kalimat yang dilihat user tidak boleh berubah.
+  for (const [berkas, sumber] of [["hd2", hd2], ["hd3", hd3]]) {
+    assert.ok(sumber.includes('react("🕕")'), `${berkas} harus tetap memberi jam pasir`);
+    assert.ok(sumber.includes('react("✅")'), `${berkas} harus tetap memberi centang hijau`);
+    assert.ok(sumber.includes('react("❌")'), `${berkas} harus tetap memberi tanda gagal`);
+    assert.ok(sumber.includes('react("☢")'), `${berkas} harus tetap memberi tanda error`);
+  }
+  // Kedua plugin menulis "kamu berikan" SEJAK AWAL — dibuktikan dari
+  // `git show ff397d2^:plugins/tools/hd3.js`, bukan dari asumsi. Menyamakan
+  // atau "memperbaiki" salah satunya bukan bagian Phase 1, jadi dua-duanya
+  // dikunci apa adanya.
+  assert.ok(hd2.includes("Maaf, sistem gagal mengunduh gambar yang kamu berikan."));
+  assert.ok(hd3.includes("Maaf, sistem gagal mengunduh gambar yang kamu berikan."));
+  assert.ok(hd2.includes("Maaf, AI gagal memproses gambarmu kali ini."));
+  assert.ok(hd3.includes("Maaf, AI gagal memproses gambarmu kali ini."));
+  // Nama file yang dikirim ke user tidak boleh berubah.
+  assert.ok(hd2.includes("HD_BY_${config.bot.name}.jpg"), "nama file hd2 harus tetap");
+  assert.ok(hd3.includes("UNBLUR_BY_${config.bot.name}.jpg"), "nama file hd3 harus tetap");
 });

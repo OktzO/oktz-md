@@ -1,5 +1,8 @@
-import axios from "axios";
-import FormData from "form-data";
+import fsp from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import crypto from "node:crypto";
+import { resolver } from "../../src/lib/resolve.js";
 import config from "../../config.js";
 import te from "../../src/lib/error.js";
 import _sharp from 'sharp';
@@ -35,6 +38,10 @@ async function handler(m, { sock }) {
 
   await m.react("🕕");
 
+  // Backend lokal dan aggregator sama-sama butuh path file di disk, sementara
+  // `m.download()` hanya memberi Buffer. Berkanya ditulis sekali ke tmp dan
+  // dihapus di `finally` — HD dipakai sering, jadi sisanya akan menumpuk.
+  let media;
   try {
     let buffer;
     if (m.quoted && m.quoted.isMedia) {
@@ -48,18 +55,12 @@ async function handler(m, { sock }) {
       return m.reply(`Maaf, sistem gagal mengunduh gambar yang kamu berikan. Silakan coba kirim ulang gambarnya!`);
     }
 
-    const form = new FormData();
-    form.append("image", buffer, { filename: "image.jpg", contentType: "image/jpeg" });
-    form.append("type", "upscale");
-    form.append("scale", "2");
+    media = path.join(os.tmpdir(), `hd-${crypto.randomUUID()}.jpg`);
+    await fsp.writeFile(media, buffer);
 
-    const response = await axios.post("https://my.izuka-api.xyz/api/tools/imglarger", form, {
-      headers: form.getHeaders(),
-      timeout: 60000
-    });
+    const { data } = await resolver.resolve("hd", { kind: "imglarger", media });
 
-    const data = response.data;
-    if (!data || !data.status || !data.result) {
+    if (!data?.url) {
       await m.react("❌");
       return m.reply(`Maaf, AI gagal memproses gambarmu kali ini. Silakan coba lagi dalam beberapa saat!`);
     }
@@ -71,7 +72,7 @@ async function handler(m, { sock }) {
     await sock.sendMessage(
       m.chat,
       {
-        document: { url: data.result },
+        document: { url: data.url },
         mimetype: "image/jpeg",
         jpegThumbnail: thumbBuffer,
         fileName: `HD_BY_${config.bot.name}.jpg`,
@@ -83,6 +84,10 @@ async function handler(m, { sock }) {
     console.error("[HD2 Plugin Error]", error);
     await m.react("☢");
     m.reply(te(m.prefix, m.command, m.pushName));
+  } finally {
+    // Dibersihkan apa pun hasilnya: sukses, kegagalan, atau reply "gagal
+    // memproses" yang keluar lebih dulu.
+    if (media) await fsp.unlink(media).catch(() => {});
   }
 }
 
