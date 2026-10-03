@@ -2,6 +2,13 @@ import { test, beforeEach, mock } from "node:test";
 import assert from "node:assert";
 import { createCipheriv } from "node:crypto";
 import { CapabilityError, createResolver } from "../src/lib/resolve.js";
+import {
+  FORMAT_DEFAULT,
+  extensionFor,
+  formatFromMime,
+  formatFromToken,
+  mimetypeFor,
+} from "../src/lib/media-format.js";
 
 // ── harness ───────────────────────────────────────────────────────────────────
 //
@@ -357,12 +364,44 @@ test("short link: URL yang dipalsukan di dalam URL lain tetap ditolak", async ()
   for (const masuk of [
     `https://evil.example/redirect?to=https://youtu.be/${ID}`,
     `https://youtube.com.evil.example/watch?v=${ID}`,
+    // Dua tautan dalam satu pesan ikut masuk daftar penolakan, dan itu keputusan
+    // yang disengaja: hanya tautan pertama yang dibaca, jadi kalau tautan pertama
+    // bukan YouTube pesan ini dijawab "❌ URL harus YouTube" — bukan dipungut
+    // `youtu.be` dari tautan kedua diam-diam. Alasannya ada di komentar
+    // `kandidatTautan` (src/capabilities/youtube.js): memindai semua token
+    // whitespace akan membuat `https://evil.example/redirect?to=https://youtu.be/<id>`
+    // (satu tautan, host evil) dan dua tautan diperlakukan berbeda, padahal
+    // keduanya ambigu. Kalau suatu saat ini perlu didukung, jawabannya "mana yang
+    // kamu mau?" — bukan memilih sendiri.
+    `https://evil.example https://youtu.be/${ID}`,
   ]) {
     for (const backend of kapyoutube.backends) {
       assert.equal(backend.applies({ url: masuk, format: "mp3" }), false, `harus ditolak: ${backend.name} / ${masuk}`);
       assert.equal(backend.applies({ url: masuk, format: "mp4" }), false, `harus ditolak: ${backend.name} / ${masuk}`);
     }
   }
+});
+
+test("short link: dua tautan memakai tautan pertama, bukan tautan paling mirip YouTube", async () => {
+  // Pasangan yang urutannya dibalik tidak ditolak: aturan baca "tautan pertama
+  // yang lengkap", jadi `youtu.be` di depan tetap dibaca dan `evil.example`
+  // di belakang diabaikan. Yang dikunci di sini bukan penolakannya, tapi ID mana
+  // yang dipakai — kalau suatu saat pemindaian semua token jadi mengizinkan
+  // `youtu.be` dari tautan kedua, test ini yang menangkapnya.
+  const masuk = `https://youtu.be/${ID} https://evil.example`;
+  // `youtube-fallback` hanya melayani mp4, jadi backend itu ditanya dengan format
+  // yang memang dilayaninya — kalau tidak, test ini menguji gate format, bukan
+  // aturan tautan pertama.
+  for (const backend of kapyoutube.backends) {
+    const format = backend.name === "youtube-fallback" ? "mp4" : "mp3";
+    assert.equal(backend.applies({ url: masuk, format }), true, `harus mau mencoba: ${backend.name}`);
+  }
+
+  PANGGILAN_AXIOS.length = 0;
+  ymdcnSukses();
+  await ytdlLokal.run({ url: masuk, format: "mp3" });
+  const req = PANGGILAN_AXIOS.find((c) => String(c.url).includes("/api/v1/convert"));
+  assert.equal(req?.opts?.params?.v, ID, "ID harus dari tautan pertama");
 });
 
 test("short link: backend mp4 juga menerima bentuk yang sama", async () => {
@@ -719,6 +758,169 @@ test("status false yang tetap membawa URL → resolver gagal, tidak ada hasil sa
       return true;
     },
   );
+});
+
+// ── format yang benar-benar diterima ─────────────────────────────────────────
+//
+// Probe langsung pada 2026-10-03 ke `my.izuka-api.xyz/api/downloader/ytmp3`
+// (lihat task-8-report.md §8.4) menjawab:
+//
+//   "format":"webm" ,  "download_url":"…&mime=audio%2Fwebm&itag=251…"
+//
+// Jadi endpoint yang namanya `ytmp3` itu menjawab WebM/Opus. `normalize` lama
+// menulis `format: "mp3"` untuk hasil itu, dan plugin mengirim byte WebM sebagai
+// `audio/mpeg` dengan nama `.mp3` — kelas "format yang berbohong" yang sama
+// dengan yang `pastikanBentuk` ada untuk mencegahnya, hanya di sisi label.
+//
+// Yang diuji di sini: label mengikuti bukti. Yang tidak diuji, dan memang tidak
+// boleh: menolak webm (izuka bisa selalu menjawab webm untuk endpoint ini, jadi
+// menolak menghapus satu-satunya cadangan aggregator `.ytmp3`) dan mengonversi
+// dengan ffmpeg (kotak 1GB, dan Phase 1 soal kecepatan).
+
+const UNDUHAN_WEBM =
+  "https://rr1---sn-cx5o4aqj5-tt1l.googlevideo.com/videoplayback?expire=1791028720&itag=251&mime=audio%2Fwebm&dur=213.061";
+
+test("normalize: respons aggregator yang melaporkan webm keluar sebagai webm", () => {
+  // Bentuk persis hasil probe: `format` di level `result`.
+  const keluar = kapyoutube.normalize({
+    status: true,
+    result: { title: "Rick Astley", format: "webm", download_url: UNDUHAN_WEBM },
+  });
+  assert.equal(keluar.format, "webm", "format yang dilaporkan host harus jadi label, bukan mp3");
+  assert.equal(keluar.url, UNDUHAN_WEBM);
+});
+
+test("normalize: webm bisa dibaca dari `mime` payload atau dari query URL unduhan", () => {
+  // Host yang tidak menulis `format` tapi menulis MIME di level result.
+  assert.equal(
+    kapyoutube.normalize({ status: true, result: { download_url: UNDUHAN_MP3, mime: "audio/webm" } }).format,
+    "webm",
+  );
+  // Host yang menulisannya sama sekali tidak ada: `googlevideo` yang dipakai
+  // aggregator membawa `mime=audio%2Fwebm` di query URL-nya, dan itu bukti
+  // langsung byte apa yang akan dilayani.
+  assert.equal(
+    kapyoutube.normalize({ status: true, result: { download_url: UNDUHAN_WEBM } }).format,
+    "webm",
+  );
+  // Parameter codec tidak boleh menggeser token: `audio/ogg; codecs=opus` tetap ogg.
+  assert.equal(
+    kapyoutube.normalize({ status: true, result: { download_url: UNDUHAN_MP3, mime: "audio/ogg; codecs=opus" } })
+      .format,
+    "ogg",
+  );
+});
+
+test("normalize: respons aggregator yang melaporkan mp3 tetap mp3", () => {
+  // Penjaga arah sebaliknya: memperbaiki webm tidak boleh mengubah jalur mp3
+  // yang memang mp3.
+  for (const isi of [
+    { download_url: UNDUHAN_MP3, format: "mp3" },
+    { download_url: UNDUHAN_MP3, mime: "audio/mpeg" },
+    { download_url: `${UNDUHAN_MP3}?mime=audio%2Fmpeg` },
+  ]) {
+    assert.equal(
+      kapyoutube.normalize({ status: true, result: isi }).format,
+      "mp3",
+      `mp3 harus tetap mp3 untuk ${JSON.stringify(isi)}`,
+    );
+  }
+});
+
+test("normalize: host yang tidak melaporkan format apa pun → default mp3 yang terdokumentasi", () => {
+  // Default bukan tebakan: setiap jalur audio di kapabilitas ini menghasilkan mp3
+  // (`ytdl` dengan `format: "mp3"`), dan jalur video dikunci lewat filter
+  // `ext: "mp4"` — bukan lewat default ini. Dipin ke `FORMAT_DEFAULT` supaya
+  // kalau defaultnya diganti, test ini ikut loudly gagal.
+  assert.equal(FORMAT_DEFAULT, "mp3");
+  assert.equal(kapyoutube.normalize({ status: true, result: { download_url: UNDUHAN_MP3 } }).format, FORMAT_DEFAULT);
+  // Bentuk lokal tanpa `format` juga tidak boleh berubah jadi apa-apa lain.
+  assert.equal(kapyoutube.normalize({ status: true, title: "Lagu", dl: UNDUHAN_MP3 }).format, FORMAT_DEFAULT);
+  // `360` milik SaveTube adalah nomor kualitas, bukan format: menerimanya sebagai
+  // label akan membuat `<judul>.360` dan `audio/mpeg` untuk video mp4.
+  assert.equal(
+    kapyoutube.normalize({ status: true, title: "Video", format: "360", url: UNDUHAN_MP4 }).format,
+    FORMAT_DEFAULT,
+  );
+});
+
+test("backend aggregator: format yang dilaporkan host ikut ke hasil, bukan format yang dipesan", async () => {
+  const izuka = kapyoutube.backends.find((b) => b.name === "izuka");
+  hasilAggregator = aggregatorSukses({
+    status: true,
+    result: { title: "Rick Astley", format: "webm", download_url: UNDUHAN_WEBM },
+  });
+
+  const keluar = await izuka.run({ url: KANONIK, format: "mp3" });
+
+  assert.equal(keluar.format, "webm", "backend tidak boleh menimpa format yang dilaporkan host");
+  assert.equal(kapyoutube.normalize(keluar).format, "webm");
+  // Jalur mp3 tetap dipakai — inilah bedanya dengan menolak: cadangan aggregator
+  // tidak hilang, hanya labelnya yang jujur.
+  assert.match(String(keluar.download_url), /^https:\/\/.*mime=audio%2Fwebm/);
+});
+
+test("resolver: fallback aggregator yang menjawab webm dilabeli webm, bukan mp3", async () => {
+  balasYmdcn = async () => {
+    throw new Error("getaddrinfo ENOTFOUND d.ymcdn.org");
+  };
+  hasilAggregator = aggregatorSukses({
+    status: true,
+    result: { title: "Rick Astley", format: "webm", download_url: UNDUHAN_WEBM },
+  });
+
+  const keluar = await resolverYoutube().resolve("youtube", { url: KANONIK, format: "mp3" });
+
+  assert.equal(keluar.source, "izuka", "webm tidak boleh dibuang sebagai kegagalan");
+  assert.equal(keluar.data.format, "webm");
+  assert.equal(keluar.data.url, UNDUHAN_WEBM);
+});
+
+test("mp4: cabang `video_normal` tetap mp4 walau host melaporkan format lain", async () => {
+  // `izuka` yang menjawab `ytmp4` pun bisa menulis `format: "webm"` di result-nya.
+  // Yang menentukan adalah entri `ext: "mp4"` yang benar-benar dipilih, jadi
+  // plugin video tidak boleh mendapat label webm untuk file mp4.
+  const keluar = kapyoutube.normalize({
+    status: true,
+    result: {
+      title: "Video Uji",
+      format: "webm",
+      video_normal: [{ ext: "mp4", quality: "360", url: UNDUHAN_MP4 }],
+    },
+  });
+  assert.equal(keluar.format, "mp4");
+  assert.equal(keluar.url, UNDUHAN_MP4);
+});
+
+test("media-format: pemetaan format ↔ MIME satu arah, dan defaultnya mp3/audio/mpeg", () => {
+  // Ini yang dibaca ketiga plugin mp3, jadi tabelnya diuji langsung: webm harus
+  // `audio/webm` (bukan `audio/mpeg`), dan ogg harus `audio/ogg` — pemutar
+  // memperlakukannya berbeda, jadi keduanya tidak boleh disatukan.
+  assert.equal(mimetypeFor("webm"), "audio/webm");
+  assert.equal(mimetypeFor("ogg"), "audio/ogg");
+  assert.equal(mimetypeFor("opus"), "audio/ogg");
+  assert.equal(mimetypeFor("mp3"), "audio/mpeg");
+  assert.equal(mimetypeFor("m4a"), "audio/mp4");
+  assert.equal(extensionFor("webm"), "webm");
+  assert.equal(extensionFor("mp3"), "mp3");
+
+  // Nilai tak dikenal dan kosong tetap jatuh ke default, supaya plugin yang
+  // menerima `format` undefined tidak berubah perilakunya.
+  for (const kosong of ["", undefined, null, "360", "bukan-format"]) {
+    assert.equal(mimetypeFor(kosong), "audio/mpeg", `mimetype default untuk ${JSON.stringify(kosong)}`);
+    assert.equal(extensionFor(kosong), FORMAT_DEFAULT, `ekstensi default untuk ${JSON.stringify(kosong)}`);
+  }
+
+  // Arah baca: parameter MIME dibuang, huruf besar diterimap, dan nama yang bukan
+  // format ditolak.
+  assert.equal(formatFromMime("audio/webm"), "webm");
+  assert.equal(formatFromMime("AUDIO/MPEG"), "mp3");
+  assert.equal(formatFromMime("audio/ogg; codecs=opus"), "ogg");
+  assert.equal(formatFromMime("application/octet-stream"), "");
+  assert.equal(formatFromToken("WEBM"), "webm");
+  assert.equal(formatFromToken(".mp4"), "mp4");
+  assert.equal(formatFromToken("360"), "");
+  assert.equal(formatFromToken(undefined), "");
 });
 
 // Sentinel: berkas ini tidak boleh hijau tanpa isi.

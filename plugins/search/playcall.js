@@ -5,6 +5,7 @@ import path from "path";
 import crypto from "crypto";
 import te from "../../src/lib/error.js";
 import { resolver } from "../../src/lib/resolve.js";
+import { extensionFor } from "../../src/lib/media-format.js";
 
 const pluginConfig = {
   name: "playcall",
@@ -22,9 +23,10 @@ const pluginConfig = {
   isEnabled: false,
 };
 
+/** Data audio dari kapabilitas: caller butuh `url` sekaligus formatnya. */
 async function downloadAudio(videoUrl) {
   const { data } = await resolver.resolve("youtube", { url: String(videoUrl).trim(), format: "mp3" });
-  return data.url;
+  return data;
 }
 
 async function handler(m, { sock, text }) {
@@ -54,7 +56,10 @@ async function handler(m, { sock, text }) {
 
   const tmpDir = path.join(process.cwd(), "tmp");
   if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-  const tmpFile = path.join(tmpDir, `call_${crypto.randomBytes(4).toString("hex")}.mp3`);
+  // Ekstensinya belum bisa ditulis di sini: format baru diketahui setelah resolve.
+  // `null` selama resolve berjalan supaya blok catch tidak pernah menghapus berkas
+  // milik panggilan lain.
+  let tmpFile = null;
 
   try {
     const search = await yts(query);
@@ -64,7 +69,12 @@ async function handler(m, { sock, text }) {
     }
 
     const video = search.videos[0];
-    const audioUrl = await downloadAudio(video.url);
+    // Pemutar VoIP membaca berkas lewat ffmpeg/FFplay yang menebak format dari
+    // isi, tapi nama yang salah tetap kotak yang salah: aggregator bisa menjawab
+    // webm/opus untuk slot mp3 (probe 2026-10-03, task-8-report.md §8.5), jadi
+    // nama sementara memakai format yang benar-benar diterima.
+    const { url: audioUrl, format } = await downloadAudio(video.url);
+    tmpFile = path.join(tmpDir, `call_${crypto.randomBytes(4).toString("hex")}.${extensionFor(format)}`);
 
     // Audio harus ada di sistem berkas: pemutar VoIP menerima `audioSource`
     // sebagai path, bukan Buffer, jadi selama panggilan berjalan tidak ada satu
@@ -102,19 +112,19 @@ async function handler(m, { sock, text }) {
 
     call.on("ended", (reason) => {
       try {
-        if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+        if (tmpFile && fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
       } catch { }
       m.reply(`📵 *PANGGILAN BERAKHIR*\n\nPanggilan telepon telah selesai (${reason || "selesai"}).`);
     });
 
     call.on("error", () => {
       try {
-        if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+        if (tmpFile && fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
       } catch { }
     });
   } catch (err) {
     try {
-      if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+      if (tmpFile && fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
     } catch { }
     await m.react("☢");
     // Alasan sebenarnya ada di `CapabilityError.tried`, bukan di `.message`.

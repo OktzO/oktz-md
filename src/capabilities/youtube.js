@@ -1,6 +1,7 @@
 import { ytdl } from "../scraper/ytdl.js";
 import { getYoutubeDirectUrl } from "../scraper/youtube.js";
 import { aggregator } from "../lib/aggregator.js";
+import { FORMAT_DEFAULT, formatFromMime, formatFromToken } from "../lib/media-format.js";
 
 // Tautan unduhan YouTube berumur pendek dan videonya bisa dihapus kapan saja,
 // jadi hasil scraping tidak boleh keluar dari cache meski tautannya sama.
@@ -45,6 +46,18 @@ const ADA_SKEMA = /^[a-z][a-z0-9+.-]*:/i;
  * ditolak sebagai host `evil.example`, bukan dipungut `youtu.be` dari query
  * string-nya. Tanpa skema, kandidat diambil dari token yang memuat "youtu" —
  * polanya sama dengan `YOUTUBE_ID_REGEX` yang lama.
+ *
+ * Dua tautan dalam satu pesan (`https://evil.example https://youtu.be/<id>`) juga
+ * ditolak, dan itu penyempitan yang disengaja, bukan efek samping: aturannya adalah
+ * "tautan pertama yang lengkap", dan tautan pertama di sana bukan YouTube.
+ * Menembak semua token whitespace sampai ketemu yang YouTube terlihat lebih ramah,
+ * tapi ia membuat dua bentuk input yang berbeda diperlakukan berbeda —
+ * `https://evil.example/redirect?to=https://youtu.be/<id>` (satu tautan, host
+ * `evil.example`) ikut menerima `youtu.be` yang disembunyikan di query string-nya.
+ * Guard lama menerima keduanya hanya karena `includes` bukan pemeriksaan sama
+ * sekali, jadi membalikkan penyempitan ini hanya mengembalikan kontrol yang sudah
+ * dibongkar. Kalau suatu saat dua tautan memang perlu didukung, bentuknya adalah
+ * membalas "mana yang kamu mau?" — bukan menebak sendiri.
  */
 function kandidatTautan(url) {
   const mentah = String(url ?? "").trim();
@@ -136,6 +149,41 @@ function formatDiminta(args) {
   return String(args?.format ?? "").toLowerCase() === "mp4" ? "mp4" : "mp3";
 }
 
+// ── format yang benar-benar diterima, bukan yang dipesan ──────────────────────
+//
+// Probe langsung pada 2026-10-03 ke `my.izuka-api.xyz/api/downloader/ytmp3`
+// menjawab `"format":"webm"` dengan `download_url` ber-`mime=audio%2Fwebm`
+// (`itag=251`, WebM/Opus). Backend lama menimpa `format` menjadi `"mp3"` untuk
+// hasil itu, jadi plugin mengirim byte WebM sebagai `audio/mpeg` dengan nama
+// `.mp3` — kelas "format yang berbohong" yang sama dengan yang `pastikanBentuk`
+// ada untuk mencegahnya, hanya di sisi label.
+//
+// Menolak webm bukan pilihannya: kalau izuka selalu menjawab webm untuk endpoint
+// ini, menolak akan menghapus satu-satunya cadangan aggregator untuk `.ytmp3`,
+// persis kelas kehilangan cadangan senyap yang Phase 1 ini ada untuk menghapus.
+// Mengonversi di setiap permintaan juga bukan pilihan di kotak 1GB. Jadi yang
+// diteruskan adalah format yang benar-benar diterima, dan `mimetype`/ekstensi
+// plugin mengikutinya (src/lib/media-format.js).
+function formatDilaporkan(isi, url = "") {
+  const langsung = formatFromToken(isi?.format);
+  if (langsung) return langsung;
+  for (const nama of ["mime", "mimetype", "mimeType", "content_type"]) {
+    const dariMime = formatFromMime(isi?.[nama]);
+    if (dariMime) return dariMime;
+  }
+  // URL `googlevideo` yang dipakai aggregator membawa `mime=audio%2Fwebm` di
+  // query string — itu bukti langsung byte apa yang akan dilayani, jadi dibaca
+  // setelah field payload. Hanya query yang diparsing, tidak ada body yang
+  // dibaca, jadi ini gratis di kotak 1GB.
+  try {
+    return formatFromMime(new URL(url).searchParams.get("mime"));
+  } catch {
+    // URL-nya sudah dipastikan http(s) oleh `urlUnduhan` sebelum sampai sini;
+    // penjaga ini supaya parsing tidak pernah jadi sumber kegagalan baru.
+    return "";
+  }
+}
+
 // ── backend ──────────────────────────────────────────────────────────────────
 
 async function lewatYtdlNative(args = {}, _) {
@@ -179,6 +227,13 @@ async function lewatYoutubeFallback(args = {}, _) {
  * dan tidak tahu apa yang dipesan, jadi backend yang memeriksa kesesuaiannya —
  * bentuk yang meleset harus jadi kegagalan, bukan `format: "mp4"` yang isinya
  * audio.
+ *
+ * Yang ditulis sebagai `format` di sini bukan selalu format yang dipesan: kalau
+ * host melaporkan format sendiri, yang dilaporkan itu yang dipakai (lihat
+ * `formatDilaporan`). Format yang dipesan hanya menjadi dasar kalau host diam
+ * saja — begitu host bicara, "yang dipesan" tidak lagi bukti yang lebih baik dari
+ * byte yang benar-benar akan dilayani. Slot `.ytmp4` tetap dikunci terpisah oleh
+ * filter `ext: "mp4"` di `urlUnduhan`, jadi kontrak mp4 tidak berubah.
  */
 function pastikanBentuk(result, format, namaField) {
   if (!result || typeof result !== "object") {
@@ -190,7 +245,7 @@ function pastikanBentuk(result, format, namaField) {
       `youtube: aggregator menjawab tanpa ${namaField} untuk permintaan ${format} — bentuk endpoint tidak cocok`,
     );
   }
-  return { ...result, format };
+  return { ...result, format: formatDilaporkan(result) || format };
 }
 
 async function lewatIzuka(args = {}, ctx = {}) {
@@ -245,10 +300,19 @@ async function lewatAzbry(args = {}, ctx = {}) {
 // itu akan kosong untuk tiga backend lain. `normalize` adalah satu-satunya tempat
 // yang boleh menyamakannya.
 
+/**
+ * URL unduhan, plus format yang sudah pasti kalau cabangnya memang menyatakannya.
+ *
+ * Hanya cabang `video_normal` yang pasti: `ext: "mp4"` disaring di sini, jadi
+ * labelnya mp4 apa pun yang host tulis di `format`-nya — `izuka` yang menjawab
+ * `ytmp4` dengan webm tidak boleh membuat plugin video mengirim container yang
+ * salah. Cabang URL tunggal tidak punya kepastian itu, jadi formatnya dibaca dari
+ * apa yang host laporkan (lihat `formatDilaporan`).
+ */
 function urlUnduhan(isi) {
   for (const nama of ["dl", "download_url", "download"]) {
     const kandidat = String(isi?.[nama] ?? "").trim();
-    if (/^https?:\/\//i.test(kandidat)) return kandidat;
+    if (/^https?:\/\//i.test(kandidat)) return { url: kandidat };
   }
   if (Array.isArray(isi?.video_normal)) {
     // Kontrak host yang sudah dipakai plugin sebelum Phase 1: hanya `ext: "mp4"`,
@@ -257,10 +321,10 @@ function urlUnduhan(isi) {
       .filter((v) => v?.ext === "mp4")
       .sort((a, b) => (parseInt(b?.quality) || 0) - (parseInt(a?.quality) || 0))[0];
     const kandidat = String(terpilih?.url ?? "").trim();
-    if (/^https?:\/\//i.test(kandidat)) return kandidat;
+    if (/^https?:\/\//i.test(kandidat)) return { url: kandidat, format: "mp4" };
   }
   const langsung = String(isi?.url ?? "").trim();
-  return /^https?:\/\//i.test(langsung) ? langsung : "";
+  return /^https?:\/\//i.test(langsung) ? { url: langsung } : { url: "" };
 }
 
 function urlGambar(nilai) {
@@ -288,7 +352,7 @@ export function normalize(raw) {
   const isi =
     raw.result && typeof raw.result === "object" && !Array.isArray(raw.result) ? raw.result : raw;
 
-  const url = urlUnduhan(isi);
+  const { url, format: pasti } = urlUnduhan(isi);
   // Sama seperti bentuk videy/sfile: backend yang tidak menghasilkan apa pun yang
   // bisa dikirim harus jadi kegagalan. Kalau diteruskan, plugin menjalankan
   // `sendMedia` tanpa file lalu tetap memberi centang hijau ke user.
@@ -305,9 +369,16 @@ export function normalize(raw) {
     // Tidak ada plugin yang mengonsumsi field ini; ia ada karena kontrak
     // kapabilitas menyebutkan empat field.
     thumbnail: urlGambar(isi.thumbnail ?? isi.thumb),
-    // Aturan yang sama dengan `ytdl` (src/scraper/ytdl.js:32): apa pun yang bukan
-    // mp4 dianggap mp3. Backend sudah menandai format yang dipesan.
-    format: String(isi.format ?? "").toLowerCase() === "mp4" ? "mp4" : "mp3",
+    // Format yang sebenarnya diterima, bukan yang dipesan. Aturan lama
+    // ("apa pun yang bukan mp4 dianggap mp3", sama dengan `ytdl` di
+    // src/scraper/ytdl.js:32) benar untuk scraper lokal yang memang menghasilkan
+    // mp3, tapi berbohong untuk aggregator: probe 2026-10-03 ke
+    // `my.izuka-api.xyz/api/downloader/ytmp3` menjawab `"format":"webm"`, dan
+    // menulis `format: "mp3"` di situ membuat plugin mengirim byte WebM sebagai
+    // `audio/mpeg`. `FORMAT_DEFAULT` hanya berlaku kalau host tidak melaporkan apa
+    // pun, jadi default mp3 yang lama tetap berlaku untuk semua backend yang diam
+    // (azbry, dan bentuk lokal yang tidak punya `format`).
+    format: pasti || formatDilaporkan(isi, url) || FORMAT_DEFAULT,
     url,
   };
 }

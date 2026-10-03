@@ -1,5 +1,8 @@
 import { test, beforeEach, mock } from "node:test";
 import assert from "node:assert";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 // ── harness ───────────────────────────────────────────────────────────────────
 //
@@ -49,6 +52,7 @@ const ID = "dQw4w9WgXcQ";
 const KANONIK = `https://www.youtube.com/watch?v=${ID}`;
 const MP3 = "https://cdn.example/audio.mp3";
 const MP4 = "https://cdn.example/video.mp4";
+const WEBM = "https://rr1---sn-cx5o4aqj5-tt1l.googlevideo.com/videoplayback?itag=251&mime=audio%2Fwebm";
 const THUMB = "https://i.ytimg.com/vi/x/hqdefault.jpg";
 
 const VIDEO_CARI = {
@@ -248,6 +252,12 @@ test("ytmp3: link bukan YouTube ditolak di plugin, tanpa memanggil resolver", as
     "https://vimeo.com/12345",
     "https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ",
     "https://notyoutube.com/watch?v=dQw4w9WgXcQ",
+    // Dua tautan dalam satu pesan: hanya tautan pertama yang dibaca, dan kalau
+    // yang pertama bukan YouTube pesannya ditolak — bukan dipungut `youtu.be` dari
+    // tautan kedua. Alasannya di `hostYoutube` dan di `kandidatTautan`
+    // (src/capabilities/youtube.js): memindai semua token akan membuat satu tautan
+    // dengan `youtu.be` tersembunyi di query string(host evil) ikut diterima.
+    `https://evil.example https://youtu.be/${ID}`,
   ]) {
     PESAN.length = 0;
     await ytmp3.modul.handler(mPalsu(buruk), { sock });
@@ -424,4 +434,138 @@ test("playch: --idch menimpa channel dari config dan query-nya dibersihkan", asy
   await playch.modul.handler(mPalsu("--idch 123456@newsletter komang"), { sock: sockPalsu() });
 
   assert.deepEqual(PANGGILAN_RESOLVE[0].args, { url: KANONIK, format: "mp3" });
+});
+
+// ── format yang dilaporkan, bukan mp3 yang diketik ────────────────────────────
+//
+// Probe langsung pada 2026-10-03 ke `my.izuka-api.xyz/api/downloader/ytmp3`
+// menjawab `"format":"webm"` dengan `mime=audio%2Fwebm` di URL unduhannya
+// (task-8-report.md §8.4). Jadi slot mp3 itu sudah delivers WebM/Opus sejak awal,
+// dan plugin yang mengetik `audio/mpeg` + `.mp3` membuat WhatsApp dan pemutar
+// menolak file karena container dan ekstensinya tidak cocok. Kapabilitas sudah
+// melaporkan format yang sebenarnya (tests/youtube-capability.test.mjs); di sini
+// yang diuji adalah plugin ikut 보고 itu — `mimetype` dan nama berkas, bukan
+// hanya komentar.
+
+test("ytmp3: aggregator yang=webm dikirim sebagai audio/webm dengan nama .webm", async () => {
+  hasilResolve = () => ({
+    ok: true,
+    source: "izuka",
+    data: { title: "Rick Astley", thumbnail: "", format: "webm", url: WEBM },
+    meta: {},
+  });
+
+  await ytmp3.modul.handler(mPalsu(KANONIK), { sock: sockPalsu() });
+
+  assert.equal(MEDIA.length, 1);
+  assert.equal(MEDIA[0].source, WEBM);
+  assert.equal(MEDIA[0].options.mimetype, "audio/webm", "mimetype harus mengikuti format yang diterima");
+  assert.match(MEDIA[0].options.fileName, /\.webm$/, "ekstensi harus mengikuti format yang diterima");
+  assert.deepEqual(REAKSI, ["🕕", "✅"], "webm bukan kegagalan: cadangan aggregator harus tetap dipakai");
+});
+
+test("ytmp3: mp3 tetap audio/mpeg + .mp3, dan format yang hilang jatuh ke default", async () => {
+  // Dua arah penjaga: memperbaiki webm tidak boleh merusak jalur mp3 yang memang
+  // mp3, dan `format` yang kosong tidak boleh membuat plugin melempar atau
+  // menghasilkan nama tanpa ekstensi.
+  const cases = [
+    ["mp3", "audio/mpeg", /\.mp3$/],
+    ["", "audio/mpeg", /\.mp3$/],
+    [undefined, "audio/mpeg", /\.mp3$/],
+  ];
+  for (const [format, mimetype, nama] of cases) {
+    PESAN.length = 0;
+    MEDIA.length = 0;
+    REAKSI.length = 0;
+    hasilResolve = () => ({
+      ok: true,
+      source: "ytdl-native",
+      data: { title: "Lagu Uji", thumbnail: "", format, url: MP3 },
+      meta: {},
+    });
+
+    await ytmp3.modul.handler(mPalsu(KANONIK), { sock: sockPalsu() });
+
+    assert.equal(MEDIA[0].options.mimetype, mimetype, `mimetype untuk format ${JSON.stringify(format)}`);
+    assert.match(MEDIA[0].options.fileName, nama, `nama berkas untuk format ${JSON.stringify(format)}`);
+    assert.deepEqual(REAKSI, ["🕕", "✅"]);
+  }
+});
+
+test("playcall: berkas sementara memakai format yang diterima, bukan .mp3 paksa", async (t) => {
+  globalThis.voipClient = {
+    async call(target, opsi) {
+      PESAN.push({ panggil: target, opsi });
+      return { on() {} };
+    },
+  };
+  t.after(() => { delete globalThis.voipClient; });
+
+  const dipakai = [];
+  for (const [format, ekstensi] of [["webm", ".webm"], ["mp3", ".mp3"]]) {
+    PESAN.length = 0;
+    hasilResolve = () => ({
+      ok: true,
+      source: "izuka",
+      data: { title: "Komang", thumbnail: "", format, url: WEBM },
+      meta: {},
+    });
+    unduhanAudio = async () => ({ data: Buffer.alloc(4096, 7) });
+
+    await playcall.modul.handler(mPalsu("komang"), { sock: sockPalsu(), text: "komang" });
+
+    const panggilan = PESAN.find((p) => p?.opsi?.audioSource);
+    assert.ok(panggilan, `panggilan harus dibuat untuk format ${format}`);
+    assert.equal(
+      path.extname(panggilan.opsi.audioSource),
+      ekstensi,
+      `nama sementara untuk format ${format} harus berakhir ${ekstensi}`,
+    );
+    // Berkas yang dibuat test ini dibersihkan di sini: jalur produksi membocorkannya
+    // kalau panggilan tidak pernah selesai, dan itu bukan urusan test.
+    dipakai.push(panggilan.opsi.audioSource);
+  }
+  t.after(() => {
+    for (const berkas of dipakai) {
+      try { fs.unlinkSync(berkas); } catch { }
+    }
+  });
+});
+
+test("playch: file masukan ffmpeg memakai format yang diterima, bukan .mp3 paksa", async (t) => {
+  // Jalur konversi sendiri butuh ffmpeg dan audio asli, jadi yang diuji di sini
+  // hanya nama berkasnya: `toOggOpus` menulis `in_<id>.<ext>` di `temp/` relatif
+  // terhadap `process.cwd()`, jadi test pindah ke direktori sementara supaya repo
+  // tidak kesampingan. Konversi pasti gagal di sini (buffer 60KB angka nol tujuh
+  // bukan audio), dan karena gagalnya lempar sebelum berkas masuk dibersihkan,
+  // nama inputnya bisa dibaca langsung — itulah yang diuji, bukan kebocorannya.
+  const cwd = process.cwd();
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "playch-format-"));
+  process.chdir(scratch);
+  t.after(() => {
+    process.chdir(cwd);
+    fs.rmSync(scratch, { recursive: true, force: true });
+  });
+
+  hasilResolve = () => ({
+    ok: true,
+    source: "izuka",
+    data: { title: "Komang", thumbnail: "", format: "webm", url: WEBM },
+    meta: {},
+  });
+  unduhanAudio = async () => ({ data: Buffer.alloc(60000, 7) });
+
+  await playch.modul.handler(mPalsu("--idch 123456@newsletter komang"), { sock: sockPalsu() });
+
+  const temp = path.join(scratch, "temp");
+  const isi = fs.existsSync(temp) ? fs.readdirSync(temp) : [];
+  assert.equal(isi.length, 1, `diharapkan tepat satu berkas kerja, dapat: ${JSON.stringify(isi)}`);
+  assert.match(isi[0], /^in_[0-9a-f]{12}\.webm$/, `masukan ffmpeg harus .webm untuk hasil webm, dapat ${isi[0]}`);
+  // Yang dikirim ke saluran tetap opus: itu format keluarannya, jadi labelnya
+  // memang tidak berubah — yang salah sebelumnya hanya nama berkasnya.
+  assert.equal(
+    PESAN.some((p) => typeof p === "object" && p.kirim === "123456@newsletter"),
+    false,
+    "konversi gagal, jadi tidak ada yang boleh terkirim ke saluran",
+  );
 });

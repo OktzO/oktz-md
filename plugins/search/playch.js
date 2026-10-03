@@ -8,6 +8,7 @@ import { promisify } from "util";
 import config from "../../config.js";
 import te from "../../src/lib/error.js";
 import { resolver } from "../../src/lib/resolve.js";
+import { extensionFor } from "../../src/lib/media-format.js";
 
 const run = promisify(exec);
 const pluginConfig = {
@@ -34,13 +35,22 @@ function formatViews(n) {
   return n.toString();
 }
 
-async function toOggOpus(mp3Buf) {
+/**
+ * Konversi ke Ogg/Opus untuk dikirim sebagai voice note ke saluran.
+ *
+ * `ext` mengikuti format yang benar-benar diterima: aggregator bisa menjawab
+ * webm/opus untuk slot mp3 (probe 2026-10-03, task-8-report.md §8.5), dan nama
+ * `in_*.mp3` untuk byte WebM adalah kebohongan yang membuat diagnosis kegagalan
+ * ffmpeg menyesatkan. Yang dikirim ke saluran tetap `audio/ogg; codecs=opus`
+ * karena itu memang format keluarannya.
+ */
+async function toOggOpus(inputBuf, ext) {
   const tmp = path.join(process.cwd(), "temp");
   if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true });
   const id = crypto.randomBytes(6).toString("hex");
-  const inp = path.join(tmp, `in_${id}.mp3`);
+  const inp = path.join(tmp, `in_${id}.${ext}`);
   const out = path.join(tmp, `out_${id}.ogg`);
-  fs.writeFileSync(inp, mp3Buf);
+  fs.writeFileSync(inp, inputBuf);
   await run(
     `ffmpeg -y -i "${inp}" -vn -map_metadata -1 -ac 1 -ar 48000 -c:a libopus -b:a 96k -vbr on -application audio -f ogg "${out}"`,
   );
@@ -69,9 +79,10 @@ function generateWaveform(audioBuf, samples = 64) {
   return waveform;
 }
 
+/** Data audio dari kapabilitas: caller butuh `url` sekaligus formatnya. */
 async function downloadAudio(videoUrl) {
   const { data } = await resolver.resolve("youtube", { url: String(videoUrl).trim(), format: "mp3" });
-  return data.url;
+  return data;
 }
 
 async function handler(m, { sock }) {
@@ -105,7 +116,7 @@ async function handler(m, { sock }) {
     // Unduhan audio lewat kapabilitas: scraper lokal dulu, aggregator cadangan.
     // `normalize` menolak respons tanpa URL, jadi `audioUrl` di sini tidak mungkin
     // kosong — versi lama melempar "Gagal mengambil audio dari API" sendiri.
-    const audioUrl = await downloadAudio(video.url);
+    const { url: audioUrl, format } = await downloadAudio(video.url);
 
     let info = `🎵 *NOW PLAYING (SALURAN)*\n\n`;
     info += `📌 *Judul:* ${video.title}\n\n`;
@@ -128,10 +139,10 @@ async function handler(m, { sock }) {
     m.react("🎵");
 
     const audioRes = await axios.get(audioUrl, { responseType: "arraybuffer", timeout: 60000 });
-    const mp3Buf = Buffer.from(audioRes.data);
+    const audioBuf = Buffer.from(audioRes.data);
 
-    if (mp3Buf.length < 50000) throw new Error("Audio terlalu kecil");
-    const opusBuf = await toOggOpus(mp3Buf);
+    if (audioBuf.length < 50000) throw new Error("Audio terlalu kecil");
+    const opusBuf = await toOggOpus(audioBuf, extensionFor(format));
     if (opusBuf.length < 10000) throw new Error("Konversi opus gagal");
     const title = video.title;
 

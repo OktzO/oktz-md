@@ -1,4 +1,5 @@
 import { resolver } from "../../src/lib/resolve.js";
+import { extensionFor, mimetypeFor } from "../../src/lib/media-format.js";
 
 const pluginConfig = {
   name: "ytmp3",
@@ -71,13 +72,19 @@ async function handler(m, { sock, resolve }) {
     // seluruh audio ke memori hanya kalau aggregator gagal; sekarang scraper
     // lokal justru yang jalan pertama, jadi jalur buffer itu akan jadi jalur
     // utama dan menarik video 2 jam ke kotak 1GB setiap kali `.ytmp3` dipakai.
-    const { title, url: download } = await getAudioDownload(url, { resolve });
+    //
+    // `mimetype` dan ekstensi mengikuti `format` yang dilaporkan kapabilitas, bukan
+    // mp3 yang diketik di sini: aggregator ada yang menjawab webm/opus untuk slot
+    // mp3 ini (probe 2026-10-03, task-8-report.md §8.5), dan byte WebM yang
+    // dikirim sebagai `audio/mpeg` dengan nama `.mp3` ditolak oleh pemutar dan
+    // WhatsApp karena container dan ekstensinya tidak cocok.
+    const { title, format, url: download } = await getAudioDownload(url, { resolve });
 
     await sock.sendMedia(m.chat, download, null, m, {
       type: "audio",
-      mimetype: "audio/mpeg",
+      mimetype: mimetypeFor(format),
       ptt: false,
-      fileName: `${title || "audio"}.mp3`,
+      fileName: `${title || "audio"}.${extensionFor(format)}`,
     });
     m.react("✅");
   } catch (err) {
