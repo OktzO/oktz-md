@@ -1,4 +1,4 @@
-import axios from 'axios'
+import { resolver } from '../../src/lib/resolve.js'
 import te from '../../src/lib/error.js'
 const pluginConfig = {
     name: 'applemusic',
@@ -18,7 +18,7 @@ const pluginConfig = {
 
 async function handler(m, { sock }) {
     const query = m.text?.trim()
-    
+
     if (!query) {
         return m.reply(
             `⚠️ *ᴄᴀʀᴀ ᴘᴀᴋᴀɪ*\n\n` +
@@ -27,27 +27,30 @@ async function handler(m, { sock }) {
             `> \`${m.prefix}applemusic Best Friend\``
         )
     }
-    
+
     try {
-        const res = await axios.get(`https://api.nexray.web.id/search/applemusic?q=${encodeURIComponent(query)}`)
-        
-        if (!res.data?.result?.length) {
+        // Backend lokal (ytmusic-api) dicoba lebih dulu dan agregator menjadi
+        // cadangan; `resolve()` yang memutuskan, bukan plugin ini.
+        // Daftar kosong itu jawaban yang sah dari host, jadi penentuannya tetap
+        // di sini seperti sebelumnya.
+        const { data } = await resolver.resolve('ytmusic', { q: query })
+        const tracks = data?.tracks ?? []
+
+        if (!tracks.length) {
             return m.reply(`❌ Tidak ditemukan hasil untuk: ${query}`)
         }
-        
-        const tracks = res.data.result.slice(0, 5)
-        
+
         let txt = `🍎 *ᴀᴘᴘʟᴇ ᴍᴜsɪᴄ sᴇᴀʀᴄʜ*\n\n`
-        txt += `> Query: *${query}*\n\n`                                                                                    
-        
-        tracks.forEach((t, i) => {
+        txt += `> Query: *${query}*\n\n`
+
+        tracks.slice(0, 5).forEach((t, i) => {
             txt += `*${i + 1}.* \`\`\`${t.title}\`\`\`\n`
-            txt += `   ├ 📀 \`${t.subtitle || 'Unknown'}\`\n`
-            txt += `   └ 🔗 \`${t.link}\`\n\n`
+            txt += `   ├ 📀 \`${t.artist || 'Unknown'}\`\n`
+            txt += `   └ 🔗 \`${t.url}\`\n\n`
         })
-        
+
         return m.reply(txt.trim())
-        
+
     } catch (err) {
         return m.reply(te(m.prefix, m.command, m.pushName))
     }

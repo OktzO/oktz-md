@@ -3193,3 +3193,345 @@ test("scraper ytdl tidak lagi mengekspor fallbackToMp3Buffer", async () => {
   const sumber = fs.readFileSync(path.join(process.cwd(), "src/scraper/ytdl.js"), "utf8");
   assert.doesNotMatch(sumber, /fallbackToMp3Buffer/, "kodenya harus hilang, bukan cuma export-nya");
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Task 9 — kapabilitas `ytmusic` (plugin `applemusic`)
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Blok ini hanya memakai `mock.module` yang sudah ada di berkas ini
+// (`../src/lib/http.js` dan `ytmusic-api`), jadi blok Task 3 sampai Task 8 tidak
+// tersentuh. Tapi `ytmusic-api` di-mock sebagai tripwire untuk spotify
+// (baris 52): `search()` di situ melempar. Karena itu backend lokal kapabilitas
+// ini — yang memang memanggil `search()` — diuji di berkas terpisah
+// tests/ytmusic-capability.test.mjs, yang mock `ytmusic-api`-nya sendiri.
+//
+// Bentuk yang diuji di sini adalah hasil probe langsung pada 2026-10-03, bukan
+// tebakan:
+//
+//   curl 'https://api.nexray.eu.cc/search/applemusic?q=best+friend'
+//     → {"status":true,"author":"@nexray - ElrayyXml","result":[{title,subtitle,link,image}, …]}
+//
+// `status` ada, jadi amplopnya wajib sampai ke `normalize`. Catatan kedua dari
+// probe itu: `result` bercampur — entri `Song`, `Artist`, dan `Album` semua
+// punya `link`, jadi penyaringan di `normalize` tidak boleh berbasis `type`.
+
+const kapytmusic = await import("../src/capabilities/ytmusic.js");
+
+const ytmLokal = kapytmusic.backends.find((b) => b.kind === "local");
+const ytmApi = kapytmusic.backends.find((b) => b.kind === "api");
+
+function resolverYtmusic(opsi = {}) {
+  return createResolver({ capabilities: { ytmusic: () => kapytmusic }, ...opsi });
+}
+
+/** Bentuk entri SONG yang benar-benar dikirim `ytmusic-api`. */
+const SONG_YTM = {
+  type: "SONG",
+  videoId: "dQw4w9WgXcQ",
+  name: "Best Friend",
+  artists: [{ name: "Rex Orange County" }, { name: "Tyler" }],
+  duration: 225,
+  thumbnails: [{ url: "https://lh3.example/ kecil.jpg" }, { url: "https://lh3.example/besar.jpg" }],
+};
+
+// ── normalisasi bentuk: sumber lokal (`ytmusic.search()`) ─────────────────────
+
+test("normalize: entri SONG mentah jadi lima field dengan nama field ytmusic", () => {
+  const keluar = kapytmusic.normalize([SONG_YTM]);
+  assert.deepEqual(keluar, {
+    tracks: [
+      {
+        title: "Best Friend",
+        artist: "Rex Orange County, Tyler",
+        // Durasi ytmusic dalam DETIK, bukan teks "3:45" seperti bentuk agregator.
+        durationSec: 225,
+        // Thumbnail diurutkan kecil → besar, jadi yang dipakai adalah entri terakhir.
+        cover: "https://lh3.example/besar.jpg",
+        url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      },
+    ],
+  });
+});
+
+test("normalize: entri dengan title (bukan name) dan artist tunggal tetap jalan", () => {
+  // `ytmusic-api` memakai `name` untuk SONG dan `title` untuk VIDEO, dan
+  // `artists` (array) untuk satu tipe tapi `artist` (objek) untuk tipe lain.
+  // Salah satu membacaan yang keliru di sini berarti hasil kosong atau
+  // `artist: "undefined"` di daftar.
+  const keluar = kapytmusic.normalize([
+    { type: "VIDEO", videoId: "abc12345678", title: "Live", artist: { name: "Some Artist" } },
+  ]);
+  assert.deepEqual(keluar.tracks, [
+    { title: "Live", artist: "Some Artist", durationSec: 0, cover: "", url: "https://www.youtube.com/watch?v=abc12345678" },
+  ]);
+});
+
+test("normalize: ARTIST dan PLAYLIST tanpa videoId dilewati, bukan jadi error", () => {
+  // `search()` mengembalikan daftar campuran dan entri non-lagu datang LEBIH
+  // DAHULU. Kalau tidak disaring, hasil pertama yang dipakai adalah artist.
+  const keluar = kapytmusic.normalize([
+    { type: "ARTIST", name: "Rex Orange County", subscribers: "1.2M" },
+    { type: "PLAYLIST", title: "Mix Lama", browseId: "VLCA" },
+    SONG_YTM,
+  ]);
+  assert.equal(keluar.tracks.length, 1);
+  assert.equal(keluar.tracks[0].title, "Best Friend");
+});
+
+test("normalize: daftar kosong sah, bukan kegagalan", () => {
+  // Pencarian tanpa hasil itu jawaban yang valid — plugin yang harus
+  // menjemputnya, bukan resolver yang harus melempar.
+  assert.deepEqual(kapytmusic.normalize([]), { tracks: [] });
+});
+
+test("normalize: null dan nilai non-objek melempar", () => {
+  assert.throws(() => kapytmusic.normalize(null), /tidak dikenali/);
+  assert.throws(() => kapytmusic.normalize("dua"), /tidak dikenali/);
+  assert.throws(() => kapytmusic.normalize(7), /tidak dikenali/);
+  // Amplop agregator tanpa `result` bukan daftar kosong: itu bentuk tak dikenal,
+  // dan membiarkaninya jadi `{ tracks: [] }` menutup kegagalan diam-diam.
+  assert.throws(() => kapytmusic.normalize({ status: true, msg: "ok" }), /bukan daftar lagu/);
+});
+
+// ── normalisasi bentuk: sumber agregator (`nexray`) ───────────────────────────
+
+test("normalize: bentuk agregator nexray memetakan subtitle→artist dan image→cover", () => {
+  // Bentuk nyata dari probe 2026-10-03. `subtitle` berisi "Song · Rex Orange
+  // County" dan itu justru yang dicetak plugin sebelum Phase 1, jadi teksnya
+  // diteruskan apa adanya — plugin menampilkan kalimat yang sama seperti dulu.
+  const keluar = kapytmusic.normalize({
+    status: true,
+    author: "@nexray - ElrayyXml",
+    result: [
+      {
+        title: "Best Friend",
+        subtitle: "Song · Rex Orange County",
+        link: "https://music.apple.com/id/album/best-friend/1286662463?i=1286662899",
+        image: "https://is1-ssl.mzstatic.com/image/thumb/Music115/110x110bb-60.jpg",
+      },
+    ],
+  });
+  assert.deepEqual(keluar, {
+    tracks: [
+      {
+        title: "Best Friend",
+        artist: "Song · Rex Orange County",
+        // nexray tidak mengirim durasi. Nol berarti "tidak dilaporkan", bukan
+        // durasi yang salah — plugin tidak memakainya, dan menebak "3:45" lebih
+        // buruk daripada tidak punya.
+        durationSec: 0,
+        cover: "https://is1-ssl.mzstatic.com/image/thumb/Music115/110x110bb-60.jpg",
+        url: "https://music.apple.com/id/album/best-friend/1286662463?i=1286662899",
+      },
+    ],
+  });
+});
+
+test("normalize: entri agregator tanpa link dibuang, bukan jadi track rusak", () => {
+  const keluar = kapytmusic.normalize({
+    status: true,
+    result: [{ title: "Tanpa Tautan", subtitle: "Song", image: "https://cdn.example/a.jpg" }],
+  });
+  assert.deepEqual(keluar, { tracks: [] });
+});
+
+// ── guard dan wiring resolver ─────────────────────────────────────────────────
+
+test("stable false: judul lagu dan tautannya berubah terus di host", () => {
+  assert.equal(kapytmusic.stable, false, "hasil pencarian tidak boleh keluar dari cache");
+});
+
+test("nama backend per-host, unik, dan ada dua tier", () => {
+  const lokal = kapytmusic.backends.filter((b) => b.kind === "local");
+  const api = kapytmusic.backends.filter((b) => b.kind !== "local");
+  assert.deepEqual(lokal.map((b) => b.name), ["ytmusic"]);
+  assert.deepEqual(api.map((b) => b.name), ["nexray"]);
+  assert.equal(
+    new Set(kapytmusic.backends.map((b) => b.name)).size,
+    kapytmusic.backends.length,
+    "nama ganda berbagi satu slot breaker untuk dua sumber berbeda",
+  );
+  for (const backend of kapytmusic.backends) {
+    assert.doesNotMatch(backend.name, /https?:|[/?@]|\d{4,}/, `nama bukan per-host: ${backend.name}`);
+  }
+});
+
+test("argumen kosong → no-applicable-backend, breaker bersih", async () => {
+  const resolver = resolverYtmusic();
+  await assert.rejects(
+    () => resolver.resolve("ytmusic", {}),
+    (error) => {
+      assert.equal(error.code, "no-applicable-backend");
+      assert.deepEqual(error.tried, []);
+      assert.deepEqual(resolver.breaker.snapshot(), []);
+      return true;
+    },
+  );
+});
+
+test("kueri kosong tidak dianggap sebagai backend yang berlaku", () => {
+  assert.equal(ytmLokal.applies({ q: "   " }), false);
+  assert.equal(ytmApi.applies({ q: "" }), false);
+  assert.equal(ytmLokal.applies({ q: "best friend" }), true);
+});
+
+test("pencarian lokal dipakai lebih dulu; agregator tidak boleh diakses lebih awal", async () => {
+  // Backend lokal di berkas ini adalah tripwire `YTMusicPalsu`, jadi `search()`
+  // melempar — persis keadaan "host lokal mati" yang harus membuat agregator
+  // mendapat giliran.
+  PANGGILAN_SEARCH.length = 0;
+  hasilAggregator = async () => ({
+    status: 200,
+    data: { status: true, result: [{ title: "Best Friend", subtitle: "Song · Rex Orange County", link: "https://music.apple.com/x", image: "https://cdn.example/a.jpg" }] },
+  });
+
+  const keluar = await resolverYtmusic().resolve("ytmusic", { q: "best friend" });
+
+  assert.deepEqual(PANGGILAN_SEARCH, ["best friend"], "backend lokal harus dicoba sebelum agregator");
+  assert.equal(keluar.source, "nexray");
+  assert.equal(keluar.data.tracks[0].url, "https://music.apple.com/x");
+});
+
+// ── amplop `status` harus bertahan melewati backend ───────────────────────────
+
+test("backend agregator wajib mengembalikan amplop, bukan body.result", async () => {
+  // Test `normalize` di atas hanya membuktikan `normalize` melempar. Itu tidak
+  // bisa menangkap backend yang membuang amplop SEBELUM `normalize` melihatnya.
+  // Probe 2026-10-03 membuktikan nexray memang mengirim `status`, jadi backend
+  // yang mengembalikan `body.result` menghapus satu-satunya tempat `status`
+  // masih bisa dibaca.
+  hasilAggregator = async () => ({
+    status: 200,
+    data: { status: false, msg: "kuota habis", result: [{ title: "Palsu", subtitle: "Song", link: "https://evil.example/bogus" }] },
+  });
+
+  const keluar = await ytmApi.run({ q: "best friend" });
+
+  assert.equal(
+    keluar?.status,
+    false,
+    `backend tidak boleh membuang amplop status: ${JSON.stringify(keluar)}`,
+  );
+  assert.throws(() => kapytmusic.normalize(keluar), /aggregator menandai gagal/);
+});
+
+test("status false yang tetap membawa result → tidak ada satu pun track yang lolos", async () => {
+  // Diuji sampai lewat resolver, supaya bentuk plugin-nya (pesan "tidak
+  // ditemukan", bukan daftar kosong) bisa dijamin.
+  hasilAggregator = async () => ({
+    status: 200,
+    data: { status: false, msg: "kuota habis", result: [{ title: "Palsu", subtitle: "Song", link: "https://evil.example/bogus" }] },
+  });
+
+  await assert.rejects(
+    () => resolverYtmusic().resolve("ytmusic", { q: "best friend" }),
+    (error) => {
+      assert.ok(error instanceof CapabilityError);
+      assert.deepEqual(error.tried.map((t) => t.name), ["ytmusic", "nexray"]);
+      assert.match(error.tried.at(-1).reason, /aggregator menandai gagal/);
+      return true;
+    },
+  );
+});
+
+// ── aggregator: URL harus dikunci persis ──────────────────────────────────────
+
+test("nexray: pathname harus persis /search/applemusic dan hanya param q", async () => {
+  PANGGILAN_HTTP.length = 0;
+  hasilAggregator = async () => ({ status: 200, data: { status: true, result: [] } });
+
+  await ytmApi.run({ q: "best friend" });
+
+  const req = PANGGILAN_HTTP.map((c) => new URL(String(c.url))).at(-1);
+  assert.equal(req.origin, "https://api.nexray.eu.cc");
+  // nexray satu-satunya host di AGGREGATORS yang tidak memakai prefix `/api`.
+  // Path lama di plugin adalah `/search/applemusic` (tanpa `/api`) dan probe
+  // 2026-10-03 membalas 200 dengan `result` berisi link — menambahkan `/api`
+  // di sini akan mengubahnya jadi 404.
+  assert.equal(req.pathname, "/search/applemusic");
+  assert.equal(req.searchParams.get("q"), "best friend");
+  // nexray `key: null` di src/lib/aggregator.js:25, jadi `apikey` di query akan
+  // jadi parameter asing yang tidak pernah dibaca host ini.
+  assert.deepEqual([...req.searchParams.keys()], ["q"], "param lain tidak boleh ikut terkirim");
+  assert.equal(PANGGILAN_HTTP[0].opts?.headers?.apikey, undefined, "nexray tidak punya key");
+});
+
+test("path agregator di kapabilitas ini tetap yang tanpa /api, dan tidak ada yang lain", () => {
+  const kode = fs
+    .readFileSync(path.join(process.cwd(), "src/capabilities/ytmusic.js"), "utf8")
+    .split("\n")
+    .filter((baris) => !/^\s*(\/\/|\/\*|\*)/.test(baris))
+    .join("\n");
+  const literalPath = [...kode.matchAll(/["'`]\/[^"'`\s]*["'`]/g)].map((m) => m[0].slice(1, -1));
+  // `https://www.youtube.com/watch?v=…` juga|POL string yang diawali "/", jadi
+  // path aggregator harus dideteksi lewat nama yang pasti muncul supaya test
+  // ini tidak bisa hijau karena tidak memindai apa pun.
+  assert.ok(
+    literalPath.includes("/search/applemusic"),
+    `path yang dipakai aggregator.hit harus terdeteksi, dapat: ${literalPath.join(", ")}`,
+  );
+  const salah = literalPath.filter((p) => p !== "/" && !p.startsWith("/search/applemusic"));
+  assert.deepEqual(salah, [], `path agregator yang tidak terduga: ${salah.join(", ")}`);
+});
+
+// ── budget: abort harus sampai ke lapisan HTTP ───────────────────────────────
+
+test("signal diteruskan ke request agregator", async () => {
+  const controller = new AbortController();
+  PANGGILAN_HTTP.length = 0;
+  hasilAggregator = async () => ({ status: 200, data: { status: true, result: [] } });
+
+  await ytmApi.run({ q: "best friend" }, { signal: controller.signal });
+
+  assert.equal(PANGGILAN_HTTP.at(-1).opts?.signal, controller.signal);
+});
+
+test("budget habis di tier lokal → agregator tetap sempat dipanggil", async () => {
+  // Backend lokal di berkas ini melempar seketika (tripwire), jadi ini belum
+  // membuktikan apa pun soal budget. Yang dibuktikan di sini adalah urutannya:
+  // kegagalan tier lokal tidak boleh mencegah giliran tier api.
+  PANGGILAN_SEARCH.length = 0;
+  PANGGILAN_HTTP.length = 0;
+  hasilAggregator = async () => ({ status: 200, data: { status: true, result: [] } });
+
+  const keluar = await resolverYtmusic().resolve("ytmusic", { q: "best friend" });
+  assert.equal(keluar.source, "nexray");
+  assert.equal(PANGGILAN_SEARCH.length, 1);
+});
+
+// ── plugin sudah tidak bicara langsung ke agregator ──────────────────────────
+
+test("plugin applemusic tidak menyebut domain agregator atau axios lagi", () => {
+  const sumber = fs.readFileSync(path.join(process.cwd(), "plugins/search/applemusic.js"), "utf8");
+  assert.doesNotMatch(sumber, /nexray|neoxr|axios/i, "plugin harus lewat aggregator.hit di kapabilitas");
+});
+
+test("plugin applemusic memakai resolver ytmusic dan menampilkan lima field", () => {
+  const sumber = fs.readFileSync(path.join(process.cwd(), "plugins/search/applemusic.js"), "utf8");
+  assert.match(sumber, /from ['"]\.\.\/\.\.\/src\/lib\/resolve\.js['"]/, "plugin harus mengimpor resolver");
+  assert.match(sumber, /resolve\(\s*['"]ytmusic['"]\s*,\s*\{\s*q\s*:\s*query\s*\}\s*\)/, "argumen harus { q: query }");
+  assert.match(sumber, /data\?\.tracks/, "plugin harus membaca data.tracks");
+});
+
+test("permukaan plugin applemusic tetap sama: config dan pesan", () => {
+  const sumber = fs.readFileSync(path.join(process.cwd(), "plugins/search/applemusic.js"), "utf8");
+  // Nilai config di-pin persis seperti sebelum rewire: nama, alias, kategori,
+  // cooldown, dan energi.
+  assert.match(sumber, /name:\s*'applemusic'/);
+  assert.match(sumber, /alias:\s*\[\s*'amusic'\s*,\s*'am'\s*\]/);
+  assert.match(sumber, /category:\s*'search'/);
+  assert.match(sumber, /cooldown:\s*5/);
+  assert.match(sumber, /energi:\s*0/);
+  // Dua pesan yang decides clamp harus utuh, huruf demi huruf.
+  assert.ok(
+    sumber.includes("⚠️ *ᴄᴀʀᴀ ᴘᴀᴋᴀɪ*") && sumber.includes("> Contoh:"),
+    "pesan cara pakai tidak boleh berubah",
+  );
+  assert.ok(
+    sumber.includes("❌ Tidak ditemukan hasil untuk: ") &&
+      sumber.includes("🍎 *ᴀᴘᴘʟᴇ ᴍᴜsɪᴄ sᴇᴀʀᴄʜ*") &&
+      sumber.includes("├ 📀") &&
+      sumber.includes("└ 🔗"),
+    "pesan hasil dan penanda baris tidak boleh berubah",
+  );
+});
