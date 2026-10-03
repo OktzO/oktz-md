@@ -297,9 +297,71 @@ test("short link: setiap bentuk yang diterima user diteruskan sebagai ID video y
     const requestKonversi = PANGGILAN_AXIOS.find((c) => String(c.url).includes("/api/v1/convert"));
     assert.ok(requestKonversi, `tidak ada request convert untuk ${masuk}`);
     assert.equal(requestKonversi.opts?.params?.v, ID, `ID harus diteruskan apa adanya untuk ${masuk}`);
-    // Dan bentuk yang benar-benar sampai ke scraper harus kanonik, bukan
-    // bentuk yang tidak bisa dibaca `YOUTUBE_ID_REGEX` untuk `/shorts/`.
+    // Yang mengunci bentuk kanonik yang benar-benar sampai ke scraper ada di test
+    // mp4 di bawah (body SaveTube) dan di tests/capabilities-phase1.test.mjs
+    // (query string aggregator): keduanya meneruskan `url` penuh, sedangkan
+    // `ytdl` hanya menerima ID. Yang dipin di sini cukup formatnya.
     assert.equal(requestKonversi.opts?.params?.f, "mp3");
+  }
+});
+
+test("short link: URL tanpa skema dan URL di dalam kalimat tetap dibaca", async () => {
+  // Ketiga bentuk ini bekerja sebelum Phase 1: guard plugin lama hanya
+  // `url.includes("youtu.be")` dan `YOUTUBE_ID_REGEX` tidak dianchor, jadi
+  // menarik ID dari tengah string. Setelah `hostYoutube` memperketat parsing jadi
+  // `new URL`, ketiganya jadi `❌ URL harus YouTube` untuk link yang tadinya
+  // mengunduh — jadi bentuk-bentuk ini harus dikunci, bukan diserahkan ke Wayback.
+  const tanpaSkema = [`youtu.be/${ID}`, `youtube.com/watch?v=${ID}`, `www.youtube.com/watch?v=${ID}`];
+  const dalamTeks = [
+    `putar https://youtu.be/${ID} dong`,
+    `tolong unduh youtube.com/watch?v=${ID} ya`,
+    `.ytmp3 https://www.youtube.com/watch?v=${ID}`,
+  ];
+
+  for (const masuk of [...tanpaSkema, ...dalamTeks]) {
+    // Setidaknya satu backend harus mau mencoba; kalau semua `applies` false,
+    // resolver melempar `no-applicable-backend` tanpa satu pun request.
+    const yangMau = kapyoutube.backends.filter((b) => b.applies({ url: masuk, format: "mp3" }));
+    assert.ok(yangMau.length > 0, `tidak ada backend yang mau mencoba: ${masuk}`);
+
+    PANGGILAN_AXIOS.length = 0;
+    ymdcnSukses();
+    const keluar = await ytdlLokal.run({ url: masuk, format: "mp3" });
+    assert.equal(keluar.status, true, `harus sukses untuk ${masuk}`);
+    const req = PANGGILAN_AXIOS.find((c) => String(c.url).includes("/api/v1/convert"));
+    assert.equal(req?.opts?.params?.v, ID, `ID harus diteruskan apa adanya untuk ${masuk}`);
+
+    // Backend mp4 dan aggregator harus melihat bentuk kanonik yang sama, kalau
+    // tidak maka normalisasi hanya berlaku di satu jalur dan user mendapat
+    // mp3/video yang berbeda tergantung backend mana yang menang.
+    PANGGILAN_AXIOS.length = 0;
+    savetubeSukses();
+    await fallbackLokal.run({ url: masuk, format: "mp4" });
+    const info = PANGGILAN_AXIOS.find((c) => String(c.url).includes("/v2/info"));
+    assert.deepEqual(info?.body, { url: KANONIK }, `SaveTube harus menerima kanonik untuk ${masuk}`);
+
+    PANGGILAN_HTTP.length = 0;
+    hasilAggregator = aggregatorSukses({ status: true, result: { download_url: UNDUHAN_MP3 } });
+    await kapyoutube.backends.find((b) => b.name === "izuka").run({ url: masuk, format: "mp3" });
+    const reqApi = PANGGILAN_HTTP.map((c) => new URL(String(c.url))).at(-1);
+    assert.equal(reqApi?.searchParams.get("url"), KANONIK, `aggregator harus menerima kanonik untuk ${masuk}`);
+  }
+});
+
+test("short link: URL yang dipalsukan di dalam URL lain tetap ditolak", async () => {
+  // Pemotongan tautan dari dalam kalimat harus ambil kemunculan pertama yang
+  // lengkap, bukan memungut `youtu.be` dari mana saja di string. Kalau tidak,
+  // `https://evil.example/redirect?to=https://youtu.be/<id>` akan lolos hanya
+  // karena contains "youtu.be" — persis mode yang membuat `includes` tidak bisa
+  // dipakai sebagai guard.
+  for (const masuk of [
+    `https://evil.example/redirect?to=https://youtu.be/${ID}`,
+    `https://youtube.com.evil.example/watch?v=${ID}`,
+  ]) {
+    for (const backend of kapyoutube.backends) {
+      assert.equal(backend.applies({ url: masuk, format: "mp3" }), false, `harus ditolak: ${backend.name} / ${masuk}`);
+      assert.equal(backend.applies({ url: masuk, format: "mp4" }), false, `harus ditolak: ${backend.name} / ${masuk}`);
+    }
   }
 });
 
@@ -388,6 +450,48 @@ test("format: default mp3, mp4 diteruskan apa adanya", async () => {
     "mp4",
     "format harus diteruskan apa adanya",
   );
+});
+
+// ── gate format: `applies` adalah satu-satunya penjaga ───────────────────────
+//
+// `lewatAzbry` (src/capabilities/youtube.js:181) menulis path `/api/download/ytmp3`
+// dan `pastikanBentuk` mengharapkan field `download` — keduanya mp3, jadi keduanya
+// saling menguatkan dan `pastikanBentuk` tidak akan pernah mendeteksi kalau
+// `applies` melebar ke mp4. Akibatnya `.ytmp4` akan dapat `{format:"mp3", url:<mp3>}`
+// lalu dikirim `sendMedia(..., {type:"video"})` — persis "format yang berbohong"
+// yang `pastikanBentuk` ada untuk mencegahnya. Jadi matriks `applies` di bawah
+// yang menjaganya, dan matriks itu harus diuji.
+
+test("format: azbry hanya mp3, dan hanya `applies` yang menjaganya", () => {
+  const izuka = kapyoutube.backends.find((b) => b.name === "izuka");
+  const azbry = kapyoutube.backends.find((b) => b.name === "azbry");
+
+  assert.equal(azbry.applies({ url: KANONIK, format: "mp3" }), true);
+  assert.equal(azbry.applies({ url: KANONIK }), true, "tanpa format berarti mp3");
+  assert.equal(
+    azbry.applies({ url: KANONIK, format: "mp4" }),
+    false,
+    "azbry tidak punya endpoint mp4: request mp4 akan dapat mp3 berlabel mp4",
+  );
+  assert.equal(
+    azbry.applies({ url: KANONIK, format: "MP4" }),
+    false,
+    "huruf besar tidak boleh melewati gate: formatDiminta sudah menurunkannya ke mp4",
+  );
+  // `izuka` memang melayani dua format lewat dua path berbeda, jadi tidak punya
+  // gate — itu yang membuat matriks ini harus diuji per backend, bukan per kapabilitas.
+  assert.equal(izuka.applies({ url: KANONIK, format: "mp3" }), true);
+  assert.equal(izuka.applies({ url: KANONIK, format: "mp4" }), true);
+});
+
+test("format: tidak ada backend mp4 yang reachable lewat aggregator selain izuka", () => {
+  for (const backend of kapyoutube.backends.filter((b) => b.kind !== "local")) {
+    assert.equal(
+      backend.applies({ url: KANONIK, format: "mp4" }),
+      backend.name === "izuka",
+      `${backend.name} reachable untuk mp4?`,
+    );
+  }
 });
 
 // ── backend lokal ────────────────────────────────────────────────────────────

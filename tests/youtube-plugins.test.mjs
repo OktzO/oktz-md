@@ -210,6 +210,38 @@ test("ytmp3: resolve gagal → tidak ada media dan tidak ada centang hijau", asy
   assert.match(teksBalasan(), /Gagal mengunduh audio\./);
 });
 
+test("ytmp3 dan ytmp4: URL tanpa skema dan URL di dalam kalimat tidak lagi ditolak di guard", async () => {
+  // Guard plugin berjalan sebelum resolver, jadi perbaikan parsing di kapabilitas
+  // tidak berarti apa-apa kalau guard plugin menolak lebih dulu. Sebelum Phase 1
+  // ketiga bentuk ini lolos `url.includes("youtu.be")` lalu dibaca regex yang
+  // tidak dianchor, jadi ini regresi nyata — bukan sekadar pengetatan yang disengaja.
+  const bentuk = [
+    `youtu.be/${ID}`,
+    `youtube.com/watch?v=${ID}`,
+    `putar https://youtu.be/${ID} dong`,
+  ];
+  // Konteks plugin sengaja tanpa `resolve`: jalur yang diuji di sini adalah
+  // seam modul yang di-mock, jadi kalau suatu plugin nanti Diam-diam bergantung
+  // pada `resolve` dari konteks, test ini akan gagal alih-alih lolos diam-diam.
+  const kasar = async (modul) => {
+    for (const teks of bentuk) {
+      PESAN.length = 0;
+      REAKSI.length = 0;
+      hasilResolve = () => ({ ok: true, source: "ytdl-native", data: { title: "Lagu", thumbnail: "", format: "mp3", url: MP3 } });
+      await modul.handler(mPalsu(teks), { sock: sockPalsu() });
+      assert.doesNotMatch(
+        teksBalasan(),
+        /❌ URL harus YouTube/,
+        `guard harus menerima bentuk ini: ${teks}`,
+      );
+      assert.equal(PANGGILAN_RESOLVE.at(-1)?.args.url, teks, `resolver harus menerima teks apa adanya: ${teks}`);
+    }
+  };
+  await kasar(ytmp3.modul);
+  PESAN.length = 0;
+  await kasar(ytmp4.modul);
+});
+
 test("ytmp3: link bukan YouTube ditolak di plugin, tanpa memanggil resolver", async () => {
   const sock = sockPalsu();
   for (const buruk of [

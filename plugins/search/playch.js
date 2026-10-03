@@ -69,9 +69,8 @@ function generateWaveform(audioBuf, samples = 64) {
   return waveform;
 }
 
-async function downloadAudio(videoUrl, deps = {}) {
-  const runResolve = deps.resolve ?? ((capability, args) => resolver.resolve(capability, args));
-  const { data } = await runResolve("youtube", { url: String(videoUrl).trim(), format: "mp3" });
+async function downloadAudio(videoUrl) {
+  const { data } = await resolver.resolve("youtube", { url: String(videoUrl).trim(), format: "mp3" });
   return data.url;
 }
 

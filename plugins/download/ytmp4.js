@@ -17,11 +17,20 @@ const pluginConfig = {
  * `youtube.com.evil.example` dan `notyoutube.com` lolos `includes` tapi bukan
  * YouTube. Normalisasi short link ada di kapabilitas, jadi `youtu.be/...`,
  * `m.youtube.com`, dan `/shorts/...` tetap diterima.
+ *
+ * Teks user juga sering berupa tautan tanpa skema (`youtu.be/...`) atau tautan
+ * di dalam kalimat ("putar https://youtu.be/... dong"). Keduanya harus lolos
+ * guard: versi lama menerimanya, dan versi yang lebih ketat hanya memindahkan
+ * penolakan ke kapabilitas tanpa memperbaiki apa pun. Kandidat diambil dengan
+ * urutan yang sama seperti `kandidatTautan` di src/capabilities/youtube.js.
  */
 function hostYoutube(url) {
+  const mentah = String(url ?? "").trim();
+  const lengkap = /\bhttps?:\/\/[^\s<>"']+/i.exec(mentah)?.[0];
+  const dasar = lengkap ?? mentah.split(/\s+/).find((token) => /youtu/i.test(token)) ?? mentah;
   let parsed;
   try {
-    parsed = new URL(String(url).trim());
+    parsed = new URL(/^[a-z][a-z0-9+.-]*:/i.test(dasar) ? dasar : `https://${dasar}`);
   } catch {
     return false;
   }
@@ -30,9 +39,8 @@ function hostYoutube(url) {
   return host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
 }
 
-async function getVideoDownloadUrl(url, deps = {}) {
-  const run = deps.resolve ?? ((capability, args) => resolver.resolve(capability, args));
-  const { data } = await run("youtube", { url: String(url).trim(), format: "mp4" });
+async function getVideoDownloadUrl(url) {
+  const { data } = await resolver.resolve("youtube", { url: String(url).trim(), format: "mp4" });
   return data.url;
 }
 

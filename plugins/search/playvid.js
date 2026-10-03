@@ -20,9 +20,8 @@ function formatViews(n) {
   return n.toString();
 }
 
-async function getVideoDownloadUrl(url, deps = {}) {
-  const run = deps.resolve ?? ((capability, args) => resolver.resolve(capability, args));
-  const { data } = await run("youtube", { url: String(url).trim(), format: "mp4" });
+async function getVideoDownloadUrl(url) {
+  const { data } = await resolver.resolve("youtube", { url: String(url).trim(), format: "mp4" });
   return data.url;
 }
 

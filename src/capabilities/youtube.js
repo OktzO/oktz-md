@@ -11,8 +11,8 @@ export const stable = false;
 // User WhatsApp hampir selalu mengirim short link: `youtu.be/…`, `m.youtube.com`,
 // `music.youtube.com`, atau `youtube.com/shorts/…`. Semuanya adalah video yang
 // sama, jadi semua dinormalkan ke satu bentuk kanonik sebelum masuk scraper atau
-// aggregator. `SaveTube.download` (src/scraper/youtube.js:53) sudah menyodorkan
-// bentuk kanonik ke hostnya, tapi `extractVideoId` di src/scraper/ytdl.js:12 hanya
+// aggregator. `SaveTube.download` (src/scraper/youtube.js:52) sudah menyodorkan
+// bentuk kanonik ke hostnya, tapi `extractVideoId` di src/scraper/ytdl.js:6 hanya
 // bisa membaca sebagian dari bentuk itu — `/shorts/<id>` dan `/live/<id>` tidak
 // terbaca sama sekali, dan `ytdl` menjawab `{ status: false }` untuk keduanya
 // tanpa satu pun request. `m.` dan `music.` kebetulan ikut terbaca karena regex-nya
@@ -27,34 +27,53 @@ export const stable = false;
 const POLA_ID = /^[A-Za-z0-9_-]{11}$/;
 const JALUR_LANGKAS = new Set(["shorts", "live", "embed", "v"]);
 
-function hostYoutube(url) {
-  let parsed;
+// `new URL` menolak dua bentuk yang justru paling sering diketik user: tautan
+// tanpa skema (`youtu.be/…`) dan tautan yang disisipkan di dalam kalimat
+// ("putar https://youtu.be/… dong"). Keduanya bekerja sebelum Phase 1 — guard
+// plugin lama hanya `url.includes("youtu.be")` dan `YOUTUBE_ID_REGEX` tidak
+// dianchor, jadi menarik ID dari tengah string — jadi menolaknya sekarang adalah
+// penyempitan yang tidak diminta dan tidak diinginkan.
+const TAUTAN_LENGKAP = /\bhttps?:\/\/[^\s<>"']+/i;
+const ADA_SKEMA = /^[a-z][a-z0-9+.-]*:/i;
+
+/**
+ * Bentuk yang mungkin tautan, urut dari paling mungkin sampai fallback.
+ *
+ * Pemotongan dari dalam kalimat hanya dilakukan kalau user menulis skema yang
+ * lengkap, dan potongan pertamanya dirakim sampai whitespace: itu yang membuat
+ * `https://evil.example/redirect?to=https://youtu.be/<id>` terambil utuh dan
+ * ditolak sebagai host `evil.example`, bukan dipungut `youtu.be` dari query
+ * string-nya. Tanpa skema, kandidat diambil dari token yang memuat "youtu" —
+ * polanya sama dengan `YOUTUBE_ID_REGEX` yang lama.
+ */
+function kandidatTautan(url) {
+  const mentah = String(url ?? "").trim();
+  const lengkap = TAUTAN_LENGKAP.exec(mentah)?.[0];
+  const dasar = lengkap ?? mentah.split(/\s+/).find((token) => /youtu/i.test(token)) ?? mentah;
+  // Skema hanya dipulihkan kalau memang tidak ada token skema sama sekali, jadi
+  // `ftp://youtube.com/…` dan `javascript:…` tetap sampai ke pemeriksaan protocol
+  // dan ditolak di sana — bukan diam-diam jadi request https.
+  return [dasar, mentah]
+    .filter((nilai, i, semua) => nilai && semua.indexOf(nilai) === i)
+    .map((nilai) => (ADA_SKEMA.test(nilai) ? nilai : `https://${nilai}`));
+}
+
+function parseTautan(nilai) {
   try {
-    parsed = new URL(String(url).trim());
+    const parsed = new URL(nilai);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed : null;
   } catch {
-    return false;
+    return null;
   }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+}
+
+function hostYoutube(parsed) {
   const host = parsed.hostname.toLowerCase();
   return host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
 }
 
-/**
- * ID video dari URL YouTube, atau `null` kalau URL itu bukan tautan video.
- *
- * `null` berarti tidak ada yang bisa diprobe — jadi pemanggil boleh berhenti
- * sebelum satu pun request, bukan menunggu upstream menolak.
- */
-function idVideo(url) {
-  if (!hostYoutube(url)) return null;
-
-  let parsed;
-  try {
-    parsed = new URL(String(url).trim());
-  } catch {
-    return null;
-  }
-
+/** ID video dari satu URL yang sudah pasti host-nya YouTube. */
+function idDariTautan(parsed) {
   // Short link resmi: seluruh path adalah ID-nya.
   if (parsed.hostname.toLowerCase() === "youtu.be") {
     const kandidat = parsed.pathname.replace(/^\/+/, "").split("/")[0];
@@ -66,11 +85,27 @@ function idVideo(url) {
   if (dariQuery && POLA_ID.test(dariQuery)) return dariQuery;
 
   // Bentuk berbagi yang lain. Semuanya dipetakan ke `watch?v=<id>`, dan itu
-  // bukan sekadarFormalitas: `SaveTube` hanya menerima daftar kualitas
+  // bukan sekadar formalitas: `SaveTube` hanya menerima daftar kualitas
   // tertentu, jadi quality string bukan tautan yang bisa dipakai.
   const segmen = parsed.pathname.replace(/^\/+|\/+$/g, "").split("/");
   if (segmen.length >= 2 && JALUR_LANGKAS.has(segmen[0]) && POLA_ID.test(segmen[1])) {
     return segmen[1];
+  }
+  return null;
+}
+
+/**
+ * ID video dari URL YouTube, atau `null` kalau URL itu bukan tautan video.
+ *
+ * `null` berarti tidak ada yang bisa diprobe — jadi pemanggil boleh berhenti
+ * sebelum satu pun request, bukan menunggu upstream menolak.
+ */
+function idVideo(url) {
+  for (const nilai of kandidatTautan(url)) {
+    const parsed = parseTautan(nilai);
+    if (!parsed || !hostYoutube(parsed)) continue;
+    const id = idDariTautan(parsed);
+    if (id) return id;
   }
   return null;
 }
@@ -96,7 +131,7 @@ function target(args) {
 
 // Dua format, dan hanya dua: plugin menyebut `format`, dan scraper hanya menerima
 // mp3 atau mp4. Aturan yang sama dipakai `ytdl` sendiri di
-// src/scraper/ytdl.js:79, jadi bentuk lain tidak pernah diam-diam jadi mp3.
+// src/scraper/ytdl.js:32, jadi bentuk lain tidak pernah diam-diam jadi mp3.
 function formatDiminta(args) {
   return String(args?.format ?? "").toLowerCase() === "mp4" ? "mp4" : "mp3";
 }
@@ -106,8 +141,8 @@ function formatDiminta(args) {
 async function lewatYtdlNative(args = {}, _) {
   const kanonik = target(args);
   // `ytdl` tidak melempar: semua kegagalan dikembalikan sebagai
-  // `{ status: false, mess }` (src/scraper/ytdl.js:153), termasuk timeout polling
-  // di :146. Bentuk itu diteruskan apa adanya supaya `normalize` yang memeriksa
+  // `{ status: false, mess }` (src/scraper/ytdl.js:106), termasuk timeout polling
+  // di :97. Bentuk itu diteruskan apa adanya supaya `normalize` yang memeriksa
   // `status`. Parameter kedua dibiarkan kosong: `ytdl` hanya menerima `(url, format)`,
   // jadi `ctx.signal` tidak punya tempat masuk — lihat catatan di
   // `lewatYoutubeFallback` untuk konsekuensinya ke budget resolver.
@@ -168,8 +203,18 @@ async function lewatIzuka(args = {}, ctx = {}) {
     params: { url: kanonik },
     signal: ctx?.signal,
   });
-  // Plugin sebelum Phase 1 mensyaratkan `data.status` dan `data.result`, jadi
-  // `status: false` dengan `result` yang penuh harus tetap jadi kegagalan.
+  // Dua jalur lama tidak sama-sama memeriksa `status`, jadi bedanya harus jujur:
+  // `ytmp4` lama menuntut `data.status` sebelum membaca `result.video_normal`,
+  // tapi `ytmp3` lama sama sekali tidak memeriksa `status` — ia langsung memakai
+  // `result.download_url` apa adanya. Untuk mp3 jalur ini jadi lebih ketat dari
+  // sebelumnya, dan itu memang disengaja: amplop yang menandai gagal tidak boleh
+  // diperlakukan sebagai unduhan siap kirim.
+  //
+  // `!== true`, bukan "status yang tidak kosong": probe langsung pada 2026-10-03
+  // ke `my.izuka-api.xyz/api/downloader/ytmp3` menjawab `"status": true` sebagai
+  // boolean, jadi bentuk `1` atau `"true"` tidak pernah muncul di endpoint ini.
+  // Bentuk yang paling berbahaya justru yang paling ketat lolosnya: host yang
+  // hidup tapi tidak mengirim apa pun.
   if (body?.status !== true) {
     throw new Error(`youtube: aggregator izuka menandai gagal — ${String(body?.msg ?? body?.error ?? "tanpa alasan")}`);
   }
@@ -182,6 +227,10 @@ async function lewatAzbry(args = {}, ctx = {}) {
     params: { url: kanonik },
     signal: ctx?.signal,
   });
+  // Bentuk `!== true` di sini lebih ketat dari `play`/`playch` lama yang hanya
+  // menuntut `status` tidak kosong, dan tidak ada satu pun respons azbry yang
+  // tersimpan di repo ini untuk membuktikannya — jadi ini belum diuji terhadap
+  // hostnya, hanya disamakan dengan izuka yang sudah diprobe.
   if (body?.status !== true) {
     throw new Error(`youtube: aggregator azbry menandai gagal — ${String(body?.msg ?? body?.error ?? "tanpa alasan")}`);
   }
@@ -256,7 +305,7 @@ export function normalize(raw) {
     // Tidak ada plugin yang mengonsumsi field ini; ia ada karena kontrak
     // kapabilitas menyebutkan empat field.
     thumbnail: urlGambar(isi.thumbnail ?? isi.thumb),
-    // Aturan yang sama dengan `ytdl` (src/scraper/ytdl.js:79): apa pun yang bukan
+    // Aturan yang sama dengan `ytdl` (src/scraper/ytdl.js:32): apa pun yang bukan
     // mp4 dianggap mp3. Backend sudah menandai format yang dipesan.
     format: String(isi.format ?? "").toLowerCase() === "mp4" ? "mp4" : "mp3",
     url,

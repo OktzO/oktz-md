@@ -22,9 +22,8 @@ const pluginConfig = {
   isEnabled: false,
 };
 
-async function downloadAudio(videoUrl, deps = {}) {
-  const run = deps.resolve ?? ((capability, args) => resolver.resolve(capability, args));
-  const { data } = await run("youtube", { url: String(videoUrl).trim(), format: "mp3" });
+async function downloadAudio(videoUrl) {
+  const { data } = await resolver.resolve("youtube", { url: String(videoUrl).trim(), format: "mp3" });
   return data.url;
 }
 
@@ -67,8 +66,14 @@ async function handler(m, { sock, text }) {
     const video = search.videos[0];
     const audioUrl = await downloadAudio(video.url);
 
-    // Audio harus ada di sistem berkas: pemutar VoIP menerima path, bukan URL,
-    // dan mengunduh ke memori dulu akan menahan satu lagu penuh selama menelepon.
+    // Audio harus ada di sistem berkas: pemutar VoIP menerima `audioSource`
+    // sebagai path, bukan Buffer, jadi selama panggilan berjalan tidak ada satu
+    // lagu penuh yang harus tetap hidup di RAM.
+    //
+    // Dua keburukan yang tersisa di blok ini sengaja tidak disentuh: `axios.get`
+    // tetap membaca seluruh audio ke memori tanpa batas ukuran sebelum masuk ke
+    // `tmpFile`, dan `tmpFile` bocor kalau panggilan tidak pernah selesai. Keduanya
+    // milik sapuan yang lebih luas dari rewire kapabilitas ini.
     const audioRes = await axios.get(audioUrl, {
       responseType: "arraybuffer",
       timeout: 60000,

@@ -18,11 +18,20 @@ const pluginConfig = {
  * YouTube. Guard plugin tetap ada supaya user dapat jawabannya sebelum
  * kapabilitas sempat mencatat kegagalan host; normalisasi short link ada di
  * kapabilitas, jadi `youtu.be/...` tetap diterima di sini.
+ *
+ * Teks user juga sering berupa tautan tanpa skema (`youtu.be/...`) atau tautan
+ * di dalam kalimat ("putar https://youtu.be/... dong"). Keduanya harus lolos
+ * guard: versi lama menerimanya, dan versi yang lebih ketat hanya memindahkan
+ * penolakan ke kapabilitas tanpa memperbaiki apa pun. Kandidat diambil dengan
+ * urutan yang sama seperti `kandidatTautan` di src/capabilities/youtube.js.
  */
 function hostYoutube(url) {
+  const mentah = String(url ?? "").trim();
+  const lengkap = /\bhttps?:\/\/[^\s<>"']+/i.exec(mentah)?.[0];
+  const dasar = lengkap ?? mentah.split(/\s+/).find((token) => /youtu/i.test(token)) ?? mentah;
   let parsed;
   try {
-    parsed = new URL(String(url).trim());
+    parsed = new URL(/^[a-z][a-z0-9+.-]*:/i.test(dasar) ? dasar : `https://${dasar}`);
   } catch {
     return false;
   }
@@ -37,8 +46,10 @@ function hostYoutube(url) {
  * sudah menolak sendiri kalau key kosong, dan jalur lokal tidak butuh key
  * sama sekali.
  *
- * `deps.resolve` hanya untuk test —(testes/upstream-diagnostics.test.mjs)
- * menyuntikkan kegagalan aggregator tanpa jaringan.
+ * `deps.resolve` hanya untuk test — `tests/upstream-diagnostics.test.mjs`
+ * menyuntikkan kegagalan aggregator lewat konteks plugin, tanpa jaringan.
+ * Empat plugin YouTube lain tidak punya seam ini karena tidak ada pemanggilnya:
+ * satu jalur suntik saja sudah cukup.
  */
 export async function getAudioDownload(url, deps = {}) {
   const run = deps.resolve ?? ((capability, args) => resolver.resolve(capability, args));

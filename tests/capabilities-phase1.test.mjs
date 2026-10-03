@@ -2843,7 +2843,10 @@ test("permukaan plugin videy tetap sama: config, pesan, dan reaksi", () => {
 // langsung.
 //
 // Blok ini tidak memakai `mock.module` baru, jadi blok-blok Task 3 sampai Task 7
-// di atas tidak tersentuh.
+// di atas tidak tersentuh. Satu-satunya hal bersama yang dipakai blok ini adalah
+// `httpPalsu.get`, dan itu di-wrap di bawah — bukan diganti: host aggregator
+// YouTube ditangani di sini, sisanya diteruskan ke `get` yang lama apa adanya
+// supaya blok-blok sebelumnya tetap berperilaku persis seperti sebelumnya.
 
 const getYoutube = httpPalsu.get;
 httpPalsu.get = async (url, opts) => {
@@ -2997,10 +3000,12 @@ test("lima plugin youtube memakai resolver youtube dengan format yang tepat", ()
   for (const [file, format] of Object.entries(diharapkan)) {
     const sumber = fs.readFileSync(path.join(process.cwd(), file), "utf8");
     assert.match(sumber, /from "\.\.\/\.\.\/src\/lib\/resolve\.js"|from '\.\.\/\.\.\/src\/lib\/resolve\.js'/, `${file}: resolver belum diimpor`);
-    // Panggilan ada di dalam helper supaya plugin bisa disuntik di test; yang
-    // diuji adalah kapabilitas dan format yang diteruskan ke sana.
-    assert.match(sumber, /resolver\.resolve\(/, `${file}: belum memakai resolver`);
-    assert.match(sumber, /run\w*\("youtube"|run\w*\('youtube'/, `${file}: kapabilitas yang dipanggil bukan youtube`);
+// Panggilan ada di dalam helper; yang diuji adalah kapabilitas dan format
+    // yang diteruskan ke sana, bukan nama variabel yang kebetulan memegang
+    // closure. Bentuknya berubah dari `run("youtube", …)` ke
+    // `resolver.resolve("youtube", …)` setelah seam `deps.resolve` dihapus dari
+    // empat plugin yang tidak pernah memakainya.
+    assert.match(sumber, /\(\s*["']youtube["']/, `${file}: kapabilitas yang dipanggil bukan youtube`);
     assert.match(sumber, new RegExp(`format: "${format}"`), `${file}: format harus ${format}`);
     // `playcall` dan `playch` masih mengunduh media ke berkas dengan axios, jadi
     // yang dilarang adalah axios ke URL absolut — memuat `audioUrl` lokal sah.
@@ -3096,4 +3101,95 @@ test("ytmp3 tidak lagi mengunduh audio ke memori sebagai jalur utama", async () 
     .join("\n");
   assert.doesNotMatch(sumber, /fallbackToMp3Buffer/, "unduhan penuh tidak boleh jadi jalur plugin");
   assert.doesNotMatch(sumber, /isFallback/, "cabang fallback harus hilang bersama pemanggilnya");
+});
+
+// ── budget resolver harus benar-benar mencapai aggregator ─────────────────────
+//
+// Paruh yang bisa diuji di kapabilitas ini adalah tier `api`: `ytdl` dan
+// SaveTube tidak punya parameter signal — lihat catatan di `lewatYtdlNative`
+// dan `lewatYoutubeFallback` di src/capabilities/youtube.js — jadi hanya
+// aggregator.hit yang bisa dihentikan oleh budget resolver. Kalau `ctx.signal`
+// tidak diteruskan di sini, seluruh `.ytmp3` yang jatuh ke aggregator berjalan
+// sampai timeout 5 detik milik `aggregator.hit` tanpa bisa dihentikan — dan
+// tidak ada test lain yang akan menangkapnya.
+
+test("signal diteruskan ke request aggregator youtube, bukan hanya ke scraper lokal", async () => {
+  const controller = new AbortController();
+  for (const [backend, body, format] of [
+    [backendIzuka, IZUKA_MP3_BODY, "mp3"],
+    [backendIzuka, IZUKA_MP4_BODY, "mp4"],
+    [backendAzbry, AZBRY_MP3_BODY, "mp3"],
+  ]) {
+    PANGGILAN_HTTP.length = 0;
+    hasilAggregator = async () => ({ status: 200, data: body });
+    await backend.run({ url: "https://youtu.be/dQw4w9WgXcQ", format }, { signal: controller.signal });
+    const call = PANGGILAN_HTTP.at(-1);
+    assert.equal(call?.verb, "get", `${backend.name} harus lewat GET aggregator`);
+    assert.equal(
+      call?.opts?.signal,
+      controller.signal,
+      `tier api ${backend.name} (${format}) harus menghormati budget resolver`,
+    );
+  }
+});
+
+test("budget habis di tier aggregator youtube → request aggregator benar-benar dibatalkan", async () => {
+  // Bukti yang tidak bisa dipalsukan oleh test "signal diteruskan": kalau
+  // `opts.signal` benar-benar sampai ke transport, `abort()` memanggil daftar
+  // listener-nya dan request ini menolak — bukan menunggu timeout 5 detik.
+  const controller = new AbortController();
+  let terputus = false;
+  PANGGILAN_HTTP.length = 0;
+  hasilAggregator = (url, opts) =>
+    new Promise((_resolve, reject) => {
+      opts?.signal?.addEventListener("abort", () => {
+        terputus = true;
+        reject(new Error("dibatalkan oleh budget"));
+      });
+    });
+
+  const jalan = backendIzuka.run({ url: "https://youtu.be/dQw4w9WgXcQ", format: "mp3" }, { signal: controller.signal });
+  controller.abort();
+
+  // Tanpa `opts.signal` di transport, promise di atas tidak akan pernah selesai,
+  // jadi ada batas waktu pendek supaya kegagalan muncul sebagai merah yang jelas
+  // dan tidak menggantung seluruh berkas. Timer dibersihkan di `finally` supaya
+  // jalur hijau tidak meninggalkan pekerjaan yang belum selesai.
+  let ganti;
+  const yolk = new Promise((_, reject) => {
+    ganti = setTimeout(
+      () => reject(new Error("request tidak dibatalkan: signal tidak sampai ke transport")),
+      300,
+    );
+  });
+  try {
+    await assert.rejects(() => Promise.race([jalan, yolk]), /dibatalkan oleh budget/);
+  } finally {
+    clearTimeout(ganti);
+  }
+  assert.equal(terputus, true, "request aggregator harus benar-benar dibatalkan");
+});
+
+// ── `fallbackToMp3Buffer` tidak boleh tetap hidup sebagai export ──────────────
+//
+// Setelah rewire `.ytmp3` tidak pernah menyentuhnya, dan nol pemanggil tersisa di
+// repo. Fungsi itu `axios.get(url, {responseType:"arraybuffer"})` tanpa batas
+// ukuran lalu `readFileSync` hasilnya — persis mode yang dilarang di kotak 1GB.
+// Export yang tidak terpakai adalah gubernak yang menganggur: plugin berikutnya
+// bisa mengimpornya tanpa jejak karena tidak ada yang menunjuk. Jadi dihapus, dan
+// ketidakhadirannya ikut dikunci supaya tidak kembali diam-diam.
+
+test("scraper ytdl tidak lagi mengekspor fallbackToMp3Buffer", async () => {
+  const mod = await import("../src/scraper/ytdl.js");
+  assert.equal(
+    mod.fallbackToMp3Buffer,
+    undefined,
+    "unduhan penuh tanpa batas ke RAM tidak boleh tetap tersedia sebagai export",
+  );
+  // Hapus exportnya tidak boleh merusak yang masih dipakai plugin di luar Phase 1.
+  assert.equal(typeof mod.ytdl, "function");
+  assert.equal(typeof mod.Youtube, "function");
+  assert.equal(typeof mod.default, "function");
+  const sumber = fs.readFileSync(path.join(process.cwd(), "src/scraper/ytdl.js"), "utf8");
+  assert.doesNotMatch(sumber, /fallbackToMp3Buffer/, "kodenya harus hilang, bukan cuma export-nya");
 });
