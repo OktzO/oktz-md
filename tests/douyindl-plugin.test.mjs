@@ -31,7 +31,43 @@ const httpPalsu = {
 };
 mock.module("../src/lib/http.js", { namedExports: { httpAxios: httpPalsu } });
 
-const douyindl = await import("../plugins/download/douyindl.js");
+// ── sentinel import ─────────────────────────────────────────────────────────
+//
+// Rantai impor di berkas ini melewati modul yang memanggil `src/lib/aggregator.js`
+// → `config.js` → `src/lib/database.js` → `src/lib/lid.js`, dan `src/lib/lid.js:61`
+// memasang `process.on("uncaughtException", …)` yang menelan semua error — termasuk
+// yang dilempar modul yang gagal diimpor. Akibatnya impor yang gagal TIDAK
+// menggagalkan berkas: proses keluar 0 dan node:test melaporkan `pass 1` dengan nol
+// test di dalamnya.
+//
+// Impor jadi tidak boleh dibiarkan gagal telanjang. Kalau `await import` melempar,
+// badan modul ini tidak pernah selesai dievaluasi dan tidak satu pun `test()`
+// terdaftar — sentinel yang diletakkan setelah impor pun tidak akan ikut jalan.
+// Kesalahannya ditangkap, lalu assertion sentinel yang menggagalkan.
+//
+// Pola yang sama dipakai tests/applemusic-plugin.test.mjs dan
+// tests/sfiledl-plugin.test.mjs. `src/lib/lid.js` sendiri tidak diubah di sini: itu
+// penanganan crash produksi dan di luar cakupan tugas ini.
+const GALAT_IMPOR = [];
+
+async function impor(specifier) {
+  try {
+    return await import(specifier);
+  } catch (error) {
+    GALAT_IMPOR.push(`${specifier} → ${error?.code ?? "?"}: ${error?.message ?? error}`);
+    return null;
+  }
+}
+
+// Catatan: berkas ini hari ini belum menarik `lid.js` ke dalam prosesnya,
+// jadi sentinel di sini guarding sesuatu yang belum terjadi. Murah sekarang,
+// mahal besok kalau satu baris impor plugin berubah.
+const douyindl = await impor("../plugins/download/douyindl.js");
+
+test("sentinel: plugin douyindl benar-benar terimpor (bukan berkas kosong yang hijau)", () => {
+  assert.deepEqual(GALAT_IMPOR, [], `impor gagal:\n${GALAT_IMPOR.join("\n")}`);
+  assert.equal(typeof douyindl?.handler, "function");
+});
 
 const VIDEO = "https://v3.douyinvod.com/abc/video.mp4";
 const AUDIO = "https://v3.douyinvod.com/abc/audio.mp3";

@@ -58,10 +58,48 @@ mock.module("../src/lib/aggregator.js", {
   },
 });
 
-const kap = await import("../src/capabilities/ytmusic.js");
-const { createResolver } = await import("../src/lib/resolve.js");
+// ── sentinel import ─────────────────────────────────────────────────────────
+//
+// Rantai impor di berkas ini melewati modul yang memanggil `src/lib/aggregator.js`
+// → `config.js` → `src/lib/database.js` → `src/lib/lid.js`, dan `src/lib/lid.js:61`
+// memasang `process.on("uncaughtException", …)` yang menelan semua error — termasuk
+// yang dilempar modul yang gagal diimpor. Akibatnya impor yang gagal TIDAK
+// menggagalkan berkas: proses keluar 0 dan node:test melaporkan `pass 1` dengan nol
+// test di dalamnya.
+//
+// Impor jadi tidak boleh dibiarkan gagal telanjang. Kalau `await import` melempar,
+// badan modul ini tidak pernah selesai dievaluasi dan tidak satu pun `test()`
+// terdaftar — sentinel yang diletakkan setelah impor pun tidak akan ikut jalan.
+// Kesalahannya ditangkap, lalu assertion sentinel yang menggagalkan.
+//
+// Pola yang sama dipakai tests/applemusic-plugin.test.mjs dan
+// tests/sfiledl-plugin.test.mjs. `src/lib/lid.js` sendiri tidak diubah di sini: itu
+// penanganan crash produksi dan di luar cakupan tugas ini.
+const GALAT_IMPOR = [];
 
-const lokal = kap.backends.find((b) => b.kind === "local");
+async function impor(specifier) {
+  try {
+    return await import(specifier);
+  } catch (error) {
+    GALAT_IMPOR.push(`${specifier} → ${error?.code ?? "?"}: ${error?.message ?? error}`);
+    return null;
+  }
+}
+
+// Catatan: `aggregator` di-mock di berkas ini, jadi rantai config.js → lid.js
+// belum masuk ke proses test. Sentinel tetap dipasang karena mock itu bisa
+// dihapus kapan saja.
+const kap = await impor("../src/capabilities/ytmusic.js");
+const { createResolver } = await impor("../src/lib/resolve.js");
+
+const lokal = kap?.backends.find((b) => b.kind === "local");
+
+test("sentinel: modul ytmusic dan resolver benar-benar terimpor", () => {
+  assert.deepEqual(GALAT_IMPOR, [], `impor gagal:\n${GALAT_IMPOR.join("\n")}`);
+  assert.equal(typeof kap?.normalize, "function");
+  assert.equal(typeof lokal?.run, "function", "backend lokal ytmusic tidak terbaca");
+  assert.equal(typeof createResolver, "function", "resolver tidak terimpor");
+});
 
 /**
  * Modul kapabilitas yang sama, tapi instance modul BARU.

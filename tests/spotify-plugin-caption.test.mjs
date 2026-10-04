@@ -63,7 +63,46 @@ mock.module("../src/lib/resolve.js", {
   },
 });
 
-const { handler } = await import("../plugins/search/spotify.js");
+// ── sentinel import ─────────────────────────────────────────────────────────
+//
+// Rantai impor di berkas ini melewati modul yang memanggil `src/lib/aggregator.js`
+// → `config.js` → `src/lib/database.js` → `src/lib/lid.js`, dan `src/lib/lid.js:61`
+// memasang `process.on("uncaughtException", …)` yang menelan semua error — termasuk
+// yang dilempar modul yang gagal diimpor. Akibatnya impor yang gagal TIDAK
+// menggagalkan berkas: proses keluar 0 dan node:test melaporkan `pass 1` dengan nol
+// test di dalamnya.
+//
+// Impor jadi tidak boleh dibiarkan gagal telanjang. Kalau `await import` melempar,
+// badan modul ini tidak pernah selesai dievaluasi dan tidak satu pun `test()`
+// terdaftar — sentinel yang diletakkan setelah impor pun tidak akan ikut jalan.
+// Kesalahannya ditangkap, lalu assertion sentinel yang menggagalkan.
+//
+// Pola yang sama dipakai tests/applemusic-plugin.test.mjs dan
+// tests/sfiledl-plugin.test.mjs. `src/lib/lid.js` sendiri tidak diubah di sini: itu
+// penanganan crash produksi dan di luar cakupan tugas ini.
+const GALAT_IMPOR = [];
+
+async function impor(specifier) {
+  try {
+    return await import(specifier);
+  } catch (error) {
+    GALAT_IMPOR.push(`${specifier} → ${error?.code ?? "?"}: ${error?.message ?? error}`);
+    return null;
+  }
+}
+
+// `resolve.js` di-mock di berkas ini dan hanya menarik `circuit-breaker` serta
+// `capability-cache`, jadi rantai config.js → lid.js belum masuk ke proses test.
+// Catatan: berkas ini hari ini belum menarik `lid.js` ke dalam prosesnya,
+// jadi sentinel di sini guarding sesuatu yang belum terjadi. Murah sekarang,
+// mahal besok kalau satu baris impor plugin berubah.
+const spotifyPlugin = await impor("../plugins/search/spotify.js");
+const handler = spotifyPlugin?.handler;
+
+test("sentinel: plugin spotify benar-benar terimpor (bukan berkas kosong yang hijau)", () => {
+  assert.deepEqual(GALAT_IMPOR, [], `impor gagal:\n${GALAT_IMPOR.join("\n")}`);
+  assert.equal(typeof handler, "function");
+});
 
 function captionTerkirim() {
   if (ISI_PESAN) return ISI_PESAN.contentText;

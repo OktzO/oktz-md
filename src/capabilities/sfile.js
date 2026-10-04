@@ -50,9 +50,14 @@ async function lewatNeoxr({ url } = {}, ctx = {}) {
     params: { url: url.trim() },
     signal: ctx?.signal,
   });
-  // Bentuk neoxr adalah amplop `{ data: { url, filename, mime } }`; `lewatAzbry`
-  // di src/capabilities/douyin.js melakukan hal yang sama dengan `result`.
-  return body?.data;
+  // Bentuk neoxr adalah amplop `{ data: { url, filename, mime } }` dengan
+  // `status` di luar `data`, dan amplop itu dikembalikan UTUH: backend yang
+  // mengembalikan `body.data` membuang `status` sebelum `normalize` sempat
+  // membacanya. Plugin sebelum Phase 1 (plugins/download/sfiledl.js) memang
+  // tidak pernah memeriksa `status`, tapi tanpa amplop `{ status: false, data:
+  // { url } }` akan lolos sebagai file yang siap dikirim. Bentuk neoxr yang
+  // sama ditangani di src/capabilities/videy.js.
+  return body;
 }
 
 const punyaUrl = (args) => typeof args?.url === "string" && args.url.trim() !== "";
@@ -75,7 +80,21 @@ export function normalize(raw) {
     throw new Error("bentuk respons sfile tidak dikenali");
   }
 
-  const url = String(raw.download_url ?? raw.url ?? "").trim();
+  // Bentuk lokal tidak punya `status`, jadi pemeriksaan ditulis eksplisit —
+  // `!raw.status` akan salah memblokir hasil scraping lokal.
+  if (raw.status === false) {
+    throw new Error(
+      `sfile: aggregator menandai gagal — ${String(raw.msg ?? raw.error ?? "tanpa alasan")}`,
+    );
+  }
+
+  // Amplop neoxr dibuka di sini, bukan di backend: `data` satu level di bawah
+  // `status`, dan amplop yang sudah terbuang tidak bisa diperiksa lagi. Array
+  // tidak ikut dibuka — `data: []` adalah kegagalan bentuk, bukan file.
+  const isi =
+    raw.data && typeof raw.data === "object" && !Array.isArray(raw.data) ? raw.data : raw;
+
+  const url = String(isi.download_url ?? isi.url ?? "").trim();
   // `sfile()` mengembalikan `download_url: null` pada tiga jalur keluar yang
   // berbeda — tanpa `og:url`, tanpa `#download`, dan regex gate yang tidak
   // cocok. Semua itu kegagalan, bukan file yang sah tanpa tautan: plugin akan
@@ -83,12 +102,12 @@ export function normalize(raw) {
   // tidak menerima apa-apa.
   if (!/^https?:\/\//i.test(url)) {
     throw new Error(
-      `sfile: respons tanpa URL unduhan (field: ${Object.keys(raw).join(", ") || "kosong"})`,
+      `sfile: respons tanpa URL unduhan (field: ${Object.keys(isi).join(", ") || "kosong"})`,
     );
   }
 
   return {
-    filename: String(raw.file_name ?? raw.filename ?? "").trim(),
+    filename: String(isi.file_name ?? isi.filename ?? "").trim(),
     url,
     // PERMUKAAN YANG TIDAK DIPAKAI. `plugins/download/sfiledl.js` hanya
     // mengonsumsi `filename`, `url`, dan `mime` — `size` tidak pernah dibaca
@@ -98,8 +117,8 @@ export function normalize(raw) {
     // kedua bentuk kehilangan satu-satunya tempat di mana nama field itu
     // diterjemahkan. Kalau suatu saat plugin butuh, ia ada di sini; jangan
     // tambah field baru tanpa konsumen.
-    size: String(raw.size_from_text ?? raw.size ?? "").trim(),
-    mime: String(raw.mime ?? "").trim(),
+    size: String(isi.size_from_text ?? isi.size ?? "").trim(),
+    mime: String(isi.mime ?? "").trim(),
   };
 }
 

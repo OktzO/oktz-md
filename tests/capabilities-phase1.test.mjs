@@ -7,8 +7,12 @@ import { CapabilityError, createResolver } from "../src/lib/resolve.js";
 
 // ── harness ───────────────────────────────────────────────────────────────────
 //
-// Modul kapabilitas diimpor sungguhan (tidak dimock), jadi import-nya ikut
-// diuji: file yang hilang harus menggagalkan test ini, bukan lolos diam-diam.
+// Modul kapabilitas diimpor sungguhan (tidak dimock), jadi perilakunya ikut
+// diuji. Tapi mengimpor sungguhan TIDAK berarti berkas ini gagal kalau
+// impornya gagal: `src/lib/lid.js:61` memasang `process.on("uncaughtException")`
+// yang menelan error itu, proses keluar 0, dan node:test melaporkan `pass 1`
+// dengan nol test di dalamnya. Yang menegakkan "file yang hilang harus
+// menggagalkan test ini" adalah sentinel di bawah blok mock, bukan impor ini.
 // Yang dimock adalah transport di bawahnya — `httpAxios` yang dipakai
 // spotyloader dan oleh `aggregator.hit` — sehingga tidak ada satu pun request
 // yang keluar ke jaringan dan upstream yang sedang mati tidak bisa membuat
@@ -52,10 +56,57 @@ class YTMusicPalsu {
 }
 mock.module("ytmusic-api", { defaultExport: YTMusicPalsu });
 
-const kapspotify = await import("../src/capabilities/spotify.js");
+// ── sentinel import ─────────────────────────────────────────────────────────
+//
+// Rantai impor setiap modul kapabilitas di berkas ini melewati
+// `src/lib/aggregator.js` → `config.js` → `src/lib/database.js` → `src/lib/lid.js`, dan
+// `src/lib/lid.js:61` memasang `process.on("uncaughtException", …)` yang menelan semua
+// error — termasuk error dari modul yang gagal diimpor. Akibatnya `await import`
+// yang melempar di top-level tidak menggagalkan berkas ini: proses keluar 0 dan
+// node:test melaporkan `pass 1` dengan nol test di dalamnya.
+//
+// Jadi impor TIDAK boleh dibiarkan gagal telanjang: kalau `await import` di situ
+// melempar, modul berkas ini tidak pernah selesai dievaluasi dan tidak satu pun
+// `test()` terdaftar — sentinel yang diletakkan setelah impor justru tidak pernah
+// ikut jalan. Kesalahannya ditangkap di sini, lalu assertion-nya yang menggagalkan.
+//
+// Sentinel-nya DUA, dan itu bukan pengulangan.
+//
+// node:test menjalankan sebuah test begitu test itu terdaftar — yaitu pada
+// `await` pertama yang menyuspend badan modul, bukan setelah seluruh berkas selesai
+// dievaluasi. Jadi sentinel yang paling atas hanya boleh memeriksa impor yang sudah
+// lewat di titik dia terdaftar, dan sentinel paling akhir memeriksa kedelapan modul
+// sekaligus. Satu sentinel di tengah tidak akan pernah melihat impor yang belum
+// terjadi.
+//
+// `src/lib/lid.js` sendiri tidak diubah di sini: itu penanganan crash produksi dan
+// di luar cakupan tugas ini. Pola yang sama dipakai
+// tests/applemusic-plugin.test.mjs dan tests/sfiledl-plugin.test.mjs.
+const GALAT_IMPOR = [];
 
-const backendLokal = kapspotify.backends.find((b) => b.kind === "local");
-const backendApi = kapspotify.backends.find((b) => b.kind === "api");
+async function impor(specifier) {
+  try {
+    return await import(specifier);
+  } catch (error) {
+    GALAT_IMPOR.push(`${specifier} → ${error?.code ?? "?"}: ${error?.message ?? error}`);
+    return null;
+  }
+}
+
+const kapspotify = await impor("../src/capabilities/spotify.js");
+
+const backendLokal = kapspotify?.backends.find((b) => b.kind === "local");
+const backendApi = kapspotify?.backends.find((b) => b.kind === "api");
+
+// Test pertama yang terdaftar di berkas ini. Impor spotify ada di atas dan sudah
+// selesai ketika test ini berjalan; impor kapabilitas lain menyusul ratusan baris di
+// bawah dan diperiksa oleh sentinel terakhir.
+test("sentinel: modul spotify benar-benar terimpor (bukan berkas kosong yang hijau)", () => {
+  assert.deepEqual(GALAT_IMPOR, [], `impor gagal:\n${GALAT_IMPOR.join("\n")}`);
+  assert.equal(typeof kapspotify?.normalize, "function");
+  assert.equal(typeof backendLokal?.run, "function", "backend lokal spotify tidak terbaca");
+  assert.equal(typeof backendApi?.run, "function", "backend aggregator spotify tidak terbaca");
+});
 
 function resolverUji() {
   // Registry diganti agar test ini tidak ikut bergantung pada tujuh modul
@@ -682,10 +733,10 @@ httpPalsu.post = async (url, body, config) => {
   return postSpotify(url, body, config);
 };
 
-const kappinterest = await import("../src/capabilities/pinterest.js");
+const kappinterest = await impor("../src/capabilities/pinterest.js");
 
-const pinLokal = kappinterest.backends.find((b) => b.kind === "local");
-const pinApi = kappinterest.backends.find((b) => b.kind === "api");
+const pinLokal = kappinterest?.backends.find((b) => b.kind === "local");
+const pinApi = kappinterest?.backends.find((b) => b.kind === "api");
 
 function resolverPin(opsi = {}) {
   return createResolver({
@@ -1352,10 +1403,10 @@ httpPalsu.post = async (url, body, config) => {
   return postPinterest(url, body, config);
 };
 
-const kapdouyin = await import("../src/capabilities/douyin.js");
+const kapdouyin = await impor("../src/capabilities/douyin.js");
 
-const douyinLokal = kapdouyin.backends.find((b) => b.kind === "local");
-const douyinApi = kapdouyin.backends.find((b) => b.kind === "api");
+const douyinLokal = kapdouyin?.backends.find((b) => b.kind === "local");
+const douyinApi = kapdouyin?.backends.find((b) => b.kind === "api");
 
 function resolverDouyin(opsi = {}) {
   return createResolver({ capabilities: { douyin: () => kapdouyin }, ...opsi });
@@ -1907,13 +1958,13 @@ httpPalsu.get = async (url, opts) => {
 // `aggregator.hit` menolak neoxr sebelum ada request kalau key kosong, jadi
 // key dipin di sini. Nilainya dikembalikan apa adanya di setiap respons —
 // hanya yang dibaca test adalah hostname, pathname, dan param.
-const configUji = (await import("../config.js")).default;
-configUji.APIkey.neoxr = "k-neoxr-untuk-test";
+const configUji = (await impor("../config.js"))?.default;
+if (configUji?.APIkey) configUji.APIkey.neoxr = "k-neoxr-untuk-test";
 
-const kapsfile = await import("../src/capabilities/sfile.js");
+const kapsfile = await impor("../src/capabilities/sfile.js");
 
-const sfileLokal = kapsfile.backends.find((b) => b.kind === "local");
-const sfileApi = kapsfile.backends.find((b) => b.kind === "api");
+const sfileLokal = kapsfile?.backends.find((b) => b.kind === "local");
+const sfileApi = kapsfile?.backends.find((b) => b.kind === "api");
 
 function resolverSfile(opsi = {}) {
   return createResolver({ capabilities: { sfile: () => kapsfile }, ...opsi });
@@ -2346,10 +2397,10 @@ function neoxrVidey(body) {
   return async () => ({ status: 200, data: body });
 }
 
-const kapvidey = await import("../src/capabilities/videy.js");
+const kapvidey = await impor("../src/capabilities/videy.js");
 
-const videyLokal = kapvidey.backends.find((b) => b.kind === "local");
-const videyApi = kapvidey.backends.find((b) => b.kind === "api");
+const videyLokal = kapvidey?.backends.find((b) => b.kind === "local");
+const videyApi = kapvidey?.backends.find((b) => b.kind === "api");
 
 function resolverVidey(opsi = {}) {
   return createResolver({ capabilities: { videy: () => kapvidey }, ...opsi });
@@ -2861,7 +2912,7 @@ httpPalsu.get = async (url, opts) => {
   return getYoutube(url, opts);
 };
 
-const kapyoutube = await import("../src/capabilities/youtube.js");
+const kapyoutube = await impor("../src/capabilities/youtube.js");
 
 const PLUGIN_YOUTUBE = [
   "plugins/download/ytmp3.js",
@@ -3216,10 +3267,10 @@ test("scraper ytdl tidak lagi mengekspor fallbackToMp3Buffer", async () => {
 // probe itu: `result` bercampur — entri `Song`, `Artist`, dan `Album` semua
 // punya `link`, jadi penyaringan di `normalize` tidak boleh berbasis `type`.
 
-const kapytmusic = await import("../src/capabilities/ytmusic.js");
+const kapytmusic = await impor("../src/capabilities/ytmusic.js");
 
-const ytmLokal = kapytmusic.backends.find((b) => b.kind === "local");
-const ytmApi = kapytmusic.backends.find((b) => b.kind === "api");
+const ytmLokal = kapytmusic?.backends.find((b) => b.kind === "local");
+const ytmApi = kapytmusic?.backends.find((b) => b.kind === "api");
 
 function resolverYtmusic(opsi = {}) {
   return createResolver({ capabilities: { ytmusic: () => kapytmusic }, ...opsi });
@@ -3574,15 +3625,38 @@ test("permukaan plugin applemusic tetap sama: config dan pesan", () => {
 // di `git show ff397d2^:plugins/tools/hd2.js` dan `hd3.js`: `result` berupa
 // string URL untuk imglarger, dan `result.output_url[0]` untuk unblur.
 
-const kapListrik = await import("../src/capabilities/hd.js");
+const kapListrik = await impor("../src/capabilities/hd.js");
 
-const hdImglarger = kapListrik.backends.find((b) => b.name === "photoai-imglarger");
-const hdUnblur = kapListrik.backends.find((b) => b.name === "fgsi-enchantvideo");
-const hdIzuka = kapListrik.backends.find((b) => b.name === "izuka");
+const hdImglarger = kapListrik?.backends.find((b) => b.name === "photoai-imglarger");
+const hdUnblur = kapListrik?.backends.find((b) => b.name === "fgsi-enchantvideo");
+const hdIzuka = kapListrik?.backends.find((b) => b.name === "izuka");
 
 function resolverHd(opsi = {}) {
   return createResolver({ capabilities: { hd: () => kapListrik }, ...opsi });
 }
+
+// Sentinel terakhir: di titik ini semua impor di berkas ini sudah lewat, jadi ini
+// satu-satunya tempat yang bisa menjamin kedelapan modul benar-benar ada. Yang di
+// atas hanya melihat impor spotify; kalau modul di tengah file hilang, semua test
+// setelahnya akan berjalan tanpa memuatnya sama sekali.
+test("sentinel: kedelapan modul kapabilitas benar-benar terimpor", () => {
+  assert.deepEqual(GALAT_IMPOR, [], `impor gagal:\n${GALAT_IMPOR.join("\n")}`);
+  const modul = {
+    spotify: kapspotify,
+    pinterest: kappinterest,
+    douyin: kapdouyin,
+    sfile: kapsfile,
+    videy: kapvidey,
+    youtube: kapyoutube,
+    ytmusic: kapytmusic,
+    hd: kapListrik,
+  };
+  for (const [nama, isi] of Object.entries(modul)) {
+    assert.equal(typeof isi?.normalize, "function", `normalize ${nama} tidak ada`);
+    assert.ok(Array.isArray(isi?.backends) && isi.backends.length > 0, `backends ${nama} tidak ada`);
+  }
+  assert.ok(configUji?.APIkey, "config.js tidak terimpor");
+});
 
 const KODE_UPLOAD = { code: 200, data: { code: "lgIhxcRf", imageId: "1791017793415", type: 13 }, msg: "Success" };
 const SELESAI = {
@@ -4211,4 +4285,302 @@ test("pesan dan permukaan kedua plugin tetap hidup", () => {
   // Nama file yang dikirim ke user tidak boleh berubah.
   assert.ok(hd2.includes("HD_BY_${config.bot.name}.jpg"), "nama file hd2 harus tetap");
   assert.ok(hd3.includes("UNBLUR_BY_${config.bot.name}.jpg"), "nama file hd3 harus tetap");
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Temuan review Task 11 — amplop `status` di tiga kapabilitas yang belum punya
+//
+// `lewatNexray` (spotify), `lewatAzbry` (pinterest), dan `lewatNeoxr` (sfile)
+// pernah mengembalikan `body.result` / `body.data`. `status` ada SATU level di
+// atas field itu, jadi begitu amplop dibuang tidak ada lagi yang bisa
+// membacanya: `normalize` hanya punya `result`, dan `result` tidak pernah punya
+// `status`. Reproduksi end-to-end dengan backend dan `normalize` sungguhan:
+// aggregator yang menjawab HTTP 200 dengan `{ status: false, msg: "gagal",
+// result: { ... } }` DITERIMA, dan `resolve.js` lalu memanggil
+// `breaker.recordSuccess(backend.name)` — jadi host yang sistematis rusak
+// ditandai sehat dan terus menang di setiap permintaan berikutnya.
+//
+// Test di blok ini sengaja di level BACKEND, bukan `normalize`: test normalize
+// hanya membuktikan normalize melempar, dan tidak bisa menangkap backend yang
+// membuang amplop sebelum normalize melihatnya. Itulah persis لماذا bug ini
+// lolos sebelas review per-task.
+//
+// Bentuk yang diuji tidak dikarang: dua di antaranya diambil apa adanya dari
+// plugin sebelum Phase 1 — `git show 1e40b65:plugins/download/spotifydl.js:29`
+// (`!data.status || !data.result || !data.result.url`) dan
+// `git show 1e40b65:plugins/download/pindl.js:39` (`!res.data?.status ||
+// !res.data?.result`). Dua pemeriksaan itu hilang saat rewire.
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** Tubuh hasil unduhan yang SENGAJA penuh, supaya amplify hanya soal amplop. */
+const SPOTIFY_PALSU = {
+  title: "Lagu Palsu",
+  artist: "Nobody",
+  url: "https://cdn.example/palsu.mp3",
+  mime: "audio/mpeg",
+};
+
+// ── spotify: amplop nexray ────────────────────────────────────────────────────
+
+test("backend nexray wajib mengembalikan amplop, bukan body.result", async () => {
+  hasilAggregator = async () => ({ status: 200, data: { status: false, msg: "gagal", result: SPOTIFY_PALSU } });
+
+  const keluar = await backendApi.run({ url: "https://open.spotify.com/track/abc" });
+
+  assert.equal(
+    keluar?.status,
+    false,
+    `backend tidak boleh membuang amplop status: ${JSON.stringify(keluar)}`,
+  );
+  assert.throws(
+    () => kapspotify.normalize(keluar),
+    /aggregator menandai gagal/,
+    "keluaran backend tidak boleh bisa dipakai langsung sebagai { url }",
+  );
+});
+
+test("pencarian: amplop nexray juga harus utuh, bukan body.result", async () => {
+  // Jalur pencarian punya risiko lebih besar: tanpa amplop, `result` yang penuh
+  // jadi daftar lagu yang dikirim ke user sebagai hasil pencarian yang jujur.
+  hasilAggregator = async () => ({
+    status: 200,
+    data: {
+      status: false,
+      msg: "gagal",
+      result: [{ title: "Lagu Palsu", url: "https://open.spotify.com/track/palsu" }],
+    },
+  });
+
+  const keluar = await backendApi.run({ q: "neffex grateful" });
+
+  assert.equal(keluar?.status, false, `amplop dibuang: ${JSON.stringify(keluar)}`);
+  assert.throws(() => kapspotify.normalize(keluar), /aggregator menandai gagal/);
+});
+
+test("spotify: status false yang tetap membawa result → CapabilityError, bukan lagu palsu", async () => {
+  // Backend lokal harus gagal lebih dulu; kalau tidak test ini hanya
+  // membuktikan spotyloader menang tanpa pernah menyentuh amplop.
+  balasSpotyloader = async () => {
+    throw new Error("spotyloader mati");
+  };
+  hasilAggregator = async () => ({ status: 200, data: { status: false, msg: "gagal", result: SPOTIFY_PALSU } });
+
+  const resolver = resolverUji();
+  await assert.rejects(
+    () => resolver.resolve("spotify", { url: "https://open.spotify.com/track/abc" }),
+    (error) => {
+      assert.ok(error instanceof CapabilityError);
+      assert.deepEqual(error.tried.map((t) => t.name), ["spotyloader", "nexray"]);
+      assert.match(error.tried.at(-1).reason, /aggregator menandai gagal/);
+      return true;
+    },
+  );
+  // Kegagalan di breaker adalah akibat kedua yang paling berbahaya: `resolve.js`
+  // memanggil `recordSuccess` untuk backend yang normalize-nya sukses, jadi
+  // backend yang amplopnya dibuang akan ditandai SEHAT dan menang lagi nanti.
+  const nexray = resolver.breaker.snapshot().find((s) => s.name === "nexray");
+  assert.equal(nexray?.failures, 1, `breaker nexray: ${JSON.stringify(resolver.breaker.snapshot())}`);
+});
+
+test("spotify: amplop tanpa status tapi result penuh tetap gagal", async () => {
+  // Bentuk tanpa `status` tidak mungkin terjadi kalau host jujur, tapi `hit`
+  // tidak menjamin itu, dan plugin lama juga menolak apa pun yang bukan
+  // `status` truthy. Menerimanya berarti mengarang lagu dari respons host
+  // yang tidak pernah bilang berhasil.
+  for (const body of [undefined, null, {}, { result: SPOTIFY_PALSU }]) {
+    hasilAggregator = async () => ({ status: 200, data: body });
+    await assert.rejects(
+      () => resolverUji().resolve("spotify", { q: "neffex" }),
+      (error) => {
+        assert.ok(error instanceof CapabilityError, `harus gagal: ${JSON.stringify(body)}`);
+        return true;
+      },
+      `harus gagal: ${JSON.stringify(body)}`,
+    );
+  }
+  // Bentuk paling berbahaya dari empat itu adalah `result` yang penuh tanpa
+  // `status`: tanpa pemeriksaan amplop, `trackUnduh` tidak punya cara
+  // mengetahui hostnya tidak pernah bilang berhasil.
+  hasilAggregator = async () => ({ status: 200, data: { result: SPOTIFY_PALSU } });
+  await assert.rejects(
+    () => resolverUji().resolve("spotify", { q: "neffex" }),
+    (error) => {
+      assert.match(error.tried.at(-1).reason, /aggregator menandai gagal/);
+      return true;
+    },
+  );
+});
+
+// ── spotify: aggregator URL harus dikunci persis ──────────────────────────────
+//
+// Nexray adalah backend Spotify SATU-SATUNYA sejak backend `ytmusic` dicabut,
+// jadi path yang salah tidak akan ketahuan dari router mana pun: capabilities
+// ini akan 404 seluruhnya dengan suite yang tetap hijau. Yang dikunci di sini:
+// origin, pathname, param, dan penempatan key (nexray `key: null` di
+// src/lib/aggregator.js, jadi key di query maupun header berarti mengubah
+// request yang tadinya tidak ditolak).
+
+test("nexray spotify: URL persis /downloader/spotify dan /search/spotify, tanpa key", async () => {
+  hasilAggregator = async () => ({ status: 200, data: { status: true, result: [] } });
+
+  await backendApi.run({ url: "https://open.spotify.com/track/abc" });
+  await backendApi.run({ q: "neffex grateful" });
+
+  const [unduh, cari] = PANGGILAN_HTTP.filter((c) => c.verb === "get").map((c) => new URL(c.url));
+  assert.equal(unduh.origin, "https://api.nexray.eu.cc");
+  assert.equal(unduh.pathname, "/downloader/spotify");
+  assert.deepEqual([...unduh.searchParams.keys()], ["url"], "hanya param url");
+  assert.equal(unduh.searchParams.get("url"), "https://open.spotify.com/track/abc");
+  assert.equal(cari.origin, "https://api.nexray.eu.cc");
+  assert.equal(cari.pathname, "/search/spotify");
+  assert.deepEqual([...cari.searchParams.keys()], ["q"], "hanya param q");
+  assert.equal(cari.searchParams.get("q"), "neffex grateful");
+  assert.equal(unduh.searchParams.get("apikey"), null, "nexray tidak punya key");
+  assert.equal(PANGGILAN_HTTP.at(-1).opts?.headers?.apikey, undefined);
+});
+
+test("nexray spotify: tidak satu pun literal path aggregator boleh berawalan /api", () => {
+  // Konvensi per host di repo ini: neoxr, izuka, cuki, siputzx, dan azbry
+  // semuanya memakai prefix `/api`; hanya nexray yang tidak. Prefix `/api` di
+  // sini membuat seluruh kapabilitas 404 tanpa satu pun test lain berkedip.
+  // Cakupan test ini sengaja sempit dan disebutkan apa adanya: dia memindai
+  // literal yang ditulis di berkas ini. Test URL di atas yang membaca request
+  // sungguhan adalah penjaga sesungguhnya.
+  const kode = fs
+    .readFileSync(path.join(process.cwd(), "src/capabilities/spotify.js"), "utf8")
+    .split("\n")
+    .filter((baris) => !/^\s*(\/\/|\/\*|\*)/.test(baris))
+    .join("\n");
+  const literalPath = [...kode.matchAll(/["'`]\/[^"'`\s]*["'`]/g)].map((m) => m[0].slice(1, -1));
+  assert.ok(literalPath.length >= 2, `path aggregator harus detectable, dapat ${literalPath.length}`);
+  const salah = literalPath.filter((p) => p.startsWith("/api/"));
+  assert.deepEqual(salah, [], `nexray tidak memakai prefix /api: ${salah.join(", ")}`);
+});
+
+// ── pinterest: amplop azbry ──────────────────────────────────────────────────
+
+const PIN_PALSU = {
+  type: "image",
+  images: [{ name: "orig", url: "https://cdn.example/palsu.jpg" }],
+};
+
+test("backend azbry wajib mengembalikan amplop, bukan body.result", async () => {
+  hasilAggregator = async () => ({ status: 200, data: { status: false, msg: "gagal", result: PIN_PALSU } });
+
+  const keluar = await pinApi.run({ url: "https://pin.it/abc" });
+
+  assert.equal(
+    keluar?.status,
+    false,
+    `backend tidak boleh membuang amplop status: ${JSON.stringify(keluar)}`,
+  );
+  assert.throws(
+    () => kappinterest.normalize(keluar),
+    /aggregator menandai gagal/,
+    "keluaran backend tidak boleh bisa dipakai langsung sebagai { type, images }",
+  );
+});
+
+test("pencarian pinterest: amplop azbry juga harus utuh, bukan body.result", async () => {
+  hasilAggregator = async () => ({
+    status: 200,
+    data: {
+      status: false,
+      msg: "gagal",
+      result: [{ title: "Palsu", image: "https://i.pinimg.com/originals/palsu.jpg" }],
+    },
+  });
+
+  const keluar = await pinApi.run({ q: "cewe cantik indonesia" });
+
+  assert.equal(keluar?.status, false, `amplop dibuang: ${JSON.stringify(keluar)}`);
+  assert.throws(() => kappinterest.normalize(keluar), /aggregator menandai gagal/);
+});
+
+test("pinterest: status false yang tetap membawa result → CapabilityError, bukan pin palsu", async () => {
+  balasIlovepin = async () => null;
+  hasilAggregator = async () => ({ status: 200, data: { status: false, msg: "gagal", result: PIN_PALSU } });
+
+  const resolver = resolverPin();
+  await assert.rejects(
+    () => resolver.resolve("pinterest", { url: "https://pin.it/abc" }),
+    (error) => {
+      assert.ok(error instanceof CapabilityError);
+      assert.deepEqual(error.tried.map((t) => t.name), ["ilovepin", "azbry"]);
+      assert.match(error.tried.at(-1).reason, /aggregator menandai gagal/);
+      return true;
+    },
+  );
+  const azbry = resolver.breaker.snapshot().find((s) => s.name === "azbry");
+  assert.equal(azbry?.failures, 1, `breaker azbry: ${JSON.stringify(resolver.breaker.snapshot())}`);
+});
+
+// ── sfile: amplop neoxr ───────────────────────────────────────────────────────
+
+test("backend neoxr wajib mengembalikan amplop, bukan body.data", async () => {
+  // `status` neoxr ada di luar `data`, jadi amplopnya dua lapis: status di
+  // level atas, file di dalam `data`. Stub di sini ditulis langsung (bukan
+  // lewat `neoxrSfile`) karena helper itu memang hanya bisa menyelipkan
+  // `status` ke dalam `data` — bentuk yang tidak pernah dikirim host.
+  hasilAggregator = async () => ({
+    status: 200,
+    data: { status: false, msg: "gagal", data: { url: SFILE_UNDUHAN, filename: "a.apk" } },
+  });
+
+  const keluar = await sfileApi.run({ url: "https://sfile.mobi/abc123" });
+
+  assert.equal(
+    keluar?.status,
+    false,
+    `backend tidak boleh membuang amplop status: ${JSON.stringify(keluar)}`,
+  );
+  assert.throws(
+    () => kapsfile.normalize(keluar),
+    /aggregator menandai gagal/,
+    "keluaran backend tidak boleh bisa dipakai langsung sebagai { url }",
+  );
+});
+
+test("sfile: status false yang tetap membawa data → CapabilityError, bukan file palsu", async () => {
+  // Gate sfile memblokir lebih dulu (`download_url: null` dari scraper lokal),
+  // supaya aggregator benar-benar dapat giliran.
+  sfileLokalSukses([HAL_SFILE[0], HAL_SFILE[2]]);
+  hasilAggregator = async () => ({
+    status: 200,
+    data: { status: false, msg: "gagal", data: { url: SFILE_UNDUHAN, filename: "a.apk" } },
+  });
+
+  const resolver = resolverSfile();
+  await assert.rejects(
+    () => resolver.resolve("sfile", { url: "https://sfile.mobi/abc123" }),
+    (error) => {
+      assert.ok(error instanceof CapabilityError);
+      assert.deepEqual(error.tried.map((t) => t.name), ["sfile-mobi", "neoxr"]);
+      assert.match(error.tried.at(-1).reason, /aggregator menandai gagal/);
+      return true;
+    },
+  );
+  const neoxr = resolver.breaker.snapshot().find((s) => s.name === "neoxr");
+  assert.equal(neoxr?.failures, 1, `breaker neoxr: ${JSON.stringify(resolver.breaker.snapshot())}`);
+});
+
+test("normalize: bentuk lokal tanpa amplop tetap jalan (regresi sebelum Phase 1)", async () => {
+  // Penjaga terhadap over-correction: `status` hanya boleh menolak bentuk yang
+  // benar-benar amplop. Scraper lokal spotyloader, ilovepin, dan sfiledl tidak
+  // punya `status` maupun `result`, dan semuanya harus tetap bisa dilayani.
+  assert.equal(
+    kapspotify.normalize(SPOTIFY_PALSU).url,
+    "https://cdn.example/palsu.mp3",
+    "bentuk spotyloader tidak boleh ikut ditolak",
+  );
+  assert.equal(
+    kappinterest.normalize({ media: [{ type: "image", url: "https://x/a.jpg" }] }).media[0].url,
+    "https://x/a.jpg",
+    "bentuk ilovepin tidak boleh ikut ditolak",
+  );
+  assert.equal(
+    kapsfile.normalize({ file_name: "a.apk", download_url: "https://download.sfile.co/a.apk" }).filename,
+    "a.apk",
+    "bentuk scraper sfile tidak boleh ikut ditolak",
+  );
 });

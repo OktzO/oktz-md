@@ -48,21 +48,25 @@ async function lewatSpotyloader({ url } = {}, ctx = {}) {
 // Pencarian tidak punya backend lokal: spotyloader menerima URL, bukan kata
 // kunci, dan tidak ada scraper lokal lain di repo ini yang bisa mengubah judul
 // lagu menjadi ID track Spotify. Jadi `{ q }` hanya dilayani aggregator.
+// Amplop aggregator dikembalikan UTUH, bukan `body.result`: `status` nexray ada
+// satu level di atas `result`, dan plugin sebelum Phase 1
+// (plugins/download/spotifydl.js) menolak apa pun yang bukan `status` truthy.
+// Melempar amplop di backend membuat bukti itu hilang sebelum `normalize` sempat
+// membacanya — respons 200 dengan `status: false` tapi `result` yang penuh akan
+// lolos sebagai lagu yang siap dikirim.
 async function lewatNexray(args = {}, ctx = {}) {
   const signal = ctx?.signal;
   if (typeof args.url === "string" && POLA_URL.test(args.url.trim())) {
-    const body = await aggregator.hit("nexray", "/downloader/spotify", {
+    return await aggregator.hit("nexray", "/downloader/spotify", {
       params: { url: args.url.trim() },
       signal,
     });
-    return body?.result;
   }
   if (typeof args.q === "string" && args.q.trim() !== "") {
-    const body = await aggregator.hit("nexray", "/search/spotify", {
+    return await aggregator.hit("nexray", "/search/spotify", {
       params: { q: args.q.trim() },
       signal,
     });
-    return body?.result;
   }
   throw new Error("spotify butuh { url } atau { q }, tidak keduanya");
 }
@@ -81,6 +85,27 @@ const punyaQuery = (args) => typeof args?.q === "string" && args.q.trim() !== ""
 // `artist`, `thumbnail`, dan `duration` selalu string. Backend `ytmusic` yang
 // pernah mengembalikan bentuk lain sudah dicabut, jadi tidak ada lagi pembacaan
 // `artists: [{name}]`, `thumbnails: [{url}]`, atau durasi numerik.
+//
+// Amplop `{ status, msg, result }` dari nexray dibuka di sini, bukan di backend,
+// supaya `status` masih bisa diperiksa sebelum `result` dibaca.
+
+// Bentuk lokal spotyloader tidak punya `result` maupun `status`, jadi keberadaan
+// salah satunya sudah cukup untuk tahu bahwa yang sampai ke sini adalah amplop.
+// `status` dibaca lebih dulu: membukanya belakangan membuat `status: false` yang
+// tidak terlihat, persis bug yang dihapus di Phase 1.
+function isiAmplop(raw) {
+  if (Array.isArray(raw) || (!("status" in raw) && !("result" in raw))) return raw;
+  if (!raw.status) {
+    throw new Error(
+      `spotify: aggregator menandai gagal — ${String(raw.msg ?? raw.error ?? "tanpa alasan")}`,
+    );
+  }
+  const isi = raw.result;
+  if (!isi || typeof isi !== "object") {
+    throw new Error("spotify: aggregator menjawab tanpa result yang bisa dipakai");
+  }
+  return isi;
+}
 
 function trackCari(entri) {
   if (!entri || typeof entri !== "object") return null;
@@ -125,12 +150,13 @@ export function normalize(raw) {
     throw new Error("bentuk respons spotify tidak dikenali");
   }
 
-  const daftar = Array.isArray(raw) ? raw : raw.tracks;
+  const isi = isiAmplop(raw);
+  const daftar = Array.isArray(isi) ? isi : isi.tracks;
   if (Array.isArray(daftar)) {
     return { tracks: daftar.map(trackCari).filter(Boolean) };
   }
 
-  return trackUnduh(raw);
+  return trackUnduh(isi);
 }
 
 export const backends = [

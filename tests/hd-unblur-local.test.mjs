@@ -85,16 +85,53 @@ mock.module("../src/lib/aggregator.js", {
   },
 });
 
-const kap = await import("../src/capabilities/hd.js");
-const { createResolver } = await import("../src/lib/resolve.js");
+// ── sentinel import ─────────────────────────────────────────────────────────
+//
+// Rantai impor di berkas ini melewati modul yang memanggil `src/lib/aggregator.js`
+// → `config.js` → `src/lib/database.js` → `src/lib/lid.js`, dan `src/lib/lid.js:61`
+// memasang `process.on("uncaughtException", …)` yang menelan semua error — termasuk
+// yang dilempar modul yang gagal diimpor. Akibatnya impor yang gagal TIDAK
+// menggagalkan berkas: proses keluar 0 dan node:test melaporkan `pass 1` dengan nol
+// test di dalamnya.
+//
+// Impor jadi tidak boleh dibiarkan gagal telanjang. Kalau `await import` melempar,
+// badan modul ini tidak pernah selesai dievaluasi dan tidak satu pun `test()`
+// terdaftar — sentinel yang diletakkan setelah impor pun tidak akan ikut jalan.
+// Kesalahannya ditangkap, lalu assertion sentinel yang menggagalkan.
+//
+// Pola yang sama dipakai tests/applemusic-plugin.test.mjs dan
+// tests/sfiledl-plugin.test.mjs. `src/lib/lid.js` sendiri tidak diubah di sini: itu
+// penanganan crash produksi dan di luar cakupan tugas ini.
+const GALAT_IMPOR = [];
+
+async function impor(specifier) {
+  try {
+    return await import(specifier);
+  } catch (error) {
+    GALAT_IMPOR.push(`${specifier} → ${error?.code ?? "?"}: ${error?.message ?? error}`);
+    return null;
+  }
+}
+
+const kap = await impor("../src/capabilities/hd.js");
+const { createResolver } = await impor("../src/lib/resolve.js");
 
 // `src/capabilities/hd.js` membaca `config.APIkey.fgsi` saat runtime, jadi test
 // key harus memakai instance config yang sama — mengimpor ulang berkas lain hanya
 // menghasilkan salinan lain.
-const configUji = (await import("../config.js")).default;
+const configUji = (await impor("../config.js"))?.default;
 
-const unblur = kap.backends.find((b) => b.name === "fgsi-enchantvideo");
-const imglarger = kap.backends.find((b) => b.name === "photoai-imglarger");
+const unblur = kap?.backends.find((b) => b.name === "fgsi-enchantvideo");
+const imglarger = kap?.backends.find((b) => b.name === "photoai-imglarger");
+
+test("sentinel: modul hd, resolver, dan config benar-benar terimpor", () => {
+  assert.deepEqual(GALAT_IMPOR, [], `impor gagal:\n${GALAT_IMPOR.join("\n")}`);
+  assert.equal(typeof kap?.normalize, "function");
+  assert.equal(typeof unblur?.run, "function", "backend fgsi-enchantvideo tidak terbaca");
+  assert.equal(typeof imglarger?.run, "function", "backend photoai-imglarger tidak terbaca");
+  assert.equal(typeof createResolver, "function", "resolver tidak terimpor");
+  assert.ok(configUji?.APIkey, "config.js tidak terimpor");
+});
 
 function resolverUji(opsi = {}) {
   return createResolver({ capabilities: { hd: () => kap }, ...opsi });

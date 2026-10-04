@@ -50,19 +50,24 @@ async function lewatAzbry(args = {}, ctx = {}) {
   // dan `aggregator.hit` menempelkan path apa adanya. Tujuh panggilan langsung
   // dan lima metode AzbryApiProvider di repo ini semuanya memakai `/api` lebih
   // dulu; tanpa itu host menjawab 404. (Nexray justru tidak perlu prefix.)
+  //
+  // Amplop dikembalikan UTUH, bukan `body.result`: `status` azbry ada satu level
+  // di atas `result`, dan plugin sebelum Phase 1 (plugins/download/pindl.js)
+  // mensyaratkan `res.data?.status && res.data?.result`. Melempar amplop di
+  // backend membuat bukti itu hilang sebelum `normalize` sempat membacanya —
+  // respons 200 dengan `status: false` tapi `result` yang penuh akan lolos
+  // sebagai pin yang siap dikirim.
   if (typeof args.url === "string" && args.url.trim() !== "") {
-    const body = await aggregator.hit("azbry", "/api/download/pinterest", {
+    return await aggregator.hit("azbry", "/api/download/pinterest", {
       params: { url: args.url.trim() },
       signal,
     });
-    return body?.result;
   }
   if (typeof args.q === "string" && args.q.trim() !== "") {
-    const body = await aggregator.hit("azbry", "/api/search/pinterest", {
+    return await aggregator.hit("azbry", "/api/search/pinterest", {
       params: { q: args.q.trim() },
       signal,
     });
-    return body?.result;
   }
   throw new Error("pinterest butuh { url } atau { q }, tidak keduanya");
 }
@@ -140,25 +145,45 @@ function pinCari(entri) {
   };
 }
 
+// Bentuk lokal (src/scraper/pindl.js) tidak punya `status` maupun `result`, jadi
+// keberadaan salah satunya sudah cukup untuk tahu bahwa yang sampai ke sini
+// adalah amplop. `status` dibaca sebelum `result` dibuka: membukanya belakangan
+// membuat `status: false` yang tidak terlihat.
+function isiAmplop(raw) {
+  if (Array.isArray(raw) || (!("status" in raw) && !("result" in raw))) return raw;
+  if (!raw.status) {
+    throw new Error(
+      `pinterest: aggregator menandai gagal — ${String(raw.msg ?? raw.error ?? "tanpa alasan")}`,
+    );
+  }
+  const isi = raw.result;
+  if (!isi || typeof isi !== "object") {
+    throw new Error("pinterest: aggregator menjawab tanpa result yang bisa dipakai");
+  }
+  return isi;
+}
+
 export function normalize(raw) {
   if (!raw || typeof raw !== "object") {
     throw new Error("bentuk respons pinterest tidak dikenali");
   }
 
+  const isi = isiAmplop(raw);
+
   // Pencarian dicek lebih dulu: hasil kosong di sini adalah jawaban yang sah
   // ("tidak ada yang cocok"), sedangkan respons unduhan tanpa media adalah
   // kegagalan yang harus dilempar supaya backend lain sempat mencoba.
-  const daftar = Array.isArray(raw) ? raw : Array.isArray(raw.pins) ? raw.pins : null;
+  const daftar = Array.isArray(isi) ? isi : Array.isArray(isi.pins) ? isi.pins : null;
   if (daftar !== null) return { pins: daftar.map(pinCari).filter(Boolean) };
 
-  if (Array.isArray(raw.media)) return dariLokal(raw.media);
+  if (Array.isArray(isi.media)) return dariLokal(isi.media);
 
-  if (raw.type !== "video" && raw.type !== "image") {
+  if (isi.type !== "video" && isi.type !== "image") {
     throw new Error(
-      `bentuk respons pinterest tidak dikenali: ${Object.keys(raw).join(", ") || "kosong"}`,
+      `bentuk respons pinterest tidak dikenali: ${Object.keys(isi).join(", ") || "kosong"}`,
     );
   }
-  return dariAggregator(raw);
+  return dariAggregator(isi);
 }
 
 // Dua backend ini hanya melayani bentuk argumen yang berbeda: scraper lokal
