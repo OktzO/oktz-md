@@ -1,5 +1,5 @@
-import axios from "axios";
-import ytdl from "../../src/scraper/ytdl.js";
+import { resolver } from "../../src/lib/resolve.js";
+
 const pluginConfig = {
   name: "ytmp4",
   alias: ["youtubemp4", "ytvideo"],
@@ -12,44 +12,50 @@ const pluginConfig = {
   isEnabled: true,
 };
 
+/**
+ * Host dicek per label, bukan dengan `includes` seperti versi lama:
+ * `youtube.com.evil.example` dan `notyoutube.com` lolos `includes` tapi bukan
+ * YouTube. Normalisasi short link ada di kapabilitas, jadi `youtu.be/...`,
+ * `m.youtube.com`, dan `/shorts/...` tetap diterima.
+ *
+ * Teks user juga sering berupa tautan tanpa skema (`youtu.be/...`) atau tautan
+ * di dalam kalimat ("putar https://youtu.be/... dong"). Keduanya harus lolos
+ * guard: versi lama menerimanya, dan versi yang lebih ketat hanya memindahkan
+ * penolakan ke kapabilitas tanpa memperbaiki apa pun. Kandidat diambil dengan
+ * urutan yang sama seperti `kandidatTautan` di src/capabilities/youtube.js.
+ */
+function hostYoutube(url) {
+  const mentah = String(url ?? "").trim();
+  const lengkap = /\bhttps?:\/\/[^\s<>"']+/i.exec(mentah)?.[0];
+  const dasar = lengkap ?? mentah.split(/\s+/).find((token) => /youtu/i.test(token)) ?? mentah;
+  let parsed;
+  try {
+    parsed = new URL(/^[a-z][a-z0-9+.-]*:/i.test(dasar) ? dasar : `https://${dasar}`);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+  const host = parsed.hostname.toLowerCase();
+  return host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
+}
 
 async function getVideoDownloadUrl(url) {
-  try {
-    const { data } = await axios.get(
-      `https://my.izuka-api.xyz/api/downloader/ytmp4?url=${encodeURIComponent(url)}`
-    );
-
-    if (data?.status && data?.result?.video_normal) {
-      const videos = data.result.video_normal.filter(v => v.ext === "mp4");
-      if (videos.length > 0) {
-        videos.sort((a, b) => parseInt(b.quality) - parseInt(a.quality));
-        if (videos[0] && videos[0].url) {
-          return videos[0].url;
-        }
-      }
-    }
-  } catch (e) {
-    console.error("[YTMP4 Izuka API Error]", e.message);
-  }
-
-  const fallback = await ytdl(url, "mp4");
-  if (fallback?.status && fallback?.dl) {
-    return fallback.dl;
-  }
-
-  throw new Error(fallback?.mess || "Gagal mendapatkan video download URL");
+  const { data } = await resolver.resolve("youtube", { url: String(url).trim(), format: "mp4" });
+  return data.url;
 }
 
 async function handler(m, { sock }) {
   const url = m.text?.trim();
   if (!url)
     return m.reply(`Contoh: ${m.prefix}ytmp4 https://youtube.com/watch?v=xxx`);
-  if (!url.includes("youtube.com") && !url.includes("youtu.be"))
-    return m.reply("❌ URL harus YouTube");
+  if (!hostYoutube(url)) return m.reply("❌ URL harus YouTube");
 
   m.react("🕕");
 
   try {
+    // `normalize` menolak respons tanpa URL unduhan, jadi hasil di sini tidak
+    // mungkin kosong — versi lama bisa mengembalikan `undefined` lalu mengirim
+    // `sendMedia` dengan tidak ada file.
     const downloadUrl = await getVideoDownloadUrl(url);
 
     await sock.sendMedia(m.chat, downloadUrl, null, m, {
@@ -57,7 +63,10 @@ async function handler(m, { sock }) {
     });
     m.react("✅");
   } catch (err) {
-    console.error("[YTMP4]", err);
+    const rincian = Array.isArray(err?.tried)
+      ? err.tried.map((t) => `${t.name}: ${t.reason}`).join(" | ")
+      : String(err?.message ?? err);
+    console.error(`[YTMP4] gagal — ${rincian}`);
     m.react("❌");
     m.reply("Gagal mengunduh video.");
   }

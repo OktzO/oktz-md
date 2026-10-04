@@ -37,7 +37,19 @@ const WHITELIST = new Set([
   "native/build.rs",
   "native/build-prebuilt.sh",
 ]);
+// Import relatif yang file-nya memang tidak ada, dan tidak boleh dihapus di
+// sini: menghapusnya mengubah perilaku `src/handler.js` yang sudah produksi,
+// bukan sekadar memperbaiki jaring pengaman test. Isinya sengaja pendek dan
+// harus tetap pendek — satu entri baru berarti satu pertanyaan "kenapa file ini
+// tidak ada?" yang belum terjawab.
+//
+// Catatan asal-usul set ini: string `../capabilities/*.js` pernah ada di sini
+// karena `src/lib/resolve.js` memuat modul kapabilitas lewat import() dinamis
+// sementara `src/capabilities/` masih diisi task per task. Kedelapan modul sudah
+// ada sekarang, jadi tidak ada lagi impor kapabilitas yang perlu dikecualikan —
+// I1 memindai SETIAP import relatif, termasuk import() dinamis, tanpa pengecualian.
 const GUARDED_MISSING_IMPORTS = new Set([
+  // Keduanya import `sticker-reply` yang sudah dihapus dari repo.
   "src/handler.js -> ./lib/ourin-sticker-reply.js",
   "src/handler.js -> ./lib/sticker-reply.js",
 ]);

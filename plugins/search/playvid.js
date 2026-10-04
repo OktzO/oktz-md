@@ -1,6 +1,5 @@
-import axios from "axios";
 import yts from "yt-search";
-import ytdl from "../../src/scraper/ytdl.js";
+import { resolver } from "../../src/lib/resolve.js";
 
 const pluginConfig = {
   name: "playvid",
@@ -22,30 +21,8 @@ function formatViews(n) {
 }
 
 async function getVideoDownloadUrl(url) {
-  try {
-    const { data } = await axios.get(
-      `https://my.izuka-api.xyz/api/downloader/ytmp4?url=${encodeURIComponent(url)}`
-    );
-
-    if (data?.status && data?.result?.video_normal) {
-      const videos = data.result.video_normal.filter(v => v.ext === "mp4");
-      if (videos.length > 0) {
-        videos.sort((a, b) => parseInt(b.quality) - parseInt(a.quality));
-        if (videos[0] && videos[0].url) {
-          return videos[0].url;
-        }
-      }
-    }
-  } catch (e) {
-    console.error("[YTMP4 Izuka API Error]", e.message);
-  }
-
-  const fallback = await ytdl(url, "mp4");
-  if (fallback?.status && fallback?.dl) {
-    return fallback.dl;
-  }
-
-  throw new Error(fallback?.mess || "Gagal mendapatkan video download URL");
+  const { data } = await resolver.resolve("youtube", { url: String(url).trim(), format: "mp4" });
+  return data.url;
 }
 
 async function handler(m, { sock, _ }) {
@@ -92,7 +69,13 @@ async function handler(m, { sock, _ }) {
 
     m.react("✅");
   } catch (err) {
-    console.error("[PlayVid]", err);
+    // `CapabilityError.message` hanya menyatakan "semua backend gagal", alasan
+    // sebenarnya ada di `tried` — ikut dicetak supaya kegagalan aggregator
+    // masih bisa didiagnosis dari log.
+    const rincian = Array.isArray(err?.tried)
+      ? err.tried.map((t) => `${t.name}: ${t.reason}`).join(" | ")
+      : String(err?.message ?? err);
+    console.error(`[PlayVid] gagal — ${rincian}`);
     m.react("❌");
     m.reply(
       `Maaf *${m.pushName}*, fitur putar videonya sedang ada kendala atau video tersebut terlalu besar. Silakan coba lagi nanti ya!`,

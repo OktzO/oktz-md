@@ -1,4 +1,4 @@
-import axios from "axios";
+import { resolver, adaNormalisasiGagal } from "../../src/lib/resolve.js";
 
 const pluginConfig = {
   name: "spotifydl",
@@ -22,20 +22,16 @@ async function handler(m, { sock }) {
   await m.react("🕕");
 
   try {
-    const apiUrl = `https://api.nexray.eu.cc/downloader/spotify?url=${encodeURIComponent(text)}`;
-    const res = await axios.get(apiUrl);
-    const data = res.data;
+    const { data } = await resolver.resolve("spotify", { url: text });
+    // Pemeriksaan `!data?.url` yang dulu ada di sini sudah dihapus: `normalize`
+    // menolak respons tanpa URL unduhan, jadi setelah resolve sukses `data.url` tidak
+    // mungkin kosong dan cabang itu tidak pernah bisa bernilai true. Yang dicakupnya
+    // kini ditangani di `catch` lewat `adaNormalisasiGagal`.
 
-    if (!data.status || !data.result || !data.result.url) {
-      await m.react("❌");
-      return m.reply("⚠️ *Gagal mengambil lagu!* \n\nServer tidak merespon dengan tautan unduhan yang valid.");
-    }
-
-    const { title, artist, url } = data.result;
-    const filename = `${artist || "Spotify"} - ${title || "Audio"}.mp3`;
+    const filename = `${data.artist || "Spotify"} - ${data.title || "Audio"}.mp3`;
 
     await sock.sendMessage(m.chat, {
-      audio: { url: url },
+      audio: { url: data.url },
       mimetype: "audio/mpeg",
       fileName: filename,
       ptt: false
@@ -45,6 +41,14 @@ async function handler(m, { sock }) {
 
   } catch (error) {
     console.error("[Spotify DL Error]", error);
+    // Semua backend menjawab tapi tidak ada yang bisa dikirim: track-nya tidak ada
+    // di sana atau terkunci region. Pemisahan dilakukan dari `tried`, karena
+    // `normalize` menutup jalan "data.url kosong" supaya plugin tidak pernah mengirim
+    // tautan kosong. Bedakan dari kegagalan proses, yang harus dilaporkan ke owner.
+    if (adaNormalisasiGagal(error)) {
+      await m.react("❌");
+      return m.reply("⚠️ *Gagal mengambil lagu!* \n\nServer tidak merespon dengan tautan unduhan yang valid.");
+    }
     await m.react("❌");
     m.reply("😔 *Terjadi kesalahan sistem saat memproses tautan Spotify tersebut.* Mohon coba lagi nanti ya!");
   }

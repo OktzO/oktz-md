@@ -1,6 +1,7 @@
 import axios from "axios";
 import { generateWAMessageFromContent } from "onigis";
 import sharp from "sharp";
+import { resolver } from "../../src/lib/resolve.js";
 
 const pluginConfig = {
   name: "spotify",
@@ -26,36 +27,56 @@ async function handler(m, { sock, text }) {
   await m.react("🕕");
 
   try {
-    const res = await axios.get(`https://api.nexray.eu.cc/search/spotify?q=${encodeURIComponent(text)}`);
-    const data = res.data;
+    const { data } = await resolver.resolve("spotify", { q: text });
+    const hasil = (data?.tracks ?? []).slice(0, 5);
 
-    if (!data.status || !data.result || data.result.length === 0) {
+    if (hasil.length === 0) {
       await m.react("❌");
       return m.reply(`⚠️ *Maaf, lagu tidak ditemukan!* \n\nAku sudah mencari dengan kata kunci *${text}* tapi tidak ada hasil di Spotify. Coba gunakan judul yang lebih spesifik ya.`);
     }
 
-    const results = data.result.slice(0, 5);
-    const firstResult = results[0];
+    const firstResult = hasil[0];
 
     let contentText = `✨ *HASIL PENCARIAN SPOTIFY* ✨\n\nHalo! Aku berhasil menemukan beberapa lagu berdasarkan kata kunci *${text}*. Berikut adalah daftar teratasnya:\n\n`;
 
-    results.forEach((t, i) => {
+    hasil.forEach((t, i) => {
       contentText += `*${i + 1}. ${t.title}*\n`;
       contentText += `   🎤 Artis: ${t.artist}\n`;
       contentText += `   ⏱️ Durasi: ${t.duration}\n`;
       contentText += `   🔗 Link: ${t.url}\n\n`;
     });
 
-    contentText += `*Catatan*: Kamu bisa menyalin link lagu di atas dan menggunakan perintah \`.spdl <link>\` untuk mengunduhnya secara langsung! Atau tekan tombol di bawah ini untuk lagu pertama. 🚀`;
-
     let thumbnailBuffer = null;
     try {
-      const imageResponse = await axios.get(firstResult.thumbnail, { responseType: "arraybuffer" });
-      thumbnailBuffer = await sharp(imageResponse.data).resize(300, 170).jpeg().toBuffer();
+      if (firstResult.cover) {
+        const imageResponse = await axios.get(firstResult.cover, { responseType: "arraybuffer" });
+        thumbnailBuffer = await sharp(imageResponse.data).resize(300, 170).jpeg().toBuffer();
+      }
     } catch (e) {
     }
 
-    if (thumbnailBuffer) {
+    // `.spdl` hanya menerima link open.spotify.com/track/. Kalau hasil pencarian
+    // ternyata bukan itu, tombol dan saran `.spdl` sama-sama tidak boleh muncul.
+    // Cover yang gagal diambil juga membuat tombol tidak dikirim, padahal
+    // caption di bawah tetap ikut dibaca user.
+    const bisaUnduh = /^https?:\/\/open\.spotify\.com\/track\//i.test(firstResult.url);
+    const pakaiTombol = bisaUnduh && Boolean(thumbnailBuffer);
+
+    // Caption dibangun setelah keputusannya, bukan sebelumnya: kalimat
+    // "tekan tombol di bawah ini" hanya sah kalau tombolnya benar-benar
+    // terlampir. Satu kondisi ini yang menentukan keduanya, supaya caption dan
+    // tombol tidak bisa berbeda.
+    const catatan = [
+      "*Catatan*:",
+      ...(bisaUnduh
+        ? ["Kamu bisa menyalin link lagu di atas dan menggunakan perintah `.spdl <link>` untuk mengunduhnya secara langsung!"]
+        : []),
+      ...(pakaiTombol ? ["Atau tekan tombol di bawah ini untuk lagu pertama."] : []),
+      "🚀",
+    ].join(" ");
+    contentText += catatan;
+
+    if (pakaiTombol) {
       const content = {
         buttonsMessage: {
           buttons: [

@@ -4,9 +4,8 @@ import {
   prepareWAMessageMedia,
 } from "onigis";
 import axios from "axios";
-import config from "../../config.js";
 import te from "../../src/lib/error.js";
-import { f } from "../../src/lib/http.js";
+import { resolver } from "../../src/lib/resolve.js";
 
 const pluginConfig = {
   name: "pap",
@@ -38,20 +37,6 @@ const QUERIES = {
 const VALID_TYPES = Object.keys(QUERIES);
 
 /**
- * Hook injeksi dependensi untuk pengujian. Dipanggil hanya dari test;
- * tidak mengubah perilaku produksi (default = implementasi nyata).
- * @internal
- */
-export function __setDeps(overrides = {}) {
-  if (overrides.fetchJson) fetchProviders.fetchJson = overrides.fetchJson;
-  if (overrides.fetchImageBuffer) fetchImageBufferImpl = overrides.fetchImageBuffer;
-}
-
-// Indirection supaya test bisa mengganti fetch tanpa menyentuh jaringan.
-const fetchProviders = { fetchJson: (url) => f(url) };
-let fetchImageBufferImpl = null;
-
-/**
  * Deteksi buffer gambar lewat magic number; menolak halaman error HTML
  * yang dikembalikan CDN dengan status 200.
  */
@@ -78,7 +63,6 @@ function isImage(buf) {
 
 /** Ambil buffer gambar; Pinterest butuh Referer supaya tidak 403. */
 async function fetchImageBuffer(url) {
-  if (fetchImageBufferImpl) return fetchImageBufferImpl(url);
   const res = await axios.get(url, {
     responseType: "arraybuffer",
     timeout: 15000,
@@ -88,63 +72,47 @@ async function fetchImageBuffer(url) {
 }
 
 /**
- * Provider Pinterest.
- * - cuki.biz.id: MATI — apikey "cuki-x" selalu 401 (Invalid API key).
- * - azbry.com:   provider utama, tapi sesekali 502 (tanpa peringatan).
- * Karena itu dipakai daftar provider + fallback berantai, dan setiap
- * provider dibungkus try/catch supaya satu provider down tidak
- * menggagalkan seluruh command.
+ * Ambil daftar URL gambar dari kapabilitas pinterest.
+ *
+ * Loop per query tetap milik plugin karena itu logika domain: "cewe" yang
+ * mentah mengembalikan campuran yang tidak selalu sesuai, jadi tiap tipe
+ * punya beberapa query dan yang pertama yang berhasil dipakai. Provider-nya
+ * sendiri sudah pindah ke kapabilitas: scraper lokal menerima link pin bukan
+ * kata kunci, dan aggregator kedua yang pernah dipakai di sini sudah mati
+ * (401 tanpa peringatan) — lapisan fallback multi-provider yang tadinya ada
+ * di sini sekarang milik resolver bersama circuit breakernya.
+ *
+ * "Tidak ada hasil" punya dua sebab yang harus dibedakan, dan keduanya pernah
+ * berakhir sebagai pesan yang sama. Kapabilitas menjawab dan memang tidak
+ * punya pin itu jawaban yang sah; tidak ada satu pun kapabilitas yang menjawab
+ * adalah kapabilitas mati, dan memberitahu user "kosong" waktu begitu membuat
+ * dia menunggu retry ke host yang sama yang baru saja gagal. Karena itu
+ * kegagalan tidak ditelan: hanya lempar kalau TIDAK ADA query yang sempat
+ * menjawab, jadi satu query yang berhasil kosong tetap dianggap hasil kosong.
  */
-const PROVIDERS = [
-  {
-    name: "azbry",
-    build: (q) =>
-      `https://api.azbry.com/api/search/pinterest?q=${encodeURIComponent(q)}`,
-    // azbry: { status, result: [{ image, ... }] }
-    extract: (data) =>
-      (data?.result || [])
-        .map((it) => it?.image || it?.images_url)
-        .filter((u) => typeof u === "string" && u.startsWith("http")),
-  },
-  {
-    name: "cuki",
-    build: (q, apiKey) =>
-      apiKey
-        ? `https://api.cuki.biz.id/api/search/pinterest?apikey=${encodeURIComponent(
-            apiKey,
-          )}&query=${encodeURIComponent(q)}&type=image`
-        : null,
-    // cuki: { data: { results: [{ image_url }] } }
-    extract: (data) =>
-      (data?.data?.results || [])
-        .map((it) => it?.image_url)
-        .filter((u) => typeof u === "string" && u.startsWith("http")),
-  },
-];
-
-/** Ambil daftar URL gambar: coba tiap provider × tiap query sampai dapat. */
 async function fetchImageUrls(type) {
   const queries = QUERIES[type] || [];
-  const apiKey = config.APIkey?.cuki || "";
+  let adaYangMenjawab = false;
+  let alasanGagal = null;
 
-  for (const provider of PROVIDERS) {
-    for (const q of queries) {
-      let url;
-      try {
-        url = provider.build(q, apiKey);
-      } catch {
-        url = null;
-      }
-      if (!url) continue;
-      try {
-        const data = await fetchProviders.fetchJson(url);
-        const results = provider.extract(data);
-        if (results.length > 0) return results;
-      } catch {
-        continue; // provider/query ini gagal, lanjut ke berikutnya
-      }
+  for (const q of queries) {
+    let pins;
+    try {
+      const { data } = await resolver.resolve("pinterest", { q });
+      pins = Array.isArray(data?.pins) ? data.pins : [];
+      adaYangMenjawab = true;
+    } catch (error) {
+      // Ditahan, bukan langsung dilempar: query berikutnya masih mungkin
+      // berhasil, dan kemampuan mencoba semua query bukan barang baru.
+      alasanGagal = error;
+      continue;
+    }
+    if (pins.length > 0) {
+      return pins.map((pin) => pin?.image).filter(Boolean);
     }
   }
+
+  if (alasanGagal && !adaYangMenjawab) throw alasanGagal;
   return [];
 }
 
@@ -186,6 +154,10 @@ async function handler(m, { sock }) {
 
   try {
     const urls = await fetchImageUrls(arg);
+    // Pesan ini hanya untuk hasil kosong yang sah: kapabilitas dijawab dan memang
+    // tidak punya pin. Kapabilitas mati tidak pernah sampai ke sini — itu dilempar
+    // oleh `fetchImageUrls` dan berakhir di `catch` bawah, jadi user tidak disuruh
+    // menunggu host yang baru saja gagal.
     if (urls.length === 0) {
       await safeReact(m, "❌");
       await safeReply(m,
@@ -292,6 +264,9 @@ async function handler(m, { sock }) {
 
     await safeReact(m, "✅");
   } catch (error) {
+    // `CapabilityError` datang apa adanya, lengkap dengan `tried` per host. Itu
+    // satu-satunya tempat operator bisa melihat backend mana yang mati, jadi
+    // jangan diringkas jadi pesan user yang tidak menjelaskan apa pun.
     console.error("[PAP Search]", error);
     await safeReact(m, "☢");
     await safeReply(m, te(m.prefix, m.command, m.pushName));

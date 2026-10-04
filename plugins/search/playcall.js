@@ -4,7 +4,8 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import te from "../../src/lib/error.js";
-import ytdl from "../../src/scraper/ytdl.js";
+import { resolver } from "../../src/lib/resolve.js";
+import { extensionFor } from "../../src/lib/media-format.js";
 
 const pluginConfig = {
   name: "playcall",
@@ -22,22 +23,11 @@ const pluginConfig = {
   isEnabled: false,
 };
 
+/** Data audio dari kapabilitas: caller butuh `url` sekaligus formatnya. */
 async function downloadAudio(videoUrl) {
-  try {
-    const { data } = await axios.get(
-      `https://my.izuka-api.xyz/api/downloader/ytmp3?url=${encodeURIComponent(videoUrl)}`,
-      { timeout: 60000 }
-    );
-    const download = data?.result?.download_url;
-    if (download) return download;
-  } catch { }
-
-  const fallback = await ytdl(videoUrl, "mp3");
-  if (fallback?.status && fallback?.dl) return fallback.dl;
-
-  throw new Error("Gagal mendapatkan URL audio");
+  const { data } = await resolver.resolve("youtube", { url: String(videoUrl).trim(), format: "mp3" });
+  return data;
 }
-
 
 async function handler(m, { sock, text }) {
   const query = (text || m.text || "").trim();
@@ -66,7 +56,10 @@ async function handler(m, { sock, text }) {
 
   const tmpDir = path.join(process.cwd(), "tmp");
   if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-  const tmpFile = path.join(tmpDir, `call_${crypto.randomBytes(4).toString("hex")}.mp3`);
+  // Ekstensinya belum bisa ditulis di sini: format baru diketahui setelah resolve.
+  // `null` selama resolve berjalan supaya blok catch tidak pernah menghapus berkas
+  // milik panggilan lain.
+  let tmpFile = null;
 
   try {
     const search = await yts(query);
@@ -76,8 +69,21 @@ async function handler(m, { sock, text }) {
     }
 
     const video = search.videos[0];
-    const audioUrl = await downloadAudio(video.url);
+    // Pemutar VoIP membaca berkas lewat ffmpeg/FFplay yang menebak format dari
+    // isi, tapi nama yang salah tetap kotak yang salah: aggregator bisa menjawab
+    // webm/opus untuk slot mp3 (probe 2026-10-03, task-8-report.md §8.5), jadi
+    // nama sementara memakai format yang benar-benar diterima.
+    const { url: audioUrl, format } = await downloadAudio(video.url);
+    tmpFile = path.join(tmpDir, `call_${crypto.randomBytes(4).toString("hex")}.${extensionFor(format)}`);
 
+    // Audio harus ada di sistem berkas: pemutar VoIP menerima `audioSource`
+    // sebagai path, bukan Buffer, jadi selama panggilan berjalan tidak ada satu
+    // lagu penuh yang harus tetap hidup di RAM.
+    //
+    // Dua keburukan yang tersisa di blok ini sengaja tidak disentuh: `axios.get`
+    // tetap membaca seluruh audio ke memori tanpa batas ukuran sebelum masuk ke
+    // `tmpFile`, dan `tmpFile` bocor kalau panggilan tidak pernah selesai. Keduanya
+    // milik sapuan yang lebih luas dari rewire kapabilitas ini.
     const audioRes = await axios.get(audioUrl, {
       responseType: "arraybuffer",
       timeout: 60000,
@@ -106,22 +112,26 @@ async function handler(m, { sock, text }) {
 
     call.on("ended", (reason) => {
       try {
-        if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+        if (tmpFile && fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
       } catch { }
       m.reply(`📵 *PANGGILAN BERAKHIR*\n\nPanggilan telepon telah selesai (${reason || "selesai"}).`);
     });
 
     call.on("error", () => {
       try {
-        if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+        if (tmpFile && fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
       } catch { }
     });
   } catch (err) {
     try {
-      if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+      if (tmpFile && fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
     } catch { }
     await m.react("☢");
-    console.log(err)
+    // Alasan sebenarnya ada di `CapabilityError.tried`, bukan di `.message`.
+    const rincian = Array.isArray(err?.tried)
+      ? err.tried.map((t) => `${t.name}: ${t.reason}`).join(" | ")
+      : String(err?.message ?? err);
+    console.error(`[PlayCall] gagal — ${rincian}`);
     m.reply(te(m.prefix, m.command, m.pushName));
   }
 }

@@ -1,8 +1,14 @@
-import axios from "axios";
+import { httpAxios as axios } from "../lib/http.js";
+import { pathToFileURL } from "node:url";
 
-async function downloadSpotify(spotifyUrl) {
+// `signal` opsional supaya pemanggil lama yang hanya mengirim URL tetap jalan,
+// tapi backend resolver boleh teruskannya: AbortController di resolve.js hanya
+// menghentikan resolver menunggu, dan tanpa signal di sini POST-nya tetap hidup
+// sampai timeout 15 detik milik httpAxios sambil memegang socket.
+async function downloadSpotify(spotifyUrl, { signal } = {}) {
+  let response;
   try {
-    const response = await axios.post(
+    response = await axios.post(
       "https://spotyloader.com/api/spotify/track",
       { url: spotifyUrl },
       {
@@ -13,22 +19,45 @@ async function downloadSpotify(spotifyUrl) {
           Referer: "https://spotyloader.com/",
           Origin: "https://spotyloader.com",
         },
+        signal,
       },
     );
-
-    const data = response.data;
-    if (data.downloadLink) {
-      console.log(
-        `Judul  : ${data.post.name}\nArtis  : ${data.post.artist}\nFormat : ${data.post.mime}\nLink   : ${data.downloadLink}`,
-      );
-    } else {
-      console.log("[!] Gagal mendapatkan link:", data);
-    }
   } catch (error) {
-    console.error(error.response ? error.response.data : error.message);
+    // `||` bukan `??`: upstream yang diblokir (Cloudflare) balas body kosong,
+    // dan `??` akan memberi user pesan "spotyloader gagal: " tanpa isi. `cause`
+    // + `status` disimpan supaya consumer bisa membedakan timeout, 4xx, dan DNS
+    // gagal saat memilih backend fallback — tanpa respons HTTP tidak ada status
+    // sama sekali, dan bukan default 500 (itu menyamarkan DNS gagal).
+    const detail = error.response?.data || error.message || String(error);
+    const wrapped = new Error(
+      `spotyloader gagal: ${typeof detail === "string" ? detail : JSON.stringify(detail)}`,
+      { cause: error },
+    );
+    if (error.response?.status !== undefined) wrapped.status = error.response.status;
+    throw wrapped;
   }
+
+  const data = response.data;
+  if (!data?.downloadLink) {
+    throw new Error(
+      `spotyloader tidak mengembalikan downloadLink: ${JSON.stringify(data)}`,
+    );
+  }
+
+  return {
+    title: data.post.name,
+    artist: data.post.artist,
+    url: data.downloadLink,
+    mime: data.post.mime,
+  };
 }
 
-downloadSpotify(
-  process.argv[2] || "https://open.spotify.com/track/1XabvPK1VQEH4YqzDovs46",
-);
+export { downloadSpotify };
+
+// Pemanggilan CLI hanya boleh jalan kalau file ini dieksekusi langsung. Tanpa
+// guard ini, satu plugin yang meng-import modul ini menembak request HTTP ke
+// spotyloader setiap kali dimuat.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const url = process.argv[2];
+  if (url) downloadSpotify(url).then((r) => console.log(r)).catch((e) => console.error(e.message));
+}

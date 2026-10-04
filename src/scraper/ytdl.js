@@ -1,58 +1,10 @@
 import axios from "axios";
-import crypto from "crypto";
-import fs from "fs";
-import path from "path";
-import { exec } from "child_process";
-import { promisify } from "util";
 
 const YOUTUBE_ID_REGEX =
   /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-const run = promisify(exec);
 
 function extractVideoId(url) {
   return String(url || "").match(YOUTUBE_ID_REGEX)?.[1] || null;
-}
-
-async function fallbackToMp3Buffer(url) {
-  const tempDir = path.join(process.cwd(), "temp");
-  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-
-  const id = crypto.randomBytes(6).toString("hex");
-  const inputPath = path.join(tempDir, `ytfb_${id}.bin`);
-  const outputPath = path.join(tempDir, `ytfb_${id}.mp3`);
-
-  try {
-    const { data } = await axios.get(url, {
-      responseType: "arraybuffer",
-      timeout: 60000,
-    });
-
-    const buffer = Buffer.from(data);
-    if (!buffer.length) {
-      throw new Error("Audio fallback kosong");
-    }
-
-    fs.writeFileSync(inputPath, buffer);
-
-    await run(
-      `ffmpeg -y -i "${inputPath}" -vn -map_metadata -1 -ac 2 -ar 44100 -c:a libmp3lame -b:a 192k "${outputPath}"`,
-      { timeout: 120000 },
-    );
-
-    const mp3Buffer = fs.readFileSync(outputPath);
-    if (!mp3Buffer.length) {
-      throw new Error("Konversi fallback ke MP3 gagal");
-    }
-
-    return mp3Buffer;
-  } finally {
-    try {
-      if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
-    } catch {}
-    try {
-      if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
-    } catch {}
-  }
 }
 
 const CONVERT_FAILURE_MESSAGE = "Gagal mendapatkan data konversi.";
@@ -190,5 +142,5 @@ class Youtube {
   }
 }
 
-export { ytdl, Youtube, fallbackToMp3Buffer };
+export { ytdl, Youtube };
 export default ytdl;

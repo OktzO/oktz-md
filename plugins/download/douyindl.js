@@ -1,4 +1,4 @@
-import axios from "axios";
+import { resolver } from "../../src/lib/resolve.js";
 
 const pluginConfig = {
   name: "douyindl",
@@ -16,19 +16,29 @@ const pluginConfig = {
   isEnabled: true,
 };
 
-async function douyinFetch(url, retries = 3) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const res = await axios.get(`https://api.azbry.com/api/downloader/douyin?url=${encodeURIComponent(url)}`, { timeout: 30000 });
-      if (res.data?.status && res.data?.result) {
-        return res.data;
-      }
-    } catch (e) {
-      if (i === retries - 1) throw e;
-      await new Promise(r => setTimeout(r, 1000));
-    }
+/**
+ * Guard host, bukan `includes`. `douyin.com.evil.example` dan `notdouyin.com`
+ * lolos pemeriksaan substring; kalau guard plugin hanya cek itu, guard
+ * kapabilitas yang menolaknya dan `cobaBackend` mencatat kegagalan — tiga link
+ * palsu dari satu user sudah cukup membuka breaker snapvideotools 30 detik untuk
+ * semua orang, termasuk yang sedang mengunduh video Douyin yang sebenarnya bisa
+ * diunduh.
+ */
+function hostDouyin(url) {
+  let parsed;
+  try {
+    parsed = new URL(String(url).trim());
+  } catch {
+    return false;
   }
-  throw new Error("Gagal mengambil data dari server");
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+  const host = parsed.hostname.toLowerCase();
+  return (
+    host === "douyin.com" ||
+    host.endsWith(".douyin.com") ||
+    host === "iesdouyin.com" ||
+    host.endsWith(".iesdouyin.com")
+  );
 }
 
 async function handler(m, { sock }) {
@@ -45,22 +55,31 @@ async function handler(m, { sock }) {
     );
   }
 
+  // Tanpa reaksi di sini, sama seperti guard plugin sfiledl/videy/pindl: input
+  // salah bukan kegagalan proses, jadi tidak layak memakai centang ❌ yang di
+  // command ini dipakai untuk "tidak ada argumen".
+  if (!hostDouyin(text)) {
+    return m.reply("❌ URL tidak valid. Gunakan link dari douyin.com atau v.douyin.com");
+  }
+
   m.react("🕕");
 
   try {
-    const data = await douyinFetch(text);
-    const result = data.result;
+    // Scraper lokal lebih dulu, aggregator jadi cadangan. `normalize` sudah
+    // menolak respons tanpa URL video, jadi `video` di sini tidak mungkin
+    // kosong — parser aggregator lama tidak lagi perlu hidup di plugin ini.
+    const { data } = await resolver.resolve("douyin", { url: text });
 
-    let caption = `🎵 *${result.platform || "Douyin"}*\n\n${result.title || ""}`;
+    let caption = `🎵 *${data.platform || "Douyin"}*\n\n${data.title || ""}`;
 
-    if (result.video) {
-      await sock.sendMedia(m.chat, result.video, caption, m, {
+    if (data.video) {
+      await sock.sendMedia(m.chat, data.video, caption, m, {
         type: "video",
       });
     }
 
-    if (result.audio) {
-      await sock.sendMedia(m.chat, result.audio, null, m, {
+    if (data.audio) {
+      await sock.sendMedia(m.chat, data.audio, null, m, {
         type: "audio",
       });
     }

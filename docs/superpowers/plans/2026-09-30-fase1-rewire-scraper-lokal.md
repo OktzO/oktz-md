@@ -20,6 +20,20 @@
 - **Budget waktu 8 detik berlaku untuk resolusi metadata saja** — bukan untuk transfer byte media. `resolve()` mengembalikan URL; pengiriman file tetap lewat `sock.sendMessage` tanpa budget.
 - Komentar kode dalam bahasa Indonesia, menjelaskan **kenapa** — mengikuti konvensi repo.
 - Test: `npm test` (node:test). Lint: `npm run lint` (hanya memindai `plugins/`).
+- **Path dari `tests/` satu level ke atas, bukan dua.** `tests/` ada di root repo, jadi `../src/...` benar dan `../../src/...` keluar dari repo. Ini yang sudah dipakai `tests/wink.test.mjs`.
+- **Saat mocking, mock transport yang benar-benar dipakai kode yang diuji.** Kalau modul target meng-`import axios` mentah, mock `axios` — bukan `httpAxios` dari `src/lib/http.js`. Mocking wrapper yang tidak dipakai tidak hanya membuat test hijau palsu, tapi juga membiarkan test menembak jaringan sungguhan.
+- **Setiap task yang membuat modul kapabilitas wajib mencabut barisnya dari `GUARDED_MISSING_IMPORTS` di `tests/rename-invariants.test.mjs`.** Invariant I1 di sana memindai semua import relatif termasuk `import()` dinamis dan menolak yang file-nya belum ada. Task 2 membuka jalan dengan menambah 8 entri ke escape hatch itu; setiap modul yang benar-benar ada harus mencabut barisnya, kalau tidak jaring pengaman itu mati diam untuk sisa repo.
+- **Nama backend di circuit breaker bersifat per-host, tidak pernah per-URL atau per-user.** Breaker punya 64 slot LRU. Kalau suatu kapabilitas memakai URL atau user sebagai nama, satu host yang sehat bisa ter-evict dan langsung dianggap `CLOSED` — breaker diam-diam kehilangan daya tepat ketika paling dibutuhkan. Nama yang benar: nama backend yang dideklarasikan di `backends`, misalnya `'ilovepin'`, `'neoxr'`, `'ytdl-native'`.
+- **Path agregator wajib `/api` — kecuali nexray.** Base URL di `src/lib/aggregator.js` tidak menyertakan prefix itu, jadi `aggregator.hit` menempelkan path apa adanya. Rekamannya di repo ini, 7 panggilan langsung plus 6 method provider:
+  | Agregator | Base | Prefix wajib |
+  |---|---|---|
+  | `neoxr` | `https://api.neoxr.eu` | `/api/…` |
+  | `izuka` | `https://my.izuka-api.xyz` | `/api/…` |
+  | `cuki` | `https://api.cuki.biz.id` | `/api/…` |
+  | `siputzx` | `https://api.siputzx.my.id` | `/api/…` |
+  | `azbry` | `https://api.azbry.com` | `/api/…` |
+  | `nexray` | `https://api.nexray.eu.cc` | **tanpa** `/api` |
+  Setiap kapabilitas yang memakai `api` wajib punya test yang mengassert URL aggregator lengkapnya, bukan cuma "dipanggil". Bug ini lolos 72 test di Task 4 karena responder diuji sudah meloloskan URL apa pun yang mengandung `azbry.com`.
 
 ## Review Focus
 
@@ -99,7 +113,7 @@ import { test, mock } from 'node:test';
 import assert from 'node:assert';
 
 const calls = [];
-mock.module('../../src/lib/http.js', {
+mock.module('../src/lib/http.js', {
   namedExports: {
     httpAxios: {
       post: async (url, body) => { calls.push({ url, body }); return { data: SPOTYLOADER_OK }; },
@@ -107,7 +121,7 @@ mock.module('../../src/lib/http.js', {
   },
 });
 
-const { downloadSpotify } = await import('../../src/scraper/spotify.js');
+const { downloadSpotify } = await import('../src/scraper/spotify.js');
 ```
 
 Isi `SPOTYLOADER_OK` di `beforeEach`:
@@ -147,7 +161,7 @@ Jangan ubah apa pun yang lain di file ini — header, Referer, Origin, dan URL e
 - [ ] **Step 4: Jalankan test, pastikan lulus**
 
 Run: `node --experimental-test-module-mocks --test tests/spotify-scraper-module.test.mjs`
-Expected: PASS 5 test.
+Expected: PASS 6 test (Task 1 fix round menambah satu).
 
 - [ ] **Step 5: Commit**
 
@@ -201,7 +215,7 @@ Peta agregator → key, untuk `keyOf` di `aggregator.js` (dari `config.js:326`):
 // tests/circuit-breaker.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { createBreaker } from '../../src/lib/circuit-breaker.js';
+import { createBreaker } from '../src/lib/circuit-breaker.js';
 ```
 
 Test dengan `now` fake (bilangan bulat yang dikontrol manual, bukan `Date.now()` langsung — test harus deterministik):
@@ -217,7 +231,7 @@ Test dengan `now` fake (bilangan bulat yang dikontrol manual, bukan `Date.now()`
 - [ ] **Step 2: Jalankan, pastikan gagal**
 
 Run: `node --test tests/circuit-breaker.test.mjs`
-Expected: FAIL — `Cannot find module '../../src/lib/circuit-breaker.js'`
+Expected: FAIL — `Cannot find module '../src/lib/circuit-breaker.js'`
 
 - [ ] **Step 3: Implementasikan `createBreaker` di `src/lib/circuit-breaker.js`**
 
@@ -237,13 +251,13 @@ Jangan pakai `Map` polos: itu tumbuh unbounded dan bertentangan dengan batas RAM
 - [ ] **Step 4: Jalankan test breaker, pastikan lulus**
 
 Run: `node --test tests/circuit-breaker.test.mjs`
-Expected: PASS 8 test.
+Expected: PASS 9 test.
 
 - [ ] **Step 5: Tulis test cache yang gagal**
 
 ```js
 // tests/capability-cache.test.mjs
-import { createCapabilityCache } from '../../src/lib/capability-cache.js';
+import { createCapabilityCache } from '../src/lib/capability-cache.js';
 ```
 
 1. `set('bola', 'a', 'v')` lalu `get('bola', 'a')` → `'v'`
@@ -256,7 +270,7 @@ import { createCapabilityCache } from '../../src/lib/capability-cache.js';
 
 - [ ] **Step 6: Jalankan, pastikan gagal**
 
-Expected: FAIL — `Cannot find module '../../src/lib/capability-cache.js'`
+Expected: FAIL — `Cannot find module '../src/lib/capability-cache.js'`
 
 - [ ] **Step 7: Implementasikan `createCapabilityCache` di `src/lib/capability-cache.js`**
 
@@ -268,13 +282,13 @@ Expected: FAIL — `Cannot find module '../../src/lib/capability-cache.js'`
 
 - [ ] **Step 8: Jalankan test cache, pastikan lulus**
 
-Expected: PASS 7 test.
+Expected: PASS 8 test.
 
 - [ ] **Step 9: Tulis test aggregator yang gagal**
 
 ```js
 // tests/resolve-core.test.mjs
-import { AggregatorError, createAggregatorClient } from '../../src/lib/aggregator.js';
+import { AggregatorError, createAggregatorClient } from '../src/lib/aggregator.js';
 ```
 
 1. `hit('neoxr', '/api/sfile', { params: { url: 'u' } })` memanggil `http.get` dengan URL `https://api.neoxr.eu/api/sfile?url=u` dan header `apikey` berisi key dari `keyOf('neoxr')`
@@ -286,7 +300,7 @@ import { AggregatorError, createAggregatorClient } from '../../src/lib/aggregato
 
 - [ ] **Step 10: Jalankan, pastikan gagal**
 
-Expected: FAIL — `Cannot find module '../../src/lib/aggregator.js'`
+Expected: FAIL — `Cannot find module '../src/lib/aggregator.js'`
 
 - [ ] **Step 11: Implementasikan `src/lib/aggregator.js`**
 
@@ -336,7 +350,7 @@ Test:
 
 - [ ] **Step 14: Jalankan, pastikan gagal**
 
-Expected: FAIL — `Cannot find module '../../src/lib/resolve.js'`
+Expected: FAIL — `Cannot find module '../src/lib/resolve.js'`
 
 - [ ] **Step 15: Implementasikan `src/lib/resolve.js`**
 
@@ -365,12 +379,13 @@ Isi:
 - [ ] **Step 16: Jalankan test facade, pastikan lulus**
 
 Run: `node --experimental-test-module-mocks --test tests/resolve-core.test.mjs`
-Expected: PASS 18 test (6 aggregator + 12 facade).
-
+Expected: PASS 19 test (6 aggregator + 13 facade), plus 9 breaker dan 8 cache.
 - [ ] **Step 17: Jalankan seluruh test suite**
 
 Run: `npm test`
-Expected: semua lulus, tidak ada test lama yang regresi.
+Expected: semua lulus. Total suite naik dari 684 (setelah Task 1) menjadi 721 — tambahan 34 test, yaitu 9 breaker + 8 cache + 19 resolve-core. Angka baseline di bagian header plan yang menyebut 678/696 salah: 678 itu baseline sebelum Task 1, dan 18 itu hanya hitungan `resolve-core`.
+
+Tambahkan juga satu test yang belum ada di brief ini: **kalau semua backend gagal, `resolve()` tidak boleh membaca cache dan mengembalikan hasil lama.** Ini janji sentral spec ("tidak ada fallback ke data basi") dan saat ini tidak diuji. Bentuknya: kapabilitas `stable: true` yang sukses sekali (cache terisi), lalu dibuat gagal di panggilan kedua, lalu assert `resolve` melempar `CapabilityError` — bukan mengembalikan hasil pertama.
 
 - [ ] **Step 18: Commit**
 
@@ -415,7 +430,7 @@ Letakkan validasi di dalam backend `local` sebagai guard, sebelum memanggil scra
 
 - [ ] **Step 2: Jalankan, pastikan gagal**
 
-Expected: FAIL — `Cannot find module '../../src/capabilities/spotify.js'`
+Expected: FAIL — `Cannot find module '../src/capabilities/spotify.js'`
 
 - [ ] **Step 3: Implementasikan `src/capabilities/spotify.js`**
 
@@ -499,7 +514,7 @@ Test #2 — Review Focus #3, guard validasi:
 
 - [ ] **Step 2: Jalankan, pastikan gagal**
 
-Expected: FAIL — `Cannot find module '../../src/capabilities/pinterest.js'`
+Expected: FAIL — `Cannot find module '../src/capabilities/pinterest.js'`
 
 - [ ] **Step 3: Implementasikan `src/capabilities/pinterest.js`**
 
@@ -695,7 +710,7 @@ Test #3 — `format` default `'mp3'` kalau `args.format` tidak diberikan; `'mp4'
 
 - [ ] **Step 2: Jalankan, pastikan gagal**
 
-Expected: FAIL — `Cannot find module '../../src/capabilities/youtube.js'`
+Expected: FAIL — `Cannot find module '../src/capabilities/youtube.js'`
 
 - [ ] **Step 3: Implementasikan `src/capabilities/youtube.js`**
 
@@ -768,7 +783,7 @@ Nama field yang benar (dari `play2.js:985-995`): `track.name || track.title` unt
 
 - [ ] **Step 2: Jalankan, pastikan gagal**
 
-Expected: FAIL — `Cannot find module '../../src/capabilities/ytmusic.js'`
+Expected: FAIL — `Cannot find module '../src/capabilities/ytmusic.js'`
 
 - [ ] **Step 3: Implementasikan `src/capabilities/ytmusic.js`**
 
@@ -872,7 +887,14 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 ```
 
-Rekursif daftarkan semua `.js` di `plugins/`. Untuk tiap file, baca isinya dan assert tidak mengandung `api.neoxr.eu`, `api.nexray.`, `my.izuka-api.xyz`, `api.cuki.biz.id`, `api.siputzx.my.id`, `api.azbry.com`.
+Rekursif daftarkan semua `.js` di `plugins/`. Untuk tiap file, baca isinya dan cari `api.neoxr.eu`, `api.nexray.`, `my.izuka-api.xyz`, `api.cuki.biz.id`, `api.siputzx.my.id`, `api.azbry.com`.
+
+**Ini ratchet, bukan gate kosong — dan itu disengaja.** Pada 2026-09-30 masih ada 93 plugin di luar 17 target Fase 1 yang memakai agregator; itu backlog Fase 2-6 dan boleh ada. Test tidak boleh menuntut nol, karena itu akan gagal dan jadi tidak bermakna. Tapi juga **tidak boleh** hanya memeriksa 17 file Fase 1, karena itu membuat 93 file lain bebas bocor tanpa terdeteksi.
+
+Buat satu `Set` berisi path plugin yang **diharapkan masih** memakai agregator, di-hardcode di test. Lalu:
+
+- plugin yang memakainya tapi **tidak ada** di `Set` → gagal (kebocoran baru)
+- plugin yang **tidak** memakainya tapi ada di `Set` → gagal juga, supaya daftar itu ikut menyusut dan tidak usang (plugin yang sudah dimigrasi harus dihapus dari `Set`)
 
 Kumpulkan **semua** nama file yang melanggar lalu assert sekali di akhir dengan daftar lengkap — jangan assert di dalam loop, supaya pesan kegagalan menunjukkan seluruh sisa dalam satu kali jalan.
 
@@ -981,6 +1003,8 @@ Yang harus benar:
 2. `npm run lint` bersih
 3. `npm run audit:offline` → ≥5/8 mandiri, exit 0
 4. `grep` terakhir → `BERSIH`
-5.RSS bot tidak naik signifikan dibanding sebelum migrasi — cek dengan `node --expose-gc -e` yang meng-import semua kapabilitas lalu print `process.memoryUsage().rss`; delta harus di bawah 50KB per Global Constraints spec
+5. RSS bot tidak naik signifikan dibanding sebelum migrasi — cek dengan `node --expose-gc -e` yang meng-import `cheerio`, `ytmusic-api`, `axios`, `config.js`, lalu `src/lib/resolve.js` dan kedelapan kapabilitas, lalu print `process.memoryUsage().rss`. Delta dari baseline produksi itu harus **di bawah 8 MB** (terukur 6 MB). Angka ini hasil ukur pada `dbba3d2`, bukan target pilihan.
+
+   Catatan: versi pertama langkah ini berbunyi "delta harus di bawah 50KB". Angka itu tidak pernah diukur dan tidak bisa dipenuhi apa pun, karena `src/lib/aggregator.js:1` mengimpor `config.js` yang sudah 74–76MB. Cold total untuk kedelapan kapabilitas 110–113MB. Angka marginal yang sebenarnya, beserta cara mengukurnya, ada di §4.1 spec `docs/superpowers/specs/2026-09-30-local-capability-resolver-design.md` — termasuk kenapa biaya marginal di produksi mendekati nol (`index.js` dan plugin sebelum Phase 1 sudah memuat `axios`, `config.js`, `cheerio`, `ytmusic-api`). Fase berikutnya harus memakai angka hasil ukur; angka target yang dikarang lebih buruk daripada tidak ada angka, karena membuat orang berikutnya percaya bahwa biayanya pernah dicek.
 
 Setelah itu, lanjut ke **Fase 2** (data lokal, nol network) dengan plan terpisah.

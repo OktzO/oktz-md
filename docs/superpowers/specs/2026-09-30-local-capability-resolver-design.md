@@ -175,14 +175,37 @@ Kapabilitas volatil (primbon, jadwal, info game, hasil search) **tidak pernah** 
 
 | Aturan | Angka | Kenapa |
 |---|---|---|
-| Lazy import per kapabilitas | 0 byte untuk yang tidak dipakai | 829 plugin + 63 scraper sudah numpuk di registry ESM; jangan tambah |
+| Lazy import per kapabilitas | ~0,1–1,3 MB per kapabilitas di produksi | 829 plugin + 63 scraper sudah numpuk di registry ESM; jangan tambah |
 | Circuit breaker | 64 slot tetap, LRU | batas atas pasti, tidak pernah tumbuh mengikuti jumlah backend |
 | Response cache | 200 entri, ~400KB | `lru-cache` sudah jadi dependency |
 | Data JSON | per-file on-demand | `src/data` 2.5MB total; jangan pernah load semua |
 | Dependency baru | 0 | hindari native module baru |
-| Overhead resolver | target < 50KB RSS | diukur test #6 |
+| Overhead resolver | ≤ 8 MB RSS untuk kedelapan kapabilitas di produksi | diukur test #6, angkanya ada di §4.1 |
 
 Yang **tidak** berubah: `memory-monitor.js` (RSS 550MB / GC 380MB) tetap jadi penjaga. Resolver tidak menambah ambang apa pun.
+
+### 4.1 Angka RAM yang diukur
+
+Kriteria RAM versi pertama berbunyi "import semua kapabilitas → delta RSS < 50KB". Angka itu tidak pernah diukur, dan tidak bisa dipenuhi implementasi apa pun: `src/lib/aggregator.js:1` mengimpor `config.js`, dan `config.js` sendiri sudah 74–76 MB. Angka 50KB melenceng tiga orde besaran dan menyisakan kesan bahwa biayanya pernah dicek. Angka itu diganti dengan hasil ukur di bawah, tanpa sisa.
+
+Diukur dengan `node --expose-gc` pada commit `dbba3d2`, masing-masing di proses `node` yang baru start. Lima baris pertama adalah **delta RSS dari proses kosong** (baseline 43,8 MB); dua baris terakhir adalah **delta dari baseline produksi**, jadi angkanya tidak boleh dibandingkan langsung dengan lima baris di atasnya — itulah sumber angka 110MB yang terlihat di harness test tapi tidak pernah terjadi di bot yang sedang jalan.
+
+| Skenario | Angka |
+|---|---|
+| `src/lib/resolve.js` saja (delta dari kosong) | 1,9–2,0 MB |
+| `config.js` saja (delta dari kosong) | 74–76 MB |
+| `resolve.js` + kedelapan kapabilitas (delta dari kosong) | 110–113 MB |
+| Satu kapabilitas saja, `hd` — yang paling murah — di atas `config.js` + `resolve.js` (delta dari kosong) | 87–90 MB |
+| Baseline produksi saja — `cheerio` + `ytmusic-api` + `axios` + `config.js` (delta dari kosong) | 133–142 MB |
+| Baseline produksi + `resolve.js` + kedelapan kapabilitas (delta dari kosong) | 139–147 MB |
+| **Marginal kedelapan kapabilitas di atas baseline produksi** | **4,9–7,0 MB** |
+
+Dua hal yang tidak terlihat dari angka cold:
+
+- **Biaya marginal produksi 4,9–7,0 MB** untuk kedelapan kapabilitas, yaitu 0,1–1,3 MB masing-masing — bukan 112 MB. Alasannya `index.js` memuat seluruh plugin sebelum kapabilitas pertama menyentuh apa pun, dan plugin-plugin itu sudah mengimpor `axios` (100 berkas), `config.js`, `cheerio`, dan `ytmusic-api`. Yang benar-benar baru dibayar resolver adalah modul scraper dan `sharp`; sisanya sudah resident. Angka 110–113 MB hanya terlihat di harness test yang belum memuat apa pun, dan itu bukan keadaan produksi.
+- **Deferral itu benar-benar bekerja**: memuat satu kapabilitas (87–90 MB) jauh lebih murah daripada kedelapan (110–113 MB), jadi sekitar 23 MB tidak pernah dibayar kalau prosesnya tidak memakai backend yang bermasalah. Inilah yang di-hardcode oleh baris "lazy import per kapabilitas" di tabel di atas.
+
+Kriteria yang dipakai berikutnya: **≤ 8 MB** untuk kedelapan kapabilitas dalam bentuk produksi (baseline 133–142 MB → dengan seluruh kapabilitas 139–147 MB). Diukur 4,9–7,0 MB, jadi ada 1–3 MB ruang untuk satu scraper yang belum terduga. Fase berikutnya butuh batas yang benar; batas yang dikarang lebih buruk daripada tidak ada batas, karena membuat orang berikutnya percaya bahwa angkanya pernah dicek.
 
 ---
 
@@ -224,7 +247,7 @@ Pola `node:test` + `mock.module` yang sudah dipakai `tests/fallback-providers.te
 | 3 | **Urutan fallback** | local gagal → API dipanggil → hasil balik dengan `source: 'api:…'` |
 | 4 | **Kontrak** | semua kapabilitas balik `{ok, source, data, meta}` |
 | 5 | **Anti-basi** | kapabilitas volatil tidak pernah membaca cache (assert tidak ada hit) |
-| 6 | **Memori** | import semua kapabilitas → delta RSS < 50KB |
+| 6 | **Memori** | impor kedelapan kapabilitas di atas baseline produksi (`cheerio`, `ytmusic-api`, `axios`, `config.js`) → delta RSS **≤ 8 MB**. Angka ini hasil ukur (4,9–7,0 MB), bukan target pilihan; cold totalnya 110–113 MB dan tidak bisa ditekan karena `aggregator.js` wajib mengimpor `config.js`. Lihat §4.1 |
 | 7 | **Regresi per fase** | plugin tiap fase tetap berfungsi |
 
 ### 6.1 Audit harness
