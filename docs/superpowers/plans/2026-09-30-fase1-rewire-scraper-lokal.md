@@ -1003,6 +1003,8 @@ Yang harus benar:
 2. `npm run lint` bersih
 3. `npm run audit:offline` → ≥5/8 mandiri, exit 0
 4. `grep` terakhir → `BERSIH`
-5.RSS bot tidak naik signifikan dibanding sebelum migrasi — cek dengan `node --expose-gc -e` yang meng-import semua kapabilitas lalu print `process.memoryUsage().rss`; delta harus di bawah 50KB per Global Constraints spec
+5. RSS bot tidak naik signifikan dibanding sebelum migrasi — cek dengan `node --expose-gc -e` yang meng-import `cheerio`, `ytmusic-api`, `axios`, `config.js`, lalu `src/lib/resolve.js` dan kedelapan kapabilitas, lalu print `process.memoryUsage().rss`. Delta dari baseline produksi itu harus **di bawah 8 MB** (terukur 6 MB). Angka ini hasil ukur pada `dbba3d2`, bukan target pilihan.
+
+   Catatan: versi pertama langkah ini berbunyi "delta harus di bawah 50KB". Angka itu tidak pernah diukur dan tidak bisa dipenuhi apa pun, karena `src/lib/aggregator.js:1` mengimpor `config.js` yang sudah 74–76MB. Cold total untuk kedelapan kapabilitas 110–113MB. Angka marginal yang sebenarnya, beserta cara mengukurnya, ada di §4.1 spec `docs/superpowers/specs/2026-09-30-local-capability-resolver-design.md` — termasuk kenapa biaya marginal di produksi mendekati nol (`index.js` dan plugin sebelum Phase 1 sudah memuat `axios`, `config.js`, `cheerio`, `ytmusic-api`). Fase berikutnya harus memakai angka hasil ukur; angka target yang dikarang lebih buruk daripada tidak ada angka, karena membuat orang berikutnya percaya bahwa biayanya pernah dicek.
 
 Setelah itu, lanjut ke **Fase 2** (data lokal, nol network) dengan plan terpisah.
