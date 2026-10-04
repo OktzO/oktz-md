@@ -187,6 +187,84 @@ describe("createLibraryLogger: level error tidak lagi dibuang", () => {
     assert.equal(seen.length, 1);
     assert.match(seen[0].text, /tanpa objek Error/);
   });
+
+  // `onigis/lib/Socket/socket.js:632` melaporkan kegagalan keep-alive dengan
+  // logger.error({ trace: err.stack }, ...) — bukan `err`. Itu satu-satunya
+  // call site error di library yang memakai `trace`, jadi kalau parse hanya
+  // baca `err` penyebabnya hilang dan yang tersisa di console cuma nama
+  // gejalanya.
+  it("penyebab dari error yang dilacak lewat `trace` ikut sampai", () => {
+    const seen = [];
+    const log = createLibraryLogger((level, text) => seen.push({ level, text }));
+    const cause = new Error("Connection Closed");
+    log.error({ trace: cause.stack }, "error in sending keep alive");
+    assert.equal(seen.length, 1);
+    assert.match(seen[0].text, /error in sending keep alive/);
+    assert.match(
+      seen[0].text,
+      /Connection Closed/,
+      "penyebab keep-alive gagal harus ikut tercetak, bukan hilang",
+    );
+  });
+
+  it("trace yang bukan string tidak boleh membuat logger melempar", () => {
+    const seen = [];
+    const log = createLibraryLogger((level, text) => seen.push({ level, text }));
+    for (const trace of [{ stack: "x" }, ["a", "b"], 42, null]) {
+      log.error({ trace }, "pesan tetap sampai");
+    }
+    assert.equal(seen.length, 4);
+    assert.match(seen[0].text, /pesan tetap sampai/);
+  });
+
+  it("err menang saat library mengirim keduanya", () => {
+    const seen = [];
+    const log = createLibraryLogger((level, text) => seen.push({ level, text }));
+    log.error(
+      { err: new Error("alasan sebenarnya"), trace: "Error: lain" },
+      "gagal",
+    );
+    assert.match(seen[0].text, /alasan sebenarnya/);
+    assert.doesNotMatch(seen[0].text, /lain/);
+  });
+
+  // Sisanya call site library yang membawa error di key selain `err`/`trace`.
+  // Semuanya lewat reporter yang sama, jadi kalau key itu tidak dibaca,
+  // operator tetapondi lini merah tanpa sebab untuk event yang sama.
+  it("penyebab ikut sampai untuk key error lain yang dipakai library", () => {
+    const cases = [
+      [{ error: new Error("pre-key check gagal") }, /pre-key check gagal/],
+      [{ error: "upload ditolak server" }, /upload ditolak server/],
+      [{ ackErr: new Error("ack receipt gagal") }, /ack receipt gagal/],
+      [{ uploadError: "kuota habis", count: 3 }, /kuota habis/],
+    ];
+    for (const [payload, expected] of cases) {
+      const seen = [];
+      const log = createLibraryLogger((level, text) => seen.push({ level, text }));
+      log.error(payload, "library gagal");
+      assert.equal(seen.length, 1);
+      assert.match(seen[0].text, expected, `payload ${JSON.stringify(Object.keys(payload))}`);
+    }
+  });
+
+  it("err tetap menang atas key lain di record yang sama", () => {
+    const seen = [];
+    const log = createLibraryLogger((level, text) => seen.push({ level, text }));
+    log.error(
+      { error: new Error("kurang penting"), err: new Error("penyebab utama") },
+      "gagal",
+    );
+    assert.match(seen[0].text, /penyebab utama/);
+    assert.doesNotMatch(seen[0].text, /kurang penting/);
+  });
+
+  it("payload error yang tidak punya teks tetap tidak merusak baris log", () => {
+    const seen = [];
+    const log = createLibraryLogger((level, text) => seen.push({ level, text }));
+    log.error({ error: { node: "x" } }, "gagal");
+    assert.equal(seen.length, 1);
+    assert.match(seen[0].text, /gagal/);
+  });
 });
 
 /* ------------------------------------------------------------------ */

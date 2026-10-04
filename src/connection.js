@@ -389,6 +389,18 @@ function attachEventErrorReporter(ev, report) {
   return listener;
 }
 
+// pino hanya menyerialisasi objek Error untuk key `err`. Untuk key lain, Error
+// jadi `{}` karena tidak punya properti own enumerable — penyebabnya hilang
+// di dalam JSON, sebelum parsePinoLine sempat membacanya. Serializer di bawah
+// menutup key yang memang dipakai library untuk membawa error; nilai non-Error
+// (string, objek biasa) diteruskan apa adanya.
+const PINO_ERROR_SERIALIZER_KEYS = [
+  "err",
+  "error",
+  "ackErr",
+  "uploadError",
+];
+
 /**
  * Logger yang diteruskan ke library.
  *
@@ -411,8 +423,12 @@ function attachEventErrorReporter(ev, report) {
  */
 function createLibraryLogger(report) {
   const emit = typeof report === "function" ? report : defaultLibraryLogReport;
+  const serializers = {};
+  for (const key of PINO_ERROR_SERIALIZER_KEYS) {
+    serializers[key] = pino.stdSerializers.err;
+  }
   const base = pino(
-    { level: "error" },
+    { level: "error", serializers },
     {
       write(line) {
         const { level, msg } = parsePinoLine(line);
@@ -423,13 +439,44 @@ function createLibraryLogger(report) {
   return base;
 }
 
+// Penyebab error library datang dengan beberapa nama key, dan reporter ini
+// hanya boleh mengisi satu baris. Urutan di bawah mengikuti frekuensi pemakaian di
+// `node_modules/onigis/lib`:
+//   err         — 19 call site, error objek (pino sudah serial jadi {message,…})
+//   error       — 8 call site, sama-sama hasil `catch (error)`
+//   ackErr      — 5 call site, hasil `.catch(ackErr => …)`
+//   uploadError — 1 call site, sudah berupa string
+//   trace       — socket.js:632, satu-satunya yang melaporkan kegagalan
+//                 keep-alive; isinya err.stack
+// Kalau hanya `err` yang dibaca, `error in sending keep alive` tercetak polos —
+// nama gejalanya tanpa sebab — dan operator tidak bisa bedakan socket yang
+// sudah mati (biasa) dari server yang menolak ping (churn).
+function oneLineDetail(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value.split("\n", 1)[0];
+  const msg = value.message || value.stack;
+  if (typeof msg !== "string") return "";
+  // `trace` di library selalu err.stack penuh; hanya baris pertama yang menyebut
+  // kelas + pesannya. Sisanya frame internal library yang tidak bisa
+  // ditindaklanjuti dan cuma memenuhi satu baris log.
+  return msg.split("\n", 1)[0];
+}
+
+const ERROR_PAYLOAD_KEYS = ["err", "error", "ackErr", "uploadError", "trace"];
+
+function pinoErrorDetail(rec) {
+  for (const key of ERROR_PAYLOAD_KEYS) {
+    const detail = oneLineDetail(rec[key]);
+    if (detail) return detail;
+  }
+  return "";
+}
+
 function parsePinoLine(line) {
   try {
     const rec = JSON.parse(line);
-    const { err } = rec;
-    const extra = err
-      ? ` | ${err?.message || (typeof err === "string" ? err : "")}`
-      : "";
+    const detail = pinoErrorDetail(rec);
+    const extra = detail ? ` | ${detail}` : "";
     return {
       // record pino menyimpan level sebagai angka (50), bukan label
       level: pino.levels.labels[rec.level] ?? rec.level ?? "error",
