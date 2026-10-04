@@ -150,6 +150,78 @@ function trimLocalCache(local, cap) {
   }
 }
 
+// Jadikan `target` berisi persis isi `source`, dengan identitas objek tetap.
+//
+// Dipakai saat creds Turso diadopsi: `saveCreds` dari useMultiFileAuthState
+// menutup diri atas objek creds yang DIBUAT store itu, jadi recovered creds
+// harus masuk ke objek itu, bukan ke objek baru. Dua objek = dua sumber
+// kebenaran, dan yang ditulis ke disk selalu yang salah.
+function adoptCreds(target, source) {
+  for (const k of Object.keys(target)) {
+    if (!(k in source)) delete target[k];
+  }
+  Object.assign(target, source);
+  return target;
+}
+
+// Nama file key seperti yang ditulis useMultiFileAuthState: `${type}-${id}.json`,
+// dengan "/" -> "__" dan ":" -> "-".
+const KEY_FILE_RE =
+  /^(?:pre-key|session|sender-key|identity-key|app-state-sync-key)-.*\.json$/;
+
+function countLocalKeyFiles(sessionPath) {
+  let n = 0;
+  try {
+    for (const name of fs.readdirSync(sessionPath)) {
+      if (name.includes(".broken-")) continue;
+      if (KEY_FILE_RE.test(name)) n++;
+    }
+  } catch { }
+  return n;
+}
+
+// null = TIDAK BISA DIBAUKTI, bukan nol. Turso mati tidak boleh diartikan
+// "key habis" — itu akan memicu alarm palsu setiap kali token kedaluwarsa.
+async function remoteKeyCount(scope) {
+  const client = getTursoClient();
+  if (!client) return null;
+  try {
+    const rs = await client.execute({
+      sql: 'SELECT COUNT(*) AS n FROM session_keys WHERE scope = ?',
+      args: [scope],
+    });
+    return Number(rs.rows?.[0]?.n ?? 0);
+  } catch {
+    return null;
+  }
+}
+
+// creds paired tanpa satu pun key = setiap pesan masuk akan gagal decrypt.
+//
+// Keadaan ini muncul begitu storage/ (gitignored) hilang saat container
+// replacement DAN mirror key di Turso ikut kosong. Bot tetap connect dan log
+// boot tetap bilang "pre-keys udah dikirim", jadi tidak ada satu pun tanda di
+// layar bahwa E2EE-nya sudah mati. Ratusan "failed to decrypt message" adalah
+// gejala, dan tidak ada yang bisa memperbaikinya tanpa pair ulang.
+//
+// Dilaporkan hanya kalau nol bisa DIBUKTI di kedua tempat. Key yang ada, atau
+// Turso yang tidak bisa dijangkau, tetap diam.
+async function reportHollowSession(scope, sessionPath, creds, report) {
+  const paired = creds?.registered === true || Boolean(creds?.account);
+  if (!paired) return;
+  if (countLocalKeyFiles(sessionPath) > 0) return;
+  const remote = await remoteKeyCount(scope);
+  if (remote === null || remote > 0) return;
+  report?.(
+    'PERINGATAN KEROSOKAN: identitas ada tapi state E2EE kosong — 0 pre-key / ' +
+      'session / sender-key di storage lokal dan 0 baris di Turso. Bot tetap ' +
+      'connect, tapi tiap pesan masuk akan gagal decrypt ("failed to decrypt ' +
+      'message": "No session found to decrypt message" = sender-key hilang, ' +
+      '"no session" = session peer hilang). Kondisi ini tidak pulih sendiri: ' +
+      'pair ulang / scan QR, atau kembalikan baris session_keys dari backup.',
+  );
+}
+
 // File auth-state yang rusak tidak bisa "diperbaiki" di tempat: isinya hilang
 // dan tidak ada salinan. Yang bisa dilakukan hanya memindahkannya supaya
 // baca berikutnya jadi miss -- dan miss pre-key/sender-key adalah jalur
@@ -495,6 +567,9 @@ async function useDurableAuthState(scope, folder) {
   // operator menghapus storage/session dengan tangan.
   const loaded = await loadAuthStateWithRecovery(folder, warnRemote);
   const local = { state: loaded.state, saveCreds: loaded.saveCreds };
+  // Objek creds milik store lokal, bukan objek terpisah. Semua jalur di bawah
+  // memutasikan objek INI, jadi `local.saveCreds()` (yang menutup diri atas
+  // objek miliknya sendiri) menulis apa yang sebenarnya hidup.
   let creds = local.state.creds;
   // Dibungkus DI SINI, bukan nanti di keys.get: ini satu-satunya titik di mana
   // store lokal dibuat, dan useMultiFileAuthState juga dipakai langsung dari
@@ -520,14 +595,29 @@ async function useDurableAuthState(scope, folder) {
   // Itulah device 52, lalu 53, lalu 54.
   //
   // Creds tetap hanya diambil dari mirror ketika lokal belum paired — itu
-  // pemulihannya, dan receber creds remote di atas creds lokal yang sudah sah
+  // pemulihannya, dan menerima creds remote di atas creds lokal yang sudah sah
   // akan menimpa identitas yang baru saja di-pair.
+  //
+  // Yang dipulihkan harus DIJATUHKAN ke disk, bukan hanya diganti di memori.
+  // Sebelumnya `creds = r` membuat objek baru: storage/session/creds.json tetap
+  // `registered: false` selamanya, looksPaired salah setiap boot, dan "durable"
+  // hanya durable selama Turso hidup — token mati = identitas hilang. Dan log
+  // boot menulis "sesi dipulihkan ... ke storage lokal" tanpa satu byte pun
+  // yang ditulis ke sana.
   const remote = looksPaired ? null : await loadState(scope);
   if (!looksPaired && remote?.creds) {
     const r = remote.creds;
     if (r.registered === true || Boolean(r.account)) {
-      creds = r;
-      warnRemote('sesi dipulihkan dari Turso ke storage lokal');
+      adoptCreds(creds, r);
+      try {
+        await local.saveCreds();
+        warnRemote('sesi dipulihkan dari Turso ke storage lokal');
+      } catch (e) {
+        warnRemote(
+          `sesi dipulihkan dari Turso, tapi GAGAL ditulis ke storage lokal: ` +
+            `${e.message} — identitas hanya hidup di memori sampai boot berikutnya`,
+        );
+      }
     }
   }
 
@@ -564,22 +654,39 @@ async function useDurableAuthState(scope, folder) {
       return out;
     },
     set: async (data) => {
+      const categories = Object.keys(data || {}).join(',');
+      let localFailed = null;
       try {
         await localKeys.set(data);
       } catch (e) {
         // key yang gagal ditulis = sesi tidak bisa di-re-negotiate nanti.
         // Reporter, bukan dibiarkan hilang.
-        warnRemote(`keys.set(${Object.keys(data || {}).join(",")}) gagal: ${e.message}`);
-        return;
+        localFailed = e;
+        warnRemote(`keys.set(${categories}) gagal: ${e.message}`);
       }
-      if (!remoteKeys) return;
-      try {
-        await remoteKeys.set(data);
-      } catch (e) {
-        warnRemote(`keys.set mirror gagal: ${e.message}`);
+      // Cermin TETAP ditulis walau disk gagal. `return` di sini dulu membuat
+      // folder sesi yang tidak bisa ditulis mematikan cermin permanen: tidak ada
+      // satu pun key yang sampai ke Turso, jadi begitu container berikutnya punya
+      // storage kosong, pemulihannya mustahil.
+      if (remoteKeys) {
+        try {
+          await remoteKeys.set(data);
+        } catch (e) {
+          warnRemote(`keys.set mirror gagal: ${e.message}`);
+        }
+      } else if (localFailed) {
+        // Tidak ada satu pun tempat yang menerima key ini. Sekali, terang.
+        warnRemote(
+          `keys.set(${categories}) GAGAL TOTAL: storage lokal tidak bisa ditulis ` +
+            `(${localFailed.message}) dan cermin Turso tidak aktif — key ini hilang, ` +
+            `sesi tidak akan bisa di-re-negotiate`,
+        );
       }
     },
     getMany: async (type) => {
+      // Store lokal dari useMultiFileAuthState tidak punya getMany, jadi
+      // memanggilnya akan melempar TypeError. Semua key bisa dibaca lewat get.
+      if (typeof localKeys.getMany !== 'function') return {};
       const localAll = await localKeys.getMany(type);
       if (!remoteKeys) return localAll;
       try {
@@ -604,6 +711,8 @@ async function useDurableAuthState(scope, folder) {
     if (lastLocalError) throw lastLocalError;
   };
 
+  await reportHollowSession(scope, folder, creds, warnRemote);
+
   return {
     state: { creds, keys },
     saveCreds: saveCredsHybrid,
@@ -623,4 +732,8 @@ export {
   loadAuthStateWithRecovery,
   classifyAuthStateFailure,
   quarantineBrokenCreds,
+  adoptCreds,
+  countLocalKeyFiles,
+  remoteKeyCount,
+  reportHollowSession,
 };
