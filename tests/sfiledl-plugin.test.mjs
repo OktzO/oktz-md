@@ -231,9 +231,17 @@ test("key aggregator kosong dan scraper lokal gagal → sebut APIKEY_NEOXR", asy
   assert.match(balasan.at(-1) ?? "", /APIKEY_NEOXR/, "user harus tahu baris .env yang mana");
 });
 
-test("semua backend gagal tanpa masalah key → pesan error umum, bukan key", async () => {
+test("semua backend menjawab tanpa URL → pesan link, dan tetap bukan pesan key", async () => {
+  // Dua backend menjawab, tapi tidak ada yang memberi URL unduhan: scraper lokal
+  // mengembalikan `download_url: null` dan aggregator menjawab `{ data: {} }`.
+  // Sebidaknya satu dari mereka menjawab, dan jawabannya "tidak ada file di sini" —
+  // jadi `adaNormalisasiGagal` benar dan pesan yang dipakai adalah pesan link.
+  //
+  // Ekspektasi ini BERUBAH dari sebelum Task 11: dulu `!data?.url` dianggap mungkin
+  // terjadi dan pesan link dianggap mungkin tampil, padahal `normalize` menutupnya.
+  // Yang berubah cuma JALUR pesannya, bukan teksnya: `☢` + template operator
+  // digantikan `❌` + pesan yang memberitahu user apa yang harus diperbaiki.
   sfileLokalSukses([HAL[0], HAL[2]]);
-  // Respons aggregator hidup tapi tanpa URL unduhan.
   const { balasan, reaksi, m } = pesanPengguna("https://sfile.mobi/abc123");
   const asli = httpPalsu.get;
   httpPalsu.get = async (url, opts) => {
@@ -249,7 +257,9 @@ test("semua backend gagal tanpa masalah key → pesan error umum, bukan key", as
   }
 
   assert.deepEqual(sock.terkirim, [], "tidak boleh ada file yang diklaim terkirim");
-  assert.equal(reaksi.at(-1), "☢");
+  assert.equal(reaksi.at(-1), "❌");
+  assert.match(balasan.at(-1) ?? "", /File mungkin tidak tersedia/);
+  assert.equal(reaksi.includes("✅"), false, "centang hijau hanya sah kalau file benar-benar terkirim");
   assert.equal(balasan.some((t) => /APIKEY_/.test(t)), false, "key bukan penyebabnya");
 });
 

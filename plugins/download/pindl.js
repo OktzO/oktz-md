@@ -2,7 +2,7 @@ import fs from "fs";
 import axios from "axios";
 import path from "path";
 import { queueFFmpeg } from "./../../src/lib/ffmpeg.js";
-import { f } from "../../src/lib/http.js";
+import { httpAxios } from "../../src/lib/http.js";
 import te from "../../src/lib/error.js";
 import { resolver } from "../../src/lib/resolve.js";
 
@@ -11,12 +11,12 @@ import { resolver } from "../../src/lib/resolve.js";
 // dengan batas RSS 550MB, menarik video tanpa batas bisa membuat proses dibunuh
 // memory-monitor — gagal dengan pesan jauh lebih murah daripada bot ikut mati.
 //
-// Yang TIDAK memakai batas ini: jalur GIF. `f()` tidak punya batas ukuran — ia
-// memakai undici, bukan `httpAxios` yang batasnya 25MB — jadi satu GIF raksasa
-// bisa masuk penuh ke memori. Yang membatasinya cuma timeout 15 detik di `f()`,
-// jadi risikonya nyata tapi kecil: GIF besar gagal di 15 detik, bukan melambat
-// sampai menabrak plafon RSS. Menutupnya berarti mengubah `f()` atau mengganti
-// transport cabang GIF, dan keduanya jauh lebih luas dari lengkung ini.
+// Jalur GIF sudah ikut dibatasi, tapi bukan dengan angka sendiri: ia menarik lewat
+// `httpAxios` (src/lib/http.js:20) yang `maxContentLength`-nya 25MB, sehingga GIF
+// ikut memakai angka yang sama dengan setiap pembacaan HTTP lain di repo ini dan
+// tidak ada konstanta kedua yang bisa ikut melenceng. 25MB, bukan 64MB video,
+// karena yang dipegang setelahnya adalah Buffer GIF penuh: file GIF besar sudah
+// gawat sebelum ffmpeg sempat mengubahnya jadi mp4.
 const BATAS_BODY_VIDEO = 64 * 1024 * 1024;
 
 /** Batas bersifat inklusif: file tepat sebesar batas masih boleh dikirim. */
@@ -248,8 +248,18 @@ async function handler(m, { sock }) {
           const gifPath = path.join(tempPath, `pin-${id}.gif`);
           const mp4Path = path.join(tempPath, `pin-${id}.mp4`);
           try {
-            const raw = await f(media.url, "buffer");
-            if (!raw) throw new Error("Gagal download GIF");
+            // `f()` sengaja tidak dipakai di sini: ia memakai undici dan tidak punya
+            // batas ukuran, jadi satu GIF besar bisa masuk penuh ke memori di kotak
+            // 1GB yang plafon RSS-nya 550MB. `httpAxios` membawa `maxContentLength`
+            // 25MB, dan `responseType: "arraybuffer"` mengembalikan Buffer yang bisa
+            // langsung ditulis ke disk tanpa disalin jadi string lebih dulu.
+            const res = await httpAxios.get(media.url, {
+              responseType: "arraybuffer",
+            });
+            const raw = Buffer.isBuffer(res?.data)
+              ? res.data
+              : Buffer.from(res?.data ?? "");
+            if (!raw.length) throw new Error("Gagal download GIF");
             fs.writeFileSync(gifPath, raw);
             await queueFFmpeg(
               `ffmpeg -y -ignore_loop 0 -i "${gifPath}" -t 30 -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -pix_fmt yuv420p -movflags faststart -preset ultrafast -an "${mp4Path}"`,

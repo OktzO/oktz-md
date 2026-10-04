@@ -1,7 +1,7 @@
 import te from '../../src/lib/error.js'
 import { missingEnvNameOf } from '../../src/lib/aggregator.js'
 import { explainFailure, MissingApiKeyError } from '../../src/lib/stalker-fallback.js'
-import { resolver } from '../../src/lib/resolve.js'
+import { resolver, adaNormalisasiGagal } from '../../src/lib/resolve.js'
 
 const pluginConfig = {
     name: 'videy',
@@ -61,14 +61,13 @@ async function handler(m, { sock }) {
         // Scraper lokal lebih dulu, aggregator jadi cadangan: key aggregator tidak
         // lagi diperiksa di plugin ini karena jalur lokal tidak butuh key sama
         // sekali, dan key kosong membuat aggregator dilewati di dalam
-        // `aggregator.hit` dengan pesan yang jujur. `normalize` menolak respons
-        // tanpa URL video, jadi `url` di sini tidak mungkin kosong.
+        // `aggregator.hit` dengan pesan yang jujur.
         const { data } = await resolver.resolve('videy', { url })
 
-        if (!data?.url) {
-            m.react('❌')
-            return m.reply(`❌ Gagal mengambil video. Link tidak valid atau sudah expired.`)
-        }
+        // Pemeriksaan `!data?.url` yang dulu ada di sini sudah dihapus: `normalize`
+        // menolak respons tanpa URL video, jadi setelah resolve sukses `data.url`
+        // tidak mungkin kosong dan cabang itu tidak pernah bisa bernilai true. Yang
+        // dicakupnya kini ditangani di `catch` lewat `adaNormalisasiGagal`.
 
         await sock.sendMedia(m.chat, data.url, null, m, {
             type: 'video',
@@ -92,6 +91,14 @@ async function handler(m, { sock }) {
         if (envName) {
             m.react('❌')
             return m.reply(explainFailure(new MissingApiKeyError('aggregator', envName), `${m.prefix}videy`))
+        }
+        // Semua backend menjawab tapi tidak ada yang bisa dikirim: tautan berbagi videy
+        // sudah dihapus, atau videy tidak punya video untuk id itu. CDN videy tidak
+        // memberi tanda kedaluwarsa, jadi user perlu diberi tahu itu tautannya —
+        // kesalahan yang bisa diperbaiki dengan link lain, bukan masalah proses.
+        if (adaNormalisasiGagal(error)) {
+            m.react('❌')
+            return m.reply(`❌ Gagal mengambil video. Link tidak valid atau sudah expired.`)
         }
         m.react('☢')
         m.reply(te(m.prefix, m.command, m.pushName))

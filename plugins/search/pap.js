@@ -81,22 +81,38 @@ async function fetchImageBuffer(url) {
  * kata kunci, dan aggregator kedua yang pernah dipakai di sini sudah mati
  * (401 tanpa peringatan) — lapisan fallback multi-provider yang tadinya ada
  * di sini sekarang milik resolver bersama circuit breakernya.
+ *
+ * "Tidak ada hasil" punya dua sebab yang harus dibedakan, dan keduanya pernah
+ * berakhir sebagai pesan yang sama. Kapabilitas menjawab dan memang tidak
+ * punya pin itu jawaban yang sah; tidak ada satu pun kapabilitas yang menjawab
+ * adalah kapabilitas mati, dan memberitahu user "kosong" waktu begitu membuat
+ * dia menunggu retry ke host yang sama yang baru saja gagal. Karena itu
+ * kegagalan tidak ditelan: hanya lempar kalau TIDAK ADA query yang sempat
+ * menjawab, jadi satu query yang berhasil kosong tetap dianggap hasil kosong.
  */
 async function fetchImageUrls(type) {
   const queries = QUERIES[type] || [];
+  let adaYangMenjawab = false;
+  let alasanGagal = null;
 
   for (const q of queries) {
     let pins;
     try {
       const { data } = await resolver.resolve("pinterest", { q });
       pins = Array.isArray(data?.pins) ? data.pins : [];
-    } catch {
-      continue; // query ini gagal, coba query berikutnya
+      adaYangMenjawab = true;
+    } catch (error) {
+      // Ditahan, bukan langsung dilempar: query berikutnya masih mungkin
+      // berhasil, dan kemampuan mencoba semua query bukan barang baru.
+      alasanGagal = error;
+      continue;
     }
     if (pins.length > 0) {
       return pins.map((pin) => pin?.image).filter(Boolean);
     }
   }
+
+  if (alasanGagal && !adaYangMenjawab) throw alasanGagal;
   return [];
 }
 
@@ -138,6 +154,10 @@ async function handler(m, { sock }) {
 
   try {
     const urls = await fetchImageUrls(arg);
+    // Pesan ini hanya untuk hasil kosong yang sah: kapabilitas dijawab dan memang
+    // tidak punya pin. Kapabilitas mati tidak pernah sampai ke sini — itu dilempar
+    // oleh `fetchImageUrls` dan berakhir di `catch` bawah, jadi user tidak disuruh
+    // menunggu host yang baru saja gagal.
     if (urls.length === 0) {
       await safeReact(m, "❌");
       await safeReply(m,
@@ -244,6 +264,9 @@ async function handler(m, { sock }) {
 
     await safeReact(m, "✅");
   } catch (error) {
+    // `CapabilityError` datang apa adanya, lengkap dengan `tried` per host. Itu
+    // satu-satunya tempat operator bisa melihat backend mana yang mati, jadi
+    // jangan diringkas jadi pesan user yang tidak menjelaskan apa pun.
     console.error("[PAP Search]", error);
     await safeReact(m, "☢");
     await safeReply(m, te(m.prefix, m.command, m.pushName));

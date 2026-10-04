@@ -35,6 +35,11 @@ function timeoutError(ms) {
   return error;
 }
 
+// Awalan `reason` yang menandai "backend menjawab, tapi isinya tidak bisa
+// dikirim". Dipakai di dua tempat yang harus sepakat: `cobaBackend` yang
+// menulisnya, dan `adaNormalisasiGagal` yang membacanya.
+const ALASAN_NORMALISASI = "normalisasi gagal";
+
 // Backend dijalankan di bawah AbortController supaya timeout benar-benar
 // memutus kerja, bukan hanya melepaskannya. Scraper lokal yang sedang
 // mengunduh file besar akan terus berjalan dan menahan socket jauh setelah
@@ -80,9 +85,41 @@ async function cobaBackend(backend, cap, args, opts, ms) {
     return { ok: true, value: cap.normalize(raw) };
   } catch (error) {
     // Bentuk respons yang gagal dinormalisasi diperlakukan sebagai kegagalan
-    // backend: bentuk dari backend lain mungkin masih bisa dipakai.
-    return { ok: false, reason: `normalisasi gagal: ${error?.message ?? error}` };
+    // backend: bentuk dari backend lain mungkin masih bisa dipakai. Awalan
+    // kalimatnya bukan hiasan — plugin membacanya untuk membedakan "link-nya
+    // yang salah" dari "host-nya yang mati" (lihat `adaNormalisasiGagal`).
+    return { ok: false, reason: `${ALASAN_NORMALISASI}: ${error?.message ?? error}` };
   }
+}
+
+/**
+ * True kalau ada backend yang menjawab dengan respons yang `normalize` tolak —
+ * yaitu ada host yang hidup dan tidak memberi apa pun untuk dikirim, sementara
+ * kegagalan transport apa pun (timeout, DNS, backend mati) tidak terhitung di sini.
+ *
+ * Plugin butuh ini karena `normalize` sengaja tidak pernah mengembalikan record
+ * tanpa URL: kalau iya, plugin akan menjalankan `sendMedia(undefined)` lalu memberi
+ * centang hijau ke user yang tidak menerima apa pun. Menjaga invariants itu berarti
+ * kasus "link mati atau sudah expired" — kesalahan user yang bisa diperbaiki dengan
+ * link lain, dan penjelasan yang layak dibaca — selalu sampai sebagai error, bukan
+ * sebagai `data` yang kosong. Tanpa pemisahan ini, plugin tidak bisa lagi
+ * membedakannya dari kegagalan proses, dan tiga pesan error yang paling berguna di
+ * repo ini menjadi kode mati.
+ *
+ * Yang diperiksa adalah `reason` yang ditulis `cobaBackend` di atas, jadi
+ * klasifikasinya tidak hidup di dua tempat. Satu backend yang menjawab tanpa URL
+ * sudah cukup: host lain yang tidak bisa dihubungi tidak membatalkan bukti bahwa
+ * host yang menjawab memang tidak punya apa-apa untuk diberikan.
+ *
+ * `tried` hanya berisi backend yang benar-benar dijalankan, jadi daftar kosong
+ * berarti tidak ada yang bisa disimpulkan: jawabannya tetap "tidak tahu".
+ */
+export function adaNormalisasiGagal(error) {
+  const tried = error?.tried;
+  if (!Array.isArray(tried) || tried.length === 0) return false;
+  return tried.some((entry) =>
+    String(entry?.reason ?? "").startsWith(`${ALASAN_NORMALISASI}:`),
+  );
 }
 
 export function createResolver({

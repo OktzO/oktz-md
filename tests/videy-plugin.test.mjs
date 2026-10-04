@@ -258,16 +258,21 @@ test("key aggregator kosong dan CDN gagal → sebut APIKEY_NEOXR", async () => {
   assert.match(balasan.at(-1) ?? "", /APIKEY_NEOXR/, "user harus tahu baris .env yang mana");
 });
 
-test("semua backend gagal tanpa masalah key → pesan error umum, bukan key", async () => {
+test("semua backend menjawab tanpa URL → pesan link, dan tetap bukan pesan key", async () => {
+  // Bentuk di bawah adalah tautan yang benar-benar kedaluwarsa: CDN membalas 404
+  // dan aggregator hidup menjawab 200 sambil menandai dirinya gagal dengan
+  // `error: "expired"` — DAN tetap membawa URL. Plugin sebelum Phase 1 menolak
+  // `!data.status` tepat untuk bentuk ini, jadi memuat `url` di sini adalah bagian
+  // dari yang diuji: tanpa penolakan status, video terkirim dan reaksi berakhir `✅`.
+  //
+  // Ekspektasi ini BERUBAH dari sebelum Task 11: dulu pesan link dianggap mungkin
+  // tampil padahal `normalize` menutup jalan `!data?.url`. Yang berubah cuma JALUR
+  // pesannya, bukan teksnya.
   cdnMati();
   const asli = httpPalsu.get;
   httpPalsu.get = async (url, opts) => {
     PANGGILAN.push({ verb: "get", url, opts });
     if (new URL(String(url)).hostname === "api.neoxr.eu") {
-      // Host hidup dan menjawab 200, tapi menandai dirinya gagal — DAN tetap
-      // membawa URL. Plugin sebelum Phase 1 menolak `!data.status` tepat untuk
-      // bentuk ini, jadi memuat `url` di sini adalah bagian dari yang diuji:
-      // tanpa penolakan status, video terkirim dan reaksi akhirnya `✅`.
       return { status: 200, data: { status: false, error: "expired", data: { url: VIDEO } } };
     }
     return asli(url, opts);
@@ -281,7 +286,8 @@ test("semua backend gagal tanpa masalah key → pesan error umum, bukan key", as
   }
 
   assert.deepEqual(sock.terkirim, [], "tidak boleh ada file yang diklaim terkirim");
-  assert.equal(reaksi.at(-1), "☢");
+  assert.equal(reaksi.at(-1), "❌");
+  assert.match(balasan.at(-1) ?? "", /sudah expired/);
   assert.equal(reaksi.includes("✅"), false, "centang hijau hanya sah kalau video benar-benar terkirim");
   assert.equal(balasan.some((t) => /APIKEY_/.test(t)), false, "key bukan penyebabnya");
 });

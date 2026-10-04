@@ -3,7 +3,7 @@ import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
 import FormData from "form-data";
-import { CapabilityError, createResolver } from "../src/lib/resolve.js";
+import { CapabilityError, createResolver, adaNormalisasiGagal } from "../src/lib/resolve.js";
 
 // ── harness ───────────────────────────────────────────────────────────────────
 //
@@ -2285,7 +2285,7 @@ test("plugin sfiledl memakai resolver, dan guard URL-nya dipertahankan", () => {
   const sumber = fs.readFileSync(path.join(process.cwd(), "plugins/download/sfiledl.js"), "utf8");
   // Plugin ini memakai gaya kutip tunggal, seperti file aslinya. PenAssertion di
   // sini sengaja tidak mengunci gaya kutip plugin lain.
-  assert.match(sumber, /import \{ resolver \} from '..\/..\/src\/lib\/resolve\.js'/);
+  assert.match(sumber, /import \{[^}]*\bresolver\b[^}]*\} from '..\/..\/src\/lib\/resolve\.js'/);
   assert.match(sumber, /resolver\.resolve\('sfile'/);
   assert.doesNotMatch(
     sumber,
@@ -2833,7 +2833,7 @@ test("plugin videy tidak menyebut domain agregator lagi", () => {
 test("plugin videy memakai resolver, dan guard host-nya lebih ketat dari `includes`", () => {
   const sumber = fs.readFileSync(path.join(process.cwd(), "plugins/download/videy.js"), "utf8");
   // Plugin ini memakai gaya kutip tunggal, seperti file aslinya.
-  assert.match(sumber, /import \{ resolver \} from '..\/..\/src\/lib\/resolve\.js'/);
+  assert.match(sumber, /import \{[^}]*\bresolver\b[^}]*\} from '..\/..\/src\/lib\/resolve\.js'/);
   assert.match(sumber, /resolver\.resolve\('videy'/);
   assert.doesNotMatch(
     sumber,
@@ -4582,5 +4582,180 @@ test("normalize: bentuk lokal tanpa amplop tetap jalan (regresi sebelum Phase 1)
     kapsfile.normalize({ file_name: "a.apk", download_url: "https://download.sfile.co/a.apk" }).filename,
     "a.apk",
     "bentuk scraper sfile tidak boleh ikut ditolak",
+  );
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Temuan review Task 11 — tiga pesan operator yang tidak bisa ditampilkan
+//
+// `normalize` di `sfile`, `videy`, dan `spotify` sengaja tidak pernah mengembalikan
+// record tanpa URL. Invariants itu benar dan wajib: kalau tidak, plugin menjalankan
+// `sendMedia(undefined)` lalu memberi centang hijau ke user yang tidak menerima apa
+// pun. Tapi konsekuensinya, `if (!data?.url)` di dalam `try` tidak pernah bisa
+// bernilai true, dan pesan-pesan paling berguna di repo ini —
+// "link tidak valid atau sudah expired", "file mungkin tidak tersedia", "server tidak
+// merespon dengan tautan unduhan yang valid" — menempel di branch yang tidak pernah
+// dieksekusi. Semua itu berakhir sebagai template error operator, dan operatorlah yang
+// diberi tahu — bukan user yang salah mengira tautannya masih bisa dicoba.
+//
+// Bentuk yang dipakai: `normalize` tetap tidak pernah meloloskan record tanpa URL, dan
+// plugin memetakan KEGAGALAN NORMALISASI ke pesan yang sudah ada. Pemetaan dibaca dari
+// `tried`, yang sudah membedakan "backend menjawab tapi isinya tidak bisa dikirim" dari
+// "backend tidak bisa dihubungi" — jadi tidak ada data basi yang ditambahkan dan tidak
+// ada jalur yang dibiarkan terbuka.
+//
+// BUKAN pesannya yang berubah, hanya jangkauan. Karena itu pin di blok ini menguji
+// teksnya apa adanya DAN tempatnya: di dalam `catch`, bukan di dalam `try`.
+// ═════════════════════════════════════════════════════════════════════════════
+
+const PESAN_TAUTAN = [
+  {
+    plugin: "plugins/download/sfiledl.js",
+    pola: /❌ Gagal mendapatkan link download\. File mungkin tidak tersedia\./,
+  },
+  {
+    plugin: "plugins/download/videy.js",
+    pola: /❌ Gagal mengambil video\. Link tidak valid atau sudah expired\./,
+  },
+  {
+    plugin: "plugins/download/spotifydl.js",
+    pola: /Server tidak merespon dengan tautan unduhan yang valid\./,
+  },
+];
+
+test("tiga pesan tautan masih persis seperti sebelum Phase 1", () => {
+  for (const { plugin, pola } of PESAN_TAUTAN) {
+    const src = fs.readFileSync(path.join(process.cwd(), plugin), "utf8");
+    assert.match(src, pola, `pesan hilang atau berubah di ${plugin}`);
+  }
+});
+
+test("tiga pesan tautan hidup di dalam catch, di luar jangkauan `if (!data?.url)`", () => {
+  // Inilah yang hilang di Phase 1 dan tidak dikembalikan oleh test permukaan: teks
+  // pesan masih ada di berkas, tapi tidak ada jalur yang membawanya sampai ke user.
+  // Pemeriksaan posisi inilah yang mengunci perbaikannya — teksnya tidak berubah, jadi
+  // hanya tempatnya yang bisa dijamin.
+  for (const { plugin, pola } of PESAN_TAUTAN) {
+    const src = fs.readFileSync(path.join(process.cwd(), plugin), "utf8");
+    const tangkap = src.indexOf("catch (error)");
+    const pesan = src.search(pola);
+    assert.ok(tangkap > -1, `blok catch tidak ada di ${plugin}`);
+    assert.ok(pesan > tangkap, `pesan di ${plugin} harus berada setelah blok catch`);
+    // Pemeriksaan `!data?.url` yang dulu ada sudah dihapus: kalau dibiarkan, ia
+    // terlihat seperti penjaga yang masih bekerja padahal tidak pernah bernilai true.
+    assert.doesNotMatch(
+      src,
+      /if \(!data\?\.url\)/,
+      `penjaga mati di ${plugin} harus dihapus, bukan dibiarkan sebagai penjaga palsu`,
+    );
+  }
+});
+
+test("ketiga plugin memetakan kegagalan normalisasi lewat helper yang sama", () => {
+  // Kalau satu plugin memakai klasifikasi sendiri, daftar kasus yang dia tangani
+  // akan melenceng diam-diam. Satu helper, tiga pemakai.
+  for (const { plugin } of PESAN_TAUTAN) {
+    const src = fs.readFileSync(path.join(process.cwd(), plugin), "utf8");
+    assert.match(
+      src,
+      /adaNormalisasiGagal\(error\)/,
+      `${plugin} harus memakai pemetaan yang sama`,
+    );
+    assert.match(
+      src,
+      /import \{[^}]*\badaNormalisasiGagal\b[^}]*\} from ["'][^"']*resolve\.js["']/,
+      `${plugin} harus mengimpor helper dari src/lib/resolve.js`,
+    );
+  }
+});
+
+// ── kontrak helper ───────────────────────────────────────────────────────────
+
+test("adaNormalisasiGagal: hanya respons yang ditolak normalize yang terhitung", () => {
+  const dariReason = (reason) => ({ name: "x", reason });
+  const dariNormalisasi = (pesan) => dariReason(`normalisasi gagal: ${pesan}`);
+
+  // Positif: setidaknya satu backend menjawab dan tidak memberi apa pun untuk dikirim.
+  assert.equal(
+    adaNormalisasiGagal(
+      new CapabilityError("gagal", { tried: [dariNormalisasi("sfile: respons tanpa URL unduhan")] }),
+    ),
+    true,
+  );
+  // Host lain yang mati di transport tidak membatalkan bukti itu.
+  assert.equal(
+    adaNormalisasiGagal(
+      new CapabilityError("gagal", {
+        tried: [dariReason("Request failed with status code 404"), dariNormalisasi("x")],
+      }),
+    ),
+    true,
+  );
+  // Negatif: seluruh kegagalan ada di transport, jadi ini masalah proses dan harus
+  // dilaporkan ke owner, bukan disyamarkan jadi link yang salah.
+  assert.equal(
+    adaNormalisasiGagal(
+      new CapabilityError("gagal", {
+        tried: [dariReason("ENOTFOUND"), dariReason("batas waktu 5000ms habis")],
+      }),
+    ),
+    false,
+  );
+  // Bentuk `tried` yang tidak mungkin disimpulkan: `resolve` hanya mengisi `tried`
+  // kalau ada backend yang benar-benar dijalankan, dan kode lain (`unknown-capability`,
+  // `load-failed`, `no-applicable-backend`) memang tidak punya `tried` sama sekali.
+  assert.equal(adaNormalisasiGagal(new CapabilityError("x", {})), false);
+  assert.equal(adaNormalisasiGagal(new CapabilityError("x", { tried: [] })), false);
+  assert.equal(adaNormalisasiGagal(new Error("biasa")), false);
+  assert.equal(adaNormalisasiGagal(undefined), false);
+  assert.equal(adaNormalisasiGagal(null), false);
+});
+
+test("adaNormalisasiGagal membaca awalan yang sama persis dengan yang ditulis cobaBackend", () => {
+  // Dua tempat yang harus sepakat: `cobaBackend` yang menulis awalan `reason`, dan
+  // helper ini yang membacanya. Kalau salah satu berubah sendiri, pemetaan diam-diam
+  // kembali ke "selalu salah" atau "selalu benar" dan tidak ada test lain yang
+  // berkedip. Yang diuji di sini adalah jalurnya, bukan teksnya.
+  const kap = {
+    stable: false,
+    normalize: () => {
+      throw new Error("respons tanpa URL unduhan");
+    },
+    backends: [{ name: "host-a", kind: "local", run: async () => ({}) }],
+  };
+  const resolver = createResolver({ capabilities: { uji: () => kap }, budget: { localMs: 200, totalMs: 400 } });
+
+  return resolver.resolve("uji", {}).then(
+    () => assert.fail("resolve harus gagal"),
+    (error) => {
+      assert.ok(error instanceof CapabilityError);
+      assert.equal(adaNormalisasiGagal(error), true, `tried: ${JSON.stringify(error.tried)}`);
+      assert.match(error.tried[0].reason, /^normalisasi gagal: respons tanpa URL unduhan$/);
+    },
+  );
+});
+
+test("kegagalan transport di `run` tidak pernah terhitung sebagai normalisasi", () => {
+  // Penjaga arah sebaliknya dari test di atas, di level `run`. `cobaBackend`
+  // membedakan dua jenis kegagalan sejak awal; yang belum ada sebelumnya adalah
+  // pemakaian perbedaan itu oleh plugin. Salah memakainya berarti setiap outage
+  // menyamar jadi "link-nya salah", dan operator kehilangan alarmnya.
+  const kap = {
+    stable: false,
+    normalize: (raw) => raw,
+    backends: [
+      { name: "host-a", kind: "local", run: async () => { throw new Error("ENOTFOUND"); } },
+      { name: "host-b", kind: "local", run: async () => { throw new Error("batas waktu 200ms habis"); } },
+    ],
+  };
+  const resolver = createResolver({ capabilities: { uji: () => kap }, budget: { localMs: 200, totalMs: 400 } });
+
+  return resolver.resolve("uji", {}).then(
+    () => assert.fail("resolve harus gagal"),
+    (error) => {
+      assert.ok(error instanceof CapabilityError);
+      assert.equal(adaNormalisasiGagal(error), false, `tried: ${JSON.stringify(error.tried)}`);
+      assert.deepEqual(error.tried.map((t) => t.name), ["host-a", "host-b"]);
+    },
   );
 });

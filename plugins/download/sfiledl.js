@@ -1,7 +1,7 @@
 import te from '../../src/lib/error.js'
 import { missingEnvNameOf } from '../../src/lib/aggregator.js'
 import { explainFailure, MissingApiKeyError } from '../../src/lib/stalker-fallback.js'
-import { resolver } from '../../src/lib/resolve.js'
+import { resolver, adaNormalisasiGagal } from '../../src/lib/resolve.js'
 
 const pluginConfig = {
     name: 'sfiledl',
@@ -62,14 +62,13 @@ async function handler(m, { sock }) {
         // Scraper lokal lebih dulu, aggregator jadi cadangan: key aggregator tidak
         // lagi diperiksa di plugin ini karena scraper lokal tidak butuh key
         // sama sekali, dan key kosong membuat aggregator dilewati di dalam
-        // `aggregator.hit` dengan pesan yang jujur. `normalize` menolak respons
-        // tanpa URL unduhan, jadi `url` di sini tidak mungkin kosong.
+        // `aggregator.hit` dengan pesan yang jujur.
         const { data } = await resolver.resolve('sfile', { url })
 
-        if (!data?.url) {
-            m.react('❌')
-            return m.reply(`❌ Gagal mendapatkan link download. File mungkin tidak tersedia.`)
-        }
+        // Pemeriksaan `!data?.url` yang dulu ada di sini sudah dihapus: `normalize`
+        // menolak respons tanpa URL unduhan, jadi setelah resolve sukses `data.url`
+        // tidak mungkin kosong dan cabang itu tidak pernah bisa bernilai true. Yang
+        // dicakupnya kini ditangani di `catch` lewat `adaNormalisasiGagal`.
 
         await sock.sendMedia(m.chat, data.url, null, m, {
             type: 'document',
@@ -95,6 +94,15 @@ async function handler(m, { sock }) {
         if (envName) {
             m.react('❌')
             return m.reply(explainFailure(new MissingApiKeyError('aggregator', envName), `${m.prefix}sfiledl`))
+        }
+        // Semua backend menjawab tapi tidak ada yang bisa dikirim: file-nya memang
+        // sudah hilang dari sfile, atau tautannya bukan file sfile yang bisa diunduh.
+        // Itu kesalahan link dari user dan ada jalan keluarnya — kirim link lain —
+        // jadi jawabannya pesan link, bukan template error operator. Pemisahan
+        // dilakukan dari `tried`, karena `normalize` menutup jalan "data.url kosong".
+        if (adaNormalisasiGagal(error)) {
+            m.react('❌')
+            return m.reply(`❌ Gagal mendapatkan link download. File mungkin tidak tersedia.`)
         }
         m.react('☢')
         m.reply(te(m.prefix, m.command, m.pushName))
