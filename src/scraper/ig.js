@@ -20,7 +20,9 @@ async function instagramDownloader(url) {
     throw new Error("Gagal mengambil media dari Instagram");
   }
 
-  const media = data.result.map((item) => {
+  const media = data.result
+    .filter((item) => String(item?.url || "").trim() !== "")
+    .map((item) => {
     const ext = extFromToken(item.url);
     const isVideo = ext === "mp4" || ext === "mov" || ext === "m3u8" || String(item.url).includes(".mp4");
     return {
@@ -28,9 +30,13 @@ async function instagramDownloader(url) {
       url: item.url,
       thumbnail: item.thumbnail || "",
     };
-  });
+    });
 
-  const thumbUrl = data.result[0]?.thumbnail || "";
+  if (media.length === 0) {
+    throw new Error("Gagal mengambil media dari Instagram");
+  }
+
+  const thumbUrl = media[0]?.thumbnail || "";
 
   return {
     status: true,
