@@ -137,12 +137,12 @@ async function playBootSequence(info = {}) {
   const { name = "OKTZ", version = "3.3", mode = "public" } = info;
   console.log("");
   console.log(chalk.cyan(`
-           ██████╗ ██╗   ██╗██████╗ ██╗███╗   ██╗
-          ██╔═══██╗██║   ██║██╔══██╗██║████╗  ██║
-          ██║   ██║██║   ██║██████╔╝██║██╔██╗ ██║
-          ██║   ██║██║   ██║██╔══██╗██║██║╚██╗██║
-          ╚██████╔╝╚██████╔╝██║  ██╗██║██║ ╚████║
-           ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝
+       ██████╗ ██╗  ██╗████████╗███████╗
+      ██╔═══██╗██║ ██╔╝╚══██╔══╝╚══███╔╝
+      ██║   ██║█████╔╝    ██║     ███╔╝
+      ██║   ██║██╔═██╗    ██║    ███╔╝
+      ╚██████╔╝██║  ██╗   ██║   ███████╗
+       ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚══════╝
 `));
   console.log(`         ${chalk.magenta.bold("►")} ${chalk.white("OKTZ MULTI-DEVICE BOT")} ${chalk.gray(`v${version}`)}`);
   console.log(`         ${chalk.magenta("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")}`);
@@ -165,7 +165,7 @@ function logCommand(info = {}) {
   const typeTag = messageType || "Command";
   const msg = `${prefix}${command}`;
 
-  console.log(`  ${makeTag("CMD")} ${cWhite(msg)} ${cGray("dari")} ${chalk.greenBright(senderName)} ${cGray("•")} ${chalk.yellow(location)} ${cGray(`• ${time} • ${typeTag}`)}`);
+  console.log(`${makeTag("CMD")} ${cWhite(msg)} ${cGray("dari")} ${chalk.greenBright(senderName)} ${cGray("•")} ${chalk.yellow(location)} ${cGray(`• ${time} • ${typeTag}`)}`);
 }
 function logPlugin(name, category) {
   // Simple tree view for plugin
