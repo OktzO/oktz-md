@@ -352,6 +352,21 @@ function warnRemote(msg) {
   else console.warn(`[turso-session] ${msg}`);
 }
 
+async function withRemoteRetry(fn, attempts = 3) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      const msg = String(e?.message || e);
+      if (!/fetch failed|network|ECONN|ETIMEDOUT|ECONNRESET|socket|disconnect/i.test(msg)) throw e;
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, 500 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 // Store key mirror untuk satu scope, berdiri sendiri dari loadState.
 //
 // loadState sengaja mengembalikan null ketika session_creds kosong supaya
@@ -376,10 +391,10 @@ async function loadRemoteKeys(scope) {
       const local = cache.get(cacheKey);
       const missing = ids.filter((id) => !local.has(id));
       if (missing.length > 0) {
-        const rs = await client.execute({
+        const rs = await withRemoteRetry(() => client.execute({
           sql: `SELECT id, data FROM session_keys WHERE scope = ? AND category = ? AND id IN (${missing.map(() => '?').join(',')})`,
           args: [scope, type, ...missing],
-        });
+        }));
         for (const row of rs.rows) local.set(row.id, JSON.parse(row.data, BufferJSON.reviver));
         trimLocalCache(local, KEYS_CACHE_CAP);
       }
@@ -391,15 +406,15 @@ async function loadRemoteKeys(scope) {
       for (const [type, entries] of Object.entries(patch || {})) {
         for (const [id, value] of Object.entries(entries || {})) {
           if (value === null) {
-            await client.execute({
+            await withRemoteRetry(() => client.execute({
               sql: 'DELETE FROM session_keys WHERE scope = ? AND category = ? AND id = ?',
               args: [scope, type, id],
-            });
+            }));
           } else {
-            await client.execute({
+            await withRemoteRetry(() => client.execute({
               sql: 'INSERT INTO session_keys (scope, category, id, data, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(scope, category, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at',
               args: [scope, type, id, JSON.stringify(value, BufferJSON.replacer), Date.now()],
-            });
+            }));
           }
         }
       }
@@ -412,10 +427,10 @@ async function loadState(scope) {
   const client = getTursoClient();
   if (!client) return null;
   // load creds
-  const credsRs = await client.execute({
+  const credsRs = await withRemoteRetry(() => client.execute({
     sql: 'SELECT creds FROM session_creds WHERE scope = ?',
     args: [scope],
-  });
+  }));
   if (!credsRs.rows || credsRs.rows.length === 0) {
     // WAJIB null, bukan initAuthCreds(): state fabricated bikin connection.js
     // skip fallback file lokal, jadi sesi WA hanya hidup di Turso. Kontrak ini
@@ -435,10 +450,10 @@ async function loadState(scope) {
         const missing = ids.filter(id => !local.has(id));
         if (missing.length > 0) {
           const placeholders = missing.map(() => '?').join(',');
-          const rs = await client.execute({
+          const rs = await withRemoteRetry(() => client.execute({
             sql: `SELECT id, data FROM session_keys WHERE scope = ? AND category = ? AND id IN (${placeholders})`,
             args: [scope, type, ...missing],
-          });
+          }));
           for (const row of rs.rows) {
             local.set(row.id, JSON.parse(row.data, BufferJSON.reviver));
           }
@@ -470,20 +485,20 @@ async function loadState(scope) {
         }
         if (statements.length > 0) {
           try {
-            await client.batch(statements, "write");
+            await withRemoteRetry(() => client.batch(statements, "write"));
           } catch (e) {
             console.warn('[turso-session] batch failed, falling back to sequential:', e.message);
             for (const stmt of statements) {
-              await client.execute(stmt);
+              await withRemoteRetry(() => client.execute(stmt));
             }
           }
         }
       },
       getMany: async (type) => {
-        const rs = await client.execute({
+        const rs = await withRemoteRetry(() => client.execute({
           sql: 'SELECT id, data FROM session_keys WHERE scope = ? AND category = ?',
           args: [scope, type],
-        });
+        }));
         const result = {};
         for (const row of rs.rows) {
           result[row.id] = JSON.parse(row.data, BufferJSON.reviver);

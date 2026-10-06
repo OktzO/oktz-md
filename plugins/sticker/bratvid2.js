@@ -513,8 +513,16 @@ async function generateBratVideo({
           // event 'close' sudah lewat dan 'drain' tidak akan pernah datang.
           if (!child.stdin.write(rgba) && alive()) {
             await new Promise((done) => {
-              child.stdin.once("drain", done);
-              child.once("close", done);
+              const onDrain = () => {
+                child.off("close", onClose);
+                done();
+              };
+              const onClose = () => {
+                child.stdin.off("drain", onDrain);
+                done();
+              };
+              child.stdin.once("drain", onDrain);
+              child.once("close", onClose);
             });
           }
         }
