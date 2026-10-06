@@ -1,5 +1,5 @@
-import axios from 'axios'
-import FormData from 'form-data'
+import QRCode from 'qrcode'
+import sharp from 'sharp'
 import te from '../../src/lib/error.js'
 const pluginConfig = {
     name: ['qrcustom', 'qrcode', 'qr'],
@@ -17,30 +17,9 @@ const pluginConfig = {
     isEnabled: true
 }
 
-const BASE_URL = 'https://api.denayrestapi.xyz'
-
-async function uploadTo0x0(buffer) {
-    try {
-        const form = new FormData()
-        form.append('file', buffer, { filename: 'logo.png', contentType: 'image/png' })
-        
-        const response = await axios.post(`https://c.termai.cc/api/upload?key=${process.env.TERMAI_UPLOAD_KEY || ''}`, form, {
-            headers: form.getHeaders(),
-            timeout: 30000
-        })
-        
-        if (response.data?.status === 'success' && response.data?.files?.[0]?.url) {
-            return response.data
-        }
-        return null
-    } catch {
-        return null
-    }
-}
-
 async function handler(m, { sock }) {
     const data = m.text?.trim()
-    
+
     if (!data) {
         return m.reply(
             `⚠️ *ᴄᴀʀᴀ ᴘᴀᴋᴀɪ*\n\n` +
@@ -50,39 +29,34 @@ async function handler(m, { sock }) {
             `💡 Reply gambar untuk custom logo di tengah QR`
         )
     }
-    
+
     await m.reply(`🕕 *Generating QR code...*`)
-    
+
     try {
-        let imageUrl = ''
-        
+        let buffer = await QRCode.toBuffer(data, { type: 'png', width: 512, margin: 2, errorCorrectionLevel: 'H' })
+
+        let logoBuffer = null
         if (m.isImage) {
-            const buffer = await m.download()
-            imageUrl = await uploadTo0x0(buffer) || ''
+            logoBuffer = await m.download()
         } else if (m.quoted?.isImage) {
-            const buffer = await m.quoted.download()
-            imageUrl = await uploadTo0x0(buffer) || ''
+            logoBuffer = await m.quoted.download()
         }
-        
-        const params = new URLSearchParams({
-            data: data,
-            type: 'png',
-            size: '300'
-        })
-        
-        if (imageUrl) {
-            params.append('image', imageUrl)
+
+        if (logoBuffer) {
+            const logo = await sharp(logoBuffer).resize(120, 120).png().toBuffer()
+            buffer = await sharp(buffer)
+                .composite([{ input: logo, gravity: 'centre' }])
+                .png()
+                .toBuffer()
         }
-        
-        const apiUrl = `${BASE_URL}/api/v1/tools/qrcustom?${params.toString()}`
-        
+
         await sock.sendMessage(m.chat, {
-            image: { url: apiUrl },
+            image: buffer,
             caption: `📱 *QR Code*\n> ${data.substring(0, 50)}${data.length > 50 ? '...' : ''}`
         }, { quoted: m })
-        
+
         m.react('📱')
-        
+
     } catch (err) {
         m.react('☢')
         return m.reply(te(m.prefix, m.command, m.pushName))

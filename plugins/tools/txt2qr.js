@@ -1,4 +1,4 @@
-import axios from 'axios'
+import QRCode from 'qrcode'
 import te from '../../src/lib/error.js'
 const pluginConfig = {
     name: 'txt2qr',
@@ -26,16 +26,12 @@ async function handler(m, { sock }) {
     m.react('📱')
     
     try {
-        const url = `https://api-faa.my.id/faa/qr-create?text=${encodeURIComponent(text)}`
-        const res = await axios.get(url, {
-            responseType: 'arraybuffer',
-            timeout: 30000
-        })
-        
+        const buffer = await QRCode.toBuffer(text, { type: 'png', width: 512, margin: 2 })
+
         m.react('✅')
-        
+
         await sock.sendMessage(m.chat, {
-            image: Buffer.from(res.data),
+            image: buffer,
             caption: `📱 *Qʀ ᴄᴏᴅᴇ*\n\n> ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}`
         }, { quoted: m })
         
