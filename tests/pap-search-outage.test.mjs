@@ -170,7 +170,7 @@ test("semua query gagal → JANGAN bilang kosong; laporkan kegagalan ke operator
   jawabPinterest = () => {
     throw gagalSemua([
       MATI,
-      { name: "azbry", reason: "azbry menjawab 503" },
+      { name: "nexray", reason: "nexray menjawab 503" },
     ]);
   };
   const { balasan, reaksi, m } = pesanPengguna("cewe");
@@ -188,7 +188,7 @@ test("semua query gagal → JANGAN bilang kosong; laporkan kegagalan ke operator
   const [label, error] = log[0];
   assert.match(String(label), /PAP Search/);
   assert.equal(error?.name, "CapabilityError");
-  assert.deepEqual(error?.tried?.map((t) => t.name), ["ilovepin", "azbry"]);
+  assert.deepEqual(error?.tried?.map((t) => t.name), ["ilovepin", "nexray"]);
 });
 
 test("semua query gagal → user dapat template error, bukan teks internal", async () => {

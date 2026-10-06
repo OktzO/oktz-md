@@ -43,37 +43,27 @@ async function lewatSnapvideotools({ url } = {}, ctx = {}) {
   return await DouyinDL(bersih, { signal: ctx?.signal });
 }
 
-async function lewatAzbry({ url } = {}, ctx = {}) {
+async function lewatNexray({ url } = {}, ctx = {}) {
   const signal = ctx?.signal;
   if (typeof url !== "string" || url.trim() === "") {
     throw new Error("douyin butuh { url }: link video dari douyin.com atau v.douyin.com");
   }
-  // `AGGREGATORS.azbry.base` hanya berisi host dan `aggregator.hit` menempelkan
-  // path apa adanya, jadi `/api` harus ditulis eksplisit: tanpa itu host
-  // menjawab 404 dan fallback ini justru jadi sumber utama kegagalan.
-  const body = await aggregator.hit("azbry", "/api/downloader/douyin", {
+  const body = await aggregator.hit("nexrayWeb", "/api/downloader/douyin", {
     params: { url: url.trim() },
     signal,
   });
-  // `status` azbry ada SATU level di atas `result`, jadi memeriksa `body.status`
-  // di sini adalah satu-satunya tempat yang bisa membacanya sebelum amplopnya
-  // hilang. Plugin sebelum Phase 1 persis meminta `res.data?.status &&
-  // res.data?.result` (plugins/download/douyindl.js) dan mengulang tiga kali
-  // kalau salah satu tidak terpenuhi; kalau amplop dibuang diam-diam, respons
-  // 200 dengan `status: false` tapi `result` yang penuh akan lolos sebagai
-  // scraping yang sukses.
-  //
-  // Perhatikan arahnya: ini KEBALIKAN dari `lewatNeoxr` di src/capabilities/videy.js
-  // yang sengaja mengembalikan body utuh. Bentuk dua host memang berbeda —
-  // azbry menaruh `result` di dalam, videy menaruh `url` di dalam `data` dengan
-  // `status` di luar. Yang dijaga di sini dan di sana sama: `status` tidak boleh
-  // hilang tanpa satu backend sudah menjadikannya kegagalan lebih dulu.
   if (body?.status !== true) {
     throw new Error(
       `douyin: aggregator menandai gagal — ${String(body?.msg ?? body?.error ?? "tanpa alasan")}`,
     );
   }
-  return body?.result;
+  const media = Array.isArray(body?.result?.media) ? body.result.media : [];
+  return {
+    title: body?.result?.title ?? "",
+    platform: body?.result?.platform ?? "",
+    video: media.find((m) => m?.type === "video")?.url ?? "",
+    audio: media.find((m) => m?.type === "audio")?.url ?? "",
+  };
 }
 
 const punyaUrl = (args) => typeof args?.url === "string" && args.url.trim() !== "";
@@ -85,7 +75,7 @@ const punyaUrl = (args) => typeof args?.url === "string" && args.url.trim() !== 
 //
 // Bentuk lokal (`DouyinDL` di src/scraper/douyin.js) sudah menandai dirinya di
 // `status`, dan `platform` berisi `platformName` dari host. Bentuk aggregator
-// tidak membawa `status` ke sini: `lewatAzbry` memeriksa `body.status` dulu dan
+// tidak membawa `status` ke sini: `lewatNexray` memeriksa `body.status` dulu dan
 // melempar kalau bukan `true`, jadi yang diteruskan ke sini cuma `result`.
 // Karena itu pemeriksaan `raw.status === false` di bawah hanya berlaku untuk
 // bentuk lokal dan harus ditulis eksplisit — `!raw.status` akan salah memblokir
@@ -138,9 +128,9 @@ export const backends = [
     run: lewatSnapvideotools,
   },
   {
-    name: "azbry",
+    name: "nexray",
     kind: "api",
     applies: (args) => punyaUrl(args) && urlDouyin(args.url),
-    run: lewatAzbry,
+    run: lewatNexray,
   },
 ];

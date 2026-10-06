@@ -27,6 +27,7 @@ const AGGREGATORS = {
   cuki: { base: "https://api.cuki.biz.id", key: "cuki", keyIn: "query" },
   siputzx: { base: "https://api.siputzx.my.id", key: null },
   azbry: { base: "https://api.azbry.com", key: null },
+  nexrayWeb: { base: "https://api.nexray.web.id", key: null },
 };
 
 // Lebih pendek dari timeout instance httpAxios (15 detik di src/lib/http.js)

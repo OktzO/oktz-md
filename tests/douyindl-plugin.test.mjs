@@ -184,7 +184,7 @@ test("scraper lokal gagal → aggregator neoxr membakar penuh dan file tetap ter
   snapSukses({ video: false, audio: false });
   balasAggregator = async () => ({
     status: 200,
-    data: { status: true, result: { platform: "Douyin", title: "Dari aggregator", video: VIDEO, audio: AUDIO } },
+    data: { status: true, result: { platform: "Douyin", title: "Dari aggregator", media: [{ type: "video", url: VIDEO }, { type: "audio", url: AUDIO }] } },
   });
   const { m } = pesanPengguna("https://v.douyin.com/abc123/");
   const sock = sockPalsu();
@@ -192,7 +192,7 @@ test("scraper lokal gagal → aggregator neoxr membakar penuh dan file tetap ter
   await douyindl.handler(m, { sock });
 
   assert.ok(
-    PANGGILAN.some((c) => String(c.url).includes("azbry.com")),
+    PANGGILAN.some((c) => String(c.url).includes("api.nexray.web.id")),
     "aggregator harus dihubungi setelah scraper lokal tidak memberi video",
   );
   assert.equal(sock.terkirim[0].media, VIDEO);
@@ -223,7 +223,7 @@ test("aggregator status false tapi result-nya penuh → tidak ada video yang dik
     data: {
       status: false,
       msg: "gagal",
-      result: { platform: "Douyin", title: "Dari aggregator", video: VIDEO, audio: AUDIO },
+      result: { platform: "Douyin", title: "Dari aggregator", media: [{ type: "video", url: VIDEO }, { type: "audio", url: AUDIO }] },
     },
   });
   const { balasan, reaksi, m } = pesanPengguna("https://v.douyin.com/abc123/");

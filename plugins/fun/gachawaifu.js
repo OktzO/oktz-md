@@ -25,10 +25,10 @@ const pluginConfig = {
 async function getWaifuImage(keyword) {
   try {
     // cuki.biz.id mati (401) — pindah ke azbry (konsisten pin.js/pindl.js)
-    const res = await axios.get(`https://api.azbry.com/api/search/pinterest?q=${encodeURIComponent(keyword)}`, { timeout: 15000 });
+    const res = await axios.get(`https://api.nexray.web.id/api/search/pinterest?q=${encodeURIComponent(keyword)}`, { timeout: 15000 });
     const results = res.data?.result;
     if (Array.isArray(results) && results.length > 0) {
-      const validImages = results.map((item) => item?.image).filter(Boolean);
+      const validImages = results.map((item) => (item?.image || item?.images_url)).filter(Boolean);
       if (validImages.length > 0) {
         const limit = Math.min(15, validImages.length);
         return validImages[Math.floor(Math.random() * limit)];

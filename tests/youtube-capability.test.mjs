@@ -503,7 +503,7 @@ test("format: default mp3, mp4 diteruskan apa adanya", async () => {
 
 test("format: azbry hanya mp3, dan hanya `applies` yang menjaganya", () => {
   const izuka = kapyoutube.backends.find((b) => b.name === "izuka");
-  const azbry = kapyoutube.backends.find((b) => b.name === "azbry");
+  const azbry = kapyoutube.backends.find((b) => b.name === "nexray");
 
   assert.equal(azbry.applies({ url: KANONIK, format: "mp3" }), true);
   assert.equal(azbry.applies({ url: KANONIK }), true, "tanpa format berarti mp3");
@@ -668,7 +668,7 @@ test("semua backend gagal → CapabilityError, tidak ada URL basi yang dikembali
       assert.ok(error instanceof CapabilityError);
       assert.deepEqual(
         error.tried.map((t) => t.name),
-        ["ytdl-native", "izuka", "azbry"],
+        ["ytdl-native", "izuka", "nexray"],
       );
       return true;
     },
@@ -706,7 +706,7 @@ test("hasil resolve tidak pernah masuk cache", async () => {
 
 test("aggregator: bentuk endpoint yang meleset adalah kegagalan, bukan format yang berbohong", async () => {
   const izuka = kapyoutube.backends.find((b) => b.name === "izuka");
-  const azbry = kapyoutube.backends.find((b) => b.name === "azbry");
+  const azbry = kapyoutube.backends.find((b) => b.name === "nexray");
 
   // Permintaan mp3 dijawab bentuk mp4. `normalize` tidak tahu format yang dipesan,
   // jadi tanpa pemeriksaan di backend hasilnya `format: "mp3"` yang berisi URL
@@ -749,7 +749,7 @@ test("status false yang tetap membawa URL → resolver gagal, tidak ada hasil sa
       assert.ok(error instanceof CapabilityError);
       assert.deepEqual(
         error.tried.map((t) => t.name),
-        ["ytdl-native", "izuka", "azbry"],
+        ["ytdl-native", "izuka", "nexray"],
       );
       assert.ok(
         error.tried.every((t) => !/Lagu Uji|\.mp3$/.test(t.reason)),

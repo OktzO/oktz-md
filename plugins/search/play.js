@@ -32,10 +32,10 @@ async function handler(m, { sock, _ }) {
     if (!search.videos.length) throw new Error("Video tidak ditemukan");
     const video = search.videos[0];
 
-    const res = await axios.get(`https://api.azbry.com/api/download/ytmp3?url=${encodeURIComponent(video.url)}`, { timeout: 60000 });
+    const res = await axios.get(`https://api.nexray.web.id/api/downloader/ytmp3?url=${encodeURIComponent(video.url)}`, { timeout: 60000 });
     const data = res.data;
     
-    if (!data.status || !data.result || !data.result.download) {
+    if (!data.status || !data.result || !data.result.url) {
        throw new Error("Gagal mengambil audio dari API");
     }
 
@@ -69,7 +69,7 @@ async function handler(m, { sock, _ }) {
       },
     );
 
-    const audioRes = await axios.get(data.result.download, { responseType: "arraybuffer", timeout: 60000 });
+    const audioRes = await axios.get(data.result.url, { responseType: "arraybuffer", timeout: 60000 });
     const audioBuffer = Buffer.from(audioRes.data);
 
     await sock.sendMessage(

@@ -44,30 +44,37 @@ async function lewatIlovepin(args = {}, ctx = {}) {
   return await scrapePinterest(bersih, { signal: ctx?.signal });
 }
 
-async function lewatAzbry(args = {}, ctx = {}) {
+async function lewatNexray(args = {}, ctx = {}) {
   const signal = ctx?.signal;
-  // Prefix `/api` bukan detail gaya: `AGGREGATORS.azbry.base` hanya berisi host
-  // dan `aggregator.hit` menempelkan path apa adanya. Tujuh panggilan langsung
-  // dan lima metode AzbryApiProvider di repo ini semuanya memakai `/api` lebih
-  // dulu; tanpa itu host menjawab 404. (Nexray justru tidak perlu prefix.)
-  //
-  // Amplop dikembalikan UTUH, bukan `body.result`: `status` azbry ada satu level
-  // di atas `result`, dan plugin sebelum Phase 1 (plugins/download/pindl.js)
-  // mensyaratkan `res.data?.status && res.data?.result`. Melempar amplop di
-  // backend membuat bukti itu hilang sebelum `normalize` sempat membacanya —
-  // respons 200 dengan `status: false` tapi `result` yang penuh akan lolos
-  // sebagai pin yang siap dikirim.
   if (typeof args.url === "string" && args.url.trim() !== "") {
-    return await aggregator.hit("azbry", "/api/download/pinterest", {
+    const body = await aggregator.hit("nexrayWeb", "/api/downloader/pinterest", {
       params: { url: args.url.trim() },
       signal,
     });
+    if (body?.status !== true) {
+      return body && typeof body === "object" ? body : { status: false, msg: "tanpa alasan" };
+    }
+    const d = body?.result;
+    if (Array.isArray(d) || (d && (d.images || d.videos || d.type))) {
+      return { status: true, result: d };
+    }
+    if (d && d.video) {
+      return { status: true, result: { type: "video", videos: [{ url: d.video }] } };
+    }
+    if (d && (d.image || d.thumbnail)) {
+      return { status: true, result: { type: "image", images: [{ name: "orig", url: d.image || d.thumbnail }] } };
+    }
+    return { status: true, result: d ?? null };
   }
   if (typeof args.q === "string" && args.q.trim() !== "") {
-    return await aggregator.hit("azbry", "/api/search/pinterest", {
+    const body = await aggregator.hit("nexrayWeb", "/api/search/pinterest", {
       params: { q: args.q.trim() },
       signal,
     });
+    if (body?.status !== true) {
+      return body && typeof body === "object" ? body : { status: false, msg: "tanpa alasan" };
+    }
+    return { status: true, result: Array.isArray(body?.result) ? body.result : [] };
   }
   throw new Error("pinterest butuh { url } atau { q }, tidak keduanya");
 }
@@ -198,12 +205,9 @@ export const backends = [
     run: lewatIlovepin,
   },
   {
-    name: "azbry",
+    name: "nexray",
     kind: "api",
-    // Link yang gagal guard lokal juga ditolak di sini: meneruskannya ke
-    // aggregator hanya mengubah penolakan input menjadi satu request yang pasti
-    // ditolak dan satu kegagalan host tambahan di breaker.
     applies: (args) => (punyaUrl(args) && urlPin(args.url)) || punyaQuery(args),
-    run: lewatAzbry,
+    run: lewatNexray,
   },
 ];

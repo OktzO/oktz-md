@@ -276,20 +276,16 @@ async function lewatIzuka(args = {}, ctx = {}) {
   return pastikanBentuk(body.result, format, format === "mp4" ? "video_normal" : "download_url");
 }
 
-async function lewatAzbry(args = {}, ctx = {}) {
+async function lewatNexray(args = {}, ctx = {}) {
   const kanonik = target(args);
-  const body = await aggregator.hit("azbry", "/api/download/ytmp3", {
+  const body = await aggregator.hit("nexrayWeb", "/api/downloader/ytmp3", {
     params: { url: kanonik },
     signal: ctx?.signal,
   });
-  // Bentuk `!== true` di sini lebih ketat dari `play`/`playch` lama yang hanya
-  // menuntut `status` tidak kosong, dan tidak ada satu pun respons azbry yang
-  // tersimpan di repo ini untuk membuktikannya — jadi ini belum diuji terhadap
-  // hostnya, hanya disamakan dengan izuka yang sudah diprobe.
   if (body?.status !== true) {
-    throw new Error(`youtube: aggregator azbry menandai gagal — ${String(body?.msg ?? body?.error ?? "tanpa alasan")}`);
+    throw new Error(`youtube: aggregator nexray menandai gagal — ${String(body?.error ?? "tanpa alasan")}`);
   }
-  return pastikanBentuk(body.result, "mp3", "download");
+  return pastikanBentuk({ ...body.result, download: body.result?.url }, "mp3", "download");
 }
 
 // ── normalisasi ───────────────────────────────────────────────────────────────
@@ -416,9 +412,9 @@ export const backends = [
     run: lewatIzuka,
   },
   {
-    name: "azbry",
+    name: "nexray",
     kind: "api",
     applies: (args) => idVideo(args?.url) !== null && formatDiminta(args) === "mp3",
-    run: lewatAzbry,
+    run: lewatNexray,
   },
 ];

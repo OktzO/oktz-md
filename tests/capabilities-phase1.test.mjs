@@ -33,7 +33,7 @@ const httpPalsu = {
     PANGGILAN_HTTP.push({ verb: "get", url, opts });
     // GET hanya lewat `aggregator.hit`, jadi sama-sama harus bisa dikendalikan
     // test. `status` wajib ikut: aggregator menolak respons tanpa status 2xx.
-    if (url.includes("nexray.eu.cc")) return hasilAggregator(url, opts);
+    if (url.includes("nexray.eu.cc") || url.includes("api.nexray.web.id")) return hasilAggregator(url, opts);
     throw new Error("GET ke sumber daya luar tidak diizinkan di test ini");
   },
   async post(url, body, config) {
@@ -573,7 +573,7 @@ const PLUGIN_SPOTIFY = [
 ];
 
 test("tiga plugin tidak menyebut domain agregator lagi", () => {
-  const pola = /nexray|neoxr|izuka|cuki|siputzx|azbry/i;
+  const pola = /nexray|neoxr|izuka|cuki|siputzx|nexray/i;
   const ketemu = [];
   for (const file of PLUGIN_SPOTIFY) {
     fs.readFileSync(path.join(process.cwd(), file), "utf8")
@@ -715,9 +715,9 @@ httpPalsu.get = async (url, opts) => {
     PANGGILAN_HTTP.push({ verb: "get", url, opts });
     return balasIlovepin(url, opts);
   }
-  // azbry masuk lewat `aggregator.hit` → GET juga, tapi harness blok spotify
+  // nexray masuk lewat `aggregator.hit` → GET juga, tapi harness blok spotify
   // hanya mengarahkan GET ke nexray.
-  if (String(url).includes("azbry.com")) {
+  if (String(url).includes("nexray.com")) {
     PANGGILAN_HTTP.push({ verb: "get", url, opts });
     return hasilAggregator(url, opts);
   }
@@ -957,7 +957,7 @@ test("guard: aggregator tidak dihubungi untuk link yang gagal guard", async () =
   await assert.rejects(() => resolver.resolve("pinterest", { url: "https://example.com/bukan-pinterest" }));
 
   assert.deepEqual(
-    PANGGILAN_HTTP.filter((c) => String(c.url).includes("azbry.com")),
+    PANGGILAN_HTTP.filter((c) => String(c.url).includes("nexray.com")),
     [],
     "aggregator tidak boleh dihubungi untuk link yang gagal guard",
   );
@@ -1027,7 +1027,7 @@ test("minimal satu backend local dan satu api sebagai cadangan", () => {
   assert.ok(lokal.length >= 1, `backend local minimal satu, dapat ${lokal.length}`);
   assert.ok(api.length >= 1, "harus ada cadangan aggregator, scraper lokal bisa mati");
   assert.equal(lokal[0].name, "ilovepin");
-  assert.equal(api[0].name, "azbry");
+  assert.equal(api[0].name, "nexray");
   assert.equal(new Set(kappinterest.backends.map((b) => b.name)).size, kappinterest.backends.length);
 });
 
@@ -1061,8 +1061,8 @@ test("unduhan: scraper lokal dulu, aggregator tidak boleh diakses lebih awal", a
     return { data: { api: { status: "OK", mediaItems: [VIDEO_ILOVEPIN, VIDEO_ILOVEPIN_KECIL] } } };
   };
   hasilAggregator = async () => {
-    dipanggil.push("azbry");
-    return { status: 200, data: { status: true, result: { type: "image", images: [{ name: "orig", url: "https://x/o.jpg" }] } } };
+    dipanggil.push("nexray");
+    return { status: 200, data: { status: true, result: { image: "https://x/o.jpg" } } };
   };
 
   const keluar = await resolverPin().resolve("pinterest", { url: "https://pin.it/abc" });
@@ -1082,11 +1082,11 @@ test("unduhan: scraper lokal gagal → aggregator jadi cadangan", async () => {
   };
   hasilAggregator = async () => ({
     status: 200,
-    data: { status: true, result: { type: "image", images: [{ name: "small", url: "https://x/s.jpg" }, { name: "orig", url: "https://x/o.jpg" }] } },
+    data: { status: true, result: { image: "https://x/o.jpg" } },
   });
 
   const keluar = await resolverPin().resolve("pinterest", { url: "https://pin.it/abc" });
-  assert.equal(keluar.source, "azbry");
+  assert.equal(keluar.source, "nexray");
   assert.deepEqual(keluar.data.media, [{ type: "image", url: "https://x/o.jpg" }]);
 });
 
@@ -1102,7 +1102,7 @@ test("unduhan: pin yang dihapus dari aggregator → CapabilityError, bukan media
     () => resolverPin().resolve("pinterest", { url: "https://pin.it/abc" }),
     (error) => {
       assert.ok(error instanceof CapabilityError);
-      assert.deepEqual(error.tried.map((t) => t.name), ["ilovepin", "azbry"]);
+      assert.deepEqual(error.tried.map((t) => t.name), ["ilovepin", "nexray"]);
       return true;
     },
   );
@@ -1122,7 +1122,7 @@ test("pencarian: { q } tidak pernah menyentuh scraper lokal", async () => {
 
   const keluar = await resolverPin().resolve("pinterest", { q: "cewe cantik indonesia" });
 
-  assert.equal(keluar.source, "azbry");
+  assert.equal(keluar.source, "nexray");
   assert.equal(keluar.data.pins.length, 2);
   assert.equal(keluar.data.pins[0].image, "https://i.pinimg.com/originals/a.jpg");
   assert.equal(keluar.data.pins[1].image, "https://i.pinimg.com/originals/b.jpg");
@@ -1136,19 +1136,19 @@ test("pencarian: { q } tidak pernah menyentuh scraper lokal", async () => {
 test("pencarian: aggregator hidup tapi nihil → pins kosong, plugin bisa bilang tidak ditemukan", async () => {
   hasilAggregator = async () => ({ status: 200, data: { status: true, result: [] } });
   const keluar = await resolverPin().resolve("pinterest", { q: "tidak ada ini" });
-  assert.equal(keluar.source, "azbry");
+  assert.equal(keluar.source, "nexray");
   assert.deepEqual(keluar.data, { pins: [] });
 });
 
 test("pencarian: aggregator mati → CapabilityError tanpa mencoba scraper lokal", async () => {
   hasilAggregator = async () => {
-    throw new Error("getaddrinfo ENOTFOUND api.azbry.com");
+    throw new Error("getaddrinfo ENOTFOUND api.nexray.web.id");
   };
   await assert.rejects(
     () => resolverPin().resolve("pinterest", { q: "cewe" }),
     (error) => {
       assert.ok(error instanceof CapabilityError);
-      assert.deepEqual(error.tried.map((t) => t.name), ["azbry"]);
+      assert.deepEqual(error.tried.map((t) => t.name), ["nexray"]);
       return true;
     },
   );
@@ -1159,7 +1159,7 @@ test("tiga pencarian tidak boleh menyusun breaker scraper lokal", async () => {
   // boleh menghitung kegagalan: kalau tidak, tiga ketikan `.pap` sudah cukup
   // untuk mengeluarkan scraper yang sehat dari rotasi selama 30 detik.
   hasilAggregator = async () => {
-    throw new Error("azbry mati");
+    throw new Error("nexray mati");
   };
   const resolver = resolverPin();
   for (const q of ["satu", "dua", "tiga"]) await resolver.resolve("pinterest", { q }).catch(() => {});
@@ -1170,12 +1170,12 @@ test("tiga pencarian tidak boleh menyusun breaker scraper lokal", async () => {
     [],
     "scraper lokal tidak boleh punya slot breaker setelah tiga pencarian",
   );
-  assert.equal(state.find((s) => s.name === "azbry")?.failures, 3);
+  assert.equal(state.find((s) => s.name === "nexray")?.failures, 3);
 });
 
 test("setelah tiga pencarian, unduhan tetap memakai scraper lokal", async () => {
   hasilAggregator = async () => {
-    throw new Error("azbry mati");
+    throw new Error("nexray mati");
   };
   const resolver = resolverPin();
   for (const q of ["satu", "dua", "tiga"]) await resolver.resolve("pinterest", { q }).catch(() => {});
@@ -1252,7 +1252,7 @@ const PLUGIN_PINTEREST = [
 ];
 
 test("tiga plugin tidak menyebut domain agregator lagi", () => {
-  const pola = /nexray|neoxr|izuka|cuki|siputzx|azbry/i;
+  const pola = /nexray|neoxr|izuka|cuki|siputzx|nexray/i;
   const ketemu = [];
   for (const file of PLUGIN_PINTEREST) {
     fs.readFileSync(path.join(process.cwd(), file), "utf8")
@@ -1313,10 +1313,10 @@ test("pin: album tetap dibangun dari buffer, bukan dari URL mentah", () => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 
-// ── Critical: prefix /api pada host azbry ────────────────────────────────────
+// ── Critical: prefix /api pada host nexray ────────────────────────────────────
 
-test("azbry: pathname harus persis /api/download/pinterest dan /api/search/pinterest", async () => {
-  // `AGGREGATORS.azbry.base` di src/lib/aggregator.js hanya berisi host, dan
+test("nexray: pathname harus persis /api/downloader/pinterest dan /api/search/pinterest", async () => {
+  // `AGGREGATORS.nexray.base` di src/lib/aggregator.js hanya berisi host, dan
   // `aggregator.hit` menempelkan path apa adanya. Tujuh panggilan langsung dan
   // enam metode AzbryApiProvider di repo ini semuanya memakai /api lebih dulu,
   // jadi path yang lupa /api akan dijawab 404 — fallback yang justru jadi
@@ -1328,14 +1328,14 @@ test("azbry: pathname harus persis /api/download/pinterest dan /api/search/pinte
   await pinApi.run({ q: "cewe cantik indonesia" });
 
   const [unduh, cari] = PANGGILAN_HTTP.map((c) => new URL(c.url));
-  assert.equal(unduh.origin, "https://api.azbry.com");
-  assert.equal(unduh.pathname, "/api/download/pinterest");
+  assert.equal(unduh.origin, "https://api.nexray.web.id");
+  assert.equal(unduh.pathname, "/api/downloader/pinterest");
   assert.equal(unduh.searchParams.get("url"), "https://pin.it/abc");
   assert.equal(cari.pathname, "/api/search/pinterest");
   assert.equal(cari.searchParams.get("q"), "cewe cantik indonesia");
 });
 
-test("azbry: setiap literal path aggregator di kapabilitas ini berawalan /api", () => {
+test("nexray: setiap literal path aggregator di kapabilitas ini berawalan /api", () => {
   // Cakupan test ini sengaja sempit dan disebutkan apa adanya: dia memeriksa
   // literal yang ditulis di dalam berkas kapabilitas ini, bukan aturan per host.
   // Yang menegakkan aturan per host adalah test pathname di atas, karena ia
@@ -1429,7 +1429,7 @@ function snapSukses(mediaUrls = [
   });
 }
 
-/** Bentuk yang benar-benar dikirim azbry /downloader/douyin. */
+/** Bentuk yang benar-benar dikirim nexray /downloader/douyin. */
 const AZBRY = {
   status: 200,
   data: {
@@ -1437,8 +1437,7 @@ const AZBRY = {
     result: {
       platform: "Douyin",
       title: "Judul Douyin",
-      video: SNAP_VIDEO,
-      audio: SNAP_AUDIO,
+      media: [{ type: "video", url: SNAP_VIDEO }, { type: "audio", url: SNAP_AUDIO }],
     },
   },
 };
@@ -1588,7 +1587,7 @@ test("guard: aggregator tidak dihubungi untuk link yang gagal guard", async () =
   const resolver = resolverDouyin();
   await assert.rejects(() => resolver.resolve("douyin", { url: "https://douyin.com.evil.example/v/1" }));
   assert.deepEqual(
-    PANGGILAN_HTTP.filter((c) => String(c.url).includes("azbry.com")),
+    PANGGILAN_HTTP.filter((c) => String(c.url).includes("nexray.com")),
     [],
     "aggregator tidak boleh dihubungi untuk link yang gagal guard",
   );
@@ -1624,7 +1623,7 @@ test("minimal satu backend local dan satu api sebagai cadangan", () => {
   const api = kapdouyin.backends.filter((b) => b.kind !== "local");
   assert.equal(lokal.length, 1, `backend local minimal satu, dapat ${lokal.length}`);
   assert.equal(api.length, 1, "harus ada cadangan aggregator, snapvideotools bisa mati");
-  assert.equal(api[0].name, "azbry");
+  assert.equal(api[0].name, "nexray");
   assert.deepEqual(
     kapdouyin.backends.map((b) => b.name).sort(),
     [...new Set(kapdouyin.backends.map((b) => b.name))].sort(),
@@ -1649,7 +1648,7 @@ test("unduhan: scraper lokal dulu, aggregator tidak boleh diakses lebih awal", a
     return { data: { data: { title: "Judul", platformName: "Douyin", mediaUrls: [{ type: "video", url: SNAP_VIDEO }] } } };
   };
   hasilAggregator = async () => {
-    dipanggil.push("azbry");
+    dipanggil.push("nexray");
     return AZBRY;
   };
 
@@ -1666,7 +1665,7 @@ test("unduhan: scraper lokal gagal → aggregator jadi cadangan", async () => {
 
   const keluar = await resolverDouyin().resolve("douyin", { url: "https://v.douyin.com/abc/" });
 
-  assert.equal(keluar.source, "azbry");
+  assert.equal(keluar.source, "nexray");
   assert.equal(keluar.data.video, SNAP_VIDEO);
 });
 
@@ -1678,15 +1677,15 @@ test("unduhan: aggregator hidup tapi nihil → CapabilityError, bukan URL basi",
     () => resolverDouyin().resolve("douyin", { url: "https://v.douyin.com/abc/" }),
     (error) => {
       assert.ok(error instanceof CapabilityError);
-      assert.deepEqual(error.tried.map((t) => t.name), ["snapvideotools", "azbry"]);
+      assert.deepEqual(error.tried.map((t) => t.name), ["snapvideotools", "nexray"]);
       return true;
     },
   );
 });
 
-// ── amplop `status` azbry tidak boleh hilang ─────────────────────────────────
+// ── amplop `status` nexray tidak boleh hilang ─────────────────────────────────
 //
-// `lewatAzbry` pernah mengembalikan `body.result` apa adanya. `status` azbry ada
+// `lewatAzbry` pernah mengembalikan `body.result` apa adanya. `status` nexray ada
 // satu level di atas `result`, jadi begitu amplop itu dibuang, tidak ada lagi
 // yang bisa membacanya: `normalize` hanya punya `result`, dan `result` tidak
 // pernah punya `status`. Plugin sebelum Phase 1 mensyaratkan
@@ -1699,7 +1698,7 @@ test("backend aggregator wajib menolak status false, meski result-nya penuh", as
   const body = {
     status: false,
     msg: "gagal",
-    result: { platform: "Douyin", title: "Judul Douyin", video: SNAP_VIDEO, audio: SNAP_AUDIO },
+    result: { platform: "Douyin", title: "Judul Douyin", media: [{ type: "video", url: SNAP_VIDEO }, { type: "audio", url: SNAP_AUDIO }] },
   };
   hasilAggregator = async () => ({ status: 200, data: body });
 
@@ -1735,7 +1734,7 @@ test("status false yang tetap membawa video → tidak ada yang dikirim ke user",
     data: {
       status: false,
       msg: "gagal",
-      result: { platform: "Douyin", title: "Judul Douyin", video: SNAP_VIDEO, audio: SNAP_AUDIO },
+      result: { platform: "Douyin", title: "Judul Douyin", media: [{ type: "video", url: SNAP_VIDEO }, { type: "audio", url: SNAP_AUDIO }] },
     },
   });
 
@@ -1743,7 +1742,7 @@ test("status false yang tetap membawa video → tidak ada yang dikirim ke user",
     () => resolverDouyin().resolve("douyin", { url: "https://v.douyin.com/abc/" }),
     (error) => {
       assert.ok(error instanceof CapabilityError);
-      assert.deepEqual(error.tried.map((t) => t.name), ["snapvideotools", "azbry"]);
+      assert.deepEqual(error.tried.map((t) => t.name), ["snapvideotools", "nexray"]);
       return true;
     },
   );
@@ -1764,7 +1763,7 @@ test("argumen kosong → no-applicable-backend, breaker bersih", async () => {
 
 // ── aggregator: URL harus dikunci persis ──────────────────────────────────────
 
-test("azbry: pathname harus persis /api/downloader/douyin dan param url", async () => {
+test("nexray: pathname harus persis /api/downloader/douyin dan param url", async () => {
   // Routing berbasis substring tidak bisa membedakan path benar dari path
   // salah, dan path yang lupa `/api` dijawab 404 — fallback yang justru jadi
   // alasan kapabilitas ini ada.
@@ -1773,19 +1772,19 @@ test("azbry: pathname harus persis /api/downloader/douyin dan param url", async 
   await douyinApi.run({ url: "https://v.douyin.com/abc/" });
 
   const [req] = PANGGILAN_HTTP.map((c) => new URL(c.url));
-  assert.equal(req.origin, "https://api.azbry.com");
+  assert.equal(req.origin, "https://api.nexray.web.id");
   assert.equal(req.pathname, "/api/downloader/douyin");
   assert.equal(req.searchParams.get("url"), "https://v.douyin.com/abc/");
-  // Berbeda dengan neoxr: azbry tidak punya key sama sekali (`AGGREGATORS.azbry.key`
+  // Berbeda dengan neoxr: nexray tidak punya key sama sekali (`AGGREGATORS.nexray.key`
   // = null), jadi memang tidak ada apikey yang boleh ikut terkirim. Ini sebabnya
   // assertion ini tetap sah meski bentuknya sama persis dengan assertion neoxr
-  // yang lama. Bedanya: azbry memang tidak punya key.
+  // yang lama. Bedanya: nexray memang tidak punya key.
   assert.equal(req.searchParams.has("apikey"), false);
   assert.deepEqual([...req.searchParams.keys()], ["url"], "param lain tidak boleh ikut terkirim");
   assert.ok(!("apikey" in (PANGGILAN_HTTP[0].opts?.headers ?? {})));
 });
 
-test("azbry: setiap literal path aggregator di kapabilitas ini berawalan /api", () => {
+test("nexray: setiap literal path aggregator di kapabilitas ini berawalan /api", () => {
   const kode = fs
     .readFileSync(path.join(process.cwd(), "src/capabilities/douyin.js"), "utf8")
     .split("\n")
@@ -1843,7 +1842,7 @@ test("signal diteruskan ke request aggregator", async () => {
 const PLUGIN_DOUYIN = ["plugins/download/douyindl.js"];
 
 test("plugin douyin tidak menyebut domain agregator lagi", () => {
-  const pola = /nexray|neoxr|izuka|cuki|siputzx|azbry/i;
+  const pola = /nexray|neoxr|izuka|cuki|siputzx|nexray/i;
   const ketemu = [];
   for (const file of PLUGIN_DOUYIN) {
     fs.readFileSync(path.join(process.cwd(), file), "utf8")
@@ -2186,7 +2185,7 @@ test("argumen kosong → no-applicable-backend, breaker bersih", async () => {
 // ── aggregator: URL harus dikunci persis ──────────────────────────────────────
 
 test("neoxr: pathname harus persis /api/sfile dan param url", async () => {
-  // Konvensi per host di repo ini: neoxr, izuka, cuki, siputzx, dan azbry
+  // Konvensi per host di repo ini: neoxr, izuka, cuki, siputzx, dan nexray
   // semuanya memakai prefix `/api`; hanya nexray yang tidak.
   hasilAggregator = neoxrSfile({ url: SFILE_UNDUHAN, filename: "a.apk" });
 
@@ -2271,7 +2270,7 @@ test("signal diteruskan ke request aggregator", async () => {
 // ── plugin sudah tidak bicara langsung ke agregator ──────────────────────────
 
 test("plugin sfiledl tidak menyebut domain agregator lagi", () => {
-  const pola = /nexray|neoxr|izuka|cuki|siputzx|azbry/i;
+  const pola = /nexray|neoxr|izuka|cuki|siputzx|nexray/i;
   const ketemu = [];
   fs.readFileSync(path.join(process.cwd(), "plugins/download/sfiledl.js"), "utf8")
     .split("\n")
@@ -2720,7 +2719,7 @@ test("argumen kosong → no-applicable-backend, breaker bersih", async () => {
 // ── aggregator: URL harus dikunci persis ──────────────────────────────────────
 
 test("neoxr: pathname harus persis /api/videy dan param url", async () => {
-  // Konvensi per host di repo ini: neoxr, izuka, cuki, siputzx, dan azbry
+  // Konvensi per host di repo ini: neoxr, izuka, cuki, siputzx, dan nexray
   // semuanya memakai prefix `/api`; hanya nexray yang tidak.
   hasilAggregator = neoxrVidey({ status: true, data: { url: VIDEO_VIDEY } });
 
@@ -2820,7 +2819,7 @@ test("budget habis di tier lokal → probe CDN benar-benar dibatalkan", async ()
 // ── plugin sudah tidak bicara langsung ke agregator ──────────────────────────
 
 test("plugin videy tidak menyebut domain agregator lagi", () => {
-  const pola = /nexray|neoxr|izuka|cuki|siputzx|azbry/i;
+  const pola = /nexray|neoxr|izuka|cuki|siputzx|nexray/i;
   const ketemu = [];
   fs.readFileSync(path.join(process.cwd(), "plugins/download/videy.js"), "utf8")
     .split("\n")
@@ -2905,7 +2904,7 @@ httpPalsu.get = async (url, opts) => {
   const host = new URL(String(url)).hostname;
   // Host yang dipakai kapabilitas ini. Dicocokkan ke host, bukan ke substring:
   // URL aggregator memuat "youtube.com/watch?v=…" di query string-nya.
-  if (host === "my.izuka-api.xyz" || host === "api.azbry.com") {
+  if (host === "my.izuka-api.xyz" || host === "api.nexray.web.id") {
     PANGGILAN_HTTP.push({ verb: "get", url, opts });
     return hasilAggregator(url, opts);
   }
@@ -2930,7 +2929,7 @@ test("kapabilitas youtube: nama per-host, unik, dan ada dua tier", () => {
   const lokal = kapyoutube.backends.filter((b) => b.kind === "local");
   const api = kapyoutube.backends.filter((b) => b.kind !== "local");
   assert.deepEqual(lokal.map((b) => b.name).sort(), ["youtube-fallback", "ytdl-native"]);
-  assert.deepEqual(api.map((b) => b.name).sort(), ["azbry", "izuka"]);
+  assert.deepEqual(api.map((b) => b.name).sort(), ["izuka", "nexray"].sort());
   assert.equal(
     new Set(kapyoutube.backends.map((b) => b.name)).size,
     kapyoutube.backends.length,
@@ -2950,11 +2949,11 @@ test("kapabilitas youtube: nama per-host, unik, dan ada dua tier", () => {
 // `plugins/download/ytmp3.js:23` dan `plugins/search/playcall.js:28` memakai
 // `/api/downloader/ytmp3`, `plugins/download/ytmp4.js:19` dan
 // `plugins/search/playvid.js:27` memakai `/api/downloader/ytmp4`, dan
-// `plugins/search/playch.js:99` memakai `/api/download/ytmp3`. Melewatkan `/api`
+// `plugins/search/playch.js:99` memakai `/api/downloader/ytmp3`. Melewatkan `/api`
 // dijawab 404, jadi path-nya di sini dikunci, bukan cuma "aggregator dipanggil".
 
 const backendIzuka = kapyoutube.backends.find((b) => b.name === "izuka");
-const backendAzbry = kapyoutube.backends.find((b) => b.name === "azbry");
+const backendAzbry = kapyoutube.backends.find((b) => b.name === "nexray");
 
 /** Jalankan satu backend aggregator dan kembalikan URL request yang benar-benar keluar. */
 async function reqAggregator(backend, body, args) {
@@ -2969,7 +2968,7 @@ const IZUKA_MP4_BODY = {
   status: true,
   result: { title: "Video", video_normal: [{ ext: "mp4", quality: "720", url: "https://cdn.example/v.mp4" }] },
 };
-const AZBRY_MP3_BODY = { status: true, result: { download: "https://cdn.example/a.mp3", title: "Lagu" } };
+const AZBRY_MP3_BODY = { status: true, result: { url: "https://cdn.example/a.mp3", title: "Lagu" } };
 
 test("izuka mp3: pathname /api/downloader/ytmp3 dan hanya param url", async () => {
   const req = await reqAggregator(backendIzuka, IZUKA_MP3_BODY, { url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", format: "mp3" });
@@ -2989,12 +2988,12 @@ test("izuka mp4: pathname /api/downloader/ytmp4, bukan endpoint mp3", async () =
   assert.deepEqual([...req.searchParams.keys()], ["url"]);
 });
 
-test("azbry mp3: pathname /api/download/ytmp3 (download, bukan downloader)", async () => {
-  // Path azbry berbeda satu kata dari izuka; tertukar di sini berarti mp3 dari
+test("nexray mp3: pathname /api/downloader/ytmp3 (download, bukan downloader)", async () => {
+  // Path nexray berbeda satu kata dari izuka; tertukar di sini berarti mp3 dari
   // channelCfg salah host dan salah bentuk respons.
   const req = await reqAggregator(backendAzbry, AZBRY_MP3_BODY, { url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", format: "mp3" });
-  assert.equal(req.origin, "https://api.azbry.com");
-  assert.equal(req.pathname, "/api/download/ytmp3");
+  assert.equal(req.origin, "https://api.nexray.web.id");
+  assert.equal(req.pathname, "/api/downloader/ytmp3");
   assert.deepEqual([...req.searchParams.keys()], ["url"]);
 });
 
@@ -3029,7 +3028,7 @@ test("semua path aggregator di kapabilitas ini berawalan /api", () => {
 // ── plugin sudah tidak bicara langsung ke agregator ──────────────────────────
 
 test("lima plugin youtube tidak menyebut domain agregator lagi", () => {
-  const pola = /nexray|neoxr|izuka|cuki|siputzx|azbry/i;
+  const pola = /nexray|neoxr|izuka|cuki|siputzx|nexray/i;
   const ketemu = [];
   for (const file of PLUGIN_YOUTUBE) {
     fs.readFileSync(path.join(process.cwd(), file), "utf8")
@@ -4440,7 +4439,7 @@ test("nexray spotify: URL persis /downloader/spotify dan /search/spotify, tanpa 
 });
 
 test("nexray spotify: tidak satu pun literal path aggregator boleh berawalan /api", () => {
-  // Konvensi per host di repo ini: neoxr, izuka, cuki, siputzx, dan azbry
+  // Konvensi per host di repo ini: neoxr, izuka, cuki, siputzx, dan nexray
   // semuanya memakai prefix `/api`; hanya nexray yang tidak. Prefix `/api` di
   // sini membuat seluruh kapabilitas 404 tanpa satu pun test lain berkedip.
   // Cakupan test ini sengaja sempit dan disebutkan apa adanya: dia memindai
@@ -4457,14 +4456,14 @@ test("nexray spotify: tidak satu pun literal path aggregator boleh berawalan /ap
   assert.deepEqual(salah, [], `nexray tidak memakai prefix /api: ${salah.join(", ")}`);
 });
 
-// ── pinterest: amplop azbry ──────────────────────────────────────────────────
+// ── pinterest: amplop nexray ──────────────────────────────────────────────────
 
 const PIN_PALSU = {
   type: "image",
   images: [{ name: "orig", url: "https://cdn.example/palsu.jpg" }],
 };
 
-test("backend azbry wajib mengembalikan amplop, bukan body.result", async () => {
+test("backend nexray wajib mengembalikan amplop, bukan body.result", async () => {
   hasilAggregator = async () => ({ status: 200, data: { status: false, msg: "gagal", result: PIN_PALSU } });
 
   const keluar = await pinApi.run({ url: "https://pin.it/abc" });
@@ -4481,7 +4480,7 @@ test("backend azbry wajib mengembalikan amplop, bukan body.result", async () => 
   );
 });
 
-test("pencarian pinterest: amplop azbry juga harus utuh, bukan body.result", async () => {
+test("pencarian pinterest: amplop nexray juga harus utuh, bukan body.result", async () => {
   hasilAggregator = async () => ({
     status: 200,
     data: {
@@ -4506,13 +4505,13 @@ test("pinterest: status false yang tetap membawa result → CapabilityError, buk
     () => resolver.resolve("pinterest", { url: "https://pin.it/abc" }),
     (error) => {
       assert.ok(error instanceof CapabilityError);
-      assert.deepEqual(error.tried.map((t) => t.name), ["ilovepin", "azbry"]);
+      assert.deepEqual(error.tried.map((t) => t.name), ["ilovepin", "nexray"]);
       assert.match(error.tried.at(-1).reason, /aggregator menandai gagal/);
       return true;
     },
   );
-  const azbry = resolver.breaker.snapshot().find((s) => s.name === "azbry");
-  assert.equal(azbry?.failures, 1, `breaker azbry: ${JSON.stringify(resolver.breaker.snapshot())}`);
+  const nexray = resolver.breaker.snapshot().find((s) => s.name === "nexray");
+  assert.equal(nexray?.failures, 1, `breaker nexray: ${JSON.stringify(resolver.breaker.snapshot())}`);
 });
 
 // ── sfile: amplop neoxr ───────────────────────────────────────────────────────
