@@ -663,8 +663,8 @@ async function isSpamming(jid) {
  */
 async function messageHandler(msg, sock, options = {}) {
   const isJadibot = options.isJadibot || false;
+  let m;
   try {
-    let m;
     try {
       m = await serialize(sock, msg);
     } catch (serializeErr) {
@@ -2008,7 +2008,7 @@ async function groupHandler(update, sock) {
     try {
       const cached = global.groupMetadataCache?.get(groupJid);
       const cachedData = cached ? cached.data || cached : null;
-      if (cachedData && Date.now() - (cached._ts || cached.timestamp || 0) < 30000) {
+      if (cachedData && Date.now() - (cached._ts || cached.timestamp || 0) < 300000) {
         groupMeta = cachedData;
       } else {
         groupMeta = await sock.groupMetadata(groupJid);

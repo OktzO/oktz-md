@@ -635,6 +635,15 @@ async function startJadibot(sock, m, userJid, usePairing = true) {
   childSock.store = childStore;
   await extendSocket(childSock);
 
+  (async () => {
+    try {
+      const groups = await childSock.groupFetchAllParticipating();
+      for (const [jid, meta] of Object.entries(groups || {})) {
+        groupMetadataCache.set(jid, meta);
+      }
+    } catch { }
+  })();
+
   let qrCount = 0;
   let lastQRMsg = null;
   let pairingCode = null;
@@ -944,7 +953,7 @@ async function startJadibot(sock, m, userJid, usePairing = true) {
       if (m && m.chat) {
         let thumbnail = null;
         try {
-          if (!!getAssetBuffer("foto2")) {
+          if (getAssetBuffer("foto2")) {
             thumbnail = getAssetBuffer("foto2");
           }
         } catch { }

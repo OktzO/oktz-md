@@ -637,6 +637,7 @@ async function startConnection(options = {}) {
     useDurableAuthState,
     setRemoteSessionLogger,
     withCorruptKeyRecovery,
+    loadAuthStateWithRecovery,
   } = await import("./lib/turso-session.js");
   setRemoteSessionLogger((m) => colors.logger.warn("turso", m));
 
@@ -1135,6 +1136,23 @@ async function startConnection(options = {}) {
         "bot",
         `Tersambung ke: ${config.bot?.name || "Bot"} (${n || "?"}) · WA v${version.join(".")}`,
       );
+
+      (async () => {
+        try {
+          const groups = await sock.groupFetchAllParticipating();
+          const now = Date.now();
+          if (!global.groupMetadataCache) global.groupMetadataCache = new Map();
+          for (const [jid, meta] of Object.entries(groups || {})) {
+            groupCache.set(jid, meta);
+            sweepGroupMetadataCache(global.groupMetadataCache, now);
+            global.groupMetadataCache.set(jid, { data: meta, timestamp: now });
+          }
+          colors.logger.info(
+            "cache",
+            `preload metadata ${Object.keys(groups || {}).length} grup`,
+          );
+        } catch { }
+      })();
 
       setTimeout(async () => {
         try {
