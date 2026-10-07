@@ -2,10 +2,9 @@ import { getDatabase } from "./database.js";
 import { logger } from "./logger.js";
 import { CronJob } from "cron";
 import config from "../../config.js";
-import * as timeHelper from "./time.js";
 import { saluranCtx } from "./context.js";
 import { getTodaySchedule, extractPrayerTimes } from "./sholat-api.js";
-import { getGroupCache, invalidateGroupCache, AsyncPool, yieldToEventLoop } from "./async-pool.js";
+import { getGroupCache, AsyncPool, yieldToEventLoop } from "./async-pool.js";
 
 const TZ = "Asia/Jakarta";
 
@@ -44,8 +43,6 @@ const GAMBAR_SUASANA = {
 const AUDIO_ADZAN = "https://files.catbox.moe/z2bj5s.mp3";
 
 let sock = null;
-let cachedSchedule = null;
-let cacheDate = "";
 const sholatCronJobs = new Map();
 let dailyRefreshJob = null;
 
@@ -54,21 +51,18 @@ function getTodayDateString() {
   return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
 }
 
-async function loadTodaySchedule() {
-  const todayStr = getTodayDateString();
-  if (cachedSchedule && cacheDate === todayStr) return cachedSchedule;
+const scheduleCache = new Map();
 
-  const db = getDatabase();
-  const kotaSetting = db.setting("autoSholatKota") || {
-    id: "1301",
-    nama: "KOTA JAKARTA",
-  };
+async function loadTodaySchedule(kotaId = "1301") {
+  const todayStr = getTodayDateString();
+  const cacheKey = `${kotaId}|${todayStr}`;
+  if (scheduleCache.has(cacheKey)) return scheduleCache.get(cacheKey);
 
   try {
-    const jadwalData = await getTodaySchedule(kotaSetting.id);
+    const jadwalData = await getTodaySchedule(kotaId);
     const schedule = extractPrayerTimes(jadwalData);
     const daerah = jadwalData.daerah || "DKI JAKARTA";
-    
+
     let cityTz = "Asia/Jakarta";
     const d = daerah.toUpperCase();
     if (d.includes("SULAWESI") || d.includes("BALI") || d.includes("NUSA TENGGARA") || d.includes("KALIMANTAN SELATAN") || d.includes("KALIMANTAN TIMUR") || d.includes("KALIMANTAN UTARA")) {
@@ -77,9 +71,9 @@ async function loadTodaySchedule() {
       cityTz = "Asia/Jayapura";
     }
 
-    cachedSchedule = { schedule, cityTz };
-    cacheDate = todayStr;
-    return cachedSchedule;
+    const entry = { schedule, cityTz };
+    scheduleCache.set(cacheKey, entry);
+    return entry;
   } catch (e) {
     logger.error("SholatScheduler", `Gagal fetch jadwal: ${e.message}`);
     return null;
@@ -95,62 +89,86 @@ async function schedulePrayerTimes() {
   clearSholatCronJobs();
 
   const db = getDatabase();
-  const globalEnabled = db.setting("autoSholat");
-  if (!globalEnabled) return;
 
-  const data = await loadTodaySchedule();
-  if (!data) return;
+  let groupsObj;
+  try {
+    groupsObj = await getGroupCache(sock);
+  } catch {
+    return;
+  }
 
-  const { schedule, cityTz } = data;
+  const globalAuto = db.setting("autoSholat");
+  const globalKotaId = db.setting("autoSholatKota")?.id || "1301";
 
-  for (const [sholat, waktu] of Object.entries(schedule)) {
-    if (waktu === "-") continue;
+  // Kelompokkan grup berdasarkan kota: hanya grup yang aktif secara eksplisit
+  // (autoSholat=true per grup) atau mewarisi global, dan belum mematikan notif.
+  const groupsByKota = new Map();
+  for (const groupId of Object.keys(groupsObj)) {
+    const g = db.data?.groups?.[groupId] || {};
+    const enabled = g.autoSholat ?? globalAuto;
+    if (!enabled) continue;
+    if (g.notifSholat === false) continue;
+    const kotaId = g.autoSholatKota?.id || globalKotaId;
+    if (!groupsByKota.has(kotaId)) groupsByKota.set(kotaId, []);
+    groupsByKota.get(kotaId).push(groupId);
+  }
 
-    const [hour, minute] = waktu.split(":").map(Number);
-    const cronExpr = `${minute} ${hour} * * *`;
+  if (groupsByKota.size === 0) return;
 
-    const job = new CronJob(
-      cronExpr,
-      async () => {
-        await sendSholatNotifications(sholat, waktu);
-      },
-      null,
-      true,
-      cityTz,
-    );
-    job.threshold = 10000;
+  let totalJobs = 0;
+  for (const [kotaId, groupIds] of groupsByKota) {
+    const data = await loadTodaySchedule(kotaId);
+    if (!data) continue;
 
-    sholatCronJobs.set(sholat, job);
+    const { schedule, cityTz } = data;
+
+    for (const [sholat, waktu] of Object.entries(schedule)) {
+      if (waktu === "-") continue;
+
+      const [hour, minute] = waktu.split(":").map(Number);
+      const cronExpr = `${minute} ${hour} * * *`;
+
+      const job = new CronJob(
+        cronExpr,
+        async () => {
+          await sendSholatNotifications(sholat, waktu, kotaId, groupIds);
+        },
+        null,
+        true,
+        cityTz,
+      );
+      job.threshold = 10000;
+
+      sholatCronJobs.set(`${kotaId}:${sholat}`, job);
+      totalJobs++;
+    }
   }
 
   logger.info(
     "SholatScheduler",
-    `Scheduled ${sholatCronJobs.size} prayer times (Timezone: ${cityTz})`,
+    `Scheduled ${totalJobs} prayer times across ${groupsByKota.size} kota(s)`,
   );
 }
 
-async function sendSholatNotifications(sholat, waktu) {
+async function sendSholatNotifications(sholat, waktu, kotaId, groupIds) {
   try {
     const db = getDatabase();
-
-    const closeGroup = db.setting("autoSholatCloseGroup") || false;
-    const duration = db.setting("autoSholatDuration") || 5;
-    const sendAudio = db.setting("autoSholatAudio") !== false;
-    const kotaSetting = db.setting("autoSholatKota") || {
-      nama: "KOTA JAKARTA",
-    };
 
     const saluranId = config.saluran?.id || "120363400911374213@newsletter";
     const saluranName = config.saluran?.name || config.bot?.name || "Bot";
 
-    let groupList = [];
-    try {
-      const groupsObj = await getGroupCache(sock);
-      groupList = Object.keys(groupsObj);
-    } catch (e) {
-      logger.error("SholatScheduler", `Failed to fetch groups: ${e.message}`);
-      return;
-    }
+    const globalAuto = db.setting("autoSholat");
+
+    // Re-validasi ulang saat kirim: grup bisa saja sudah mematikan fitur
+    // sejak cron dijadwalkan.
+    const groupList = (groupIds || []).filter((groupId) => {
+      const g = db.data?.groups?.[groupId] || {};
+      const enabled = g.autoSholat ?? globalAuto;
+      if (!enabled) return false;
+      if (g.notifSholat === false) return false;
+      const gKotaId = g.autoSholatKota?.id || db.setting("autoSholatKota")?.id || "1301";
+      return gKotaId === kotaId;
+    });
 
     if (groupList.length === 0) return;
 
@@ -164,18 +182,20 @@ async function sendSholatNotifications(sholat, waktu) {
       "isya",
     ].includes(sholat);
 
-    let message = `${SHOLAT_MESSAGES[sholat] || `🕌 *WAKTU ${sholat.toUpperCase()}*`}\n\n⏰ *${waktu} WIB*\n📍 *${kotaSetting.nama}*`;
-
-    if (closeGroup && isSholatTime) {
-      message += `\n\n> 🔒 _Grup ditutup ${duration} menit untuk sholat_`;
-    }
-
     const pool = new AsyncPool(5);
 
     for (const groupId of groupList) {
       pool.add(async () => {
         const groupData = db.data?.groups?.[groupId] || {};
-        if (groupData.notifSholat === false) return;
+        const closeGroup = groupData.autoSholatCloseGroup ?? db.setting("autoSholatCloseGroup") ?? false;
+        const duration = groupData.autoSholatDuration ?? db.setting("autoSholatDuration") ?? 5;
+        const sendAudio = groupData.autoSholatAudio ?? (db.setting("autoSholatAudio") !== false);
+        const kotaNama = groupData.autoSholatKota?.nama ?? db.setting("autoSholatKota")?.nama ?? "KOTA JAKARTA";
+
+        let message = `${SHOLAT_MESSAGES[sholat] || `🕌 *WAKTU ${sholat.toUpperCase()}*`}\n\n⏰ *${waktu} WIB*\n📍 *${kotaNama}*`;
+        if (closeGroup && isSholatTime) {
+          message += `\n\n> 🔒 _Grup ditutup ${duration} menit untuk sholat_`;
+        }
 
         try {
           if (sendAudio && isSholatTime) {
@@ -213,7 +233,7 @@ async function sendSholatNotifications(sholat, waktu) {
           if (closeGroup && isSholatTime) {
             try {
               await sock.groupSettingUpdate(groupId, "announcement");
-              closedGroups.push(groupId);
+              closedGroups.push({ groupId, duration });
             } catch (e) {
               logger.error(
                 "SholatScheduler",
@@ -237,38 +257,38 @@ async function sendSholatNotifications(sholat, waktu) {
 
     await pool.onIdle();
 
-    if (closeGroup && closedGroups.length > 0) {
+    for (const { groupId, duration } of closedGroups) {
       setTimeout(
         async () => {
-          for (const groupId of closedGroups) {
-            try {
-              await sock.groupSettingUpdate(groupId, "not_announcement");
-              await sock.sendMessage(groupId, {
-                text: `✅ Grup dibuka kembali setelah sholat ${sholat}.\n\n> Semoga sholat kita diterima. Aamiin 🤲`,
-                contextInfo: {
-                  forwardingScore: 9999,
-                  isForwarded: true,
-                  forwardedNewsletterMessageInfo: {
-                    newsletterJid: saluranId,
-                    newsletterName: saluranName,
-                    serverMessageId: 127,
-                  },
+          try {
+            await sock.groupSettingUpdate(groupId, "not_announcement");
+            await sock.sendMessage(groupId, {
+              text: `✅ Grup dibuka kembali setelah sholat ${sholat}.\n\n> Semoga sholat kita diterima. Aamiin 🤲`,
+              contextInfo: {
+                forwardingScore: 9999,
+                isForwarded: true,
+                forwardedNewsletterMessageInfo: {
+                  newsletterJid: saluranId,
+                  newsletterName: saluranName,
+                  serverMessageId: 127,
                 },
-              });
-              await new Promise((r) => setTimeout(r, 600));
-            } catch (e) {
-              logger.error(
-                "SholatScheduler",
-                `Failed to open ${groupId}: ${e.message}`,
-              );
-            }
+              },
+            });
+          } catch (e) {
+            logger.error(
+              "SholatScheduler",
+              `Failed to open ${groupId}: ${e.message}`,
+            );
           }
-          logger.info(
-            "SholatScheduler",
-            `Opened ${closedGroups.length} groups after ${sholat}`,
-          );
         },
         duration * 60 * 1000,
+      );
+    }
+
+    if (closedGroups.length > 0) {
+      logger.info(
+        "SholatScheduler",
+        `Closed ${closedGroups.length} groups after ${sholat}, will reopen per-group durations`,
       );
     }
 
@@ -292,7 +312,7 @@ function initSholatScheduler(socketInstance) {
   dailyRefreshJob = new CronJob(
     "1 0 * * *",
     async () => {
-      cachedSchedule = null;
+      scheduleCache.clear();
       await schedulePrayerTimes();
     },
     null,

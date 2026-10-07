@@ -23,7 +23,8 @@ async function handler(m, { sock }) {
   const option = m.text?.toLowerCase()?.trim();
 
   if (!option) {
-    const status = db.setting("anticulik") || "off";
+    const group = db.getGroup(m.chat) || {};
+    const status = group.anticulik ?? db.setting("anticulik") ?? "off";
 
     return m.reply(
       `🛡️ *Anti Culik*\n\n` +
@@ -38,7 +39,9 @@ async function handler(m, { sock }) {
   }
 
   if (option === "on") {
-    db.setting("anticulik", "on");
+    const group = db.getGroup(m.chat) || {};
+    group.anticulik = "on";
+    db.setGroup(m.chat, group);
     const ctx = saluranCtx();
     return m.reply(
       `🛡️ *Anti Culik Aktif*\n\n` +
@@ -50,7 +53,9 @@ async function handler(m, { sock }) {
   }
 
   if (option === "off") {
-    db.setting("anticulik", "off");
+    const group = db.getGroup(m.chat) || {};
+    group.anticulik = "off";
+    db.setGroup(m.chat, group);
     return m.reply(
       `🛡️ *Anti Culik Nonaktif*\n\n` +
         `> Bot tidak akan keluar otomatis jika ditambah ke grup\n` +
@@ -83,7 +88,9 @@ async function handleAntiCulik(event, sock, db) {
 
   if (!isBotAdded) return false;
 
-  const anticulikStatus = db.setting("anticulik") || "off";
+  const groupData = db.getGroup(event.id) || {};
+  const anticulikStatus =
+    groupData.anticulik ?? db.setting("anticulik") ?? "off";
   if (anticulikStatus !== "on") return false;
 
   const inviter = event.author || "";

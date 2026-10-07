@@ -12,21 +12,37 @@ const pluginConfig = {
     isEnabled: true
 }
 
+function readAdminFlag(db, m, key) {
+    if (m.isGroup) {
+        const group = db.getGroup(m.chat)
+        if (group && group[key] !== undefined) return group[key]
+    }
+    return db.setting(key)
+}
+
+function writeAdminFlags(db, m, flags) {
+    if (m.isGroup) {
+        const group = db.getGroup(m.chat) || {}
+        Object.assign(group, flags)
+        db.setGroup(m.chat, group)
+    } else {
+        for (const [key, value] of Object.entries(flags)) db.setting(key, value)
+    }
+}
+
 async function handler(m) {
     const db = getDatabase()
     const args = m.args[0]?.toLowerCase()
     const cmd = m.command.toLowerCase()
-    const current = db.setting('onlyAdmin') || false
+    const current = readAdminFlag(db, m, 'onlyAdmin') || false
 
     if (cmd === 'selfadmin') {
         if (current) {
-            db.setting('onlyAdmin', false)
+            writeAdminFlags(db, m, { onlyAdmin: false })
             await m.react('❌')
             return m.reply('❌ *ᴏɴʟʏᴀᴅᴍɪɴ ɴᴏɴᴀᴋᴛɪꜰ*\n\n> Bot bisa diakses semua orang')
         }
-        db.setting('onlyAdmin', true)
-        db.setting('selfAdmin', false)
-        db.setting('publicAdmin', false)
+        writeAdminFlags(db, m, { onlyAdmin: true, selfAdmin: false, publicAdmin: false })
         await m.react('✅')
         return m.reply(
             '✅ *ᴏɴʟʏᴀᴅᴍɪɴ ᴀᴋᴛɪꜰ*\n\n' +
@@ -41,13 +57,11 @@ async function handler(m) {
 
     if (cmd === 'publicadmin') {
         if (current) {
-            db.setting('onlyAdmin', false)
+            writeAdminFlags(db, m, { onlyAdmin: false })
             await m.react('❌')
             return m.reply('❌ *ᴏɴʟʏᴀᴅᴍɪɴ ɴᴏɴᴀᴋᴛɪꜰ*\n\n> Bot bisa diakses semua orang')
         }
-        db.setting('onlyAdmin', true)
-        db.setting('selfAdmin', false)
-        db.setting('publicAdmin', false)
+        writeAdminFlags(db, m, { onlyAdmin: true, selfAdmin: false, publicAdmin: false })
         await m.react('✅')
         return m.reply(
             '✅ *ᴏɴʟʏᴀᴅᴍɪɴ ᴀᴋᴛɪꜰ*\n\n' +
@@ -74,9 +88,7 @@ async function handler(m) {
 
     if (args === 'on') {
         if (current) return m.reply('⚠️ OnlyAdmin sudah aktif.')
-        db.setting('onlyAdmin', true)
-        db.setting('selfAdmin', false)
-        db.setting('publicAdmin', false)
+        writeAdminFlags(db, m, { onlyAdmin: true, selfAdmin: false, publicAdmin: false })
         await m.react('✅')
         return m.reply(
             '✅ *ᴏɴʟʏᴀᴅᴍɪɴ ᴀᴋᴛɪꜰ*\n\n' +
@@ -91,7 +103,7 @@ async function handler(m) {
 
     if (args === 'off') {
         if (!current) return m.reply('⚠️ OnlyAdmin sudah nonaktif.')
-        db.setting('onlyAdmin', false)
+        writeAdminFlags(db, m, { onlyAdmin: false })
         await m.react('❌')
         return m.reply('❌ *ᴏɴʟʏᴀᴅᴍɪɴ ɴᴏɴᴀᴋᴛɪꜰ*\n\n> Bot bisa diakses semua orang')
     }

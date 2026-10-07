@@ -145,9 +145,15 @@ function checkMode(m, getActiveJadibots) {
 
   const onlyGc = db.setting("onlyGc");
   const onlyPc = db.setting("onlyPc");
-  const selfAdmin = db.setting("selfAdmin");
-  const publicAdmin = db.setting("publicAdmin");
   const botAfk = db.setting("botAfk");
+
+  const groupFlags = m.isGroup ? db.getGroup(m.chat) || {} : {};
+  const selfAdmin = m.isGroup
+    ? groupFlags.selfAdmin ?? db.setting("selfAdmin")
+    : db.setting("selfAdmin");
+  const publicAdmin = m.isGroup
+    ? groupFlags.publicAdmin ?? db.setting("publicAdmin")
+    : db.setting("publicAdmin");
 
   if (botAfk && botAfk.active) {
     if (m.fromMe || m.isOwner) {
@@ -231,7 +237,9 @@ function checkMode(m, getActiveJadibots) {
   }
 
   if (mode === "public") {
-    const onlyAdmin = db.setting("onlyAdmin");
+    const onlyAdmin = m.isGroup
+      ? groupFlags.onlyAdmin ?? db.setting("onlyAdmin")
+      : db.setting("onlyAdmin");
 
     if (onlyAdmin) {
       if (m.fromMe || m.isOwner) return { allowed: true };

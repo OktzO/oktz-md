@@ -28,12 +28,31 @@ const AUDIO_ADZAN = "https://media.vocaroo.com/mp3/1ofLT2YUJAjQ";
 async function handler(m, { sock }) {
   const args = m.args[0]?.toLowerCase();
   const database = getDatabase();
-  
+  const group = m.isGroup ? database.getGroup(m.chat) || {} : null;
+  const groupSetting = (key, fallback) =>
+    m.isGroup && group[key] !== undefined ? group[key] : fallback;
+
   if (!args || args === "status") {
-    const status = database.setting("autoSholat") ? "Aktif ✅" : "Nonaktif ❌";
-    const closeGroup = database.setting("autoSholatCloseGroup") ? "Ya ✅" : "Tidak ❌";
-    const duration = database.setting("autoSholatDuration") || 5;
-    const kotaSetting = database.setting("autoSholatKota") || { id: "1301", nama: "KOTA JAKARTA" };
+    const status = (m.isGroup
+      ? groupSetting("autoSholat", database.setting("autoSholat"))
+      : database.setting("autoSholat"))
+      ? "Aktif ✅"
+      : "Nonaktif ❌";
+    const closeGroup = groupSetting(
+      "autoSholatCloseGroup",
+      database.setting("autoSholatCloseGroup"),
+    )
+      ? "Ya ✅"
+      : "Tidak ❌";
+
+    const duration = groupSetting(
+      "autoSholatDuration",
+      database.setting("autoSholatDuration"),
+    ) || 5;
+    const kotaSetting = groupSetting(
+      "autoSholatKota",
+      database.setting("autoSholatKota"),
+    ) || { id: "1301", nama: "KOTA JAKARTA" };
     
     let jadwalText = "";
     try {
@@ -65,10 +84,23 @@ async function handler(m, { sock }) {
     );
   }
 
+  const writeSetting = (key, value) => {
+    if (m.isGroup) {
+      const g = database.getGroup(m.chat) || {};
+      g[key] = value;
+      database.setGroup(m.chat, g);
+    } else {
+      database.setting(key, value);
+    }
+  };
+
   if (args === "on") {
-    database.setting("autoSholat", true);
+    writeSetting("autoSholat", true);
     await m.react("✅");
-    const kota = database.setting("autoSholatKota") || { nama: "KOTA JAKARTA" };
+    const kota = groupSetting(
+      "autoSholatKota",
+      database.setting("autoSholatKota"),
+    ) || { nama: "KOTA JAKARTA" };
     return m.reply(
       `✅ **Sistem Pengingat Sholat Berhasil Diaktifkan!**\n\n` +
       `Mulai sekarang, aku akan mengirimkan pesan pemberitahuan beserta rekaman audio adzan tepat saat waktu sholat tiba. Seluruh informasi disesuaikan dengan zona waktu di **${kota.nama}** ya!`
@@ -76,7 +108,7 @@ async function handler(m, { sock }) {
   }
 
   if (args === "off") {
-    database.setting("autoSholat", false);
+    writeSetting("autoSholat", false);
     await m.react("❌");
     return m.reply(
       `❌ **Sistem Pengingat Sholat Dinonaktifkan.**\n\n` +
@@ -87,7 +119,7 @@ async function handler(m, { sock }) {
   if (args === "close") {
     const subArg = m.args[1]?.toLowerCase();
     if (subArg === "on") {
-      database.setting("autoSholatCloseGroup", true);
+      writeSetting("autoSholatCloseGroup", true);
       await m.react("🔒");
       return m.reply(
         `🔒 **Fitur Tutup Grup Otomatis Diaktifkan!**\n\n` +
@@ -95,7 +127,7 @@ async function handler(m, { sock }) {
       );
     }
     if (subArg === "off") {
-      database.setting("autoSholatCloseGroup", false);
+      writeSetting("autoSholatCloseGroup", false);
       await m.react("🔓");
       return m.reply(
         `🔓 **Fitur Tutup Grup Otomatis Dimatikan.**\n\n` +
@@ -110,7 +142,7 @@ async function handler(m, { sock }) {
     if (isNaN(duration) || duration < 1 || duration > 60) {
       return m.reply(`Tolong masukkan angka antara 1 sampai 60 untuk durasi penutupan grup (dalam menit).`);
     }
-    database.setting("autoSholatDuration", duration);
+    writeSetting("autoSholatDuration", duration);
     await m.react("⏱️");
     return m.reply(
       `⏱️ **Durasi Penutupan Grup Telah Diperbarui!**\n\n` +
@@ -129,7 +161,7 @@ async function handler(m, { sock }) {
       if (!result) {
         return m.reply(`Aduh, aku sudah mencari di database MyQuran tapi nama daerah **${kotaName}** tidak dapat kutemukan. Coba nama kota yang lain?`);
       }
-      database.setting("autoSholatKota", {
+      writeSetting("autoSholatKota", {
         id: result.id,
         nama: result.lokasi,
       });
@@ -148,13 +180,22 @@ async function handler(m, { sock }) {
 
 async function runAutoSholat(sock) {
   const db = getDatabase();
-  if (!db.setting("autoSholat")) return;
-  
+
+  const isGroupEnabled = (groupData) => {
+    const enabled = groupData.autoSholat ?? db.setting("autoSholat");
+    return enabled && groupData.notifSholat !== false;
+  };
+
+  const enabledGroups = Object.entries(db.data?.groups || {})
+    .filter(([, g]) => isGroupEnabled(g))
+    .map(([jid]) => jid);
+  if (enabledGroups.length === 0) return;
+
   const kotaSetting = db.setting("autoSholatKota") || {
     id: "1301",
     nama: "KOTA JAKARTA",
   };
-  
+
   let times;
   try {
     const jadwalData = await getTodaySchedule(kotaSetting.id);
@@ -184,18 +225,22 @@ async function runAutoSholat(sock) {
         const groupsObj = await sock.groupFetchAllParticipating();
         global.isFetchingGroups = false;
         
-        const groupList = Object.keys(groupsObj);
-        const closeGroup = db.setting("autoSholatCloseGroup") || false;
-        const duration = db.setting("autoSholatDuration") || 5;
+        const groupList = Object.keys(groupsObj).filter((jid) =>
+          isGroupEnabled(db.data?.groups?.[jid] || {}),
+        );
+        if (groupList.length === 0) continue;
 
+        const closedGroups = [];
         for (const jid of groupList) {
           const groupData = db.data?.groups?.[jid] || {};
-          if (groupData.notifSholat === false) continue;
-          
+          const closeGroup = groupData.autoSholatCloseGroup ?? (db.setting("autoSholatCloseGroup") ?? false);
+          const duration = groupData.autoSholatDuration ?? (db.setting("autoSholatDuration") || 5);
+          const groupKota = groupData.autoSholatKota || kotaSetting;
+
           try {
             const caption =
               `🕌 **Pemberitahuan Waktu Sholat ${sholat.toUpperCase()}** 🕌\n\n` +
-              `Sudah saatnya mengistirahatkan sejenak urusan duniamu! Waktu untuk menunaikan ibadah sholat **${sholat}** telah tiba untuk wilayah **${kotaSetting.nama}** dan sekitarnya (tepatnya pada pukul **${waktu} WIB**).\n\n` +
+              `Sudah saatnya mengistirahatkan sejenak urusan duniamu! Waktu untuk menunaikan ibadah sholat **${sholat}** telah tiba untuk wilayah **${groupKota.nama}** dan sekitarnya (tepatnya pada pukul **${waktu} WIB**).\n\n` +
               `Mari segarkan pikiran, ambil air wudhu, dan hampiri panggilan suci-Nya. Selamat menunaikan ibadah sholat! 🤲\n\n` +
               (closeGroup ? `_Sebagai bentuk penghormatan, sistem akan menutup obrolan grup ini untuk sementara waktu (selama ${duration} menit)._` : "");
             
@@ -211,27 +256,24 @@ async function runAutoSholat(sock) {
 
             if (closeGroup) {
               await sock.groupSettingUpdate(jid, "announcement");
+              closedGroups.push({ jid, duration });
             }
             await new Promise((res) => setTimeout(res, 500));
           } catch (e) {
             console.log(`Gagal mengirim pesan sholat ke grup ${jid}:`, e.message);
           }
         }
-        
-        if (closeGroup) {
+
+        for (const { jid, duration } of closedGroups) {
           setTimeout(async () => {
-            for (const jid of groupList) {
-              try {
-                await sock.groupSettingUpdate(jid, "not_announcement");
-                await sock.sendMessage(jid, {
-                  text: `✅ **Waktu Penutupan Telah Berakhir**\n\nSesi ibadah sholat **${sholat}** telah usai. Obrolan grup sekarang sudah kubuka kembali secara otomatis. Selamat melanjutkan aktivitas kembali!`,
-                });
-                await new Promise((res) => setTimeout(res, 600));
-              } catch (e) {
-                console.log(`Gagal membuka obrolan grup ${jid}:`, e.message);
-              }
+            try {
+              await sock.groupSettingUpdate(jid, "not_announcement");
+              await sock.sendMessage(jid, {
+                text: `✅ **Waktu Penutupan Telah Berakhir**\n\nSesi ibadah sholat **${sholat}** telah usai. Obrolan grup sekarang sudah kubuka kembali secara otomatis. Selamat melanjutkan aktivitas kembali!`,
+              });
+            } catch (e) {
+              console.log(`Gagal membuka obrolan grup ${jid}:`, e.message);
             }
-            console.log(`Selesai mereset pembukaan seluruh grup.`);
           }, duration * 60 * 1000);
         }
         

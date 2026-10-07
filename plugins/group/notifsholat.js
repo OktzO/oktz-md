@@ -23,16 +23,16 @@ function handler(m, { sock, db }) {
     const args = m.args[0]?.toLowerCase();
     const group = db.getGroup(m.chat) || {};
     const globalDb = getDatabase();
-    const kotaSetting = globalDb.setting('autoSholatKota') || { nama: 'KOTA JAKARTA' };
+    const groupAuto = group.autoSholat ?? globalDb.setting('autoSholat') ?? false;
+    const kotaSetting = group.autoSholatKota || globalDb.setting('autoSholatKota') || { nama: 'KOTA JAKARTA' };
 
     if (!['on', 'off'].includes(args)) {
-        const isGlobalActive = globalDb.setting('autoSholat') || false;
-        const statusGlobal = isGlobalActive ? '✅ AKTIF' : '❌ NONAKTIF';
+        const statusGlobal = groupAuto ? '✅ AKTIF' : '❌ NONAKTIF';
         const statusGrup = group.notifSholat !== false ? '✅ AKTIF' : '❌ NONAKTIF';
-        
+
         return m.reply(
             `🕌 *PENGINGAT WAKTU SHOLAT*\n\n` +
-            `Status Global: *${statusGlobal}* (Dari Owner)\n` +
+            `Status Pengingat (grup ini): *${statusGlobal}*\n` +
             `Status Grup: *${statusGrup}*\n` +
             `Lokasi: *${kotaSetting.nama}*\n\n` +
             `*PENGATURAN GRUP:*\n` +
@@ -41,7 +41,7 @@ function handler(m, { sock, db }) {
             `*CARA KERJA:*\n` +
             `1. Mengirimkan mp3 adzan & gambar jadwal saat masuk waktu sholat\n` +
             `2. Mengikuti jadwal real-time dari myquran.com\n` +
-            `3. Jika Status Global NONAKTIF, grup tidak akan dikirim adzan meskipun Status Grup AKTIF.\n` +
+            `3. Owner dapat mengatur ulang dengan perintah *${m.prefix}autosholat* di grup ini.\n` +
             `4. Jika grup merasa terganggu, admin dapat mematikan khusus untuk grup ini.`
         );
     }
