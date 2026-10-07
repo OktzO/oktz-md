@@ -1,7 +1,14 @@
-import fs from 'fs'
-async function pixa(img) {
+import sharp from 'sharp'
+
+async function normalizeToJpeg(img) {
+  const meta = await sharp(img).metadata().catch(() => null)
+  const buf = await sharp(img).jpeg().toBuffer()
+  return { buf, width: meta?.width || 0, height: meta?.height || 0 }
+}
+
+async function pixelcutRemove(buf) {
   const form = new FormData()
-  form.append('image', new Blob([fs.readFileSync(img)], { type: 'image/jpeg' }), img.split('/').pop())
+  form.append('image', new Blob([buf], { type: 'image/jpeg' }), 'image.jpg')
   form.append('format', 'png')
   form.append('model', 'v1')
 
@@ -15,17 +22,66 @@ async function pixa(img) {
       'x-client-version': 'web:pixa.com:4a5b0af2',
       'sec-ch-ua-mobile': '?1',
       'sec-ch-ua-platform': '"Android"',
-      'origin': 'https://www.pixa.com',
+      'origin': 'https://www.pixelcut.ai',
       'sec-fetch-site': 'cross-site',
       'sec-fetch-mode': 'cors',
       'sec-fetch-dest': 'empty',
-      'referer': 'https://www.pixa.com/',
+      'referer': 'https://www.pixelcut.ai/',
       'accept-language': 'id-ID,id;q=0.9,en-AU;q=0.8,en;q=0.7,en-US;q=0.6'
     },
     body: form
   })
 
+  const contentType = res.headers.get('content-type') || ''
+  if (!res.ok || !contentType.includes('image/')) {
+    const text = await res.text().catch(() => '')
+    try {
+      const json = JSON.parse(text)
+      throw new Error(json.error || json.message || `pixelcut failed: ${res.status}`)
+    } catch (e) {
+      if (e instanceof SyntaxError) throw new Error(`pixelcut failed: ${res.status} ${text.slice(0, 200)}`, { cause: e })
+      throw e
+    }
+  }
   return Buffer.from(await res.arrayBuffer())
+}
+
+async function bgninjaRemove(buf) {
+  const form = new FormData()
+  form.append('file', new Blob([buf], { type: 'image/jpeg' }), 'image.jpg')
+  form.append('src', 'wa-bot')
+
+  const res = await fetch('https://bgninja.com/api/remove', {
+    method: 'POST',
+    headers: { 'User-Agent': 'Mozilla/5.0' },
+    body: form
+  })
+
+  const contentType = res.headers.get('content-type') || ''
+  if (!res.ok || !contentType.includes('image/')) {
+    const text = await res.text().catch(() => '')
+    try {
+      const json = JSON.parse(text)
+      throw new Error(json.error || json.detail || `bgninja failed: ${res.status}`)
+    } catch (e) {
+      if (e instanceof SyntaxError) throw new Error(`bgninja failed: ${res.status} ${text.slice(0, 200)}`, { cause: e })
+      throw e
+    }
+  }
+  return Buffer.from(await res.arrayBuffer())
+}
+
+async function pixa(img) {
+  const { buf } = await normalizeToJpeg(img)
+  try {
+    return await pixelcutRemove(buf)
+  } catch (err) {
+    try {
+      return await bgninjaRemove(buf)
+    } catch (err2) {
+      throw new Error(`removebg gagal (pixelcut: ${err.message}; bgninja: ${err2.message})`, { cause: err2 })
+    }
+  }
 }
 
 export { pixa }
