@@ -475,6 +475,18 @@ async function loadState(scope) {
             if (!keysCache.has(cacheKey)) keysCache.set(cacheKey, new Map());
             const local = keysCache.get(cacheKey);
             local.delete(id);
+            // null = hapus, bukan "simpan nilai null". removePreKey mengirim
+            // begini (libsignal.js), jadi tanpa cabang DELETE key-nya jadi
+            // row berisi 'null' — session membengkak justru saat key dipakai.
+            // Key yang dihapus juga harus hilang dari cache, kalau tidak get()
+            // tetap menyajikan null seolah-olah key itu masih ada.
+            if (value === null) {
+              statements.push({
+                sql: 'DELETE FROM session_keys WHERE scope = ? AND category = ? AND id = ?',
+                args: [scope, type, id],
+              });
+              continue;
+            }
             local.set(id, value);
             trimLocalCache(local, KEYS_CACHE_CAP);
             statements.push({
