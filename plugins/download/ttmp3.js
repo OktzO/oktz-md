@@ -114,6 +114,31 @@ async function handler(m, { sock }) {
       const extractedAudio = await extractAudioFromVideo(videoDownload.url);
       cleanupFiles = extractedAudio.files;
       audioSource = extractedAudio.buffer;
+    } else {
+      try {
+        const res = await axios.get(audioSource, {
+          responseType: "arraybuffer",
+          timeout: 60000,
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Linux; Android 15; SM-F958 Build/AP3A.240905.015) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.6723.86 Mobile Safari/537.36",
+            Referer: new URL(audioSource).origin + "/",
+          },
+        });
+        audioSource = Buffer.from(res.data);
+      } catch (fetchErr) {
+        console.warn(
+          "[TTMP3] fetch mp3 langsung gagal, fallback ekstrak dari video:",
+          fetchErr.message,
+        );
+        const videoDownload =
+          result.downloads.find((d) => d.type === "nowatermark_hd") ||
+          result.downloads.find((d) => d.type === "nowatermark");
+        if (!videoDownload?.url) throw fetchErr;
+        const extractedAudio = await extractAudioFromVideo(videoDownload.url);
+        cleanupFiles = extractedAudio.files;
+        audioSource = extractedAudio.buffer;
+      }
     }
 
     await sock.sendMedia(m.chat, audioSource, null, m, {
