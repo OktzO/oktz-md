@@ -747,6 +747,90 @@ async function useDurableAuthState(scope, folder) {
   };
 }
 
+const PREKEY_MAX_AGE_MS = 30 * 86400000;
+const PREKEY_SWEEP_INTERVAL_MS = 259200000; // 3 hari
+const SWEEP_SCOPE = 'main';
+
+let preKeySweeper = null;
+
+// Pre-key sekali pakai: messages-recv.js mengambil tepat satu per pesan masuk,
+// dan socket.js:382 sudah mengupload ulang otomatis saat stok kurang. Yang
+// basi karena tidak pernah dipakai tidak mungkin dipakai lagi.
+//
+// HANYA category='pre-key' dan scope='main'. session, sender-key,
+// identity-key, device-list, lid-mapping, dan tctoken adalah ratchet state
+// atau trust anchor: menghapusnya merusak sesi dan tidak bisa dipulihkan
+// tanpa pairing ulang. Session jadibot juga bukan sampah — dia sesi hidup.
+async function sweepPreKeys(options = {}) {
+  const now = options.now ?? Date.now();
+  const maxAgeMs = options.maxAgeMs ?? PREKEY_MAX_AGE_MS;
+  const client = getTursoClient();
+  if (!client) {
+    return { ok: false, deleted: 0, error: 'Turso tidak dikonfigurasi' };
+  }
+  try {
+    const rs = await withRemoteRetry(() => client.execute({
+      sql: 'DELETE FROM session_keys WHERE scope = ? AND category = ? AND updated_at < ?',
+      args: [SWEEP_SCOPE, 'pre-key', now - maxAgeMs],
+    }));
+    return { ok: true, deleted: Number(rs?.rowsAffected ?? 0) };
+  } catch (e) {
+    // Kembalikan nilai, jangan lempar: sweep adalah perawatan, tidak boleh
+    // menjatuhkan proses. Turso mati = accomplishments nol, bukan crash.
+    return { ok: false, deleted: 0, error: e.message };
+  }
+}
+
+async function sessionKeyStats() {
+  const client = getTursoClient();
+  if (!client) return { total: 0, bytes: 0, byCategory: [] };
+  try {
+    const rs = await withRemoteRetry(() => client.execute(
+      'SELECT category, COUNT(*) AS keys, SUM(LENGTH(data)) AS bytes FROM session_keys GROUP BY category ORDER BY bytes DESC',
+    ));
+    const byCategory = (rs.rows || []).map((r) => ({
+      category: r.category,
+      keys: Number(r.keys),
+      bytes: Number(r.bytes ?? 0),
+    }));
+    return {
+      total: byCategory.reduce((a, r) => a + r.keys, 0),
+      bytes: byCategory.reduce((a, r) => a + r.bytes, 0),
+      byCategory,
+    };
+  } catch (e) {
+    return { total: 0, bytes: 0, byCategory: [], error: e.message };
+  }
+}
+
+function startPreKeySweeper(intervalMs = PREKEY_SWEEP_INTERVAL_MS) {
+  if (preKeySweeper) return;
+  preKeySweeper = setInterval(async () => {
+    const res = await sweepPreKeys();
+    if (!res.ok) {
+      console.warn(`[turso-session] sweep pre-key gagal: ${res.error}`);
+      return;
+    }
+    if (res.deleted === 0) {
+      console.log('[turso-session] sweep pre-key: tidak ada yang basi');
+      return;
+    }
+    const stats = await sessionKeyStats();
+    console.log(
+      `[turso-session] sweep pre-key: ${res.deleted} key dihapus, ` +
+      `sisa ${stats.total} key / ${(stats.bytes / 1024).toFixed(1)} KB`,
+    );
+  }, intervalMs);
+  if (preKeySweeper.unref) preKeySweeper.unref();
+}
+
+function stopPreKeySweeper() {
+  if (preKeySweeper) {
+    clearInterval(preKeySweeper);
+    preKeySweeper = null;
+  }
+}
+
 export {
   useTursoAuthState,
   useDurableAuthState,
@@ -763,4 +847,8 @@ export {
   countLocalKeyFiles,
   remoteKeyCount,
   reportHollowSession,
+  sweepPreKeys,
+  sessionKeyStats,
+  startPreKeySweeper,
+  stopPreKeySweeper,
 };

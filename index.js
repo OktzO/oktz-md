@@ -31,6 +31,7 @@ import { startMemoryMonitor } from "./src/lib/memory-monitor.js";
 import { evictOldestOverCap } from "./src/lib/cache-cap.js";
 import { startTempCleaner } from "./src/lib/temp-cleaner.js";
 import { startDailyPruner } from "./src/lib/data-pruner.js";
+import { startPreKeySweeper } from "./src/lib/turso-session.js";
 import { initAutoClearScheduler } from "./src/lib/chat-cleaner.js";
 import { preloadAssets } from "./src/lib/asset-manager.js";
 import {
@@ -595,6 +596,7 @@ async function main() {
         startMemoryMonitor();
         startTempCleaner();
         startDailyPruner();
+        startPreKeySweeper();
         logger.success("ready", `All subsystems are fully operational${devLabel}`);
         divider();
       }
