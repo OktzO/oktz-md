@@ -53,6 +53,16 @@ Untuk perbandingan, storage lokal `storage/session/` cuma **12 file / 4.184 byte
 
 Kriteria 4 dijaga test — kalau sweep salah dan menyentuh kategori lain, byte-nya berubah dan test gagal.
 
+### Hasil ukur aktual — 2026-10-08
+
+Sweep produksi pertama dijalankan dan mengembalikan `deleted: 0`. **Itu benar, bukan kegagalan:** seluruh pre-key yang ada berumur 4,1 hari, jadi tidak ada yang melewati ambang 30 hari.
+
+Kriteria 4 **terbukti terpenuhi** — `session` 493 key / 510.086 byte, `sender-key` 177 / 660.091, `identity-key` 40 / 2.840: semua utuh sebelum dan sesudah sweep.
+
+Kriteria 1, 2, dan 3 **belum bisa dinilai.** Baseline spec mengasumsikan pre-key bertambah 30/hari; hasil ukur menunjukkan pola sebenarnya adalah burst — 10.828 key datang dalam ~4 burst (23, 364, 5.573, 3.829, 284, 15) mengikuti `uploadPreKeys` di setiap reconnect, bukan upload terjadwal. Angka "30/hari" dan proyeksi "~1,27 MB" karena itu tidak dapat dipertahankan sebagai fakta.
+
+Ambang 30 hari sendiri tetap benar secara protokol, tapi steady-state hanya bisa ditentukan setelah satu siklus sweep berjalan di atas data nyata. Menilai ulang kriteria 1–3 setelah 30 hari data produksi.
+
 ---
 
 ## 1. Akar masalah
