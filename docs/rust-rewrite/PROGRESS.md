@@ -18,8 +18,13 @@ Belum ada satu baris kode Rust produksi. Belum ada `rust/` directory.
 | Klasifikasi plugin A–F | ✅ `PLUGIN-CLASSIFICATION.md` + `plugin-manifest.json` |
 | Risiko | ✅ `RISKS.md` |
 | Spec tertulis | ✅ `docs/superpowers/specs/2026-10-10-oktz-md-rust-rewrite-design.md` |
-| **GATE 0 — approval Oktz** | ⏳ **MENUNGGU** |
-| Spike S1–S4 | ⏳ setelah GATE 0 |
+| Plan spike S1–S4 | ✅ `docs/superpowers/plans/2026-10-10-rust-rewrite-spike-s1-s4.md` |
+| Toolchain Rust | ✅ terpasang (lihat di bawah) |
+| **Probe Turso (S1 pre-check)** | ✅ **selesai — 12.639 session_keys** |
+| **GATE 0 — approval Oktz** | ✅ **lolos** (engine, F=port-all, RSS delegated) |
+| Spike S1–S4 (Rust) | 🔄 sedang: scaffold + baseline, build berjalan |
+| Spike S2 (RSS angka) | ⏳ |
+| Spike S3/S4 (interaktif) | ⏳ butuh akun WA uji |
 
 ## Keputusan yang sudah diambil
 
@@ -58,6 +63,35 @@ Items non-blocking yang mungkin nanti muncul:
 - 1 subagent inventaris plugin → `plugin-manifest.json` (830 plugin, 0 parse failure) + `PLUGIN-CLASSIFICATION.md`.
 - 1 subagent crate-researcher → `CRATES.md` (53 crate, versi dari crates.io API).
 - Verifikasi independen: extractor exit 0, JSON parse ulang 830/830, `git diff` source kosong.
+
+## Temuan spike (2026-10-10)
+
+**Probe Turso (S1 pre-check) — ✅ selesai, tanpa Rust.** `@libsql/client` + `.env` → DB hidup. Isi `session_keys` scope `main`:
+
+| category | n | |
+|---|--:|---|
+| pre-key | 11.072 | jauh lebih banyak dari 10 di disk |
+| **session** | **512** | sesi ratchet per kontak — target utama S1 |
+| device-list | 406 | |
+| lid-mapping | 366 | |
+| **sender-key** | **214** + 10 memory | group E2EE |
+| identity-key | 48 | |
+| tctoken | 11 | |
+
+Tabel: `stores`(8), `session_creds`(2), `session_keys`(12.639), `backup_snapshots`(0).
+**Implikasi:** jalur **full viable** — sesi ratchet 512 + sender-key 224 ada nyata, format `BufferJSON` di Turso. Review Focus #2 (hollow session) **tidak terjadi**. Jalur creds-only tetap jaring pengaman.
+
+**Toolchain.** Rust 1.94.0 via rustup, tapi repo ini **lingkungan Nix** dan `/home` disk-nya kritis (hampir penuh). Dua jebakan yang sudah dilewati:
+1. `/home` 100% penuh setelah install Rust → toolchain dipindah ke `/tmp/opencode/rust/` (`RUSTUP_HOME`/`CARGO_HOME`/`CARGO_TARGET_DIR`).
+2. Build gagal `GLIBC_2.39 not found` — root cause **bukan** linker salah, tapi **artefak cache** `build-script-build` yang ter-link ke glibc 2.38 dari percobaan nixpkgs lama. `cargo clean` + pin nixpkgs 25.05 (glibc 2.40) → jalan.
+
+Env build (semua di `nix-shell`):
+```bash
+export NIX_PATH="" NIX_CFLAGS_COMPILE="" NIX_CFLAGS_LINK="" NIX_LDFLAGS=""
+export RUSTUP_HOME=/tmp/opencode/rust/rustup CARGO_HOME=/tmp/opencode/rust/cargo
+export CARGO_TARGET_DIR=/tmp/opencode/rust/target
+nix-shell -p stdenv.cc pkg-config -I nixpkgs=/tmp/opencode/nixpkgs-25.05 --run 'cargo build --release'
+```
 
 ## Reproduction
 

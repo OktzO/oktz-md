@@ -1,0 +1,35 @@
+[package]
+name = "oktz-spike"
+version = "0.0.0"
+edition = "2024"
+
+# THROWAWAY — spike investigasi. Tidak masuk ke rewrite produksi (lihat plan
+# 2026-10-10-rust-rewrite-spike-s1-s4.md).
+#
+# PENTING — `default-features = false` WAJIB (diverifikasi 2026-10-10):
+# default features whatsapp-rust 0.7 memuat `simd`, yang memakai `core::simd`
+# -> `#![feature]` -> GAGAL di stable ("E0554: #![feature] may not be used on
+# the stable release channel", plus "E0432: unresolved import core::simd::Select"
+# pada crate `wacore-binary`). Jadi kita opt-in manual ke semua yang dibutuh
+# dari default, KECUALI `simd`. Untuk target 1-core/1GB ini justru bagus:
+# SIMD cuma optimasi throughput, dan kita butuh kompatibilitas stable.
+[dependencies]
+whatsapp-rust = { version = "0.7", default-features = false, features = [
+    "sqlite-storage",
+    "tokio-transport",
+    "tokio-native",
+    "ureq-client",
+    "signal",
+    "legacy-session-interop",
+    "tracing",
+] }
+tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "fs", "time", "signal", "io-util", "io-std"] }
+serde_json = { version = "1.0.151", features = ["preserve_order"] }
+serde = { version = "1.0.229", features = ["derive"] }
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+hex = "0.4"
+# CATATAN: `libsql` SENGAJA tidak dipakai di spike. Pembacaan Turso dilakukan
+# via Node (@libsql/client, sudah terbukti: 12639 baris session_keys) lalu
+# di-dump ke JSON, spike baca file-nya. Menghemat build libsql-ffi yang berat.
