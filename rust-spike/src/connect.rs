@@ -32,8 +32,31 @@ pub async fn run(creds_path: &str, hold_secs: u64) -> Result<()> {
     let c1 = connected.clone();
     let c2 = logged_out.clone();
 
+    let msgs = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let m1 = msgs.clone();
+
+
     let bot = Bot::builder()
         .with_backend(store)
+        .on_message(move |ctx| {
+            let m1 = m1.clone();
+            async move {
+                let n = m1.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+                let sender = ctx.info.source.sender.to_string();
+                let text = ctx.message.text_content().unwrap_or("<bukan teks>");
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "phase": "MESSAGE",
+                        "seq": n,
+                        "sender": sender,
+
+                        "text": text,
+                        "rss_kb": rss::current_kb(),
+                    })
+                );
+            }
+        })
         .on_connected(move |_client| {
             let c1 = c1.clone();
             async move {
@@ -61,9 +84,6 @@ pub async fn run(creds_path: &str, hold_secs: u64) -> Result<()> {
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(hold_secs);
     let mut last_rss = 0u64;
     while tokio::time::Instant::now() < deadline {
-        if connected.load(std::sync::atomic::Ordering::SeqCst) {
-            break;
-        }
         if logged_out.load(std::sync::atomic::Ordering::SeqCst) {
             break;
         }
@@ -86,6 +106,7 @@ pub async fn run(creds_path: &str, hold_secs: u64) -> Result<()> {
             "phase":"result",
             "connected": ok,
             "logged_out": logged_out.load(out),
+            "messages": msgs.load(std::sync::atomic::Ordering::SeqCst),
             "rss_kb": rss::current_kb(),
         })
     );

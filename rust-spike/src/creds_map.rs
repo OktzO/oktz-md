@@ -109,14 +109,19 @@ pub struct RoutingInfoJson {
 /// pemetaannya 1:1. `details` sudah berupa bytes ter-serialize, pass-through.
 #[derive(Debug, Deserialize)]
 pub struct AccountJson {
-    #[serde(default, deserialize_with = "de_b64_any")]
+    #[serde(default, deserialize_with = "de_b64_any_opt")]
     pub details: Option<String>,
-    #[serde(default, deserialize_with = "de_b64_any")]
+    #[serde(default, deserialize_with = "de_b64_any_opt")]
     pub account_signature_key: Option<String>,
-    #[serde(default, deserialize_with = "de_b64_any")]
+    #[serde(default, deserialize_with = "de_b64_any_opt")]
     pub account_signature: Option<String>,
-    #[serde(default, deserialize_with = "de_b64_any")]
+    #[serde(default, deserialize_with = "de_b64_any_opt")]
     pub device_signature: Option<String>,
+}
+
+fn de_b64_any_opt<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
+    let s = de_b64_any(d)?;
+    Ok(if s.is_empty() { None } else { Some(s) })
 }
 
 pub fn b64(s: &str) -> Result<Vec<u8>> {
