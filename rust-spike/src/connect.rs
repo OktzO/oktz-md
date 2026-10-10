@@ -141,5 +141,25 @@ fn kp(j: &creds_map::KeyPairJson, label: &str) -> Result<KeyPair> {
     if let Some(ri) = c.routing_info.as_ref().and_then(|r| r.data.as_ref()) {
         d.edge_routing_info = Some(creds_map::b64(ri)?);
     }
+
+    // ADVSignedDeviceIdentity — tanpa ini PDO/retry receipt dan decrypt pesan
+    // grup yang gagal decrypt akan bermasalah.
+    if let Some(a) = c.account.as_ref() {
+        let nb = |s: &str| -> Result<Option<Vec<u8>>> {
+            if s.is_empty() { Ok(None) } else { Ok(Some(creds_map::b64(s)?)) }
+        };
+        d.account = Some(std::sync::Arc::new(whatsapp_rust::waproto::whatsapp::ADVSignedDeviceIdentity {
+            details: nb(a.details.as_deref().unwrap_or(""))?,
+            account_signature_key: nb(a.account_signature_key.as_deref().unwrap_or(""))?,
+            account_signature: match &a.account_signature {
+                Some(s) => nb(s)?,
+                None => None,
+            },
+            device_signature: match &a.device_signature {
+                Some(s) => nb(s)?,
+                None => None,
+            },
+        }));
+    }
     Ok(d)
 }

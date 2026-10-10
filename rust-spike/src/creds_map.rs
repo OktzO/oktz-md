@@ -33,6 +33,8 @@ pub struct Creds {
     #[serde(default)]
     pub me: Option<MeJson>,
     #[serde(default)]
+    pub account: Option<AccountJson>,
+    #[serde(default)]
     #[serde(rename = "routingInfo")]
     pub routing_info: Option<RoutingInfoJson>,
     #[serde(default)]
@@ -101,6 +103,20 @@ pub struct MeJson {
 pub struct RoutingInfoJson {
     #[serde(default)]
     pub data: Option<String>,
+}
+
+/// `account` di creds.json == protobuf `ADVSignedDeviceIdentity` (4 field bytes),
+/// pemetaannya 1:1. `details` sudah berupa bytes ter-serialize, pass-through.
+#[derive(Debug, Deserialize)]
+pub struct AccountJson {
+    #[serde(default, deserialize_with = "de_b64_any")]
+    pub details: Option<String>,
+    #[serde(default, deserialize_with = "de_b64_any")]
+    pub account_signature_key: Option<String>,
+    #[serde(default, deserialize_with = "de_b64_any")]
+    pub account_signature: Option<String>,
+    #[serde(default, deserialize_with = "de_b64_any")]
+    pub device_signature: Option<String>,
 }
 
 pub fn b64(s: &str) -> Result<Vec<u8>> {
