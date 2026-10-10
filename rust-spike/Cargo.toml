@@ -30,6 +30,11 @@ anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 hex = "0.4"
+base64 = "0.22"
+bytes = "1"
+# wacore-libsignal dipakai LANGSUNG untuk constructing SessionRecord dari
+# legacy state (fitur legacy-session-interop). Path pub: wacore_libsignal::protocol::legacy_session::*
+wacore-libsignal = { version = "0.7", features = ["legacy-session-interop"] }
 # CATATAN: `libsql` SENGAJA tidak dipakai di spike. Pembacaan Turso dilakukan
 # via Node (@libsql/client, sudah terbukti: 12639 baris session_keys) lalu
 # di-dump ke JSON, spike baca file-nya. Menghemat build libsql-ffi yang berat.

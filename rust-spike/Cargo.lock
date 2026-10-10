@@ -939,12 +939,15 @@ name = "oktz-spike"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
+ "bytes",
  "hex",
  "serde",
  "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "wacore-libsignal",
  "whatsapp-rust",
 ]
 

@@ -2,6 +2,7 @@
 // Lihat docs/superpowers/plans/2026-10-10-rust-rewrite-spike-s1-s4.md
 // Modul rss dipakai ulang oleh semua probe.
 
+pub mod onigis_session;
 pub mod rss;
 
 use anyhow::Result;
@@ -23,6 +24,60 @@ async fn main() -> Result<()> {
         "baseline" => {
             // Startup baseline sebelum load apa pun.
             println!("baseline ok");
+        }
+        "import" => {
+            // Baca dump Turso fixture dan coba impor seluruh sesi.
+            let path = args
+                .get(2)
+                .cloned()
+                .unwrap_or_else(|| "fixtures/turso_session_keys.json".into());
+            let raw = std::fs::read_to_string(&path)
+                .map_err(|e| anyhow::anyhow!("baca {path}: {e}"))?;
+            let dump: serde_json::Map<String, serde_json::Value> =
+                serde_json::from_str(&raw).map_err(|e| anyhow::anyhow!("parse dump: {e}"))?;
+
+            let sessions = dump.get("session").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+            let mut agg = onigis_session::ImportStats::default();
+            let mut ok_records = 0usize;
+            let mut failed_records = 0usize;
+            let mut first_error: Option<String> = None;
+
+            for row in &sessions {
+                let Some(data) = row.get("data").and_then(|d| d.as_str()) else { continue };
+                let mut stats = onigis_session::ImportStats::default();
+                match onigis_session::import_session_record(data, &mut stats) {
+                    Ok(_) => ok_records += 1,
+                    Err(e) => {
+                        failed_records += 1;
+                        if first_error.is_none() {
+                            first_error = Some(format!("{e:#}"));
+                        }
+                    }
+                }
+                agg.total_sessions += stats.total_sessions;
+                agg.imported_sessions += stats.imported_sessions;
+                agg.skipped_prekey_chains += stats.skipped_prekey_chains;
+                agg.skipped_unknown_basekeyrole += stats.skipped_unknown_basekeyrole;
+                agg.skipped_other += stats.skipped_other;
+                for e in stats.errors.iter() {
+                    if agg.errors.len() < 20 { agg.errors.push(e.clone()); }
+                }
+            }
+
+            println!("{}", serde_json::json!({
+                "phase": "import",
+                "rows_total": sessions.len(),
+                "records_ok": ok_records,
+                "records_failed": failed_records,
+                "sessions_total": agg.total_sessions,
+                "sessions_imported": agg.imported_sessions,
+                "skipped_prekey_chains": agg.skipped_prekey_chains,
+                "skipped_unknown_basekeyrole": agg.skipped_unknown_basekeyrole,
+                "skipped_other": agg.skipped_other,
+                "rss_kb": rss::current_kb(),
+                "first_error": first_error,
+            }));
+            for e in &agg.errors { eprintln!("  ! {e}"); }
         }
         "rss" => {
             let hold: u64 = args
