@@ -29,8 +29,29 @@ Belum ada satu baris kode Rust produksi. Belum ada `rust/` directory.
 | **Spike S3 (tombol)** | ✅ **muncul + bisa diklik** |
 | **Spike S4 (list)** | ✅ terkirim, render menunggu verifikasi Oktz |
 | **Spike S2 (RSS)** | ✅ **26.6 MB** saat connect (target 60) |
-| Test suite / clippy | ⚠️ re-run setelah helper berubah |
-| Fase 1 (oktz-core/store/plugin-api) | ⏳ **NEXT — fokus utama** |
+| Test suite / clippy | ✅ 33 test, clippy -D warnings bersih |
+| Fase 1 (oktz-core/store/plugin-api) | ✅ **GATE 1 LOLOS** (reviewer independen: LAYAK) |
+| Fase 2 (oktz-wa + router produksi) | ⏳ **NEXT** |
+
+## Fase 1 — DONE (GATE 1)
+
+Commit: `c67dfb4` (core) · `d28dc04` (store) · `256aa97` (plugin-api) · `53dc2e6` (bin) · `9a43724` (fix blocker) · `ad032bf` (fix re-review).
+
+| Item | Angka |
+|---|---|
+| `cargo test --workspace` | **33 hijau** (core 8, store 17, plugin-api 8, bin 0) |
+| `cargo clippy -- -D warnings` | **0 warning** |
+| `cargo fmt --check` | bersih |
+| DB round-trip | **24 file / 874KB, semua byte-identik** |
+
+Crate: `oktz-core` (config/env/error/logging) · `oktz-store` (LowDB byte-compat, JsonStore, stub Turso) ·
+`oktz-plugin-api` + `oktz-plugin-macros` (macro `#[plugin]`, linkme registry) · `oktz-bin` (boot stub + verify-db).
+
+**Reviewer independen menemukan 2 blocker yang TIDAK terlihat dari test hijau:**
+1. `JsonStore` menghapus seluruh isi file yang top-level-nya array (`owner/partner/premium.json`).
+2. `PluginMeta` tidak parity dengan JS (`snake_case` vs `camelCase`; 4 default salah) — dan test
+   sendiri **mengunci** bug itu. Reviewer re-review: blocker terbukti tertutup (uji independen,
+   file byte-identik). 2 temuan lanjutan (serde default, verify-db false-green) juga sudah fix.
 
 ## Keputusan yang sudah diambil
 
