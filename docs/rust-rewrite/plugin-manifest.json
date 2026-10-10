@@ -3221,7 +3221,8 @@
           "api.nexray.eu.cc"
         ]
       },
-      "awaitingDecision": true
+      "awaitingDecision": false,
+      "oktzDecision": "port-all"
     },
     {
       "file": "plugins/canvas/fakecall.js",
@@ -3278,7 +3279,8 @@
           "my.izuka-api.xyz"
         ]
       },
-      "awaitingDecision": true
+      "awaitingDecision": false,
+      "oktzDecision": "port-all"
     },
     {
       "file": "plugins/canvas/fakedana.js",
@@ -3330,7 +3332,8 @@
           "api.nexray.eu.cc"
         ]
       },
-      "awaitingDecision": true
+      "awaitingDecision": false,
+      "oktzDecision": "port-all"
     },
     {
       "file": "plugins/canvas/fakedev7.js",
@@ -3376,7 +3379,8 @@
         "usesMedia": true,
         "externalEndpoints": []
       },
-      "awaitingDecision": true
+      "awaitingDecision": false,
+      "oktzDecision": "port-all"
     },
     {
       "file": "plugins/canvas/fakegopay.js",
@@ -3427,7 +3431,8 @@
           "kyzznekoo.zone.id"
         ]
       },
-      "awaitingDecision": true
+      "awaitingDecision": false,
+      "oktzDecision": "port-all"
     },
     {
       "file": "plugins/canvas/fakeml.js",
@@ -3498,7 +3503,8 @@
           "upload.ee": "src/lib/upload-providers.js"
         }
       },
-      "awaitingDecision": true
+      "awaitingDecision": false,
+      "oktzDecision": "port-all"
     },
     {
       "file": "plugins/canvas/fakeovo.js",
@@ -3550,7 +3556,8 @@
           "kyzznekoo.zone.id"
         ]
       },
-      "awaitingDecision": true
+      "awaitingDecision": false,
+      "oktzDecision": "port-all"
     },
     {
       "file": "plugins/canvas/fakestory.js",
@@ -3599,7 +3606,8 @@
         "usesMedia": true,
         "externalEndpoints": []
       },
-      "awaitingDecision": true
+      "awaitingDecision": false,
+      "oktzDecision": "port-all"
     },
     {
       "file": "plugins/canvas/fakestory2.js",
@@ -3648,7 +3656,8 @@
         "usesMedia": true,
         "externalEndpoints": []
       },
-      "awaitingDecision": true
+      "awaitingDecision": false,
+      "oktzDecision": "port-all"
     },
     {
       "file": "plugins/canvas/fakestory3.js",
@@ -3698,7 +3707,8 @@
         "usesMedia": true,
         "externalEndpoints": []
       },
-      "awaitingDecision": true
+      "awaitingDecision": false,
+      "oktzDecision": "port-all"
     },
     {
       "file": "plugins/canvas/fakestory4.js",
@@ -3748,7 +3758,8 @@
         "usesMedia": true,
         "externalEndpoints": []
       },
-      "awaitingDecision": true
+      "awaitingDecision": false,
+      "oktzDecision": "port-all"
     },
     {
       "file": "plugins/canvas/gura.js",
@@ -3958,7 +3969,8 @@
         "usesMedia": false,
         "externalEndpoints": []
       },
-      "awaitingDecision": true
+      "awaitingDecision": false,
+      "oktzDecision": "port-all"
     },
     {
       "file": "plugins/canvas/iqc2.js",
@@ -4004,7 +4016,8 @@
         "usesMedia": false,
         "externalEndpoints": []
       },
-      "awaitingDecision": true
+      "awaitingDecision": false,
+      "oktzDecision": "port-all"
     },
     {
       "file": "plugins/canvas/iqcpink.js",
@@ -4050,7 +4063,8 @@
         "usesMedia": true,
         "externalEndpoints": []
       },
-      "awaitingDecision": true
+      "awaitingDecision": false,
+      "oktzDecision": "port-all"
     },
     {
       "file": "plugins/canvas/kalender.js",
@@ -4539,7 +4553,8 @@
         "usesMedia": true,
         "externalEndpoints": []
       },
-      "awaitingDecision": true
+      "awaitingDecision": false,
+      "oktzDecision": "port-all"
     },
     {
       "file": "plugins/canvas/watercolortext.js",
@@ -17496,7 +17511,8 @@
         "usesMedia": false,
         "externalEndpoints": []
       },
-      "awaitingDecision": true
+      "awaitingDecision": false,
+      "oktzDecision": "port-all"
     },
     {
       "file": "plugins/main/allmenu.js",
@@ -18617,7 +18633,8 @@
           "api.waifu.pics"
         ]
       },
-      "awaitingDecision": true
+      "awaitingDecision": false,
+      "oktzDecision": "port-all"
     },
     {
       "file": "plugins/nsfw/paptt.js",
@@ -18668,7 +18685,8 @@
           "kyzznekoo.zone.id"
         ]
       },
-      "awaitingDecision": true
+      "awaitingDecision": false,
+      "oktzDecision": "port-all"
     },
     {
       "file": "plugins/owner/addenergi.js",
@@ -27469,7 +27487,8 @@
         "usesMedia": false,
         "externalEndpoints": []
       },
-      "awaitingDecision": true
+      "awaitingDecision": false,
+      "oktzDecision": "port-all"
     },
     {
       "file": "plugins/random/anime.js",
@@ -38350,7 +38369,8 @@
           "api.cuki.biz.id"
         ]
       },
-      "awaitingDecision": true
+      "awaitingDecision": false,
+      "oktzDecision": "port-all"
     },
     {
       "file": "plugins/tools/ssweb.js",

@@ -29,12 +29,22 @@ Belum ada satu baris kode Rust produksi. Belum ada `rust/` directory.
 4. **`panic="unwind"`**, bukan `abort` — `catch_unwind` per handler menjaga `handler-error-visibility` (22 kasus).
 5. **`serde_json` `preserve_order` wajib** — byte-compat lowdb.
 6. **ffmpeg tetap subprocess**, `ourin-native` (OCR) dipakai ulang, `oktz-signal` bukan engine tapi tidak dihapus.
+7. **20 plugin kelas F → PORT SEMUA** (Oktz, GATE 0 2026-10-10). Manifest di-update: semua F `oktzDecision: "port-all"`. Tidak ada yang dibuang.
+8. **RSS → orchestrator atur sendiri** (Oktz, GATE 0). Kalau S2 ukur >60MB: lazy-load media → feature flag per kategori → kurangi cache dulu; naikkan angka target **hanya sebagai ops terakhir** + catat di `PERF.md`.
+9. **Impor sesi — analisis 3 lapis** (lihat RISKS R1). Fail total jauh lebih sempit dari diasumsikan: hanya device identity hilang. Gate S1 diperbaiki: **harus pesan terbaca, bukan sekadar connect OK**, dan dua jalur (full vs creds-only) diuji terpisah. Jalur creds-only yang menjamin no-re-pair.
 
 ## Keputusan yang MENUNGGU Oktz (jangan diasumsikan)
 
-- **20 plugin kelas F** (`awaitingDecision: true` di manifest) — port atau buang? Daftar di `PLUGIN-CLASSIFICATION.md`. **Jangan sentuh sampai dijawab.**
-- **R3** — kalau spike S2 ukur RSS idle `whatsapp-rust` > 60MB: turunkan scope (lazy-load media) atau naikkan target? Jangan putuskan sendiri.
-- **R1** — kalau spike S1 + re-encode v6→v1 sama-sama gagal: re-pair diterima atau proyek ditunda?
+_(tidak ada yang blocking saat ini — R1/R3/R5 sudah diputuskan di atas)_
+
+Items non-blocking yang mungkin nanti muncul:
+- Ekuivalen gratis untuk `firefly.maiku.my.id` (text2img) — belum terverifikasi, hanya biteks kalau ada plugin yang butuh.
+- Mirror PDDikti (kini 401) — belum terverifikasi.
+
+## Keputusan orchestrator (tanpa tanya Oktz)
+
+- RSS < 60MB: kalau tidak tercapai, urut mitigasi S2 = lazy-load media → feature flag per kategori plugin → kurangi cache global. Angka target hanya dinaikkan sebagai opsi terakhir dengan catatan di `PERF.md`.
+- API mati (kelas E): port dengan pesan error **yang sama persis** seperti perilaku JS sekarang, tandai ❌-mati di manifest. Cari ekuivalen gratis hanya kalau jelas bernilai.
 
 ## Skill / MCP / subagent yang dipakai
 

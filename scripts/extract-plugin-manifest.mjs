@@ -596,7 +596,8 @@ if (!info.ast) {
       ...base,
       ...cls,
       externalEndpoints: [],
-      awaitingDecision: cls.class === "F",
+      awaitingDecision: false,
+      oktzDecision: cls.class === "F" ? "port-all" : undefined,
       flags: {
         usesInteractive: false,
         usesNewsletter: false,
@@ -758,6 +759,11 @@ if (!info.ast) {
   }
   if (out.awaitingDecision === undefined) {
     out.awaitingDecision = classification.class === "F";
+  }
+  if (classification.class === "F") {
+    // Oktz (GATE 0, 2026-10-10): port semua kelas F, jangan ada yang dibuang diam-diam.
+    out.oktzDecision = "port-all";
+    out.awaitingDecision = false;
   }
   return out;
 }

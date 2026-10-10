@@ -4,12 +4,21 @@ Generated: **2026-10-10** · Skala: **Blocker** (hentikan proyek) / **Tinggi** /
 
 ---
 
-## R1 — Impor sesi lama mungkin mustahil — **Blocker**
+## R1 — Impor sesi lama mungkin mustahil — **Blocker** *(sempit, lihat analisis)*
 
-**Apa.** `creds.json` Baileys/onigis + file `SessionRecord` v6 dari `oktz-signal` harus dibaca `whatsapp-rust` (decoder v1, feature `legacy-session-interop`) tanpa pairing ulang.
-**Kenapa credibel.** README `oktz-signal` sendiri mengakui "wire compatibility with real WhatsApp clients is not guaranteed in every edge case" dan tidak pernah diaudit. `DeviceStore` butuh `login_counter` dsb yang belum terbukti ada.
-**Dampak kalau gagal.** Syarat mutlak Oktz "user tidak scan ulang" gugur.
-**Mitigasi.** Spike S1 **sebelum** kode produksi. Fallback berjenjang: (1) `legacy-session-interop`, (2) skrip re-encode v6→v1, (3) **keputusan Oktz** re-pair / tunda.
+**Analisis 3 lapis (hasilThinking deeper, 2026-10-10):** `storage/session/` hanya berisi `creds.json` + 10 `pre-key-*.json` + `device-list-*.json` — **nol `session-*.json`**. Sesi ratchet per kontak **tidak di file, tapi di Turso** (`turso-session.js`, format `BufferJSON` Baileys). Tiga lapis yang bisa gagal:
+
+1. **Struktural** (`creds.json` → `DeviceStore`): butuh `login_counter`, `device_pairing_data`, `pairing_epoch`, `server_cert_chain` yang mungkin tidak ada di 22 key Baileys. Murah — synthesize. Precedent: adopter ditolak 0.6.0 karena kurang `login_counter`.
+2. **Format record** (Turso `SessionRecord` v6 → decoder v1): **gagal diam-diam**. Protobuf mengabaikan unknown field, jadi record bisa ke-parse tanpa error tapi isinya salah (message keys kosong) → decrypt gagal terus-menerus.
+3. **Algoritma** (`oktz-signal` vs libsignal): paling mungkin buntu. README `oktz-signal`: tidak pernah diaudit, "wire compatibility tidak dijamin". Kalau X3DH/Double Ratchet deviate sedikit, libsignal di `whatsapp-rust` derive key berbeda → session tak akan pernah sync. Tidak tertangkap validasi struktural.
+
+**Kenapa ini TIDAK fail total.** Sesi ratchet per kontak bisa dibangun ulang dari nol selama `identityKey` + `signedPreKey`/prekeys + device registration selamat — ketiganya ada di disk. Kalau record v6 tidak bisa di-decode: **buang record, jangan gagalkan import**; bot tetap device yang sama, ratchet direset, WA kirim prekey baru di pesan masuk berikutnya, session rebuild sendiri. Yang hilang hanya history sync belum-terbaca + mungkin window pesan terakhir.
+
+**Fail total** hanya kalau device identity hilang — `creds.json` korup/tidak terbaca, atau WA menolak device dan memaksa unlink. `creds.json` ada utuh dengan karantina `creds.json.broken-*` + test `creds-recovery.test.mjs`. Risiko kecil.
+
+**Yang sebenarnya berbahaya: setengah berhasil.** Bot connect + online + handshake lolos, tapi pesan tidak bisa didecrypt → user lihat "Menunggu pesan ini…" selamanya. Lebih mahal dari gagal bersih.
+
+**Definisi gate S1 diperbaiki:** S1 **gagal** kalau bot connect **DAN** pesan dari akun uji **terbaca** (bukan sekadar "connect OK"). **Dua jalur import diuji terpisah:** (a) full — creds + record sesi dari Turso; (b) creds-only — kalau (a) buntu, buang record, bangun ulang ratchet. Jalur (b) yang menjamin no-re-pair.
 **Status.** Terbuka. Spike adalah gate.
 
 ## R2 — Parity interactive/buttons/list — **Blocker**
@@ -19,11 +28,12 @@ Generated: **2026-10-10** · Skala: **Blocker** (hentikan proyek) / **Tinggi** /
 **Mitigasi.** Spike S3 (tombol) + S4 (list) kirim paket nyata ke akun uji; **paste bukti tombol bisa diklik**, bukan compile. Test golden byte-equal dari bot JS.
 **Status.** Terbuka.
 
-## R3 — RSS belum terukur vs target 60MB — **Tinggi**
+## R3 — RSS belum terukur vs target 60MB — **Tinggi (delegated ke orchestrator)**
 
-**Apa.** `wacore`+libsignal+SQLite in-process. Kalau >60MB sendirian, target idle <60MB mustahil tanpa scope change.
-**Mitigasi.** Spike S2. Kalau meleset → ajukan scope change ke Oktz (lazy-load media, feature flag), jangan diam-diam naikkan target.
-**Status.** Terbuka.
+**Keputusan Oktz (GATE 0):** "atur saja" — orchestrator berwenang menetapkan scope/target RSS berdasarkan angka spike, tidak perlu tanya lagi.
+**Aturan yang saya pakai kalau meleset:** kalau S2 ukur RSS idle `whatsapp-rust` > 60MB, prioritaskan (1) lazy-load subsistem media (canvas/OCR/scrapers tidak di-load sampai dipakai), (2) feature flag per kategori plugin agar binary bisa dirampingkan, (3) kurangi cache global. **Naikkan angka target hanya sebagaiPALING akhir**, dan wajib dicatat alasannya di `PERF.md` — tidak diam-diam.
+**Mitigasi.** Spike S2 mengukur; scope change dipilih dari angka, bukan tebakan.
+**Status.** Terbuka, tapi tidak lagi blokir keputusan — orchestrator pegang kendali.
 
 ## R4 — 830 plugin = 80% volume kerja — **Tinggi**
 
@@ -32,12 +42,12 @@ Generated: **2026-10-10** · Skala: **Blocker** (hentikan proyek) / **Tinggi** /
 **Mitigasi.** A dulu (47.7% logika murni → cepat). Subagent batch 10–15 per kategori. Test paritas otomatis (golden output), bukan review manual.
 **Status.** Territory, bukan blocker.
 
-## R5 — 20 plugin kelas F menunggu keputusan — **Tinggi (blokir sebagian batch)**
+## R5 — 20 plugin kelas F — **SELESAI: port semua**
 
-**Apa.** 15 artefak palsu canvas (fakedana/fakegopay/fakecall/…), `nsfw/*`, `jpm/jpm.js`, `pushkontak/pushkontak.js`, `tools/spamngl.js`.
-**Kenapa.** Diminta brief: kategori F → **tanya Oktz, jangan porting otomatis.**
-**Mitigasi.** Tandai `awaitingDecision` di manifest; **jangan sentuh** sampai Oktz memutuskan. Semua dicatat di manifest, bukan dilewati diam-diam.
-**Status.** Menunggu keputusan Oktz.
+**Keputusan Oktz (GATE 0, 2026-10-10):** port semua 20 plugin kelas F. Tidak ada yang dibuang.
+Daftar: 15 artefak palsu canvas (`fakebankjago`, `fakecall`, `fakedana`, `fakedev7`, `fakegopay`, `fakeml`, `fakeovo`, `fakestory`–`4`, `iqc`, `iqc2`, `iqcpink`, `ttqc`), `nsfw/nsfw.js`, `nsfw/paptt.js`, `jpm/jpm.js`, `pushkontak/pushkontak.js`, `tools/spamngl.js`.
+Manifest sudah di-update: semua F = `oktzDecision: "port-all"`, `awaitingDecision: false`.
+**Status.** ✅ Ditutup — jadi tugas biasa di gelombang G3.
 
 ## R6 — 5 plugin kelas E mati — **Rendah**
 
