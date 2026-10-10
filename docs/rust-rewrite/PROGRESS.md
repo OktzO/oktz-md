@@ -22,10 +22,12 @@ Belum ada satu baris kode Rust produksi. Belum ada `rust/` directory.
 | Toolchain Rust | ✅ terpasang + build **berhasil** |
 | **Probe Turso (S1 pre-check)** | ✅ **selesai — 12.639 session_keys** |
 | **GATE 0 — approval Oktz** | ✅ **lolos** (engine, F=port-all, RSS delegated) |
-| Spike Task 1 (scaffold+baseline) | ✅ **selesai — binary 2.0MB, RSS kosong 3.1MB** |
-| Spike S1 (impor sesi) | ⏳ kode importer belum ditulis |
-| Spike S2 (RSS angka) | ⏳ butuh client ter-initialize + connect |
+| Spike Task 1 (scaffold+baseline) | ✅ binary 2.0MB, RSS start 3.1MB |
+| **Spike S1 (impor sesi)** | ✅ **FULL — 538/538 sesi, 514/514 record, test 4/4** |
+| Spike S1 — pemetaan creds→DeviceStore | ⏳ next |
+| Spike S2 (RSS saat connect) | ⏳ butuh akun WA uji |
 | Spike S3/S4 (interaktif) | ⏳ butuh akun WA uji |
+| Fase 1 (oktz-core/store/plugin-api) | ⏳ next |
 
 ## Keputusan yang sudah diambil
 
@@ -72,6 +74,22 @@ Items non-blocking yang mungkin nanti muncul:
 - ⚠️ `simd` **wajib dimatikan** (`default-features = false`) atau build gagal di stable. Ini juga constrain produksi.
 
 ## Temuan spike (2026-10-10)
+
+**S1 ✅ FULL.** Dump 514 record Turso produksi → **538/538 sesi terimpor**, 0 gagal,
+test 4/4 hijau. RSS 9.4MB.
+
+**Asumsi RISKS R1 TERBATALKAN.** Kolom `data` Turso **bukan protobuf biner**, tapi JSON
+(double-encoded, 2× parse). Risiko "SessionRecord v6 vs decoder v1" tidak berlaku — semua
+field kripto tersedia sebagai base64 dan `LegacySessionV1` map 1:1. Risiko yang tersisa
+jauh lebih kecil dari diasumsikan.
+
+`baseKeyType=0` pada **85/538 sesi (16%)** → map ke `Local`, bukan dibuang. Dasar:
+`base_key_role` hanya dipakai untuk validasi `Remote + pending_pre_key.is_some()`, dan
+importer selalu `pending_pre_key=None` → nol dampak decrypt. Detail + sisa gap:
+`docs/rust-rewrite/spike/S1.md`.
+
+**Belum terbukti** (butuh Oktz): pemetaan `creds.json`→`DeviceStore`, pesan benar-benar
+terbaca, RSS saat connect aktif.
 
 **Probe Turso (S1 pre-check) — ✅ selesai, tanpa Rust.** `@libsql/client` + `.env` → DB hidup. Isi `session_keys` scope `main`:
 
