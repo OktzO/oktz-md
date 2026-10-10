@@ -124,6 +124,21 @@ messageHandler(msg, sock)
 - Auto-reconnect dengan exponential backoff
 - LID (Location ID) resolution: `src/lib/lid.js` — konversi `@lid` ↔ JID, fallback ke `@lid` bila tidak resolve
 
+### Batas tanggung jawab session store (hasil audit 2026-10-10)
+
+`src/lib/turso-session.js` **bukan** duplikat dari signal layer `onigis`. Keduanya
+bekerja pada lapisan berbeda dan keduanya dipertahankan:
+
+| Lapisan | Pemilik | Tugas |
+|---|---|---|
+| Kriptografi | `onigis` (via `oktz-signal` + `oktz-curve25519`) | session record, pre-key, encrypt/decrypt |
+| Persistensi | `src/lib/turso-session.js` | nyimpan/baca auth state, prune, recovery file korup |
+
+Bot tetap memakai `makeCacheableSignalKeyStore` dari `onigis` sebagai key store;
+`makeWASocket` di dua entry point (`src/connection.js` dan
+`src/lib/jadibot-manager.js`) meneruskan store itu apa adanya. Tidak ada
+session store ganda yang perlu dikonsolidasikan.
+
 ## Security
 
 - `config.js`: strict number matching (`matchesNumber`) — mencegah privilege escalation via partial match
@@ -164,7 +179,7 @@ sub-bot.
 
 | Library | Fungsi |
 |---------|--------|
-| `onigis` | WhatsApp MD protocol (fork of @whiskeysockets/baileys) — dinamai `foto-baileys` di versi lama |
+| `onigis` | WhatsApp MD protocol (fork of @whiskeysockets/baileys) — dinamai `foto-baileys` di versi lama. Dipin `10.1.0-rc.12` |
 | `lowdb` | JSON file database |
 | `@libsql/client` | Turso/libsql edge database |
 | `@napi-rs/canvas` | Canvas rendering (welcome card, OCR fixture) |
@@ -173,6 +188,8 @@ sub-bot.
 | `fluent-ffmpeg` | Audio/video processing |
 | `pino` | Logging (Baileys internal) |
 | `cron` | Job scheduling |
+| `oktz-signal` | Signal protocol (X25519, session, pre-key) — dipin `0.3.0-rc.3` |
+| `oktz-curve25519` | Native binding kripto kurva — transitif, `0.0.10`, binary per-platform via `@oktz/curve25519-*` |
 | `rate-limiter-flexible` | Rate limiting |
 | `lru-cache` | Performance caching (apimanager, thumb) |
 | `node-cache` | Cache key/value sederhana |

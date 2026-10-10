@@ -117,7 +117,6 @@ function createMessageDedup(cache, maxKeys) {
 }
 
 const messageDedup = createMessageDedup(processedMessages, 5000);
-const msgRetryCounterCache = new NodeCache({ stdTTL: 60, useClones: false, maxKeys: 2000 });
 
 let lastMessageReceived = Date.now();
 let watchdogTimer = null;
@@ -710,7 +709,6 @@ async function startConnection(options = {}) {
         return undefined;
       }
     },
-    msgRetryCounterCache,
   });
 
   store.bind(sock.ev);

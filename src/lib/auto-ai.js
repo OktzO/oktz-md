@@ -970,7 +970,7 @@ async function handleAutoAI(m, sock) {
   if (isOnCooldown(senderNumber)) return false;
 
   try {
-    await sock.sendPresenceUpdate("composing", m.chat);
+    await sock.sendPresenceUpdate("composing", m.chat).catch(() => {});
     setCooldown(senderNumber);
 
     let imageBuffer = null;
@@ -1054,14 +1054,14 @@ async function handleAutoAI(m, sock) {
 
     saveToHistory(autoai, senderNumber, "assistant", cleanResponse);
 
-    await sock.sendPresenceUpdate("paused", m.chat);
+    await sock.sendPresenceUpdate("paused", m.chat).catch(() => {});
 
     const typingDelay = Math.min(cleanResponse.length * 20, 2000);
     await new Promise((r) => setTimeout(r, typingDelay));
 
     if (autoai.responseType === "voice") {
       try {
-        await sock.sendPresenceUpdate("recording", m.chat);
+        await sock.sendPresenceUpdate("recording", m.chat).catch(() => {});
         const execAsync = promisify(exec);
 
         const tempDir = path.join(process.cwd(), "temp");
@@ -1115,7 +1115,7 @@ async function handleAutoAI(m, sock) {
           { quoted: m },
         );
 
-        await sock.sendPresenceUpdate("paused", m.chat);
+        await sock.sendPresenceUpdate("paused", m.chat).catch(() => {});
       } catch {
         await m.reply(cleanResponse);
       }
@@ -1156,7 +1156,9 @@ async function handleAutoAI(m, sock) {
     return true;
   } catch (error) {
     console.error("[AutoAI Error]", error.message);
-    await sock.sendPresenceUpdate("paused", m.chat);
+    // presence hanya kosmetik: tanpa catch, kegagalan di sini membuat
+    // reply fallback di bawah hilang dan error dilempar keluar dari catch.
+    await sock.sendPresenceUpdate("paused", m.chat).catch(() => {});
     try {
       await m.reply(getFallbackResponse());
     } catch {}
