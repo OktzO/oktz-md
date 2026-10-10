@@ -12,7 +12,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cfg = Config::from_env();
 
     if mode == "verify-db" {
-        return verify_db(&cfg.database.path);
+        let dir = args
+            .get(2)
+            .cloned()
+            .unwrap_or_else(|| cfg.database.path.clone());
+        return verify_db(&dir);
     }
 
     let store_path = PathBuf::from(&cfg.database.path).join("settings.json");
@@ -53,47 +57,46 @@ fn verify_db(dir: &str) -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     let mut results = Vec::new();
-    let mut entries: Vec<_> = std::fs::read_dir(&path)?.filter_map(|e| e.ok()).collect();
-    entries.sort_by_key(|e| e.file_name());
-    for e in entries {
-        let p = e.path();
-        if p.extension().and_then(|x| x.to_str()) != Some("json") {
-            continue;
-        }
-        let Ok(raw) = std::fs::read_to_string(&p) else {
-            continue;
-        };
-        let out = oktz_store::lowdb::roundtrip_bytes(&raw);
-        let (identical, detail) = match out {
-            Ok(s) => {
-                let ok = s == raw;
-                (
-                    ok,
-                    if ok {
-                        String::new()
-                    } else {
-                        let first_diff = raw
-                            .bytes()
-                            .zip(s.bytes())
-                            .position(|(a, b)| a != b)
-                            .unwrap_or(raw.len().min(s.len()));
-                        format!(
-                            "beda mulai byte {first_diff}; len {} vs {}",
-                            raw.len(),
-                            s.len()
-                        )
-                    },
-                )
+    fn walk(dir: &std::path::Path, out: &mut Vec<serde_json::Value>) -> std::io::Result<()> {
+        let mut entries: Vec<_> = std::fs::read_dir(dir)?.filter_map(|e| e.ok()).collect();
+        entries.sort_by_key(|e| e.file_name());
+        for e in entries {
+            let p = e.path();
+            if p.is_dir() {
+                walk(&p, out)?;
+                continue;
             }
-            Err(e) => (false, format!("parse gagal: {e}")),
-        };
-        results.push(serde_json::json!({
-            "file": p.file_name().unwrap_or_default().to_string_lossy(),
-            "bytes": raw.len(),
-            "identical": identical,
-            "detail": detail,
-        }));
+            if p.extension().and_then(|x| x.to_str()) != Some("json") {
+                continue;
+            }
+            let Ok(raw) = std::fs::read_to_string(&p) else {
+                continue;
+            };
+            let (identical, detail) = match oktz_store::lowdb::roundtrip_bytes(&raw) {
+                Ok(s) if s == raw => (true, String::new()),
+                Ok(s) => {
+                    let at = raw
+                        .bytes()
+                        .zip(s.bytes())
+                        .position(|(a, b)| a != b)
+                        .unwrap_or(raw.len().min(s.len()));
+                    (
+                        false,
+                        format!("beda mulai byte {at}; len {} vs {}", raw.len(), s.len()),
+                    )
+                }
+                Err(e) => (false, format!("parse gagal: {e}")),
+            };
+            out.push(serde_json::json!({
+                "file": p.display().to_string(),
+                "bytes": raw.len(),
+                "identical": identical,
+                "detail": detail,
+            }));
+        }
+        Ok(())
     }
+    walk(&path, &mut results)?;
     let all_ok = results.iter().all(|r| r["identical"] == true);
     println!(
         "{}",

@@ -8,6 +8,12 @@ pub struct JsonStore {
     data: Value,
 }
 
+/// Isi file top-level bukan object — owner.json/partner.json/premium.json
+/// top-level-nya array. Set key pada file seperti itu berarti menghapus seluruh
+/// isinya (mis. seluruh roster premium), jadi tolak eksplisit, jangan diam-diam.
+const NOT_OBJECT: &str =
+    "file JSON top-level bukan object (array/scalar) — set() akan menghapus seluruh isi";
+
 impl JsonStore {
     /// Buka file JSON; kalau tidak ada, mulai dari objek kosong.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
@@ -24,19 +30,19 @@ impl JsonStore {
         }
     }
 
-    fn map_mut(&mut self) -> &mut Map<String, Value> {
-        if !self.data.is_object() {
-            self.data = Value::Object(Map::new());
-        }
-        self.data.as_object_mut().expect("sudah object")
+    fn map_mut(&mut self) -> Result<&mut Map<String, Value>> {
+        self.data
+            .as_object_mut()
+            .ok_or_else(|| Error::Config(NOT_OBJECT.into()))
     }
 
     pub fn get(&self, key: &str) -> Option<&Value> {
         self.data.as_object().and_then(|m| m.get(key))
     }
 
-    pub fn set(&mut self, key: &str, value: Value) {
-        self.map_mut().insert(key.to_string(), value);
+    pub fn set(&mut self, key: &str, value: Value) -> Result<()> {
+        self.map_mut()?.insert(key.to_string(), value);
+        Ok(())
     }
 
     pub fn remove(&mut self, key: &str) -> Option<Value> {
@@ -76,6 +82,32 @@ mod tests {
         p
     }
 
+    // Regresi: premium.json/owner.json/partner.json top-level-nya array.
+    // Dulu map_mut() mengganti isinya jadi object kosong -> roster hilang.
+    #[test]
+    fn set_on_array_file_is_rejected_not_destructive() {
+        let path = tmpfile("array-file");
+        let original = r#"[{"jid":"6285608953677","isPremium":true}]"#;
+        std::fs::write(&path, original).unwrap();
+
+        let mut s = JsonStore::open(&path).unwrap();
+        assert!(s.set("jid", Value::from("x")).is_err(), "harus ditolak");
+        s.write().unwrap();
+
+        let after = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(after, original, "isi file array TIDAK boleh berubah");
+    }
+
+    #[test]
+    fn write_on_unopened_array_file_preserves_content() {
+        let path = tmpfile("array-preserve");
+        let original = r#"[1,2,3]"#;
+        std::fs::write(&path, original).unwrap();
+        let s = JsonStore::open(&path).unwrap();
+        s.write().unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+    }
+
     #[test]
     fn missing_file_starts_empty() {
         let s = JsonStore::open(tmpfile("missing")).unwrap();
@@ -85,7 +117,7 @@ mod tests {
     #[test]
     fn set_get_remove() {
         let mut s = JsonStore::open(tmpfile("crud")).unwrap();
-        s.set("a", Value::from(1));
+        s.set("a", Value::from(1)).unwrap();
         assert_eq!(s.get("a"), Some(&Value::from(1)));
         s.remove("a");
         assert_eq!(s.get("a"), None);
@@ -102,7 +134,7 @@ mod tests {
         .unwrap();
 
         let mut s = JsonStore::open(&path).unwrap();
-        s.set("known", Value::from(99));
+        s.set("known", Value::from(99)).unwrap();
         s.write().unwrap();
 
         let after = std::fs::read_to_string(&path).unwrap();
@@ -117,7 +149,7 @@ mod tests {
     fn integers_stay_integers_on_disk() {
         let path = tmpfile("ints");
         let mut s = JsonStore::open(&path).unwrap();
-        s.set("count", Value::from(42));
+        s.set("count", Value::from(42)).unwrap();
         s.write().unwrap();
         let after = std::fs::read_to_string(&path).unwrap();
         assert_eq!(after, r#"{"count":42}"#);
@@ -128,8 +160,8 @@ mod tests {
     fn write_is_byte_identical_to_lowdb_format() {
         let path = tmpfile("bytefmt");
         let mut s = JsonStore::open(&path).unwrap();
-        s.set("z", Value::from(1));
-        s.set("a", Value::from(2));
+        s.set("z", Value::from(1)).unwrap();
+        s.set("a", Value::from(2)).unwrap();
         s.write().unwrap();
         let after = std::fs::read_to_string(&path).unwrap();
         assert_eq!(
