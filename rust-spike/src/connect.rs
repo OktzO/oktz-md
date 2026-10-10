@@ -12,7 +12,7 @@ pub async fn run(creds_path: &str, hold_secs: u64) -> Result<()> {
     let raw = std::fs::read_to_string(creds_path)
         .map_err(|e| anyhow::anyhow!("baca {creds_path}: {e}"))?;
     let (_m, c) = creds_map::inspect_creds(&raw)?;
-    let device = build_device(&c).await?;
+    let device = build_device_pub(&c).await?;
     println!(
         "{}",
         serde_json::json!({"phase":"device_built","rss_kb":rss::current_kb()})
@@ -118,7 +118,7 @@ fn jid(s: &str) -> Result<Jid> {
     s.parse::<Jid>().map_err(|e| anyhow::anyhow!("JID {s}: {e}"))
 }
 
-async fn build_device(c: &creds_map::Creds) -> Result<whatsapp_rust::wacore::store::Device> {
+pub async fn build_device_pub(c: &creds_map::Creds) -> Result<whatsapp_rust::wacore::store::Device> {
     use wacore_libsignal::core::curve::{KeyPair, PrivateKey, PublicKey};
     // onigis/Baileys menyimpan public key Curve25519 sebagai 32 byte POLOS.
 // libsignal/wacore memakai bentuk kanonik 33 byte = 0x05 (KeyType::Djb) + 32.

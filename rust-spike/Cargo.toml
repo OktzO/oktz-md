@@ -37,4 +37,4 @@ bytes = "1"
 wacore-libsignal = { version = "0.7", features = ["legacy-session-interop"] }
 # CATATAN: `libsql` SENGAJA tidak dipakai di spike. Pembacaan Turso dilakukan
 # via Node (@libsql/client, sudah terbukti: 12639 baris session_keys) lalu
-# di-dump ke JSON, spike baca file-nya. Menghemat build libsql-ffi yang berat.
+# di-dump ke JSON, spike baca file-nya. Menghemat build libsql-ffi yang berat.wacore-binary = "0.7"
