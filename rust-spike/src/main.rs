@@ -2,6 +2,7 @@
 // Lihat docs/superpowers/plans/2026-10-10-rust-rewrite-spike-s1-s4.md
 // Modul rss dipakai ulang oleh semua probe.
 
+pub mod connect;
 pub mod creds_map;
 pub mod onigis_session;
 pub mod rss;
@@ -122,6 +123,11 @@ async fn main() -> Result<()> {
                     "rss_kb": rss::current_kb(),
                 })
             );
+        }
+        "connect" => {
+            let creds = args.get(2).cloned().unwrap_or_else(|| "../storage/session/creds.json".into());
+            let hold: u64 = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(90);
+            connect::run(&creds, hold).await?;
         }
         "rss" => {
             let hold: u64 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(60);

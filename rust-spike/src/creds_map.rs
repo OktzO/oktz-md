@@ -16,43 +16,43 @@ use wacore_libsignal::core::curve::{KeyPair, PrivateKey, PublicKey};
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)] // field dipakai saat constructing Device (tahap berikutnya)
-pub(crate) struct Creds {
+pub struct Creds {
     #[serde(rename = "noiseKey")]
-    noise_key: KeyPairJson,
+    pub noise_key: KeyPairJson,
     #[serde(rename = "signedIdentityKey")]
-    signed_identity_key: KeyPairJson,
+    pub signed_identity_key: KeyPairJson,
     #[serde(rename = "signedPreKey")]
-    signed_pre_key: SignedPreKeyJson,
+    pub signed_pre_key: SignedPreKeyJson,
     #[serde(rename = "advSecretKey")]
     #[serde(deserialize_with = "de_b64_any")]
-    adv_secret_key: String,
+    pub adv_secret_key: String,
     #[serde(rename = "registrationId")]
-    registration_id: u32,
+    pub registration_id: u32,
     #[serde(default)]
     platform: Option<String>,
     #[serde(default)]
-    me: Option<MeJson>,
+    pub me: Option<MeJson>,
     #[serde(default)]
     #[serde(rename = "routingInfo")]
-    routing_info: Option<RoutingInfoJson>,
+    pub routing_info: Option<RoutingInfoJson>,
     #[serde(default)]
     #[serde(rename = "lastPropHash")]
-    last_prop_hash: Option<String>,
+    pub last_prop_hash: Option<String>,
     #[serde(default)]
     #[serde(rename = "nextPreKeyId")]
-    next_pre_key_id: Option<u32>,
+    pub next_pre_key_id: Option<u32>,
     #[serde(default)]
     #[serde(rename = "firstUnuploadedPreKeyId")]
-    first_unuploaded_pre_key_id: Option<u32>,
+    pub first_unuploaded_pre_key_id: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)] // dipakai saat constructing Device
-struct KeyPairJson {
+pub struct KeyPairJson {
     #[serde(deserialize_with = "de_b64_any")]
-    private: String,
+    pub private: String,
     #[serde(deserialize_with = "de_b64_any")]
-    public: String,
+    pub public: String,
 }
 
 /// Di `creds.json` produksi nilai key berupa object BufferJSON
@@ -80,35 +80,36 @@ fn de_b64_any<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)] // key_pair dipakai saat constructing Device
-struct SignedPreKeyJson {
+pub struct SignedPreKeyJson {
     #[serde(rename = "keyPair")]
-    key_pair: KeyPairJson,
+    pub key_pair: KeyPairJson,
     #[serde(deserialize_with = "de_b64_any")]
-    signature: String,
+    pub signature: String,
     #[serde(rename = "keyId")]
-    key_id: u32,
+    pub key_id: u32,
 }
 
 #[derive(Debug, Deserialize)]
-struct MeJson {
-    id: String,
-    name: String,
+pub struct MeJson {
+    pub id: String,
+    pub name: String,
     #[serde(default)]
-    lid: Option<String>,
+    pub lid: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-struct RoutingInfoJson {
+pub struct RoutingInfoJson {
     #[serde(default)]
-    data: Option<String>,
+    pub data: Option<String>,
 }
 
-fn b64(s: &str) -> Result<Vec<u8>> {
+pub fn b64(s: &str) -> Result<Vec<u8>> {
     use base64::Engine;
     let cleaned: String = s.chars().filter(|c| !c.is_whitespace()).collect();
     Ok(base64::engine::general_purpose::STANDARD.decode(cleaned.as_bytes())?)
 }
 
+#[cfg(test)]
 #[cfg(test)]
 fn b64_encode(bytes: &[u8]) -> String {
     use base64::Engine;
