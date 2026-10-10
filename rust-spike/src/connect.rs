@@ -22,6 +22,14 @@ pub async fn run(creds_path: &str, hold_secs: u64) -> Result<()> {
     let _ = std::fs::remove_file(&db);
     let store = SqliteStore::new(db.to_str().unwrap()).await?;
     store.save_device_data_for_device(1, &device).await?;
+    let fixture = std::env::var("OKTZ_SESSION_FIXTURE").unwrap_or_else(|_| "fixtures/turso_session_keys.json".into());
+    let ident = creds_map::b64(&c.signed_identity_key.public)?;
+    let mut ident33 = ident.clone();
+    if ident33.len() == 32 { ident33.insert(0, 0x05); }
+    match crate::load_sessions::load_into_store(&store, &fixture, &ident33, c.registration_id).await {
+        Ok(r) => println!("{}", serde_json::json!({"phase":"sessions_loaded","loaded":r.sessions_loaded,"failed":r.sessions_failed,"records_failed":r.records_failed,"rss_kb":rss::current_kb()})),
+        Err(e) => eprintln!("!! load sesi gagal: {e}"),
+    }
     println!(
         "{}",
         serde_json::json!({"phase":"device_saved","rss_kb":rss::current_kb()})

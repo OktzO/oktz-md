@@ -4,6 +4,7 @@
 
 pub mod buttons;
 pub mod connect;
+pub mod load_sessions;
 pub mod creds_map;
 pub mod onigis_session;
 pub mod rss;
