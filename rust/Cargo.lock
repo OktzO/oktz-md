@@ -125,6 +125,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "oktz-bin"
+version = "0.1.0"
+dependencies = [
+ "oktz-core",
+ "oktz-plugin-api",
+ "oktz-store",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "oktz-core"
 version = "0.1.0"
 dependencies = [

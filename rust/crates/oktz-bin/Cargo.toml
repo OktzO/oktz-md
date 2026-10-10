@@ -1,0 +1,17 @@
+[package]
+name = "oktz-bin"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "oktz"
+path = "src/main.rs"
+
+[dependencies]
+oktz-core = { path = "../oktz-core" }
+oktz-store = { path = "../oktz-store" }
+oktz-plugin-api = { path = "../oktz-plugin-api" }
+serde_json.workspace = true
+tracing.workspace = true
