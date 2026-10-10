@@ -27,7 +27,7 @@ pub async fn run(creds_path: &str, hold_secs: u64) -> Result<()> {
     let mut ident33 = ident.clone();
     if ident33.len() == 32 { ident33.insert(0, 0x05); }
     match crate::load_sessions::load_into_store(&store, &fixture, &ident33, c.registration_id).await {
-        Ok(r) => println!("{}", serde_json::json!({"phase":"sessions_loaded","loaded":r.sessions_loaded,"failed":r.sessions_failed,"records_failed":r.records_failed,"rss_kb":rss::current_kb()})),
+        Ok(r) => println!("{}", serde_json::json!({"phase":"sessions_loaded","loaded":r.sessions_loaded,"failed":r.sessions_failed,"records_failed":r.records_failed,"first_error":r.first_error,"rss_kb":rss::current_kb()})),
         Err(e) => eprintln!("!! load sesi gagal: {e}"),
     }
     println!(

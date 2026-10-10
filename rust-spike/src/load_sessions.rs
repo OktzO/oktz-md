@@ -13,6 +13,7 @@ pub struct LoadReport {
     pub sessions_failed: usize,
     pub records_failed: usize,
     pub skipped_unknown_basekeyrole: usize,
+    pub first_error: Option<String>,
 }
 
 /// Address key yang dipakai wacore: `<jid>.<device>` (lihat log run S1:
@@ -61,8 +62,9 @@ where
 
         let record = match legacy.into_session_record(ctx) {
             Ok(r) => r,
-            Err(_) => {
+            Err(e) => {
                 rep.sessions_failed += 1;
+                if rep.first_error.is_none() { rep.first_error = Some(format!("{e:?}")); }
                 continue;
             }
         };

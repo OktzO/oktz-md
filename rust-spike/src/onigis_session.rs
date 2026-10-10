@@ -133,6 +133,18 @@ impl BufferJson {
 }
 
 /// Decode base64 toleran whitespace (beberapa nilai onigis beregak/newline).
+// onigis simpan public key Curve25519 32 byte polos; wacore/libsignal
+// butuh bentuk kanonik 33 byte = 0x05 (KeyType::Djb) + 32.
+const DJB_PREFIX: u8 = 0x05;
+
+fn pub_key_b64(s: &str) -> Result<Bytes> {
+    let mut v: Vec<u8> = base64_decode(s)?.to_vec();
+    if v.len() == 32 {
+        v.insert(0, DJB_PREFIX);
+    }
+    Ok(Bytes::from(v))
+}
+
 fn base64_decode(s: &str) -> Result<Bytes> {
     use base64::Engine;
     let cleaned: String = s.chars().filter(|c| !c.is_whitespace()).collect();
@@ -192,7 +204,7 @@ fn convert_one(
     s: &OnigisSession,
     stats: &mut ImportStats,
 ) -> Result<LegacyIndexedSessionV1> {
-    let base_key_bytes = base64_decode(&s.index_info.base_key)?;
+    let base_key_bytes = pub_key_b64(&s.index_info.base_key)?;
 
     let role = map_base_key_role(s.index_info.base_key_type, stats).ok_or_else(|| {
         anyhow::anyhow!(
@@ -212,7 +224,7 @@ fn convert_one(
             stats.skipped_prekey_chains += 1;
             continue;
         };
-        let ratchet_bytes = base64_decode(ratchet_key)?;
+        let ratchet_bytes = pub_key_b64(ratchet_key)?;
         let counter = LegacySessionChainCounterV1::new(c.chain_key.counter).context("counter")?;
         let key_bytes = match &c.chain_key.key {
             Some(k) => Some(base64_decode(k)?),
@@ -228,6 +240,9 @@ fn convert_one(
             let Ok(seed) = base64_decode(seed_b64) else {
                 continue;
             };
+            if seed.len() != 32 {
+                continue;
+            }
             message_keys.push(LegacySessionMessageKeyV1 { index: idx_n, seed });
         }
 
@@ -246,10 +261,10 @@ fn convert_one(
         registration_id: s.registration_id,
         ratchet: LegacySessionRatchetV1 {
             key_pair: LegacySessionKeyPairV1 {
-                public: base64_decode(&s.current_ratchet.ephemeral_key_pair.pub_key)?,
+                public: pub_key_b64(&s.current_ratchet.ephemeral_key_pair.pub_key)?,
                 private: base64_decode(&s.current_ratchet.ephemeral_key_pair.priv_key)?,
             },
-            last_remote_ephemeral_key: base64_decode(&s.current_ratchet.last_remote_ephemeral_key)?,
+            last_remote_ephemeral_key: pub_key_b64(&s.current_ratchet.last_remote_ephemeral_key)?,
             previous_counter: s.current_ratchet.previous_counter,
             root_key: base64_decode(&s.current_ratchet.root_key)?,
         },
@@ -259,7 +274,7 @@ fn convert_one(
             disposition,
             used_at_ms: s.index_info.used,
             created_at_ms: s.index_info.created,
-            remote_identity_key: base64_decode(&s.index_info.remote_identity_key)?,
+            remote_identity_key: pub_key_b64(&s.index_info.remote_identity_key)?,
         },
         chains,
         // pending_pre_key: tidak ada di serialisasi onigis. None aman — sesi
