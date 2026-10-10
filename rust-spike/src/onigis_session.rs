@@ -38,7 +38,7 @@ use wacore_libsignal::protocol::{
     LegacyIndexedSessionV1, LegacySessionBaseKeyRoleV1, LegacySessionChainCounterV1,
     LegacySessionChainKeyV1, LegacySessionChainRoleV1, LegacySessionChainV1,
     LegacySessionDispositionV1, LegacySessionIndexV1, LegacySessionKeyPairV1,
-    LegacySessionMessageKeyV1, LegacySessionRecordV1, LegacySessionRatchetV1, LegacySessionV1,
+    LegacySessionMessageKeyV1, LegacySessionRatchetV1, LegacySessionRecordV1, LegacySessionV1,
 };
 
 // ---------- Bentuk JSON onigis (cukup untuk parse; abaikan field lain) ----------
@@ -221,19 +221,23 @@ fn convert_one(
         // messageKeys: map {index -> {seed: base64}} (umumnya kosong).
         let mut message_keys = Vec::new();
         for (idx, v) in &c.message_keys {
-            let Ok(idx_n) = idx.parse::<u32>() else { continue };
-            let seed_b64 = v
-                .get("seed")
-                .and_then(|s| s.as_str())
-                .unwrap_or_default();
-            let Ok(seed) = base64_decode(seed_b64) else { continue };
+            let Ok(idx_n) = idx.parse::<u32>() else {
+                continue;
+            };
+            let seed_b64 = v.get("seed").and_then(|s| s.as_str()).unwrap_or_default();
+            let Ok(seed) = base64_decode(seed_b64) else {
+                continue;
+            };
             message_keys.push(LegacySessionMessageKeyV1 { index: idx_n, seed });
         }
 
         chains.push(LegacySessionChainV1 {
             ratchet_key: ratchet_bytes,
             role,
-            chain_key: LegacySessionChainKeyV1 { counter, key: key_bytes },
+            chain_key: LegacySessionChainKeyV1 {
+                counter,
+                key: key_bytes,
+            },
             message_keys,
         });
     }
@@ -271,22 +275,25 @@ fn convert_one(
 
 /// Parse satu string JSON onigis (yang mungkin double-encoded) lalu konversi
 /// seluruh sesi di dalamnya ke satu `LegacySessionRecordV1`.
-pub fn import_session_record(raw_data: &str, stats: &mut ImportStats) -> Result<LegacySessionRecordV1> {
+pub fn import_session_record(
+    raw_data: &str,
+    stats: &mut ImportStats,
+) -> Result<LegacySessionRecordV1> {
     // Kolom data di Turso = JSON-string yang berisi JSON-string (double-encoded),
     // jadi butuh 2 parse.-smoke test single-level juga boleh (1 parse jalan,
     // kedua parse tidak dipicu karena bukan String lagi... tapi data asli 2-level).
     // Loop defensif: parse sampai bukan String atau mentok.
-    let mut value: serde_json::Value = serde_json::from_str(raw_data)
-        .context("parse JSON luar")?;
+    let mut value: serde_json::Value = serde_json::from_str(raw_data).context("parse JSON luar")?;
     let mut hops = 0;
     while let serde_json::Value::String(inner) = &value {
-        if hops >= 4 { break; }
+        if hops >= 4 {
+            break;
+        }
         value = serde_json::from_str(inner).context("parse JSON dalam")?;
         hops += 1;
     }
     let root: OnigisRoot =
         serde_json::from_value(value).context("bentuk OnigisRoot tidak dikenali")?;
-
 
     let mut indexed = Vec::with_capacity(root._sessions.len());
     for (base_key, s) in &root._sessions {
@@ -307,8 +314,8 @@ pub fn import_session_record(raw_data: &str, stats: &mut ImportStats) -> Result<
         }
     }
 
-    let record = LegacySessionRecordV1::from_indexed_sessions(indexed)
-        .context("validasi SessionRecord")?;
+    let record =
+        LegacySessionRecordV1::from_indexed_sessions(indexed).context("validasi SessionRecord")?;
     stats.imported_sessions = record.indexed_sessions().len();
     Ok(record)
 }
@@ -382,7 +389,10 @@ mod tests {
         let outer = wrap(session_json(0, json!({})));
         let mut stats = ImportStats::default();
         let rec = import_session_record(&outer, &mut stats).expect("tidak boleh gagal total");
-        assert_eq!(stats.skipped_unknown_basekeyrole, 1, "nilai tak dikenal harus tercatat");
+        assert_eq!(
+            stats.skipped_unknown_basekeyrole, 1,
+            "nilai tak dikenal harus tercatat"
+        );
         assert_eq!(stats.imported_sessions, 1, "sesi TIDAK boleh dibuang");
         assert_eq!(
             rec.indexed_sessions()[0].session.index.base_key_role,
