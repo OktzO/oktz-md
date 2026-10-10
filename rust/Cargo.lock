@@ -107,6 +107,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "oktz-store"
+version = "0.1.0"
+dependencies = [
+ "oktz-core",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"

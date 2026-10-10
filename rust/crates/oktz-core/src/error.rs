@@ -16,6 +16,9 @@ pub enum Error {
     #[error("not found: {0}")]
     NotFound(String),
 
+    #[error("json: {0}")]
+    Json(#[from] serde_json::Error),
+
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
