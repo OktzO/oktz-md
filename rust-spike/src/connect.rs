@@ -88,7 +88,7 @@ pub async fn run(creds_path: &str, hold_secs: u64) -> Result<()> {
         .build()
         .await?;
 
-    let mut handle = bot.spawn();
+    let handle = bot.spawn();
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(hold_secs);
     let mut last_rss = 0u64;
     while tokio::time::Instant::now() < deadline {
@@ -152,21 +152,22 @@ fn kp(j: &creds_map::KeyPairJson, label: &str) -> Result<KeyPair> {
     }
 
     let me = c.me.as_ref().context("creds tanpa `me`")?;
-    let mut d = whatsapp_rust::wacore::store::Device::default();
-
-    d.pn = Some(jid(&me.id)?);
-    d.lid = me.lid.as_deref().map(jid).transpose()?;
-    d.registration_id = c.registration_id;
-    d.noise_key = kp(&c.noise_key, "noiseKey")?;
-    d.identity_key = kp(&c.signed_identity_key, "signedIdentityKey")?;
-    d.signed_pre_key = kp(&c.signed_pre_key.key_pair, "signedPreKey.keyPair")?;
-    d.signed_pre_key_id = c.signed_pre_key.key_id;
-    d.signed_pre_key_signature = arr(creds_map::b64(&c.signed_pre_key.signature)?, "signature")?;
-    d.adv_secret_key = arr(creds_map::b64(&c.adv_secret_key)?, "advSecretKey")?;
-    d.push_name = me.name.clone();
-    d.next_pre_key_id = c.next_pre_key_id.unwrap_or(0);
-    d.first_unupload_pre_key_id = c.first_unuploaded_pre_key_id.unwrap_or(0);
-    d.props_hash = c.last_prop_hash.clone();
+    let mut d = whatsapp_rust::wacore::store::Device {
+        pn: Some(jid(&me.id)?),
+        lid: me.lid.as_deref().map(jid).transpose()?,
+        registration_id: c.registration_id,
+        noise_key: kp(&c.noise_key, "noiseKey")?,
+        identity_key: kp(&c.signed_identity_key, "signedIdentityKey")?,
+        signed_pre_key: kp(&c.signed_pre_key.key_pair, "signedPreKey.keyPair")?,
+        signed_pre_key_id: c.signed_pre_key.key_id,
+        signed_pre_key_signature: arr(creds_map::b64(&c.signed_pre_key.signature)?, "signature")?,
+        adv_secret_key: arr(creds_map::b64(&c.adv_secret_key)?, "advSecretKey")?,
+        push_name: me.name.clone(),
+        next_pre_key_id: c.next_pre_key_id.unwrap_or(0),
+        first_unupload_pre_key_id: c.first_unuploaded_pre_key_id.unwrap_or(0),
+        props_hash: c.last_prop_hash.clone(),
+        ..Default::default()
+    };
     if let Some(ri) = c.routing_info.as_ref().and_then(|r| r.data.as_ref()) {
         d.edge_routing_info = Some(creds_map::b64(ri)?);
     }

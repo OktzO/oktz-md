@@ -69,8 +69,6 @@ fn build_card(body: &str, footer: Option<&str>) -> wa::Message {
     }
 }
 
-/// node <biz><interactive type="native_flow" v="1"><native_flow v="9" name="mixed"/></interactive></biz>
-
 fn build_list() -> wa::Message {
     let rows = vec![
         wa::message::list_message::Row {
@@ -138,12 +136,14 @@ pub async fn run(creds_path: &str, to: &str, hold_secs: u64, kind: &str) -> Resu
     let connected = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let c1 = connected.clone();
     let target = to.to_string();
+    let kind = kind.to_string();
 
     let bot = Bot::builder()
         .with_backend(store)
         .on_connected(move |client| {
             let c1 = c1.clone();
             let target = target.clone();
+            let kind = kind.clone();
             async move {
                 println!(
                     "{}",
@@ -160,15 +160,13 @@ pub async fn run(creds_path: &str, to: &str, hold_secs: u64, kind: &str) -> Resu
                 };
 
                 let opts = SendOptions::default().with_extra_stanza_nodes(vec![biz_node()]);
+                let msg = if kind.as_str() == "list" {
+                    build_list()
+                } else {
+                    build_card("Tombol test dari Rust — apakah muncul?", Some("footer test"))
+                };
 
-                match client
-                    .send_message_with_options(
-                        jid.clone(),
-                        build_card("Tombol test dari Rust — apakah muncul?", Some("footer test")),
-                        opts,
-                    )
-                    .await
-                {
+                match client.send_message_with_options(jid.clone(), msg, opts).await {
                     Ok(s) => println!(
                         "{}",
                         serde_json::json!({
@@ -186,7 +184,7 @@ pub async fn run(creds_path: &str, to: &str, hold_secs: u64, kind: &str) -> Resu
         .build()
         .await?;
 
-    let mut handle = bot.spawn();
+    let handle = bot.spawn();
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(hold_secs);
     while tokio::time::Instant::now() < deadline {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;

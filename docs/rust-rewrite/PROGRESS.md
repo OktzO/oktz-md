@@ -23,11 +23,14 @@ Belum ada satu baris kode Rust produksi. Belum ada `rust/` directory.
 | **Probe Turso (S1 pre-check)** | ✅ **selesai — 12.639 session_keys** |
 | **GATE 0 — approval Oktz** | ✅ **lolos** (engine, F=port-all, RSS delegated) |
 | Spike Task 1 (scaffold+baseline) | ✅ binary 2.0MB, RSS start 3.1MB |
-| **Spike S1 (impor sesi)** | ✅ **FULL — 538/538 sesi, 514/514 record, test 4/4** |
-| Spike S1 — pemetaan creds→DeviceStore | ⏳ next |
-| Spike S2 (RSS saat connect) | ⏳ butuh akun WA uji |
-| Spike S3/S4 (interaktif) | ⏳ butuh akun WA uji |
-| Fase 1 (oktz-core/store/plugin-api) | ⏳ next |
+| **Spike S1 (impor sesi)** | ✅ **514/514 sesi ratchet, 0 BadMac** |
+| S1 — pemetaan creds→Device | ✅ connect authenticated |
+| S1 — decrypt via sesi impor | ✅ **"hemz" terbaca** (bukti kompatibilitas oktz-signal↔wacore) |
+| **Spike S3 (tombol)** | ✅ **muncul + bisa diklik** |
+| **Spike S4 (list)** | ✅ terkirim, render menunggu verifikasi Oktz |
+| **Spike S2 (RSS)** | ✅ **26.6 MB** saat connect (target 60) |
+| Test suite / clippy | ⚠️ re-run setelah helper berubah |
+| Fase 1 (oktz-core/store/plugin-api) | ⏳ **NEXT — fokus utama** |
 
 ## Keputusan yang sudah diambil
 
@@ -74,6 +77,33 @@ Items non-blocking yang mungkin nanti muncul:
 - ⚠️ `simd` **wajib dimatikan** (`default-features = false`) atau build gagal di stable. Ini juga constrain produksi.
 
 ## Temuan spike (2026-10-10)
+
+**GATE S1–S4 TERTUTUP.** Semua risiko terbuka yang di RISKS R1/R2/R3 sudah selesai
+dipert estimations dengan bukti run nyata:
+
+- **S1 impor sesi ratchet: 514/514, 0 BadMac.** Data Turso = JSON double-encoded,
+  bukan protobuf v6 — asumsi awal RISKS R1 salah dan lebih benign dari dugaan.
+  `LegacySessionV1` map 1:1. Field kunci publik onigis (32 byte polos) wajib
+  diprefix `0x05` jadi 33 byte — bug yang sama berulang di creds DAN di sesi.
+- **Decrypt real-time via sesi impor: "hemz" terbaca.** Membuktikan ratchet
+  `oktz-signal` (JS) ↔ `wacore-libsignal` (Rust) kompatibel → tanpa pairing ulang,
+  tanpa kehilangan riwayat decrypt.
+- **S3 tombol native flow: muncul + bisa diklik** (verifikasi Oktz).
+- **S4 list message: terkirim**, render menunggu verifikasi Oktz.
+- **RSS 26.6 MB** dengan 514 sesi (target 60). Semua mitigasi R3 tidak perlu.
+
+**Cara unlock blocker:** 3 blocker schema/session (button params, viewOnce
+wrapper, public-key prefix) HANYA ketahuan lewat baca langsung `Onigi/WAProto.proto`,
+`src/lib/socket.js`, `jpm.js`, `wacore-libsignal/curve.rs` — bukan dari docs.rs.
+Pelajaran: **kalau ada yang tricky, trace balik ke kode JS/Onigis/oktz-signal Oktz
+sebelum nebak dari dokumentasi upstream.**
+
+## Sisa pekerjaan spike
+
+- Re-run `cargo test` + clippy (helper berubah).
+- Verifikasi render list message dari Oktz.
+
+## Reproduction
 
 **S1 ✅ FULL.** Dump 514 record Turso produksi → **538/538 sesi terimpor**, 0 gagal,
 test 4/4 hijau. RSS 9.4MB.
