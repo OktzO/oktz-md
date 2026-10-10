@@ -22,11 +22,11 @@ fn build_card(body: &str, footer: Option<&str>) -> wa::Message {
     let buttons = vec![
         NativeFlowButton {
             name: Some("quick_reply".into()),
-            button_params_json: Some(r#"{"display_name":"OKE"}"#.into()),
+            button_params_json: Some(r#"{"display_text":"OKE","id":"test_oke"}"#.into()),
         },
         NativeFlowButton {
             name: Some("quick_reply".into()),
-            button_params_json: Some(r#"{"display_name":"GAGAW"}"#.into()),
+            button_params_json: Some(r#"{"display_text":"GAGAW","id":"test_gagaw"}"#.into()),
         },
     ];
 
