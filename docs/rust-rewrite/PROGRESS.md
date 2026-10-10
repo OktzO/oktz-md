@@ -19,11 +19,12 @@ Belum ada satu baris kode Rust produksi. Belum ada `rust/` directory.
 | Risiko | ✅ `RISKS.md` |
 | Spec tertulis | ✅ `docs/superpowers/specs/2026-10-10-oktz-md-rust-rewrite-design.md` |
 | Plan spike S1–S4 | ✅ `docs/superpowers/plans/2026-10-10-rust-rewrite-spike-s1-s4.md` |
-| Toolchain Rust | ✅ terpasang (lihat di bawah) |
+| Toolchain Rust | ✅ terpasang + build **berhasil** |
 | **Probe Turso (S1 pre-check)** | ✅ **selesai — 12.639 session_keys** |
 | **GATE 0 — approval Oktz** | ✅ **lolos** (engine, F=port-all, RSS delegated) |
-| Spike S1–S4 (Rust) | 🔄 sedang: scaffold + baseline, build berjalan |
-| Spike S2 (RSS angka) | ⏳ |
+| Spike Task 1 (scaffold+baseline) | ✅ **selesai — binary 2.0MB, RSS kosong 3.1MB** |
+| Spike S1 (impor sesi) | ⏳ kode importer belum ditulis |
+| Spike S2 (RSS angka) | ⏳ butuh client ter-initialize + connect |
 | Spike S3/S4 (interaktif) | ⏳ butuh akun WA uji |
 
 ## Keputusan yang sudah diambil
@@ -64,6 +65,12 @@ Items non-blocking yang mungkin nanti muncul:
 - 1 subagent crate-researcher → `CRATES.md` (53 crate, versi dari crates.io API).
 - Verifikasi independen: extractor exit 0, JSON parse ulang 830/830, `git diff` source kosong.
 
+**Task 1 spike — ✅ SELESAI (2026-10-10).** `whatsapp-rust 0.7` + `legacy-session-interop` + `sqlite-storage` + `tokio-transport` + `signal` **berjalan di stable Rust 1.94.0 tanpa `simd`**.
+- Binary: **2.0 MB**, RSS saat start (engine belum dimuat): **3.128 KB**.
+- Nol error. Build took ~20 min di 2-core.
+- ⚠️ Angka RSS **belum** jawaban S2 — 3.1MB cuma floor harness. S2 butuh client ter-initialize + connect ke WA.
+- ⚠️ `simd` **wajib dimatikan** (`default-features = false`) atau build gagal di stable. Ini juga constrain produksi.
+
 ## Temuan spike (2026-10-10)
 
 **Probe Turso (S1 pre-check) — ✅ selesai, tanpa Rust.** `@libsql/client` + `.env` → DB hidup. Isi `session_keys` scope `main`:
@@ -99,8 +106,10 @@ nix-shell -p stdenv.cc pkg-config -I nixpkgs=/tmp/opencode/nixpkgs-25.05 --run '
 # regenerate manifest
 node scripts/extract-plugin-manifest.mjs
 
-# (akan datang) spike & test — butuh Codespaces
-cd rust && cargo test
+# spike build (butuh toolchain di /tmp/opencode/rust — lihat "Toolchain" di atas)
+source /tmp/opencode/build_env.sh
+cd rust-spike
+nix-shell -p stdenv.cc pkg-config -I nixpkgs=/tmp/opencode/nixpkgs-25.05 --run 'cargo build --release'
 ```
 
 ## Perintah penting
