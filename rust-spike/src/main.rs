@@ -135,7 +135,8 @@ async fn main() -> Result<()> {
             let creds = args.get(2).cloned().unwrap_or_else(|| "../storage/session/creds.json".into());
             let to = args.get(3).cloned().unwrap_or_else(|| "32328738959591@lid".into());
             let hold: u64 = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(45);
-            buttons::run(&creds, &to, hold).await?;
+            let kind = args.get(5).cloned().unwrap_or_else(|| "card".into());
+            buttons::run(&creds, &to, hold, &kind).await?;
         }
         "rss" => {
             let hold: u64 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(60);

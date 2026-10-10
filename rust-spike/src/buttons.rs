@@ -70,6 +70,48 @@ fn build_card(body: &str, footer: Option<&str>) -> wa::Message {
 }
 
 /// node <biz><interactive type="native_flow" v="1"><native_flow v="9" name="mixed"/></interactive></biz>
+
+fn build_list() -> wa::Message {
+    let rows = vec![
+        wa::message::list_message::Row {
+            title: Some("JPM Basic".into()),
+            description: Some("Broadcast semua grup".into()),
+            row_id: Some("test_basic".into()),
+        },
+        wa::message::list_message::Row {
+            title: Some("JPM Hidetag".into()),
+            description: Some("Tag tersembunyi".into()),
+            row_id: Some("test_hidetag".into()),
+        },
+    ];
+    let inner = wa::Message {
+        message_context_info: MessageField::some(wa::MessageContextInfo {
+            device_list_metadata: MessageField::some(wa::DeviceListMetadata::default()),
+            device_list_metadata_version: Some(2),
+            ..Default::default()
+        }),
+        list_message: MessageField::some(wa::message::ListMessage {
+            title: Some("Pilih Mode".into()),
+            description: Some("List message dari Rust".into()),
+            button_text: Some("Buka".into()),
+            footer_text: Some("footer list".into()),
+            list_type: Some(wa::message::list_message::ListType::SINGLE_SELECT),
+            sections: vec![wa::message::list_message::Section {
+                title: Some("MODE".into()),
+                rows,
+            }],
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    wa::Message {
+        view_once_message: MessageField::some(wa::message::FutureProofMessage {
+            message: MessageField::some(inner),
+        }),
+        ..Default::default()
+    }
+}
+
 fn biz_node() -> Node {
     let native_flow = NodeBuilder::new("native_flow")
         .attr("v", "9")
@@ -83,7 +125,7 @@ fn biz_node() -> Node {
     NodeBuilder::new("biz").children([interactive]).build()
 }
 
-pub async fn run(creds_path: &str, to: &str, hold_secs: u64) -> Result<()> {
+pub async fn run(creds_path: &str, to: &str, hold_secs: u64, kind: &str) -> Result<()> {
     let raw = std::fs::read_to_string(creds_path)?;
     let (_m, c) = creds_map::inspect_creds(&raw)?;
     let device = crate::connect::build_device_pub(&c).await?;
