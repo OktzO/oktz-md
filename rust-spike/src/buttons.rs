@@ -8,7 +8,7 @@ use anyhow::Result;
 use whatsapp_rust::prelude::*;
 use whatsapp_rust::waproto::buffa::MessageField;
 use whatsapp_rust::NodeBuilder;
-use wacore_binary::Node;
+use whatsapp_rust::wacore_binary::Node;
 
 use crate::creds_map;
 use crate::rss;
@@ -31,7 +31,7 @@ fn build_card(body: &str, footer: Option<&str>) -> wa::Message {
     ];
 
     let inner = wa::Message {
-        message_context_info: MessageField::some(wa::message_association::MessageContextInfo {
+        message_context_info: MessageField::some(wa::MessageContextInfo {
             device_list_metadata: MessageField::some(wa::DeviceListMetadata::default()),
             device_list_metadata_version: Some(2),
             ..Default::default()
@@ -44,11 +44,9 @@ fn build_card(body: &str, footer: Option<&str>) -> wa::Message {
             body: MessageField::some(Body {
                 text: Some(body.to_string()),
             }),
-            footer: footer.map(|f| {
-                MessageField::some(Footer {
-                    text: Some(f.to_string()),
-                    ..Default::default()
-                })
+            footer: MessageField::some(Footer {
+                text: Some(footer.unwrap_or("").to_string()),
+                ..Default::default()
             }),
             interactive_message: Some(ImOneof::NativeFlowMessage(Box::new(
                 wa::message::interactive_message::NativeFlowMessage {
@@ -61,11 +59,10 @@ fn build_card(body: &str, footer: Option<&str>) -> wa::Message {
         ..Default::default()
     };
 
-    // JS memakai viewOnceMessage.message; waproto 0.7 tidak punya field itu
-    // (hanya image/video). FutureProofMessage (ephemeralMessage) holds Message
-    // generik -> struktur identik, wrapper beda.
+    // Cocok dengan Onigis WAProto.proto:2095 — viewOnceMessage bertipe
+    // FutureProofMessage { optional Message message = 1 }, bukan ViewOnceMessage.
     wa::Message {
-        ephemeral_message: MessageField::some(wa::message::FutureProofMessage {
+        view_once_message: MessageField::some(wa::message::FutureProofMessage {
             message: MessageField::some(inner),
         }),
         ..Default::default()
@@ -77,24 +74,19 @@ fn biz_node() -> Node {
     let native_flow = NodeBuilder::new("native_flow")
         .attr("v", "9")
         .attr("name", "mixed")
-        .build()
-        .into();
+        .build();
     let interactive = NodeBuilder::new("interactive")
         .attr("type", "native_flow")
         .attr("v", "1")
-        .add_child(native_flow)
-        .build()
-        .into();
-    NodeBuilder::new("biz")
-        .add_child(interactive)
-        .build()
-        .into()
+        .children([native_flow])
+        .build();
+    NodeBuilder::new("biz").children([interactive]).build()
 }
 
 pub async fn run(creds_path: &str, to: &str, hold_secs: u64) -> Result<()> {
     let raw = std::fs::read_to_string(creds_path)?;
     let (_m, c) = creds_map::inspect_creds(&raw)?;
-    let device = crate::connect::build_device_pub(&c)?;
+    let device = crate::connect::build_device_pub(&c).await?;
 
     let db = std::env::temp_dir().join("oktz-spike-buttons.db");
     let _ = std::fs::remove_file(&db);
