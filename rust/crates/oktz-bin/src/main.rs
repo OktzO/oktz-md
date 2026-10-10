@@ -97,7 +97,9 @@ fn verify_db(dir: &str) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
     walk(&path, &mut results)?;
-    let all_ok = results.iter().all(|r| r["identical"] == true);
+    // Path yang bukan direktori menghasilkan vektor kosong, dan `all()` pada
+    // vektor kosong = true (false-green). Pastikan ada filenya.
+    let all_ok = !results.is_empty() && results.iter().all(|r| r["identical"] == true);
     println!(
         "{}",
         serde_json::json!({

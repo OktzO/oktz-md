@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 // camelCase wajib: nama field di JS pluginConfig (isOwner, isEnabled, ...).
 // Kalau tidak, kontrak serialisasi different dengan plugin-manifest.json.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct PluginMeta {
     pub name: String,
     pub alias: Vec<String>,
