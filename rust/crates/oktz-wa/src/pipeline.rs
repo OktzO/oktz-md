@@ -285,6 +285,11 @@ pub fn capprem_from(settings: Option<&Value>, name: &str) -> Option<bool> {
 /// Simpan dibungkus `Arc` dan hanya dibaca. Penulisan di runtime adalah urusan
 /// jalur lain yang menukar `Arc` — `&self` di sini tidak bisa menulis, sesuai
 /// tanda tangan trait.
+///
+/// `Clone` dipakai runtime: satu pipeline hidup sudah menempel ke bus event,
+/// jadi saat `Event::Connected` datang lagi (reconnect) pipeline itu yang
+/// dipakai ulang, bukan yang dibangun ulang dari store yang sudah Terbaca.
+#[derive(Clone)]
 pub struct StoreContext {
     store: Arc<JsonStore>,
     started: Instant,
@@ -878,7 +883,7 @@ impl Pipeline {
         }
 
         let router = Router::new(&self.ctx, self.parse_opts.clone(), now_ms);
-        let decision = router.route(&mut caller, &body, |c| oktz_plugin_api::find(c));
+        let decision = router.route(&mut caller, &body, oktz_plugin_api::find);
 
         let reply = decision_to_reply(&decision);
         let quote = QuoteSource::from_inbound(m);
@@ -908,28 +913,64 @@ impl Pipeline {
         Ok(outcome)
     }
 
+    /// Kapasitas antrean inbound. Fixed, bukan tak berbatas: `handle_event`
+    /// sinkron dan dipanggil INLINE di bus event (wacore-0.7.0
+    /// `src/types/events.rs:609-621`), jadi satu-satunya operasi yang aman di
+    /// sana adalah `try_send` — `send().await` akan menahan seluruh dispatch
+    /// event bot, dan `send_blocking` bisa deadlock kalau handler-nya jalan di
+    /// thread tokio worker. Channel tak berbatas (pola `ChannelEventHandler`,
+    /// `events.rs:362-370`) bebas deadlock tapi membiarkan memory tumbuh tanpa
+    /// batas saat bot tidak mampu mengikuti, jadi dipakai capacity tetap.
+    const INGEST_CAPACITY: usize = 256;
+
+    /// Drain antrean: satu pesan → satu [`Pipeline::process`].
+    ///
+    /// Dipisah dari [`Pipeline::attach`] supaya loop ini bisa diuji dengan
+    /// channel buatan sendiri — `attach` sendiri butuh `Arc<Client>` sungguhan.
+    ///
+    /// Berhenti hanya kalau semua `tx` di-drop, yaitu saat `Pipeline` beserta
+    /// task ini dijatuhkan.
+    pub async fn run(self: Arc<Self>, rx: IngestRx) {
+        while let Ok(m) = rx.recv().await {
+            if let Err(e) = self.process(&m, now_ms()).await {
+                // Task ini satu-satunya pemroses pesan. Kegagalan diam-diam
+                // akan menghentikan bot tanpa jejak, jadi selalu log dengan
+                // konteks yang cukup untuk dicari balik.
+                tracing::error!(
+                    error = %e,
+                    id = %m.info.id,
+                    chat = %m.info.source.chat,
+                    sender = %m.info.source.sender,
+                    "pipeline gagal memproses pesan"
+                );
+            }
+        }
+        tracing::debug!("antrean pesan ditutup; loop pipeline berhenti");
+    }
+
     /// Daftarkan handler ke bus event dan mulai task async pemroses.
     ///
-    /// `handle_event` sinkron dan dipanggil inline di bus
-    /// (wacore-0.7.0 `src/types/events.rs:609-621`), jadi ia hanya mengantre
-    /// lewat channel tak berbatas — pola `ChannelEventHandler` (`events.rs:362`).
-    /// Kirim async yang butuh `.await` terjadi di task terpisah.
+    /// Aman dipanggil lebih dari sekali: `Event::Connected` dikirim ulang per
+    /// generasi koneksi (`whatsapp-rust-0.7.0/src/client/lifecycle.rs:230`),
+    /// jadi reconnect menjalankan `on_ready` lagi. `Subscription` lama di-drop
+    /// (`wacore-0.7.0/src/types/events.rs:538-544`) → handler lama unsubscribe
+    /// → `tx`-nya hilang → task lama keluar dari [`Pipeline::run`]. Kalau tidak,
+    /// dua loop hidup dan satu pesan dibalas dua kali.
     pub fn attach(self: &Arc<Self>, client: &Arc<Client>) {
-        let (tx, rx) = whatsapp_rust::async_channel::unbounded::<InboundMessage>();
+        let (tx, rx) = whatsapp_rust::async_channel::bounded(Self::INGEST_CAPACITY);
         let handler = Arc::new(PipelineHandler { tx });
         let sub = client.subscribe(EventInterest::of(&[EventKind::Messages]), handler);
-        *self.subscription.lock().expect("subscription") = Some(sub);
-
-        let pipeline = self.clone();
-        tokio::spawn(async move {
-            while let Ok(m) = rx.recv().await {
-                if let Err(e) = pipeline.process(&m, now_ms()).await {
-                    tracing::error!(error = %e, "pipeline gagal memproses pesan");
-                }
-            }
-        });
+        let mut slot = self.subscription.lock().unwrap_or_else(|e| e.into_inner());
+        *slot = Some(sub);
+        drop(slot);
+        tokio::spawn(self.clone().run(rx));
     }
 }
+
+/// Sisi terima antrean inbound. Alias supaya tanda tangan `run`/`attach`
+/// tidak menulis ulang path crate.
+pub type IngestRx = whatsapp_rust::async_channel::Receiver<InboundMessage>;
+type IngestTx = whatsapp_rust::async_channel::Sender<InboundMessage>;
 
 fn now_ms() -> i64 {
     std::time::SystemTime::now()
@@ -939,8 +980,12 @@ fn now_ms() -> i64 {
 }
 
 /// Menerima event dan mengantre ke task pemrosesan.
+///
+/// Satu-satunya pekerjaan di sini adalah `try_send`. Dipanggil inline di
+/// thread mana pun yang sedang memproses stanza, jadi tidak boleh-blocking,
+/// tidak boleh async, dan tidak boleh panik.
 struct PipelineHandler {
-    tx: whatsapp_rust::async_channel::Sender<InboundMessage>,
+    tx: IngestTx,
 }
 
 impl EventHandler for PipelineHandler {
@@ -948,8 +993,19 @@ impl EventHandler for PipelineHandler {
         let Event::Messages(batch) = &*event else {
             return;
         };
-        for m in batch.messages.iter() {
-            let _ = self.tx.try_send(m.clone());
+        for m in batch.iter() {
+            // Penuh = bot tidak mampu mengikuti. Menunggu di sini akan menahan
+            // bus, jadi yang tersisa adalah buang + catat: menelan perintah
+            // tanpa jejak jauh lebih sulit dicari daripada satu baris warn.
+            if let Err(e) = self.tx.try_send(m.clone()) {
+                tracing::warn!(
+                    error = %e,
+                    id = %m.info.id,
+                    chat = %m.info.source.chat,
+                    queue = Pipeline::INGEST_CAPACITY,
+                    "antrean pesan penuh; pesan dibuang"
+                );
+            }
         }
     }
 
@@ -1629,5 +1685,204 @@ fn group_number_and_long_number_are_rejected() {
         assert!(ctx.mode_settings().self_groups.is_empty());
         assert_eq!(ctx.capprem("x"), None);
         let _ = json!({});
+    }
+
+    // ---------- 8. jembatan bus event → pipeline (tanpa Client) ----------
+
+    /// Bungkus beberapa pesan jadi satu `Event::Messages` persis seperti yang
+    /// dikirim library (`events.rs:858`). `MessageBatch` `#[non_exhaustive]`
+    /// (`events.rs:1157`) jadi harus lewat builder.
+    fn messages_event(ids: &[&str]) -> Arc<Event> {
+        let messages: Arc<[InboundMessage]> = Arc::from(
+            ids.iter()
+                .map(|id| {
+                    inbound(
+                        ".ping",
+                        "6281@s.whatsapp.net",
+                        "6281@s.whatsapp.net",
+                        false,
+                        id,
+                    )
+                })
+                .collect::<Vec<_>>(),
+        );
+        Arc::new(Event::Messages(
+            whatsapp_rust::types::events::MessageBatch::builder()
+                .messages(messages)
+                .origin(whatsapp_rust::types::events::BatchOrigin::Live)
+                .build(),
+        ))
+    }
+
+    #[test]
+    fn handler_enqueues_every_message_in_a_batch() {
+        let (tx, rx) = whatsapp_rust::async_channel::unbounded();
+        let h = PipelineHandler { tx };
+        h.handle_event(messages_event(&["B1", "B2", "B3"]));
+        let ids: Vec<String> = std::iter::from_fn(|| rx.try_recv().ok())
+            .map(|m| m.info.id.clone())
+            .collect();
+        assert_eq!(ids, vec!["B1", "B2", "B3"]);
+    }
+
+    #[test]
+    fn handler_ignores_non_message_events() {
+        let (tx, rx) = whatsapp_rust::async_channel::unbounded();
+        let h = PipelineHandler { tx };
+        h.handle_event(Arc::new(Event::Connected(
+            whatsapp_rust::types::events::Connected::builder().build(),
+        )));
+        assert!(rx.try_recv().is_err(), " Connected bukan pesan");
+    }
+
+    #[test]
+    fn handler_interest_is_messages_only() {
+        let (tx, _rx) = whatsapp_rust::async_channel::unbounded();
+        let h = PipelineHandler { tx };
+        assert_eq!(h.interest(), EventInterest::of(&[EventKind::Messages]));
+    }
+
+    #[test]
+    fn full_queue_is_reported_and_never_blocks() {
+        let (tx, rx) = whatsapp_rust::async_channel::bounded(2);
+        let h = PipelineHandler { tx };
+        // Kapasitas 2, Offering 4: `try_send` HARUS balik tanpa menunggu dan
+        // 2 sisanya tercatat sebagai overflow, bukan hilang tanpa jejak.
+        for e in [
+            messages_event(&["Q1"]),
+            messages_event(&["Q2"]),
+            messages_event(&["Q3"]),
+            messages_event(&["Q4"]),
+        ] {
+            h.handle_event(e);
+        }
+        let mut got = Vec::new();
+        while let Ok(m) = rx.try_recv() {
+            got.push(m.info.id.clone());
+        }
+        assert_eq!(got, vec!["Q1", "Q2"], "sisanya harus dibuang, bukan diantrekan");
+    }
+
+    #[tokio::test]
+    async fn run_processes_each_queued_message_end_to_end() {
+        // Jembatan penuh: event bus → antrean → run → pipeline → sender palsu.
+        // AFK aktif supaya `Decision::DeniedMode(Afk)` jadi balasan yang benar-
+        // benar terkirim, jadi pemetaan Decision→Reply→wire ikut teruji.
+        let store = r#"{"settings": {"botAfk": {"active": true, "since": 1}}}"#;
+        let ctx = StoreContext::new(store_with("bridge", store));
+        let sender = Arc::new(RecordingSender::default());
+        let p = Arc::new(Pipeline::new(
+            ctx,
+            sender.clone(),
+            "bot",
+            ParseOptions::default(),
+        ));
+
+        let (tx, rx) = whatsapp_rust::async_channel::unbounded();
+        let handle = PipelineHandler { tx };
+        tokio::spawn(p.clone().run(rx));
+
+        handle.handle_event(messages_event(&["E1", "E2"]));
+
+        // Tunggu sampai kedua pesan selesai diproses.
+        let sent = wait_for_len(&sender, 2).await;
+        assert_eq!(sent.len(), 2, "satu balasan per pesan inbound");
+        for (to, m, extra) in &sent {
+            assert_eq!(to, "6281@s.whatsapp.net");
+            assert_eq!(extra, &0, "teks balasan tidak butuh node tambahan");
+            assert!(body_of(m).unwrap().contains("sᴇᴅᴀɴɢ ᴀꜰᴋ"));
+        }
+    }
+
+    #[derive(Clone, Default)]
+    struct FailingSender {
+        sends: Arc<Mutex<usize>>,
+    }
+
+    impl MessageSender for FailingSender {
+        fn send(&self, _to: &str, _m: wa::Message, _e: Vec<Node>) -> SendBox<'_> {
+            *self.sends.lock().unwrap() += 1;
+            Box::pin(async { Err("socket putus".into()) })
+        }
+    }
+
+    #[tokio::test]
+    async fn send_failure_does_not_kill_the_loop() {
+        // Kegagalan kirim harus jadi Err dari `process` → di-log di `run` →
+        // loop lanjut ke pesan berikutnya. Kalau `run` ikut mati, bot berhenti
+        // diam-diam setelah satu error jaringan.
+        let store = r#"{"settings": {"botAfk": {"active": true, "since": 1}}}"#;
+        let ctx = StoreContext::new(store_with("failbridge", store));
+        let sender = Arc::new(FailingSender::default());
+        let p = Arc::new(Pipeline::new(
+            ctx,
+            sender.clone(),
+            "bot",
+            ParseOptions::default(),
+        ));
+
+        let (tx, rx) = whatsapp_rust::async_channel::unbounded();
+        let handler = PipelineHandler { tx };
+        handler.handle_event(messages_event(&["F1", "F2", "F3"]));
+        let runner = tokio::spawn(p.run(rx));
+
+        // Tunggu sampai ketiga pesan dicoba (semua gagal kirim).
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+        while *sender.sends.lock().unwrap() < 3 {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "loop berhenti setelah {} percobaan kirim",
+                sender.sends.lock().unwrap()
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(
+            !runner.is_finished(),
+            "loop harus tetap hidup setelah error kirim"
+        );
+
+        // Menutup antrean menghentikan loop — itu jalan keluarnya yang bersih.
+        drop(handler);
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(5), runner).await;
+    }
+
+    #[tokio::test]
+    async fn media_reply_is_logged_and_processing_continues() {
+        // `Reply::Image` tidak punya byte media. Yang diuji: kegagalan ini
+        // sampai ke pemanggil sebagai error bertipe, bukan panik dan bukan
+        // "sukses diam" yang membuat caller menganggap pesan terkirim.
+        let ctx = StoreContext::new(store_with("media", "{}"));
+        let _p = Pipeline::new(
+            ctx,
+            Arc::new(RecordingSender::default()),
+            "bot",
+            ParseOptions::default(),
+        );
+        let err = render_reply(
+            &Reply::Image {
+                caption: "c".into(),
+                mentions: vec![],
+            },
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(err, PipelineError::MediaSourceMissing { variant: "Image" });
+        assert!(err.to_string().contains("sumber media"));
+    }
+
+    async fn wait_for_len(s: &RecordingSender, n: usize) -> Vec<(String, wa::Message, usize)> {
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            let got = s.sent.lock().unwrap().clone();
+            if got.len() >= n {
+                return got;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "hanya {} dari {n} balasan terkirim",
+                got.len()
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
     }
 }

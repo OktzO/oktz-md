@@ -30,7 +30,12 @@ pub enum Reply {
         text: String,
         mentions: Vec<String>,
     },
-    /// Image dengan caption (bytes sudah di-encode pemanggil).
+    /// Image dengan caption.
+    ///
+    /// BELUM bisa dikirim: variant ini tidak membawa bytes media maupun
+    /// handle-nya. Pipeline mengembalikan `MediaSourceMissing` alih-alih
+    /// mengirim apa-apa. Butuh penambahan sumber media (URL / path /
+    /// upload handle) sebelum plugin class C bisa dipakai.
     Image {
         caption: String,
         mentions: Vec<String>,

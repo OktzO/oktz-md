@@ -1,15 +1,18 @@
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
+use oktz_router::ParseOptions;
+use oktz_store::json_store::JsonStore;
 use whatsapp_rust::prelude::*;
 
 use crate::creds;
 use crate::pairing_run::{self, FalseLogoutGuard};
+use crate::pipeline::{ClientSender, Identity, Pipeline, StoreContext};
 
 /// Env yang memberi tahu jalur produksi di mana `creds.json` berada.
 ///
-/// [`connect_device`] tidak menerima creds (signedanya dijaga supaya tidak
+/// [`connect_device`] tidak menerima creds (signedannya dijaga supaya tidak
 /// pecah), dan tanpa snapshot guard tidak bisa membedakan "sesi sah yang
 /// dapat 401 palsu" dari "belum pernah ter-link". Tanpa env ini guard
 /// menerima `Value::Null` → `pairing::is_authenticated` false → arahnya
@@ -17,6 +20,116 @@ use crate::pairing_run::{self, FalseLogoutGuard};
 /// asli) tapi berarti grace window tidak aktif; caller yang punya file creds
 /// sebaiknya memakai [`connect_device_guarded`] langsung.
 pub const CREDS_ENV: &str = "OKTZ_CREDS";
+
+/// Env yang menimpa lokasi settings store. Kosong = bukan override.
+pub const SETTINGS_ENV: &str = "OKTZ_SETTINGS";
+
+/// `bot_id` dipakai kalau creds tidak menyebut JID sendiri. Hanya jadi
+/// namespace prefiks pada kunci dedup/spam (`handler.js:926, 1508`), jadi nilai
+/// tetap yang penting, bukan formatnya.
+pub const DEFAULT_BOT_ID: &str = "oktz";
+
+/// Lokasi settings store yang dibaca router: `users` / `groups` / `settings`.
+///
+/// Default-nya mengikuti `oktz-bin` (`main.rs:166`), yaitu
+/// `<database.path>/settings.json`. Argumen eksplisit selalu menang atas env
+/// supaya bisa diuji tanpa menyentuh `std::env` yang process-wide.
+pub fn settings_path(db_dir: &str, env: Option<&str>) -> PathBuf {
+    match env.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(v) => PathBuf::from(v),
+        None => PathBuf::from(db_dir).join("settings.json"),
+    }
+}
+
+/// `OWNER_NUMBERS` → [`Identity`].
+///
+/// `oktz_core::Config` hanya punya `owner_numbers`; premium/partner/admin tidak
+/// punya accessor sama sekali, jadi kumpulan itu sengaja dibiarkan kosong
+/// (lihat catatan modul di `pipeline.rs`).
+pub fn identity_from_owners<I: IntoIterator<Item = String>>(owners: I) -> Identity {
+    Identity {
+        owners: owners.into_iter().collect(),
+        ..Default::default()
+    }
+}
+
+/// `creds.me.id` → `bot_id`, dengan [`DEFAULT_BOT_ID`] sebagai fallback.
+///
+/// Creds tak terbaca menghasilkan `Value::Null` (`load_guard_creds`), jadi
+/// jalur ini harus tidak pernah gagal — `bot_id` tidak pernah boleh memblokir
+/// boot hanya karena creds belum ada.
+pub fn bot_id_from(creds: &serde_json::Value) -> String {
+    creds
+        .get("me")
+        .and_then(|me| me.get("id"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(DEFAULT_BOT_ID)
+        .to_string()
+}
+
+/// Segala yang dibutuhkan pipeline yang TIDAK butuh `Arc<Client>`.
+///
+/// Dipisah supaya semua yang mahal (baca file settings) selesai SEBELUM
+/// connect. Yang tersisa saat `Event::Connected` tiba hanyalah `subscribe`,
+/// sehingga jendela pesan yang bisa terlewat antara dispatch dan subscribe
+/// jadi kecil. Konstruksi yang boros di dalam `on_ready` justru
+/// memperlebar jendela itu — lihat catatan pada [`connect_device`].
+pub struct PipelineWiring {
+    ctx: StoreContext,
+    identity: Identity,
+    bot_id: String,
+    /// Pipeline yang sudah menempel ke bus. Disimpan supaya reconnect
+    /// memakai instance yang sama — membangun yang baru akan meninggalkan
+    /// loop lama hidup dan membalas dua kali.
+    live: Mutex<Option<Arc<Pipeline>>>,
+}
+
+/// Bangun [`PipelineWiring`] dari lokasi store, owner, dan bot id.
+///
+/// Semua argumen eksplisit: `Config::from_env()` memanggil `Env::load_dotenv()`
+/// yang mengubah environment process-wide, jadi dipanggil di satu tempat saja
+/// (`connect_device`), bukan di dalam helper yang juga dipakai tes.
+pub fn wiring_from(
+    settings: &std::path::Path,
+    owners: impl IntoIterator<Item = String>,
+    bot_id: impl Into<String>,
+) -> Result<PipelineWiring> {
+    let store = JsonStore::open(settings)
+        .with_context(|| format!("buka settings store {}", settings.display()))?;
+    Ok(PipelineWiring {
+        ctx: StoreContext::new(Arc::new(store)),
+        identity: identity_from_owners(owners),
+        bot_id: bot_id.into(),
+        live: Mutex::new(None),
+    })
+}
+
+impl PipelineWiring {
+    /// Pasang pipeline ke bus event. Aman dipanggil berulang.
+    fn attach(&self, client: &Arc<Client>) {
+        let mut slot = self.live.lock().unwrap_or_else(|e| e.into_inner());
+        let pipeline = match slot.as_ref() {
+            Some(p) => p.clone(),
+            None => {
+                let p = Arc::new(
+                    Pipeline::new(
+                        self.ctx.clone(),
+                        Arc::new(ClientSender::new(client.clone())),
+                        self.bot_id.clone(),
+                        ParseOptions::default(),
+                    )
+                    .with_identity(self.identity.clone()),
+                );
+                *slot = Some(p.clone());
+                p
+            }
+        };
+        drop(slot);
+        pipeline.attach(client);
+    }
+}
 
 fn jid(s: &str) -> Result<Jid> {
     s.parse::<Jid>()
@@ -214,7 +327,34 @@ where
 /// Creds diambil dari [`CREDS_ENV`] karena signature lama tidak punya
 /// tempat menerima creds dan tidak boleh pecah.
 ///
-/// # Batas urutan (bukan jaminan)
+/// # Pipeline pesan
+///
+/// `on_ready` dibungkus supaya [`crate::pipeline::Pipeline`] terpasang ke bus
+/// event SEBELUM closure milik pemanggil dijalankan: setiap pesan inbound
+/// `Event::Messages` lalu antre dan diproses (lihat [`PipelineWiring::attach`]).
+///
+/// Bentuk ini dipakai karena `on_ready` adalah satu-satunya titik di jalur ini
+/// yang memegang `Arc<Client>`, dan `pairing_run` berada di luar file yang boleh
+/// diubah. Builder (`Bot::on_event_for`) sebenarnya bisa mendaftarkan handler
+/// lebih awal, tapi itu menuntut membangun `Bot` sendiri — artinya
+/// menggandakan pemasangan `FalseLogoutGuard`, yang lebih berbahaya daripada
+/// jendela kecil di bawah.
+///
+/// ## Batas yang jujur: jendela di `Connected`
+///
+/// `Event::Connected` dikirim per generasi koneksi
+/// (`whatsapp-rust-0.7.0/src/client/lifecycle.rs:230`) dan handler-nya
+/// dijalankan pada task terpisah (`src/bot.rs:344-356`), bukan inline. Jadi
+/// ada secara teoretis `Event::Messages` yang bisa ter-dispatch sebelum
+/// `subscribe` selesai. Jendelanya dibuat sekecil mungkin dengan mengerjakan
+/// bagian mahal (baca settings) sebelum connect, sehingga di `on_ready` hanya
+/// tersisa `subscribe`. Menutupnya sepenuhnya berarti mendaftarkan handler lewat
+/// `Bot::on_event_for` sebelum build — menuntut perubahan di `pairing_run.rs`.
+///
+/// Kegagalan membangun pipeline (settings.json rusak/tidak terbaca) TIDAK
+/// menggagalkan boot: yang dicatat, command tidak dibalas, koneksi tetap jalan.
+///
+/// # Batas urutan 401 (bukan jaminan)
 ///
 /// whatsapp-rust 0.7.0 tidak punya hook pra-logout. Pada
 /// `<stream:error code="401">` `handle_stream_error` sudah men-clear
@@ -244,7 +384,35 @@ where
     F: Fn(Arc<Client>) -> Fut + Send + Sync + 'static,
     Fut: std::future::Future<Output = ()> + Send + 'static,
 {
-    let (handle, _guard) = connect_device_guarded(store, load_guard_creds(None), on_ready).await?;
+    let creds = load_guard_creds(None);
+
+    let cfg = oktz_core::config::Config::from_env();
+    let settings = settings_path(
+        &cfg.database.path,
+        oktz_core::env::Env::get(SETTINGS_ENV).as_deref(),
+    );
+    let wiring = match wiring_from(&settings, cfg.owner_numbers.clone(), bot_id_from(&creds)) {
+        Ok(w) => Some(Arc::new(w)),
+        Err(e) => {
+            tracing::error!(
+                error = %e,
+                settings = %settings.display(),
+                "pipeline pesan tidak aktif; command inbound tidak akan dibalas"
+            );
+            None
+        }
+    };
+    if wiring.is_some() {
+        tracing::info!(settings = %settings.display(), "pipeline pesan siap");
+    }
+
+    let (handle, _guard) = connect_device_guarded(store, creds, move |client: Arc<Client>| {
+        if let Some(w) = &wiring {
+            w.attach(&client);
+        }
+        on_ready(client)
+    })
+    .await?;
     Ok(handle)
 }
 
@@ -252,6 +420,7 @@ where
 mod tests {
     use super::*;
     use crate::pairing;
+    use oktz_router::RouterContext;
 
     fn tmpfile(name: &str) -> PathBuf {
         let p = std::env::temp_dir().join(format!("oktz-bot-test-{name}.json"));
@@ -328,6 +497,92 @@ mod tests {
             "{} tidak dibaca sebagai creds ter-autentikasi",
             CREDS_ENV
         );
+        std::fs::remove_file(&p).ok();
+    }
+
+    // ---------- pipeline wiring (tanpa koneksi WA) ----------
+
+    #[test]
+    fn settings_path_defaults_under_the_database_dir() {
+        // Default harus sama dengan yang dipakai oktz-bin (main.rs:166),
+        // kalau tidak pipeline akan membaca store yang salah diam-diam.
+        assert_eq!(
+            settings_path("./database/main", None),
+            PathBuf::from("./database/main/settings.json")
+        );
+    }
+
+    #[test]
+    fn settings_env_overrides_but_blank_does_not() {
+        assert_eq!(
+            settings_path("./database/main", Some("/var/lib/oktz/s.json")),
+            PathBuf::from("/var/lib/oktz/s.json")
+        );
+        for blank in ["", "   "] {
+            assert_eq!(
+                settings_path("./database/main", Some(blank)),
+                PathBuf::from("./database/main/settings.json"),
+                "{blank:?} harus berarti tidak di-override, bukan path path-butuh-dibuat"
+            );
+        }
+    }
+
+    #[test]
+    fn owner_numbers_become_identity_owners() {
+        let id = identity_from_owners(vec!["6281".to_string(), "6282".to_string()]);
+        assert!(id.is_owner("6281@s.whatsapp.net"));
+        assert!(id.is_owner("6282:9@s.whatsapp.net"), "cocok lewat nomor");
+        assert!(!id.is_owner("6283@s.whatsapp.net"));
+        assert!(
+            !id.is_premium("6281@s.whatsapp.net") && !id.is_admin("6281@s.whatsapp.net"),
+            "premium/admin tidak punya sumber di Config — harus kosong, bukan menebak"
+        );
+    }
+
+    #[test]
+    fn bot_id_falls_back_when_creds_carry_no_me() {
+        // `load_guard_creds` mengembalikan Null saat creds tak terbaca; jalur
+        // ini tidak boleh menggagalkan boot hanya karena itu.
+        assert_eq!(bot_id_from(&serde_json::Value::Null), DEFAULT_BOT_ID);
+        assert_eq!(bot_id_from(&serde_json::json!({})), DEFAULT_BOT_ID);
+        assert_eq!(bot_id_from(&serde_json::json!({"me": {"id": "  "}})), DEFAULT_BOT_ID);
+        assert_eq!(
+            bot_id_from(&serde_json::json!({"me": {"id": "6281@s.whatsapp.net"}})),
+            "6281@s.whatsapp.net"
+        );
+    }
+
+    #[test]
+    fn wiring_builds_from_a_store_and_survives_a_missing_file() {
+        let p = tmpfile("wiring");
+        std::fs::write(&p, r#"{"settings": {"botMode": "public"}}"#).unwrap();
+        let w = wiring_from(&p, vec!["6281".to_string()], "botid").unwrap();
+        assert_eq!(w.bot_id, "botid");
+        assert!(w.ctx.mode_settings().mode == "public");
+        assert!(w.live.lock().unwrap().is_none(), "belum ada pipeline");
+        std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
+    fn unreadable_settings_fail_wiring_without_panicking() {
+        // File rusak = error yang harus jadi log + boot tanpa pipeline
+        // (lihat connect_device), bukan panik di thread boot.
+        let p = tmpfile("wiring-bad");
+        std::fs::write(&p, "{ this is not json").unwrap();
+        assert!(wiring_from(&p, Vec::new(), "botid").is_err());
+        std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
+    fn wiring_context_is_cloned_so_attach_can_run_more_than_once() {
+        // `attach` dipanggil ulang tiap reconnect; kalau ctx tidak bisa di-clone
+        // atau state-nya berubah, pipeline kedua akan membaca store berbeda.
+        let p = tmpfile("wiring-clone");
+        std::fs::write(&p, r#"{"settings": {"onlyGc": true}}"#).unwrap();
+        let w = wiring_from(&p, Vec::new(), "botid").unwrap();
+        let a = w.ctx.clone();
+        let b = w.ctx.clone();
+        assert!(a.mode_settings().only_gc && b.mode_settings().only_gc);
         std::fs::remove_file(&p).ok();
     }
 }

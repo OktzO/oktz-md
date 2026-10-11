@@ -119,6 +119,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return smoke(&creds, &fixture, hold, &db).await;
     }
 
+    // `oktz run [creds] [settings.json] [hold_secs]` — jalur produksi: connect
+    // dengan pipeline router terpasang, jadi command masuk benar-benar mencapai
+    // plugin. smoke/send sengaja lewat pairing_run langsung dan tidak memakai
+    // pipeline.
+    if mode == "run" {
+        let creds = args
+            .get(2)
+            .cloned()
+            .unwrap_or_else(|| "../storage/session/creds.json".into());
+        let settings = args.get(3).cloned();
+        let hold: u64 = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(3600);
+        return run(&creds, settings.as_deref(), hold).await;
+    }
+
     // `oktz pair-code <nomor> [db] [hold]` / `oktz pair-qr [db] [hold]`
     if mode == "pair-code" || mode == "pair-qr" {
         // Device row di db pairing selalu dibuat baru, jadi path default-nya
@@ -271,6 +285,52 @@ fn verify_db(dir: &str) -> Result<(), Box<dyn std::error::Error>> {
 /// tidak terbaca menghasilkan `Value::Null`, bukan error.
 fn creds_for_guard(path: &str) -> serde_json::Value {
     oktz_wa::bot::load_guard_creds(Some(path))
+}
+
+/// Jalur produksi: connect lewat `connect_device` sehingga pipeline router
+/// terpasang dan command masuk benar-benar mencapai plugin.
+///
+/// `settings.json` dibaca pipeline sebagai store. Kalau tidak ada, pipeline
+/// jalan dengan default (semua mode public, semua group `all`) — bot tetap
+/// merespons, hanya gating per-grup yang tidak berlaku.
+async fn run(
+    creds: &str,
+    settings: Option<&str>,
+    hold_secs: u64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let db = db_arg(resolve_db(
+        None,
+        data_dir(Some("/var/lib/oktz")).join("oktz-run.db"),
+    ))?;
+    let store = oktz_wa::prepare_store(creds, &db, None).await?;
+
+    // Pipeline membaca lokasi settings lewat env saat connect. Argumen harus
+    // dipasang SEBELUM connect_device, makanya di sini bukan di dalam closure.
+    if let Some(p) = settings {
+        // Aman: masih single-threaded startup, sebelum task apa pun dibuat.
+        unsafe { std::env::set_var(oktz_wa::bot::SETTINGS_ENV, p) };
+        tracing::info!(path = %p, "settings dari argumen");
+    }
+
+    let handle = oktz_wa::connect_device(store, |client| async move {
+        println!(
+            "{}",
+            serde_json::json!({"phase":"CONNECTED","pipeline":true,"rss_kb":oktz_wa::rss::current_kb()})
+        );
+        let _ = &client;
+    })
+    .await?;
+
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(hold_secs);
+    while tokio::time::Instant::now() < deadline {
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    }
+    println!(
+        "{}",
+        serde_json::json!({"phase":"done","rss_kb":oktz_wa::rss::current_kb()})
+    );
+    handle.shutdown().await;
+    Ok(())
 }
 
 /// Smoke produksi: import device + sesi ratchet, connect, print pesan masuk.
