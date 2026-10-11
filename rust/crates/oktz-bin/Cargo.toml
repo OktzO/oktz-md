@@ -14,6 +14,10 @@ oktz-core = { path = "../oktz-core" }
 oktz-store = { path = "../oktz-store" }
 oktz-wa = { path = "../oktz-wa" }
 oktz-plugin-api = { path = "../oktz-plugin-api" }
+oktz-router = { path = "../oktz-router" }
+# Crate plugin harus ikut ter-link ke binary; tanpa ini `linkme` mendaftarkan
+# nol plugin dan `all_plugins()` melaporkan angka yang menipu.
+oktz-plugins = { path = "../oktz-plugins" }
 serde_json.workspace = true
 tracing.workspace = true
 tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "time"] }

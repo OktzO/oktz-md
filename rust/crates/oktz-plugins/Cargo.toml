@@ -1,0 +1,12 @@
+[package]
+name = "oktz-plugins"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+oktz-plugin-api = { path = "../oktz-plugin-api" }
+# `#[plugin]` memancarkan `linkme::distributed_slice`, jadi crate yang memakai
+# macro WAJIB punya linkme sebagai direct dependency.
+linkme = "0.3"
+rand = "0.9"

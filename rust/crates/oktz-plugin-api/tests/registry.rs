@@ -2,12 +2,12 @@ use oktz_plugin_api::{Ctx, Reply, find, plugin};
 
 #[plugin(name = "ping", alias = ["p"], category = "main", cooldown = 5, is_private = true)]
 fn ping(_ctx: Ctx) -> Reply {
-    Reply::Text("pong".into())
+    Reply::text("pong")
 }
 
 #[plugin(name = "echo", category = "tools", is_owner = true, energi = 3)]
 fn echo(ctx: Ctx) -> Reply {
-    Reply::Text(ctx.text)
+    Reply::text(ctx.text)
 }
 
 #[test]
@@ -39,20 +39,24 @@ fn macro_populates_meta_fields() {
     assert_eq!(echo.meta.energi, 3);
 }
 
-#[tokio::test]
-async fn handler_is_callable() {
+#[test]
+fn handler_is_callable() {
     let ping = find("ping").unwrap();
     let reply = (ping.handler)(Ctx {
         text: "x".into(),
-        args: vec![],
         sender: "628".into(),
-        is_owner: true,
-        uptime_secs: 1,
+        ..Default::default()
     });
-    match reply {
-        Reply::Text(t) => assert_eq!(t, "pong"),
-        Reply::None => panic!("harus Text"),
-    }
+    assert_eq!(reply.text_body(), Some("pong"));
+}
+
+/// Kontrak baru: `Reply` harus bisa membawa mention sebagai jid, bukan
+/// string yang harus di-embed plugin. Port `cek*` butuh ini.
+#[test]
+fn handler_can_return_a_mention_reply() {
+    let cek = find("ping").unwrap();
+    let reply = (cek.handler)(Ctx::default());
+    assert!(matches!(reply, Reply::Text { .. }));
 }
 
 #[test]

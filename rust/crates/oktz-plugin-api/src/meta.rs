@@ -20,12 +20,19 @@ pub struct PluginMeta {
     pub energi: i64,
     pub is_enabled: bool,
     pub is_owner: bool,
+    /// `checkPermission` aturan 2 (`middleware.js:57`) — partner tier antara
+    /// owner dan premium. Hilang dari struct awal, padahal router butuh.
+    pub is_partner: bool,
     pub is_premium: bool,
     pub is_group: bool,
     pub is_private: bool,
     pub is_admin: bool,
     pub is_bot_admin: bool,
     pub skip_registration: bool,
+    /// Non-empty = command tidak pakai prefix (mis. alias trigger kata).
+    /// `plugins/owner/eval.js` memakainya; `isBanned`/`noPrefix` juga ada di
+    /// manifest tapi hanya 1 file — belum dipakai router.
+    pub custom_trigger: Option<String>,
 }
 
 impl Default for PluginMeta {
@@ -41,12 +48,14 @@ impl Default for PluginMeta {
             energi: 0,
             is_enabled: true,
             is_owner: false,
+            is_partner: false,
             is_premium: false,
             is_group: false,
             is_private: false,
             is_admin: false,
             is_bot_admin: false,
             skip_registration: false,
+            custom_trigger: None,
         }
     }
 }

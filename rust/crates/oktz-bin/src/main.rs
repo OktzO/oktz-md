@@ -4,6 +4,15 @@ use oktz_core::config::Config;
 use oktz_store::json_store::JsonStore;
 use oktz_wa::MessageBuilderExt;
 
+/// Referensi eksplisit ke crate plugin.
+///
+/// Rust membuang crate yang tidak dirujuk, sehingga statik `linkme`-nya ikut
+/// hilang dan registry kosong. Fungsi ini yang menjaga tautan itu hidup.
+fn use_plugin_crates() {
+    // PENTANGI: tambah crate plugin baru di sini juga.
+    let _ = oktz_plugins::cek::cekbaik;
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     oktz_core::logging::init("info");
@@ -54,6 +63,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         owner = cfg.owner_numbers.len(),
         "store dibuka"
     );
+
+    // PENTING: crate plugin hanya ter-link kalau dirujuk di sini. Rust
+    // membuang dependency yang tak terpakai, dan `linkme` mendaftarkan lewat
+    // statik — kalau crate-nya hilang, `all_plugins()` melaporkan 0 tanpa error.
+    // Setiap crate plugin baru wajib ditambah ke daftar ini.
+    use_plugin_crates();
 
     let plugins = oktz_plugin_api::all_plugins();
     tracing::info!(count = plugins.len(), "plugin dimuat");

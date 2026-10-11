@@ -29,6 +29,7 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut energi: i64 = 0;
     let mut is_enabled = true;
     let mut is_owner = false;
+    let mut is_partner = false;
     let mut is_premium = false;
     let mut is_group = false;
     let mut is_private = true;
@@ -55,6 +56,7 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
             "is_enabled" => is_enabled = lit_bool(&nv.value).unwrap_or(true),
             "is_owner" => is_owner = lit_bool(&nv.value).unwrap_or(false),
             "is_premium" => is_premium = lit_bool(&nv.value).unwrap_or(false),
+            "is_partner" => is_partner = lit_bool(&nv.value).unwrap_or(false),
             "is_group" => is_group = lit_bool(&nv.value).unwrap_or(false),
             "is_private" => is_private = lit_bool(&nv.value).unwrap_or(true),
             "is_admin" => is_admin = lit_bool(&nv.value).unwrap_or(false),
@@ -86,12 +88,16 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                         energi: #energi,
                         is_enabled: #is_enabled,
                         is_owner: #is_owner,
+                        is_partner: #is_partner,
                         is_premium: #is_premium,
                         is_group: #is_group,
                         is_private: #is_private,
                         is_admin: #is_admin,
                         is_bot_admin: #is_bot_admin,
                         skip_registration: #skip_registration,
+                        // `customTrigger` hanya dipakai 1 plugin (eval.js) dan
+                        // butuh trigger bebas-prefix — belum ada di router.
+                        custom_trigger: ::std::option::Option::None,
                     },
                     handler: ::std::sync::Arc::new(#ident),
                 },
@@ -101,8 +107,22 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
     expanded.into()
 }
 
-fn lit_str(e: &Expr) -> Option<String> {
+/// Buang satu lapisan `Expr::Group`.
+///
+/// Kalau argumen `#[plugin(...)]` diteruskan lewat `macro_rules!`, token-nya
+/// dibungkus `Group` (invisible-delimiter), bukan `Lit` langsung. Tanpa
+/// unwrap di sini, semua helper `lit_*` diam-diam mengembalikan default:
+/// plugin terdaftar dengan `name: ""`, dan gejalanya "tidak ketemu saat
+/// lookup" — jauh dari penyebabnya.
+fn peel(e: &Expr) -> &Expr {
     match e {
+        Expr::Group(g) => peel(&g.expr),
+        other => other,
+    }
+}
+
+fn lit_str(e: &Expr) -> Option<String> {
+    match peel(e) {
         Expr::Lit(ExprLit {
             lit: Lit::Str(s), ..
         }) => Some(s.value()),
@@ -111,14 +131,14 @@ fn lit_str(e: &Expr) -> Option<String> {
 }
 
 fn lit_str_array(e: &Expr) -> Vec<String> {
-    match e {
+    match peel(e) {
         Expr::Array(arr) => arr.elems.iter().filter_map(lit_str).collect(),
         _ => Vec::new(),
     }
 }
 
 fn lit_u32(e: &Expr) -> Option<u32> {
-    match e {
+    match peel(e) {
         Expr::Lit(ExprLit {
             lit: Lit::Int(i), ..
         }) => i.base10_parse().ok(),
@@ -127,7 +147,7 @@ fn lit_u32(e: &Expr) -> Option<u32> {
 }
 
 fn lit_i64(e: &Expr) -> Option<i64> {
-    match e {
+    match peel(e) {
         Expr::Lit(ExprLit {
             lit: Lit::Int(i), ..
         }) => i.base10_parse().ok(),
@@ -136,7 +156,7 @@ fn lit_i64(e: &Expr) -> Option<i64> {
 }
 
 fn lit_bool(e: &Expr) -> Option<bool> {
-    match e {
+    match peel(e) {
         Expr::Lit(ExprLit {
             lit: Lit::Bool(b), ..
         }) => Some(b.value),
