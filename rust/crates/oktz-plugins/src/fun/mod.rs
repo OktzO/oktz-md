@@ -1,0 +1,14 @@
+pub mod akankah;
+pub mod apakah;
+pub mod bagaimana;
+pub mod berapa;
+pub mod bisakah;
+pub mod coba;
+pub mod dare;
+pub mod dimana;
+pub mod haruskah;
+pub mod kapan;
+pub mod mengapa;
+pub mod rate;
+pub mod soulmatch;
+pub mod truth;

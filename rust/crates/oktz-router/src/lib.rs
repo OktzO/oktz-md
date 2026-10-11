@@ -150,6 +150,11 @@ impl<'a, C: RouterContext> Router<'a, C> {
             is_group: caller.is_group,
             is_owner: caller.is_owner,
             uptime_secs: self.ctx.uptime_secs(),
+            // Field `Ctx` yang lain (roster grup, state user/grup) diisi di
+            // lapisan atas router — `oktz-wa::pipeline` membungkus `handler`
+            // dan menyuntikkannya sebelum handler asli dipanggil. Router tidak
+            // punya roster maupun store, jadi di sini sengaja `Default`.
+            ..Default::default()
         };
         Decision::Handled((entry.handler)(c))
     }

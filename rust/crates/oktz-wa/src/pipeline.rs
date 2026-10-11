@@ -11,10 +11,6 @@
 //! 3. **Pipeline** ([`Pipeline`]) — dedup → gate → route → render → kirim.
 //!
 //! Batas yang diketahui dan sengaja dibiarkan terlihat, bukan disembunyikan:
-//! - `Reply::Image` / `Reply::Sticker` tidak punya sumber byte
-//!   (`oktz_plugin_api::Reply`, `oktz-plugin-api/src/registry.rs:33-39`), jadi
-//!   [`render_reply`] mengembalikan [`PipelineError::MediaSourceMissing`] dan
-//!   [`Pipeline::process`] mem-log-nya. Lihat laporan — ini butuh perubahan API.
 //! - `DenyMode` tidak membawa payload, jadi pesan AFK/`onlyThisGroup` tidak
 //!   bisa menginterpolasi `botAfk.reason`/durasi/`onlyThisGroup.link` seperti
 //!   JS. Yang dikirim adalah kalimat yang benar tanpa data yang dikarang.
@@ -23,15 +19,21 @@
 //!   `Reply` tidak punya field yang menandai konsumsi itu — membakarnya di sini
 //!   akan menguras kuota untuk command biasa. Gate-nya tetap tersedia lewat
 //!   [`Pipeline::allow_auto_work`].
+//!
+//! Media: `Reply::Image` / `Reply::Sticker` membawa [`MediaSource`]. Tidak ada
+//! "kirim dari URL" di whatsapp-rust — `Client::upload`
+//! (`whatsapp-rust-0.7.0/src/upload.rs:409`) hanya menerima `Vec<u8>`, jadi
+//! `Url`/`Path` di-resolve ke byte dulu ([`load_media`]) sebelum upload.
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
-use oktz_plugin_api::Reply;
+use oktz_plugin_api::registry::{GroupRoster, MediaSource, Participant};
+use oktz_plugin_api::{Ctx, PluginEntry, Reply};
 use oktz_router::gates::{AutoWorkDecision, AutoWorkSettings};
 use oktz_router::serialize::{MessageKind, MessageParams, get_message_body, resolve_message_type};
 use oktz_router::{
@@ -40,9 +42,14 @@ use oktz_router::{
 };
 use oktz_store::json_store::JsonStore;
 use serde_json::Value;
+use whatsapp_rust::http::{HttpClient, HttpRequest, UreqHttpClient};
+use whatsapp_rust::media::{ImageOptions, image_message};
 use whatsapp_rust::prelude::*;
+use whatsapp_rust::GroupMetadata;
+use whatsapp_rust::upload::{UploadOptions, UploadResponse};
 use whatsapp_rust::waproto::buffa::MessageField;
 use whatsapp_rust::waproto::whatsapp::__buffa::oneof::message::interactive_response_message::InteractiveResponseMessage as IrOneof;
+use whatsapp_rust::wacore::download::MediaType;
 use whatsapp_rust::wacore_binary::Node;
 
 use crate::cards::{Card, biz_node};
@@ -344,6 +351,30 @@ impl RouterContext for StoreContext {
     }
 }
 
+impl StoreContext {
+    /// `users[key]` mentah untuk `sender` — objek yang di-Ctx jadi
+    /// `user_data`. `Value::Null` kalau tidak ada, persis `getUser` yang
+    /// mengembalikan `null` (`database.js:529-536`).
+    pub fn user_entry(&self, sender: &str) -> Value {
+        let Some(key) = normalize_user_key(sender) else {
+            return Value::Null;
+        };
+        top(&self.store, "users")
+            .and_then(|u| u.get(&key))
+            .cloned()
+            .unwrap_or(Value::Null)
+    }
+
+    /// `groups[chat]` mentah untuk `chat`. Tanpa normalisasi JID, sama seperti
+    /// `getGroup` (`database.js:711-714`).
+    pub fn group_entry(&self, chat: &str) -> Value {
+        top(&self.store, "groups")
+            .and_then(|g| g.get(chat))
+            .cloned()
+            .unwrap_or(Value::Null)
+    }
+}
+
 // =============================================================================
 // 3. Dedup 100 ms — port `debounceMessage` (src/lib/performance.js:10-29)
 // =============================================================================
@@ -405,6 +436,18 @@ pub trait MessageSender: Send + Sync {
         message: wa::Message,
         extra_nodes: Vec<Node>,
     ) -> SendBox<'_>;
+
+    /// Kirim media: baca sumbernya → upload ke CDN → kirim.
+    ///
+    /// Terpisah dari `send` karena butuh I/O (disk/HTTP/upload) yang `send`
+    /// tidak punya, dan karena pemanggil harus memilihjalur yang benar.
+    /// Default-nya error, BUKAN diam: implementasi yang tidak punya
+    /// `Client` (test) akan menolak dengan jelas alih-alih menelan reply.
+    fn send_media(&self, _to: &str, _media: PendingMedia) -> SendBox<'_> {
+        Box::pin(async move {
+            Err("pengirim ini tidak mendukung kirim media ( butuh Client )".to_string())
+        })
+    }
 }
 
 /// Sender sungguhan, membungkus `Arc<Client>`.
@@ -438,6 +481,93 @@ impl MessageSender for ClientSender {
                 .map_err(|e| e.to_string())
         })
     }
+
+    /// Alur media nyata: `Client::upload` (`src/upload.rs:409`) → bangun
+    /// `wa::Message` dari `UploadResponse` → `send_message_with_options`.
+    fn send_media(&self, to: &str, media: PendingMedia) -> SendBox<'_> {
+        let client = self.client.clone();
+        let to = to.to_string();
+        Box::pin(async move {
+            let jid: Jid = to
+                .parse()
+                .map_err(|e| format!("JID tidak valid {to}: {e}"))?;
+            let data = load_media(&media.source).await.map_err(|e| e.to_string())?;
+            // `MediaType::Sticker` dan `MediaType::Image` sama-sama mendarat
+            // di `/mms/image` (`wacore-0.7.0/src/download.rs:91`) — persis
+            // seperti WA Web, tapi tetap pakai tipe yang jujur per jenis.
+            let upload = client
+                .upload(data, media.kind.upload_type(), UploadOptions::default())
+                .await
+                .map_err(|e| format!("upload media gagal: {e}"))?;
+            let message = build_media_message(media.kind, upload, &media);
+            client
+                .send_message_with_options(jid, message, SendOptions::default())
+                .await
+                .map(|_| ())
+                .map_err(|e| e.to_string())
+        })
+    }
+}
+
+/// Client HTTP untuk [`MediaSource::Url`]. Satu instance per proses —
+/// `UreqHttpClient::new()` membangun connection pool
+/// (`whatsapp-rust-ureq-http-client-0.7.0/src/lib.rs:47`), dan fetch media
+/// cukup sering.
+fn http_client() -> &'static UreqHttpClient {
+    static HTTP: OnceLock<UreqHttpClient> = OnceLock::new();
+    HTTP.get_or_init(UreqHttpClient::new)
+}
+
+/// Resolve [`MediaSource`] jadi byte. Satu-satunya tempat di pipeline yang
+/// menyentuh disk atau jaringan — `oktz-plugin-api` tetap bebas I/O.
+///
+/// Kegagalan selalu error bertipe, tidak pernah `Ok(vec![])` diam-diam: byte
+/// kosong akan terkirim ke CDN dan gagal jauh dari penyebabnya.
+async fn load_media(source: &MediaSource) -> Result<Vec<u8>, PipelineError> {
+    match source {
+        MediaSource::Bytes { data, .. } => {
+            if data.is_empty() {
+                return Err(PipelineError::Media(
+                    "sumber media bytes kosong".to_string(),
+                ));
+            }
+            Ok(data.to_vec())
+        }
+        // `tokio::fs`, bukan `std::fs` — `read` blocking di thread tokio
+        // worker akan menahan seluruh dispatch event bot.
+        MediaSource::Path { path, .. } => {
+            let p = std::path::Path::new(path);
+            let data = tokio::fs::read(p).await.map_err(|e| {
+                PipelineError::Media(format!("gagal baca file media `{path}`: {e}"))
+            })?;
+            if data.is_empty() {
+                return Err(PipelineError::Media(format!(
+                    "file media `{path}` kosong"
+                )));
+            }
+            Ok(data)
+        }
+        MediaSource::Url { url, .. } => {
+            let resp = http_client()
+                .execute(HttpRequest::get(url))
+                .await
+                .map_err(|e| PipelineError::Media(format!("gagal fetch media: {e}")))?;
+            // URL sengaja tidak ikut pesan: media URL sering membawa token
+            // bertanda tangan yang tidak belong di log.
+            if !(200..300).contains(&resp.status_code) {
+                return Err(PipelineError::Media(format!(
+                    "server menolak fetch media: HTTP {}",
+                    resp.status_code
+                )));
+            }
+            if resp.body.is_empty() {
+                return Err(PipelineError::Media(
+                    "server membalas body kosong".to_string(),
+                ));
+            }
+            Ok(resp.body)
+        }
+    }
 }
 
 // =============================================================================
@@ -446,11 +576,12 @@ impl MessageSender for ClientSender {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PipelineError {
-    /// `Reply` tidak membawa byte media sama sekali
-    /// (`oktz-plugin-api/src/registry.rs:33-39` — `Image { caption, mentions }`
-    /// dan `Sticker` tidak punya field media). Tidak ada yang bisa dikirim, jadi
-    /// ini Reported, bukan di-drop diam-diam.
+    /// `Reply` tidak membawa sumber media sama sekali — `media: None` di
+    /// `Reply::Image` / `Reply::Sticker` (`oktz-plugin-api/src/registry.rs`).
+    /// Reported, bukan di-drop diam-diam.
     MediaSourceMissing { variant: &'static str },
+    /// Sumber media ada tapi gagal jadi byte / gagal upload.
+    Media(String),
     Other(String),
 }
 
@@ -459,11 +590,10 @@ impl fmt::Display for PipelineError {
         match self {
             Self::MediaSourceMissing { variant } => write!(
                 f,
-                "Reply::{variant} tidak punya sumber media — `Reply` hanya membawa \
-                 caption/mention, tidak ada byte atau media handle. Butuh perubahan \
-                 API pada Reply (lihat oktz-plugin-api/src/registry.rs:33-39); \
-                 pesan TIDAK dikirim."
+                "Reply::{variant} tidak punya sumber media — `media: None`, jadi tidak \
+                 ada byte yang bisa di-upload. Pesan TIDAK dikirim."
             ),
+            Self::Media(m) => write!(f, "{m}"),
             Self::Other(m) => write!(f, "{m}"),
         }
     }
@@ -494,9 +624,114 @@ impl QuoteSource {
 /// Satu pesan siap kirim.
 #[derive(Debug)]
 pub struct Rendered {
+    /// Berisi kalau reply ini sudah jadi wire-ready. KOSONG persis ketika
+    /// [`Self::media`] `Some` — pesan aslinya baru ada setelah byte media
+    /// di-upload, jadi tidak boleh dikirim apa adanya.
     pub message: wa::Message,
     /// Extra stanza node — hanya `biz` untuk kartu native-flow.
     pub extra_nodes: Vec<Node>,
+    /// Media yang belum di-upload. `Some` = kirim lewat
+    /// [`MessageSender::send_media`], bukan [`MessageSender::send`].
+    pub media: Option<PendingMedia>,
+}
+
+impl Rendered {
+    fn wire(message: wa::Message, extra_nodes: Vec<Node>) -> Self {
+        Self {
+            message,
+            extra_nodes,
+            media: None,
+        }
+    }
+
+    /// `false` kalau yang perlu dikirim media. Kalau `false`, `message`
+    /// guaranteed terisi.
+    pub fn needs_media(&self) -> bool {
+        self.media.is_some()
+    }
+}
+
+/// Jenis media yang di-upload dan dikirim.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MediaKind {
+    Image,
+    Sticker,
+}
+
+impl MediaKind {
+    /// Tipe untuk `Client::upload`. Dipisah supaya pemetaan ini bisa diuji
+    /// tanpa jaringan.
+    pub fn upload_type(self) -> MediaType {
+        match self {
+            Self::Image => MediaType::Image,
+            Self::Sticker => MediaType::Sticker,
+        }
+    }
+}
+
+/// Satu balasan media yang menunggu di-upload dan dikirim.
+#[derive(Debug, Clone)]
+pub struct PendingMedia {
+    pub kind: MediaKind,
+    pub source: MediaSource,
+    pub caption: String,
+    pub mentions: Vec<String>,
+    pub quote: Option<QuoteSource>,
+}
+
+/// `UploadResponse` → `wa::Message` siap kirim.
+///
+/// Image memakai builder resmi library (`media::image_message`,
+/// `whatsapp-rust-0.7.0/src/media.rs:67`) supaya tidak merakit sendiri field
+/// CDN-nya. Untuk sticker library TIDAK menyediakan builder
+/// (`media.rs:66-176` hanya `image_message`/`video_message`/
+/// `document_message`/`audio_message`), jadi `stickerMessage` dirakit dari
+/// `UploadResponse` dengan field yang sama seperti builder image
+/// (`waproto-0.7.0/src/whatsapp.proto:1584-1609`).
+fn build_media_message(kind: MediaKind, up: UploadResponse, media: &PendingMedia) -> wa::Message {
+    let ci = if media.mentions.is_empty() && media.quote.is_none() {
+        None
+    } else {
+        Some(Box::new(context_info(&media.mentions, media.quote.as_ref())))
+    };
+    // WA menolak caption kosong; `Some("")` dikirim apa adanya.
+    let caption = (!media.caption.is_empty()).then(|| media.caption.clone());
+    match kind {
+        MediaKind::Image => image_message(
+            up,
+            ImageOptions {
+                caption,
+                mimetype: media.source.mimetype().map(str::to_string),
+                jpeg_thumbnail: None,
+                context_info: ci,
+            },
+        ),
+        MediaKind::Sticker => wa::Message {
+            sticker_message: MessageField::some(wa::message::StickerMessage {
+                url: Some(up.url),
+                direct_path: Some(up.direct_path),
+                media_key: Some(up.media_key.to_vec()),
+                file_sha256: Some(up.file_sha256.to_vec()),
+                file_enc_sha256: Some(up.file_enc_sha256.to_vec()),
+                file_length: Some(up.file_length),
+                media_key_timestamp: Some(up.media_key_timestamp),
+                // Sticker WA Web memang webp; `image/webp` hanya label, byte
+                // yang di-upload adalah apa adanya dari `MediaSource`.
+                mimetype: Some(
+                    media
+                        .source
+                        .mimetype()
+                        .unwrap_or("image/webp")
+                        .to_string(),
+                ),
+                context_info: ci.map_or_else(MessageField::none, |c| {
+                    MessageField::some(*c)
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    }
 }
 
 fn context_info(mentions: &[String], quote: Option<&QuoteSource>) -> wa::ContextInfo {
@@ -523,26 +758,58 @@ fn context_info(mentions: &[String], quote: Option<&QuoteSource>) -> wa::Context
 ///   `quote`, teks tetap terkirim tapi quote hilang.
 /// - `Interactive` → `Card::new(body).to_message()` + node `biz`
 ///   (bentuk yang sudah terbukti, `crate::cards`).
-/// - `Image` / `Sticker` → `Err(MediaSourceMissing)`.
-pub fn render_reply(reply: &Reply, quote: Option<&QuoteSource>) -> Result<Option<Rendered>, PipelineError> {
+/// - `Image` / `Sticker` → [`Rendered::media`] terisi, `message` sengaja
+///   kosong: byte-nya harus di-upload dulu sebelum ada pesan yang bisa dikirim.
+///   `media: None` → `Err(MediaSourceMissing)`, bukan `Ok(None)` — drop
+///   senyap akan membuat plugin terlihat sukses padahal tidak mengirim apa pun.
+pub fn render_reply(
+    reply: &Reply,
+    quote: Option<&QuoteSource>,
+) -> Result<Option<Rendered>, PipelineError> {
+    let pending = |kind: MediaKind,
+                   variant: &'static str,
+                   src: &Option<MediaSource>,
+                   caption: &str,
+                   mentions: &[String]|
+     -> Result<PendingMedia, PipelineError> {
+        Ok(PendingMedia {
+            kind,
+            source: src
+                .clone()
+                .ok_or(PipelineError::MediaSourceMissing { variant })?,
+            caption: caption.to_string(),
+            mentions: mentions.to_vec(),
+            quote: quote.cloned(),
+        })
+    };
     match reply {
         Reply::None => Ok(None),
-        Reply::Sticker => Err(PipelineError::MediaSourceMissing { variant: "Sticker" }),
-        Reply::Image { .. } => Err(PipelineError::MediaSourceMissing {
-            variant: "Image",
-        }),
-        Reply::Text { text, mentions } => Ok(Some(Rendered {
-            message: text_message(text, mentions, None),
+        Reply::Sticker { media: src } => Ok(Some(Rendered {
+            message: wa::Message::default(),
             extra_nodes: Vec::new(),
+            media: Some(pending(MediaKind::Sticker, "Sticker", src, "", &[])?),
         })),
-        Reply::TextQuoted { text, mentions } => Ok(Some(Rendered {
-            message: text_message(text, mentions, quote),
+        Reply::Image {
+            media: src,
+            caption,
+            mentions,
+        } => Ok(Some(Rendered {
+            message: wa::Message::default(),
             extra_nodes: Vec::new(),
+            media: Some(pending(MediaKind::Image, "Image", src, caption, mentions)?),
         })),
-        Reply::Interactive { body } => Ok(Some(Rendered {
-            message: Card::new(body).to_message(),
-            extra_nodes: vec![biz_node()],
-        })),
+        Reply::Text { text, mentions } => Ok(Some(Rendered::wire(
+            text_message(text, mentions, None),
+            Vec::new(),
+        ))),
+        Reply::TextQuoted { text, mentions } => Ok(Some(Rendered::wire(
+            text_message(text, mentions, quote),
+            Vec::new(),
+        ))),
+        Reply::Interactive { body } => Ok(Some(Rendered::wire(
+            Card::new(body).to_message(),
+            vec![biz_node()],
+        ))),
     }
 }
 
@@ -701,6 +968,173 @@ pub fn extract_body(m: &wa::Message) -> Option<String> {
 // 7. Pipeline
 // =============================================================================
 
+/// Sumber roster grup. Pipeline yang tidak punya `Client` (test, mode offline)
+/// memakai [`NoRoster`] dan dapat roster kosong — sama dengan "tidak diketahui",
+/// bukan "grup ini kosong".
+///
+/// Implementasi sungguhan adalah [`ClientSender`], yang memanggil
+/// `Client::groups().get_metadata()` (`whatsapp-rust-0.7.0/src/features/groups.rs:689`).
+pub trait RosterSource: Send + Sync {
+    fn roster(&self, chat: &str) -> SendBoxRoster<'_>;
+}
+
+pub type SendBoxRoster<'a> =
+    Pin<Box<dyn Future<Output = Result<GroupRoster, String>> + Send + 'a>>;
+
+/// Default: tidak ada yang bisa tahu roster. Selalu kosong, bukan error —
+/// pesan dari grup tetap diproses, plugin `listadmin` yang perlu jailed.
+pub struct NoRoster;
+
+impl RosterSource for NoRoster {
+    fn roster(&self, _chat: &str) -> SendBoxRoster<'_> {
+        Box::pin(async { Ok(GroupRoster::default()) })
+    }
+}
+
+impl RosterSource for ClientSender {
+    /// `Groups::get_metadata` mengembalikan `GroupMetadata.participants:
+    /// Vec<GroupParticipant>` (`features/groups.rs:151,236`) dengan
+    /// `participant_type: ParticipantType` = `Member | Admin | SuperAdmin`
+    /// (`wacore-0.7.0/src/iq/groups.rs:184`) — persis tri-state yang dibaca
+    /// JS lewat `p.admin`.
+    fn roster(&self, chat: &str) -> SendBoxRoster<'_> {
+        let client = self.client.clone();
+        let chat = chat.to_string();
+        Box::pin(async move {
+            let jid: Jid = chat
+                .parse()
+                .map_err(|e| format!("JID grup tidak valid {chat}: {e}"))?;
+            let meta = client
+                .groups()
+                .get_metadata(&jid)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            // Bot sendiri dihitung dari daftar peserta: JID bot tidak pernah
+            // datang di `MessageInfo`, jadi satu-satunya sumber yang benar
+            // adalah roster itu sendiri.
+            let mut bot_jids: Vec<String> = Vec::new();
+            if let Some(pn) = client.pn() {
+                bot_jids.push(pn.to_string());
+            }
+            if let Some(lid) = client.lid() {
+                bot_jids.push(lid.to_string());
+            }
+            Ok(roster_from(&meta, &bot_jids))
+        })
+    }
+}
+
+/// `GroupMetadata` → `Ctx::roster`.
+///
+/// Dipisah dari I/O supaya pemetaannya bisa diuji terhadap tipe asli
+/// `whatsapp_rust` tanpa `Client`. `ParticipantType` = `Member | Admin |
+/// SuperAdmin` (`wacore-0.7.0/src/iq/groups.rs:184`) dibaca lewat
+/// `is_admin()`/`is_super_admin()` (`features/groups.rs:246,250`), persis dua
+/// nilai yang diporn plugin JS lewat `p.admin`.
+pub fn roster_from(meta: &GroupMetadata, bot_jids: &[String]) -> GroupRoster {
+    GroupRoster {
+        is_bot_admin: meta
+            .participants
+            .iter()
+            .any(|p| p.is_admin() && bot_jids.iter().any(|b| *b == p.jid.to_string())),
+        participants: meta
+            .participants
+            .iter()
+            .map(|p| Participant {
+                jid: p.jid.to_string(),
+                is_admin: p.is_admin(),
+                is_owner: p.is_super_admin(),
+            })
+            .collect(),
+    }
+}
+
+/// Roster grup hasil baca, per chat, supaya satu grup tidak di-query ulang
+/// untuk tiap pesan.
+#[derive(Default)]
+struct RosterCache {
+    map: HashMap<String, (Instant, GroupRoster)>,
+    ttl: std::time::Duration,
+}
+
+impl RosterCache {
+    /// TTL default: roster berubahRare dan `get_metadata` selalu unduh penuh
+    /// tanpa phash (`features/groups.rs:690`), jadi cache menyeimbangkan antara
+    /// biaya jaringan dan staleness.
+    const DEFAULT_TTL: std::time::Duration = std::time::Duration::from_secs(300);
+
+    fn get(&self, chat: &str) -> Option<GroupRoster> {
+        let (at, r) = self.map.get(chat)?;
+        (at.elapsed() < self.ttl).then(|| r.clone())
+    }
+
+    fn put(&mut self, chat: &str, roster: GroupRoster) {
+        self.map.insert(chat.to_string(), (Instant::now(), roster));
+    }
+}
+
+/// Apa yang boleh dibaca handler plugin untuk mengisi `Ctx`.
+///
+/// Dipisah dari pipeline supaya handler yang sudah dibungkus bisa memegangnya
+/// sendiri: handler bertipe `&'static`, jadi data per-pesan TIDAK boleh
+/// ditangkap di dalam handler — hanya sumber yang Deterministik dari `Ctx`
+/// (chat/sender) boleh.
+#[derive(Clone)]
+struct PluginCtxSource {
+    store: Arc<StoreContext>,
+    rosters: Arc<Mutex<RosterCache>>,
+}
+
+impl PluginCtxSource {
+    /// Isi field `Ctx` yang tidak bisa dihitung router: roster grup + state
+    /// store. Idempoten dan bebas I/O — semua sudah ada di memori.
+    fn fill(&self, c: &mut Ctx) {
+        c.roster = self
+            .rosters
+            .lock()
+            .expect("roster cache")
+            .get(&c.chat)
+            .unwrap_or_default();
+        c.user_data = self.store.user_entry(&c.sender);
+        c.group_data = self.store.group_entry(&c.chat);
+    }
+}
+
+/// Handler asli + pembungkus yang mengisi `Ctx`. Satu per plugin.
+///
+/// Dibuat dengan `Box::leak` SEKALI per plugin, bukan per pesan: kalau
+/// dibungkus per pesan, tiap pesan jadi satu alokasi yang tidak pernah
+/// dibebaskan.
+#[derive(Default)]
+struct WrappedHandlers {
+    map: HashMap<usize, &'static PluginEntry>,
+}
+
+impl WrappedHandlers {
+    fn get_or_insert(
+        &mut self,
+        real: &'static PluginEntry,
+        src: &PluginCtxSource,
+    ) -> &'static PluginEntry {
+        let key = std::ptr::from_ref(real) as usize;
+        if let Some(e) = self.map.get(&key) {
+            return e;
+        }
+        let handler = real.handler.clone();
+        let src = src.clone();
+        let entry: &'static PluginEntry = Box::leak(Box::new(PluginEntry {
+            meta: real.meta.clone(),
+            handler: Arc::new(move |mut c: Ctx| {
+                src.fill(&mut c);
+                handler(c)
+            }),
+        }));
+        self.map.insert(key, entry);
+        entry
+    }
+}
+
 /// Identitas pemanggil. Sumber roster TIDAK ada di crate ini — `oktz_core::Config`
 /// hanya punya `owner_numbers`, dan premium/admin tidak punya accessor sama sekali.
 /// Semua default kosong (bukan siapa pun owner/premium/admin) sampai caller
@@ -754,11 +1188,17 @@ pub enum Outcome {
     /// Plugin jalan dan balasan terkirim.
     Sent,
     /// Plugin membalas media yang `Reply` tidak punya sumbernya.
+    ///
+    /// TIDAK lagi dipakai: kasus itu sekarang jadi
+    /// [`PipelineError::MediaSourceMissing`], bukan `Outcome` — `process`
+    /// mengembalikan `Err` supaya tidak ada yang mengira pesan terkirim.
+    /// Varian dipertahankan supaya `Outcome` tidak berubah bentuk bagi
+    /// pemanggil yang sudah mematch-nya.
     MediaMissing,
 }
 
 pub struct Pipeline {
-    ctx: StoreContext,
+    ctx: Arc<StoreContext>,
     sender: Arc<dyn MessageSender>,
     dedup: Mutex<Dedup>,
     spam: Mutex<RateLimiter>,
@@ -768,6 +1208,13 @@ pub struct Pipeline {
     identity: Identity,
     anti_spam_enabled: bool,
     auto_work_settings: AutoWorkSettings,
+    /// Sumber roster grup. Default [`NoRoster`] supaya konstruktor tetap
+    /// kompatibel dengan pemanggil lama (`bot.rs`).
+    roster: Arc<dyn RosterSource>,
+    /// Yang boleh dibaca handler plugin: store + cache roster.
+    plugin_src: PluginCtxSource,
+    /// Handler yang sudah dibungkus — satu per plugin.
+    wrapped: Mutex<WrappedHandlers>,
     /// Wajib disimpan: `Subscription` unsubscribe saat di-drop
     /// (wacore-0.7.0/src/types/events.rs:538-544).
     subscription: Mutex<Option<Subscription>>,
@@ -780,7 +1227,15 @@ impl Pipeline {
         bot_id: impl Into<String>,
         parse_opts: ParseOptions,
     ) -> Self {
+        let ctx = Arc::new(ctx);
         Self {
+            plugin_src: PluginCtxSource {
+                store: Arc::clone(&ctx),
+                rosters: Arc::new(Mutex::new(RosterCache {
+                    map: HashMap::new(),
+                    ttl: RosterCache::DEFAULT_TTL,
+                })),
+            },
             ctx,
             sender,
             dedup: Mutex::new(Dedup::new()),
@@ -791,12 +1246,20 @@ impl Pipeline {
             identity: Identity::default(),
             anti_spam_enabled: true,
             auto_work_settings: AutoWorkSettings::default(),
+            roster: Arc::new(NoRoster),
+            wrapped: Mutex::new(WrappedHandlers::default()),
             subscription: Mutex::new(None),
         }
     }
 
     pub fn with_identity(mut self, identity: Identity) -> Self {
         self.identity = identity;
+        self
+    }
+
+    /// Pasang sumber roster. Tanpa ini, `Ctx::roster` selalu kosong.
+    pub fn with_roster_source(mut self, roster: Arc<dyn RosterSource>) -> Self {
+        self.roster = roster;
         self
     }
 
@@ -845,6 +1308,44 @@ impl Pipeline {
         }
     }
 
+    /// Roster untuk chat ini, dari cache atau dari jaringan.
+    ///
+    /// Gagal membaca metadata TIDAK menggagalkan pesan — plugin tanpa roster
+    /// tetap jalan, hanya `Ctx::roster` kosong. Align dengan JS:
+    /// `m.groupMetadata` bisa `undefined` dan plugin tetap jalan
+    /// (`plugins/group/tagall.js:28-32`).
+    async fn roster_of(&self, chat: &str, is_group: bool) -> GroupRoster {
+        if !is_group {
+            return GroupRoster::default();
+        }
+        if let Some(r) = self
+            .plugin_src
+            .rosters
+            .lock()
+            .expect("roster cache")
+            .get(chat)
+        {
+            return r;
+        }
+        let roster = match self.roster.roster(chat).await {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!(error = %e, chat = %chat, "gagal ambil roster grup");
+                GroupRoster::default()
+            }
+        };
+        // Kosong tidak dicache: hasil gagal baca harus dicoba ulang, bukan
+        // dikunci jadi "grup ini tidak punya anggota" selama TTL.
+        if !roster.is_empty() {
+            self.plugin_src
+                .rosters
+                .lock()
+                .expect("roster cache")
+                .put(chat, roster.clone());
+        }
+        roster
+    }
+
     /// Satu pesan inbound → satu keputusan → satu pengiriman.
     pub async fn process(&self, m: &InboundMessage, now_ms: i64) -> Result<Outcome, PipelineError> {
         let Some(body) = extract_body(&m.message) else {
@@ -882,35 +1383,57 @@ impl Pipeline {
             return Ok(Outcome::SpamBlocked);
         }
 
-        let router = Router::new(&self.ctx, self.parse_opts.clone(), now_ms);
-        let decision = router.route(&mut caller, &body, oktz_plugin_api::find);
+        // Roster dimuat SEBELUM route supaya plugin pertama yang jalan sudah
+        // melihat `Ctx` lengkap. Router tidak punya Client maupun store.
+        self.roster_of(&caller.chat, caller.is_group).await;
+        {
+            let lookup = |cmd: &str| {
+                let real = oktz_plugin_api::find(cmd)?;
+                // Kunci hanya selama lookup cache; TIDAK dipegang lintas
+                // pemanggilan handler, jadi dua pesan paralel tidak saling blokir.
+                Some(
+                    self.wrapped
+                        .lock()
+                        .expect("wrapped handlers")
+                        .get_or_insert(real, &self.plugin_src),
+                )
+            };
+            // `&*self.ctx`: trait-nya diimplementasikan untuk `StoreContext`, bukan
+            // `Arc<StoreContext>` — Arc cuma dipakai supaya bisa dipegang wrapper.
+            let router = Router::new(&*self.ctx, self.parse_opts.clone(), now_ms);
+            let decision = router.route(&mut caller, &body, lookup);
+            let reply = decision_to_reply(&decision);
+            let quote = QuoteSource::from_inbound(m);
+            let Some(rendered) = render_reply(&reply, quote.as_ref())? else {
+                // `Reply::None`: `DeniedMode::Silent`, `SelfGroup`, `NoPlugin`,
+                // `NotACommand`, atau `Reply::None` dari plugin — semua sengaja diam.
+                return Ok(if matches!(decision, Decision::Handled(_)) {
+                    Outcome::Sent
+                } else {
+                    Outcome::NotACommand
+                });
+            };
 
-        let reply = decision_to_reply(&decision);
-        let quote = QuoteSource::from_inbound(m);
-        let Some(rendered) = render_reply(&reply, quote.as_ref())? else {
-            // `Reply::None`: `DeniedMode::Silent`, `SelfGroup`, `NoPlugin`,
-            // `NotACommand`, atau `Reply::None` dari plugin — semua sengaja diam.
-            return Ok(if matches!(decision, Decision::Handled(_)) {
+            let outcome = if matches!(decision, Decision::Handled(_)) {
                 Outcome::Sent
             } else {
-                Outcome::NotACommand
-            });
-        };
+                Outcome::Denied
+            };
 
-        let outcome = if matches!(decision, Decision::Handled(_)) {
-            Outcome::Sent
-        } else {
-            Outcome::Denied
-        };
-
-        if let Err(e) = self
-            .sender
-            .send(&caller.chat, rendered.message, rendered.extra_nodes)
-            .await
-        {
-            return Err(PipelineError::Other(format!("gagal kirim: {e}")));
+            // Media lewat jalur upload; `message` yang ada di `Rendered` media
+            // sengaja kosong, jadi TIDAK mungkin terkirim apa adanya.
+            let sent = match rendered.media {
+                Some(pending) => self.sender.send_media(&caller.chat, pending).await,
+                None => self
+                    .sender
+                    .send(&caller.chat, rendered.message, rendered.extra_nodes)
+                    .await,
+            };
+            if let Err(e) = sent {
+                return Err(PipelineError::Other(format!("gagal kirim: {e}")));
+            }
+            Ok(outcome)
         }
-        Ok(outcome)
     }
 
     /// Kapasitas antrean inbound. Fixed, bukan tak berbatas: `handle_event`
@@ -1017,6 +1540,7 @@ impl EventHandler for PipelineHandler {
 mod tests {
     use super::*;
     use serde_json::json;
+    use whatsapp_rust::{GroupParticipant, ParticipantType};
     use whatsapp_rust::types::message::MessageSource;
     use whatsapp_rust::waproto::whatsapp::__buffa::oneof::message::interactive_message::InteractiveMessage as ImOneof;
 
@@ -1036,6 +1560,7 @@ mod tests {
     #[derive(Clone, Default)]
     struct RecordingSender {
         sent: Arc<Mutex<Vec<(String, wa::Message, usize)>>>,
+        media: Arc<Mutex<Vec<(String, PendingMedia)>>>,
     }
 
     impl MessageSender for RecordingSender {
@@ -1044,6 +1569,14 @@ mod tests {
                 .lock()
                 .unwrap()
                 .push((to.to_string(), message, extra.len()));
+            Box::pin(async move { Ok(()) })
+        }
+
+        fn send_media(&self, to: &str, media: PendingMedia) -> SendBox<'_> {
+            self.media
+                .lock()
+                .unwrap()
+                .push((to.to_string(), media));
             Box::pin(async move { Ok(()) })
         }
     }
@@ -1420,8 +1953,9 @@ fn group_number_and_long_number_are_rejected() {
     }
 
     #[test]
-    fn image_reply_is_a_typed_error_not_a_silent_drop() {
+    fn image_reply_without_a_source_is_a_typed_error_not_a_silent_drop() {
         let reply = Reply::Image {
+            media: None,
             caption: "c".into(),
             mentions: vec![],
         };
@@ -1431,18 +1965,202 @@ fn group_number_and_long_number_are_rejected() {
             PipelineError::MediaSourceMissing { variant: "Image" }
         );
         let msg = err.to_string();
-        assert!(msg.contains("sumber media"), "pesan harus menyebut gap: {msg}");
+        assert!(msg.contains("tidak punya sumber media"), "pesan harus menyebut gap: {msg}");
+        assert!(msg.contains("TIDAK dikirim"), "harus tegas tidak dikirim: {msg}");
     }
 
     #[test]
-    fn sticker_reply_is_a_typed_error() {
-        let err = render_reply(&Reply::Sticker, None).unwrap_err();
+    fn sticker_reply_without_a_source_is_a_typed_error() {
+        let err = render_reply(&Reply::Sticker { media: None }, None).unwrap_err();
         assert_eq!(
             err,
             PipelineError::MediaSourceMissing {
                 variant: "Sticker"
             }
         );
+    }
+
+    #[test]
+    fn image_reply_with_a_source_is_pending_media_not_a_wire_message() {
+        let reply = Reply::image(MediaSource::url("https://x/y.png"), "halo");
+        let r = render_reply(&reply, None).unwrap().unwrap();
+        assert!(r.needs_media(), "harus lewat jalur upload");
+        let p = r.media.expect("pending media");
+        assert_eq!(p.kind, MediaKind::Image);
+        assert_eq!(p.source, MediaSource::url("https://x/y.png"));
+        assert_eq!(p.caption, "halo");
+        assert!(p.quote.is_none());
+        // Invarian yang dikunci test `media_never_carries_a_wire_message`:
+        // pesan TIDAK boleh terkirim apa adanya.
+        assert_eq!(r.message, wa::Message::default());
+        assert!(r.extra_nodes.is_empty());
+    }
+
+    #[test]
+    fn image_reply_keeps_caption_and_mentions_for_the_pending_media() {
+        let reply = Reply::Image {
+            media: Some(MediaSource::bytes(vec![1, 2, 3])),
+            caption: "capt".into(),
+            mentions: vec!["6281@s.whatsapp.net".into()],
+        };
+        let p = render_reply(&reply, None).unwrap().unwrap().media.unwrap();
+        assert_eq!(p.caption, "capt");
+        assert_eq!(p.mentions, vec!["6281@s.whatsapp.net".to_string()]);
+        assert_eq!(p.source.mimetype(), None);
+    }
+
+    #[test]
+    fn sticker_reply_maps_to_sticker_pending_media() {
+        let src = MediaSource::path("/tmp/a.webp").with_mimetype("image/webp");
+        let r = render_reply(&Reply::sticker(src.clone()), None)
+            .unwrap()
+            .unwrap();
+        let p = r.media.expect("pending media");
+        assert_eq!(p.kind, MediaKind::Sticker);
+        assert_eq!(p.source, src);
+        assert_eq!(p.caption, "", "sticker tidak punya caption");
+    }
+
+    #[tokio::test]
+    async fn every_media_reply_routes_to_send_media_with_its_own_kind() {
+        // Yang diuji: pemetaan variant `Reply` → jalur kirim. `Image` dan
+        // `Sticker` TIDAK boleh jatuh ke `send` biasa.
+        for (reply, want_kind, want_label) in [
+            (
+                Reply::image(MediaSource::bytes(vec![7]), "c"),
+                MediaKind::Image,
+                "bytes(1)",
+            ),
+            (
+                Reply::sticker(MediaSource::url("https://x/s.webp")),
+                MediaKind::Sticker,
+                "url",
+            ),
+            (
+                Reply::sticker(MediaSource::path("/tmp/s.webp")),
+                MediaKind::Sticker,
+                "path",
+            ),
+        ] {
+            let s = RecordingSender::default();
+            let pending = render_reply(&reply, None).unwrap().unwrap().media.unwrap();
+            s.send_media("6281@s.whatsapp.net", pending.clone())
+                .await
+                .expect("harus terkirim");
+            let sent = s.media.lock().unwrap();
+            assert_eq!(sent.len(), 1, "{want_kind:?} harus sekali kirim");
+            assert_eq!(sent[0].0, "6281@s.whatsapp.net");
+            assert_eq!(sent[0].1.kind, want_kind);
+            assert_eq!(sent[0].1.source.label(), want_label);
+            // Tidak boleh ikut terkirim lewat jalur teks.
+            assert!(s.sent.lock().unwrap().is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn text_reply_still_goes_through_the_plain_send() {
+        let s = RecordingSender::default();
+        s.send("6281@s.whatsapp.net", wa::Message::text("hi"), Vec::new())
+            .await
+            .unwrap();
+        assert_eq!(s.sent.lock().unwrap().len(), 1);
+        assert!(
+            s.media.lock().unwrap().is_empty(),
+            "jalur teks tidak boleh menyentuh jalur media"
+        );
+    }
+
+    #[test]
+    fn media_never_carries_a_wire_message_and_wire_never_carries_media() {
+        // Invarian yang membuat drop senyap mustahil: kalau `media` terisi,
+        // `message` WAJIB kosong (belum ada upload). Kalau `media` kosong,
+        // `message` yang dikirim.
+        let cases = [
+            Reply::None,
+            Reply::text("t"),
+            Reply::TextQuoted {
+                text: "q".into(),
+                mentions: vec![],
+            },
+            Reply::Interactive { body: "b".into() },
+            Reply::image(MediaSource::bytes(vec![1]), "c"),
+            Reply::Sticker {
+                media: Some(MediaSource::bytes(vec![1])),
+            },
+        ];
+        for c in cases {
+            let Some(r) = render_reply(&c, None).unwrap() else {
+                continue;
+            };
+            if r.needs_media() {
+                assert_eq!(
+                    r.message,
+                    wa::Message::default(),
+                    "{c:?}: pesan kosong WAJIB sebelum upload"
+                );
+            } else {
+                assert_ne!(
+                    r.message,
+                    wa::Message::default(),
+                    "{c:?}: pesan non-media tidak boleh kosong"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn media_kind_maps_to_the_library_upload_type() {
+        // `MediaType::Image` dan `MediaType::Sticker` sama-sama ke
+        // `/mms/image` (wacore-0.7.0/src/download.rs:91) — persis WA Web.
+        assert_eq!(MediaKind::Image.upload_type(), MediaType::Image);
+        assert_eq!(MediaKind::Sticker.upload_type(), MediaType::Sticker);
+        assert_eq!(
+            MediaKind::Image.upload_type().upload_path(),
+            MediaKind::Sticker.upload_type().upload_path()
+        );
+    }
+
+    #[tokio::test]
+    async fn bytes_media_resolves_to_those_bytes() {
+        let data = load_media(&MediaSource::bytes(vec![9, 8, 7])).await.unwrap();
+        assert_eq!(data, vec![9, 8, 7]);
+    }
+
+    #[tokio::test]
+    async fn path_media_is_read_from_disk() {
+        let p = std::env::temp_dir().join(format!(
+            "oktz-media-{}.png",
+            SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        std::fs::write(&p, b"PNG").unwrap();
+        let got = load_media(&MediaSource::path(p.to_str().unwrap())).await.unwrap();
+        assert_eq!(got, b"PNG".to_vec());
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[tokio::test]
+    async fn missing_or_empty_media_source_is_an_explicit_error_never_empty_bytes() {
+        // Path tidak ada.
+        let e = load_media(&MediaSource::path("/tidak/ada/file.png"))
+            .await
+            .unwrap_err();
+        assert!(matches!(e, PipelineError::Media(_)));
+        assert!(e.to_string().contains("gagal baca file media"));
+        // File ada tapi kosong — `Ok(vec![])` akan lolos ke CDN dan gagal
+        // jauh dari penyebabnya.
+        let p = std::env::temp_dir().join(format!(
+            "oktz-media-empty-{}.png",
+            SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        std::fs::write(&p, b"").unwrap();
+        let e = load_media(&MediaSource::path(p.to_str().unwrap()))
+            .await
+            .unwrap_err();
+        assert!(e.to_string().contains("kosong"), "{e}");
+        let _ = std::fs::remove_file(&p);
+        // Bytes kosong.
+        let e = load_media(&MediaSource::bytes(Vec::new())).await.unwrap_err();
+        assert!(e.to_string().contains("kosong"), "{e}");
     }
 
     #[test]
@@ -1847,27 +2565,405 @@ fn group_number_and_long_number_are_rejected() {
     }
 
     #[tokio::test]
-    async fn media_reply_is_logged_and_processing_continues() {
-        // `Reply::Image` tidak punya byte media. Yang diuji: kegagalan ini
-        // sampai ke pemanggil sebagai error bertipe, bukan panik dan bukan
-        // "sukses diam" yang membuat caller menganggap pesan terkirim.
+    async fn a_media_reply_without_a_source_never_reports_success() {
+        // Kegagalan harus sampai ke pemanggil sebagai error bertipe, bukan
+        // panik dan bukan "sukses diam" yang membuat caller menganggap pesan
+        // terkirim. Yang diuji: `Reply` tanpa sumber media tidak pernah jadi
+        // `Ok` — tidak ada jalur yang bisa menjatuhkannya.
         let ctx = StoreContext::new(store_with("media", "{}"));
+        let sender = RecordingSender::default();
         let _p = Pipeline::new(
             ctx,
-            Arc::new(RecordingSender::default()),
+            Arc::new(sender.clone()),
             "bot",
             ParseOptions::default(),
         );
-        let err = render_reply(
-            &Reply::Image {
+        for reply in [
+            Reply::Image {
+                media: None,
                 caption: "c".into(),
                 mentions: vec![],
             },
+            Reply::Sticker { media: None },
+        ] {
+            let err = render_reply(&reply, None).unwrap_err();
+            assert!(matches!(err, PipelineError::MediaSourceMissing { .. }));
+            assert!(err.to_string().contains("sumber media"));
+        }
+        assert!(sender.sent.lock().unwrap().is_empty());
+        assert!(
+            sender.media.lock().unwrap().is_empty(),
+            "tanpa sumber, tidak boleh ada yang dikirim"
+        );
+    }
+
+    // ---------- 9. Ctx: roster grup + state store ----------
+
+    fn real_group_metadata() -> GroupMetadata {
+        // Bentuk persis `GroupInfoResponse` yang di-`GroupMetadata::from`
+        // (`features/groups.rs:268`): `participant_type` tri-state.
+        let p = |jid: &str, t: ParticipantType| GroupParticipant {
+            jid: jid.parse().unwrap(),
+            phone_number: None,
+            lid: None,
+            username: None,
+            participant_type: t,
+            details: None,
+        };
+        GroupMetadata {
+            participants: vec![
+                p("111@s.whatsapp.net", ParticipantType::SuperAdmin),
+                p("222@s.whatsapp.net", ParticipantType::Admin),
+                p("333@s.whatsapp.net", ParticipantType::Member),
+                p("444@lid", ParticipantType::Member),
+            ],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn roster_is_built_from_the_real_group_metadata_shape() {
+        let roster = roster_from(&real_group_metadata(), &[]);
+        assert_eq!(roster.participants.len(), 4);
+        assert_eq!(
+            roster.member_jids(),
+            vec![
+                "111@s.whatsapp.net",
+                "222@s.whatsapp.net",
+                "333@s.whatsapp.net",
+                "444@lid",
+            ]
+        );
+        // Superadmin = owner DAN admin; admin biasa hanya admin; member tidak
+        // keduanya. Persis `p.admin === 'superadmin' | 'admin'` di JS.
+        assert_eq!(roster.owners().count(), 1);
+        assert_eq!(roster.admins().count(), 2);
+        assert!(roster.is_admin("222@s.whatsapp.net"));
+        assert!(!roster.is_admin("333@s.whatsapp.net"));
+        assert!(!roster.is_bot_admin, "bot tidak ada di daftar -> bukan admin");
+    }
+
+    #[test]
+    fn bot_admin_is_detected_against_the_roster_itself() {
+        // JID bot tidak pernah datang di `MessageInfo`, jadi satu-satunya
+        // sumber kebenaran adalah daftar peserta.
+        let meta = real_group_metadata();
+        // Admin biasa dan superadmin sama-sama bot-admin.
+        assert!(roster_from(&meta, &["222@s.whatsapp.net".into()]).is_bot_admin);
+        assert!(roster_from(&meta, &["111@s.whatsapp.net".into()]).is_bot_admin);
+        // Member biasa bukan admin, LID pun tidak: yang menentukan adalah
+        // `participant_type`, bukan bentuk JID.
+        assert!(!roster_from(&meta, &["333@s.whatsapp.net".into()]).is_bot_admin);
+        assert!(!roster_from(&meta, &["444@lid".into()]).is_bot_admin);
+        // Bot tidak ada di daftar.
+        assert!(!roster_from(&meta, &["999@s.whatsapp.net".into()]).is_bot_admin);
+        assert!(!roster_from(&meta, &[]).is_bot_admin);
+        // JID bot dalam format device-suffiks tidak boleh dianggap cocok
+        // dengan JID wire yang bersih.
+        assert!(!roster_from(&meta, &["222:3@s.whatsapp.net".into()]).is_bot_admin);
+    }
+
+    #[tokio::test]
+    async fn without_a_roster_source_group_messages_still_get_processed() {
+        // `NoRoster` = "tidak tahu", bukan "grup kosong" dan bukan error:
+        // pesan harus tetap sampai ke plugin.
+        assert!(NoRoster.roster("120363@g.us").await.unwrap().is_empty());
+    }
+
+    #[test]
+    fn stored_state_is_read_from_the_same_maps_the_gates_use() {
+        let ctx = StoreContext::new(store_with("ctxstate", OK_STORE));
+        let u = ctx.user_entry("628111@s.whatsapp.net");
+        assert_eq!(u["isRegistered"], json!(true));
+        assert_eq!(u["access"].as_array().unwrap().len(), 2);
+        let g = ctx.group_entry("120363@g.us");
+        assert_eq!(g["rpg"], json!(true));
+        assert_eq!(g["botMode"], json!("store"));
+    }
+
+    #[test]
+    fn missing_user_or_group_is_null_not_a_default_object() {
+        let ctx = StoreContext::new(store_with("ctxmissing", OK_STORE));
+        assert_eq!(ctx.user_entry("999@s.whatsapp.net"), Value::Null);
+        assert_eq!(ctx.group_entry("999@g.us"), Value::Null);
+        // JID yang ditolak `normalize_user_key` -> `null`, bukan panik.
+        assert_eq!(ctx.user_entry("120363001234567890@g.us"), Value::Null);
+        assert_eq!(ctx.user_entry(""), Value::Null);
+    }
+
+    #[test]
+    fn store_map_with_odd_shape_does_not_panic_when_building_ctx_state() {
+        let ctx = StoreContext::new(store_with("ctxweird", r#"{"users": 5, "groups": []}"#));
+        assert_eq!(ctx.user_entry("628111@s.whatsapp.net"), Value::Null);
+        assert_eq!(ctx.group_entry("120363@g.us"), Value::Null);
+    }
+
+    fn enriched_entry(seen: Arc<Mutex<Option<Ctx>>>) -> &'static PluginEntry {
+        Box::leak(Box::new(PluginEntry {
+            meta: oktz_plugin_api::meta::PluginMeta {
+                name: "echo".into(),
+                ..Default::default()
+            },
+            handler: Arc::new(move |c: Ctx| {
+                *seen.lock().unwrap() = Some(c);
+                Reply::None
+            }),
+        }))
+    }
+
+    fn plugin_src_with(store: &str) -> PluginCtxSource {
+        PluginCtxSource {
+            store: Arc::new(StoreContext::new(store_with("wrapsrc", store))),
+            rosters: Arc::new(Mutex::new(RosterCache {
+                map: HashMap::new(),
+                ttl: RosterCache::DEFAULT_TTL,
+            })),
+        }
+    }
+
+    #[test]
+    fn wrapped_handler_receives_roster_and_state_without_losing_router_fields() {
+        // Yang disuntik pipeline: roster + state. Yang dihitung router:
+        // text/args/sender/prefix. Keduanya harus sampai ke plugin.
+        let seen = Arc::new(Mutex::new(None));
+        let real = enriched_entry(seen.clone());
+        let roster = GroupRoster {
+            participants: vec![Participant {
+                jid: "111@s.whatsapp.net".into(),
+                is_admin: true,
+                is_owner: true,
+            }],
+            is_bot_admin: true,
+        };
+        let mut cache = WrappedHandlers::default();
+        let src = plugin_src_with(OK_STORE);
+        src.rosters
+            .lock()
+            .unwrap()
+            .put("120363@g.us", roster.clone());
+        let wrapped = cache.get_or_insert(real, &src);
+
+        // `Ctx` seperti yang router buat sebelum disuntik.
+        let router_ctx = Ctx {
+            text: "satu dua".into(),
+            args: vec!["satu".into(), "dua".into()],
+            sender: "628111@s.whatsapp.net".into(),
+            chat: "120363@g.us".into(),
+            prefix: ".".into(),
+            command: "echo".into(),
+            is_group: true,
+            uptime_secs: 7,
+            ..Default::default()
+        };
+        (wrapped.handler)(router_ctx);
+
+        let c = seen.lock().unwrap().clone().expect("handler harus jalan");
+        // Field router utuh.
+        assert_eq!(c.text, "satu dua");
+        assert_eq!(c.args, vec!["satu", "dua"]);
+        assert_eq!(c.sender, "628111@s.whatsapp.net");
+        assert_eq!(c.prefix, ".");
+        assert_eq!(c.uptime_secs, 7);
+        // Field yang disuntik terisi.
+        assert!(c.roster.is_bot_admin);
+        assert_eq!(c.roster.owners().count(), 1);
+        assert_eq!(
+            c.user_field("isRegistered").and_then(|v| v.as_bool()),
+            Some(true),
+            "state user harus terbaca dari store"
+        );
+        assert_eq!(c.group_field("rpg").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(
+            c.user_list("access").len(),
+            2,
+            "list dari store harus bisa dibaca plugin"
+        );
+    }
+
+    #[test]
+    fn nested_state_path_matches_what_rpg_plugins_read() {
+        // Plugin rpg membaca `user.rpg.stamina` / `user.rpg.bank`
+        // (`plugins/rpg/bank.js:27-34`). Jalur bertingkat harus bisa dibaca
+        // tanpa plugin tahu bentuk JSON-nya.
+        //
+        // Kunci store adalah hasil `normalize_user_key`, bukan JID mentah —
+        // sama seperti `getUser` (`database.js:529-536`). Plugin cukup
+        // baca `ctx.user_data`, tidak perlu tahu aturan normalisasi.
+        let src = plugin_src_with(
+            r#"{"users": {"628111": {"koin": 5, "rpg": {"stamina": 30, "bank": 120}}}}"#,
+        );
+        let mut c = Ctx {
+            sender: "628111@s.whatsapp.net".into(),
+            ..Default::default()
+        };
+        src.fill(&mut c);
+        assert_eq!(c.user_field("rpg.stamina").and_then(|v| v.as_i64()), Some(30));
+        assert_eq!(c.user_field("rpg.bank").and_then(|v| v.as_i64()), Some(120));
+        assert_eq!(c.user_field("koin").and_then(|v| v.as_i64()), Some(5));
+        assert_eq!(c.user_field("rpg.hp"), None);
+        // Versi dengan sufiks device menunjuk ke user yang sama.
+        let mut c2 = Ctx {
+            sender: "628111:4@s.whatsapp.net".into(),
+            ..Default::default()
+        };
+        src.fill(&mut c2);
+        assert_eq!(
+            c2.user_field("koin").and_then(|v| v.as_i64()),
             None,
-        )
-        .unwrap_err();
-        assert_eq!(err, PipelineError::MediaSourceMissing { variant: "Image" });
-        assert!(err.to_string().contains("sumber media"));
+            "nomor perangkat = kunci berbeda, seperti di JS"
+        );
+    }
+
+    #[test]
+    fn wrapper_is_reused_but_never_pins_one_messages_state() {
+        // Regresi: handler dibungkus SEKALI per plugin, jadi kalau isinya
+        // capturing `Enrich` pesan pertama, semua pesan berikutnya melihat
+        // state pesan pertama. Isi wrapper harus dibaca dari sumber, bukan
+        // dari capture.
+        let seen = Arc::new(Mutex::new(Vec::<Ctx>::new()));
+        let real = Box::leak(Box::new(PluginEntry {
+            meta: oktz_plugin_api::meta::PluginMeta {
+                name: "echo".into(),
+                ..Default::default()
+            },
+            handler: Arc::new({
+                let seen = seen.clone();
+                move |c: Ctx| {
+                    seen.lock().unwrap().push(c);
+                    Reply::None
+                }
+            }),
+        }));
+        let src = plugin_src_with(OK_STORE);
+        let mut cache = WrappedHandlers::default();
+
+        let first = cache.get_or_insert(real, &src);
+        let second = cache.get_or_insert(real, &src);
+        assert!(
+            std::ptr::eq(first, second),
+            "entri yang sama harus dipakai ulang (tidak boleh leak per pesan)"
+        );
+
+        // Pesan dari user yang ADA di store.
+        (second.handler)(Ctx {
+            sender: "628111@s.whatsapp.net".into(),
+            chat: "628111@s.whatsapp.net".into(),
+            ..Default::default()
+        });
+        // Pesan berikutnya dari user yang TIDAK ada di store.
+        (second.handler)(Ctx {
+            sender: "628999@s.whatsapp.net".into(),
+            chat: "628999@s.whatsapp.net".into(),
+            ..Default::default()
+        });
+
+        let got = seen.lock().unwrap().clone();
+        assert_eq!(got.len(), 2);
+        assert_eq!(
+            got[0].user_field("isRegistered").and_then(|v| v.as_bool()),
+            Some(true),
+            "pesan pertama: user ada"
+        );
+        assert_eq!(
+            got[1].user_field("isRegistered").and_then(|v| v.as_bool()),
+            None,
+            "pesan kedua harus melihat store SAAT INI, bukan pesan pertama"
+        );
+        assert!(got[1].roster.is_empty());
+    }
+
+    #[test]
+    fn unknown_chat_yields_an_empty_roster_not_a_stale_one() {
+        let src = plugin_src_with(OK_STORE);
+        src.rosters.lock().unwrap().put("120363@g.us", roster_from(
+            &real_group_metadata(),
+            &["222@s.whatsapp.net".into()],
+        ));
+        let mut c = Ctx {
+            chat: "999@g.us".into(),
+            ..Default::default()
+        };
+        src.fill(&mut c);
+        assert!(
+            c.roster.is_empty(),
+            "chat lain tidak boleh mewarisi roster chat sebelumnya"
+        );
+        assert_eq!(c.group_field("rpg"), None);
+
+        let mut c = Ctx {
+            chat: "120363@g.us".into(),
+            ..Default::default()
+        };
+        src.fill(&mut c);
+        assert_eq!(c.roster.participants.len(), 4);
+        assert!(c.roster.is_bot_admin);
+    }
+
+    #[test]
+    fn roster_cache_expires_and_a_failed_read_is_not_cached() {
+        let mut c = RosterCache {
+            map: HashMap::new(),
+            ttl: RosterCache::DEFAULT_TTL,
+        };
+        let r = GroupRoster {
+            participants: vec![Participant {
+                jid: "a".into(),
+                is_admin: false,
+                is_owner: false,
+            }],
+            is_bot_admin: false,
+        };
+        c.put("g", r.clone());
+        assert_eq!(c.get("g"), Some(r));
+        assert_eq!(c.get("lain"), None);
+        // TTL habis -> dianggap tidak ada, supaya di-refresh.
+        c.map.get_mut("g").unwrap().0 = Instant::now() - RosterCache::DEFAULT_TTL * 2;
+        assert_eq!(c.get("g"), None, "roster basi tidak boleh dipakai selamanya");
+    }
+
+    #[tokio::test]
+    async fn roster_failure_never_blocks_the_message() {
+        struct Broken;
+        impl RosterSource for Broken {
+            fn roster(&self, _chat: &str) -> SendBoxRoster<'_> {
+                Box::pin(async { Err("grup tidak bisa dibaca".into()) })
+            }
+        }
+        let ctx = StoreContext::new(store_with("rosterbroken", "{}"));
+        let p = Pipeline::new(ctx, Arc::new(RecordingSender::default()), "bot", ParseOptions::default())
+            .with_roster_source(Arc::new(Broken));
+        // Pesan tetap diproses; roster kosong bukan reason untuk menolak.
+        let m = inbound(
+            ".ping",
+            "6281@s.whatsapp.net",
+            "120363@g.us",
+            true,
+            "R1",
+        );
+        let o = p.process(&m, 1_000).await.unwrap();
+        assert!(matches!(
+            o,
+            Outcome::NotACommand | Outcome::Denied | Outcome::SpamBlocked
+        ));
+    }
+
+    #[tokio::test]
+    async fn private_chat_never_asks_for_a_roster() {
+        // Non-grup: tidak ada roster, dan sumber roster tidak boleh dipanggil.
+        struct Tripwire(Arc<Mutex<usize>>);
+        impl RosterSource for Tripwire {
+            fn roster(&self, _chat: &str) -> SendBoxRoster<'_> {
+                *self.0.lock().unwrap() += 1;
+                Box::pin(async { Ok(GroupRoster::default()) })
+            }
+        }
+        let calls = Arc::new(Mutex::new(0));
+        let ctx = StoreContext::new(store_with("rostertrip", "{}"));
+        let p = Pipeline::new(ctx, Arc::new(RecordingSender::default()), "bot", ParseOptions::default())
+            .with_roster_source(Arc::new(Tripwire(calls.clone())));
+        let m = inbound("halo", "6281@s.whatsapp.net", "6281@s.whatsapp.net", false, "R2");
+        p.process(&m, 1_000).await.unwrap();
+        assert_eq!(*calls.lock().unwrap(), 0);
     }
 
     async fn wait_for_len(s: &RecordingSender, n: usize) -> Vec<(String, wa::Message, usize)> {

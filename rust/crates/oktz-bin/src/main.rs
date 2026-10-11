@@ -10,7 +10,9 @@ use oktz_wa::MessageBuilderExt;
 /// hilang dan registry kosong. Fungsi ini yang menjaga tautan itu hidup.
 fn use_plugin_crates() {
     // PENTANGI: tambah crate plugin baru di sini juga.
-    let _ = oktz_plugins::cek::cekbaik;
+    // Rujuk handler (fn), bukan modul: tiap plugin kini punya modul sendiri,
+    // jadi `oktz_plugins::cek::cekbaik` tidak lagi punya nilai.
+    let _ = oktz_plugins::cek::cekbaik::cekbaik;
 }
 
 /// Env yang mengarahkan SEMUA default db runtime (pairing, smoke, send).
