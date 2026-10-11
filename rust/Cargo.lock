@@ -967,7 +967,9 @@ dependencies = [
  "oktz-core",
  "oktz-plugin-api",
  "oktz-store",
+ "oktz-wa",
  "serde_json",
+ "tokio",
  "tracing",
 ]
 

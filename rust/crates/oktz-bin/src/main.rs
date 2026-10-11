@@ -3,7 +3,8 @@ use std::path::PathBuf;
 use oktz_core::config::Config;
 use oktz_store::json_store::JsonStore;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     oktz_core::logging::init("info");
 
     let args: Vec<String> = std::env::args().collect();
@@ -17,6 +18,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .cloned()
             .unwrap_or_else(|| cfg.database.path.clone());
         return verify_db(&dir);
+    }
+
+    if mode == "smoke" {
+        let creds = args
+            .get(2)
+            .cloned()
+            .unwrap_or_else(|| "../storage/session/creds.json".into());
+        let fixture = args
+            .get(3)
+            .cloned()
+            .unwrap_or_else(|| "fixtures/turso_session_keys.json".into());
+        let hold: u64 = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(90);
+        return smoke(&creds, &fixture, hold).await;
     }
 
     let store_path = PathBuf::from(&cfg.database.path).join("settings.json");
@@ -112,5 +126,30 @@ fn verify_db(dir: &str) -> Result<(), Box<dyn std::error::Error>> {
     if !all_ok {
         std::process::exit(1);
     }
+    Ok(())
+}
+
+/// Smoke produksi: import device + sesi ratchet, connect, print pesan masuk.
+async fn smoke(creds: &str, fixture: &str, hold_secs: u64) -> Result<(), Box<dyn std::error::Error>> {
+    let store = oktz_wa::prepare_store(creds, "/tmp/opencode/oktz-smoke.db", Some(fixture)).await?;
+
+    let handle = oktz_wa::connect_device(store, move |_client| async move {
+        println!(
+            "{}",
+            serde_json::json!({"phase":"CONNECTED","rss_kb":oktz_wa::rss::current_kb()})
+        );
+    })
+    .await?;
+
+    let deadline =
+        tokio::time::Instant::now() + std::time::Duration::from_secs(hold_secs);
+    while tokio::time::Instant::now() < deadline {
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    }
+    println!(
+        "{}",
+        serde_json::json!({"phase":"done","rss_kb":oktz_wa::rss::current_kb()})
+    );
+    handle.shutdown().await;
     Ok(())
 }

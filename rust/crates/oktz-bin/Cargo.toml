@@ -12,6 +12,8 @@ path = "src/main.rs"
 [dependencies]
 oktz-core = { path = "../oktz-core" }
 oktz-store = { path = "../oktz-store" }
+oktz-wa = { path = "../oktz-wa" }
 oktz-plugin-api = { path = "../oktz-plugin-api" }
 serde_json.workspace = true
 tracing.workspace = true
+tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "time"] }
