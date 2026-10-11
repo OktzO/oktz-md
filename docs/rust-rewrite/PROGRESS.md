@@ -31,7 +31,29 @@ Belum ada satu baris kode Rust produksi. Belum ada `rust/` directory.
 | **Spike S2 (RSS)** | ✅ **26.6 MB** saat connect (target 60) |
 | Test suite / clippy | ✅ 33 test, clippy -D warnings bersih |
 | Fase 1 (oktz-core/store/plugin-api) | ✅ **GATE 1 LOLOS** (reviewer independen: LAYAK) |
-| Fase 2 (oktz-wa + router produksi) | ⏳ **NEXT** |
+| Fase 2 (oktz-wa + router produksi) | 🔄 **sedang** — plan `2026-10-10-fase-2-oktz-wa.md`, Task 1 (promosi spike) build berjalan |
+| Fase 3+ / 830 plugin | ⏳ setelah GATE 2 |
+
+## ⚠️ INSIDEN LINGKUNGAN — 2026-10-10
+
+`/tmp/opencode/` **direset total** saat build `oktz-wa` (Task 1). Hilang: rustup toolchain,
+`CARGO_TARGET_DIR` (seluruh hasil compile), nixpkgs-25.05. Yang selamat: **repo & semua
+commit** (aman, sudah di-commit).
+
+**Penyebab:** `/tmp` di-overlay 46G; kemungkinan tmpfiles/periodic-cleanup. `/home` hanya
+**695MB free** (takut toolchain ~1GB), `/opt` tidak writable. Jadi `/tmp` satu-satunya
+lokasi writable yang cukup besar.
+
+**Prosedur recovery (sudah dikuasai, ~4 menit):**
+```bash
+export RUSTUP_HOME=/tmp/opencode/rust/rustup CARGO_HOME=/tmp/opencode/rust/cargo
+curl -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal --default-toolchain 1.94.0
+cd /tmp/opencode && curl -sSL https://github.com/NixOS/nixpkgs/archive/refs/tags/25.05.tar.gz -o n25.tar.gz
+mkdir -p nixpkgs-25.05 && tar xzf n25.tar.gz -C nixpkgs-25.05 --strip-components=1
+```
+Source `/tmp/opencode/build_env.sh` (RUSTUP_HOME/CARGO_HOME/CARGO_TARGET_DIR/PATH + `NS`
+helper nix-shell). Untuk iterasi cepat pakai **`cargo check`** — bukan `build`
+(build penuh wacore ~25 menit di 2-core).
 
 ## Fase 1 — DONE (GATE 1)
 
