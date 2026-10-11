@@ -15,3 +15,8 @@ pub use creds::{DeviceMapping, inspect_creds};
 pub use load::{LoadReport, load_into_store};
 pub use session::{ImportStats, import_session_record};
 pub use whatsapp_rust::bot::BotHandle;
+
+// Re-export untuk konsumen (oktz-bin) supaya tidak perlu depend ke whatsapp-rust langsung.
+pub use whatsapp_rust::{Jid, SendOptions};
+pub use whatsapp_rust::wacore::proto_helpers::MessageBuilderExt;
+pub use whatsapp_rust::waproto::whatsapp::Message;

@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use oktz_core::config::Config;
 use oktz_store::json_store::JsonStore;
+use oktz_wa::MessageBuilderExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -18,6 +19,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .cloned()
             .unwrap_or_else(|| cfg.database.path.clone());
         return verify_db(&dir);
+    }
+
+    if mode.starts_with("send-") {
+        let creds = args.get(2).cloned().unwrap_or_else(|| "../storage/session/creds.json".into());
+        let to = args.get(3).cloned().unwrap_or_default();
+        let hold: u64 = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(60);
+        let kind = mode.trim_start_matches("send-").to_string();
+        return send(&creds, &to, hold, &kind).await;
     }
 
     if mode == "smoke" {
@@ -150,6 +159,64 @@ async fn smoke(creds: &str, fixture: &str, hold_secs: u64) -> Result<(), Box<dyn
         "{}",
         serde_json::json!({"phase":"done","rss_kb":oktz_wa::rss::current_kb()})
     );
+    handle.shutdown().await;
+    Ok(())
+}
+
+/// Kirim satu pesan sesuai jenis: text | card | list.
+async fn send(creds: &str, to: &str, hold_secs: u64, kind: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let store = oktz_wa::prepare_store(creds, "/tmp/opencode/oktz-send.db", None).await?;
+    let to = to.to_string();
+    let kind = kind.to_string();
+
+    let handle = oktz_wa::connect_device(store, move |client| {
+        let to = to.clone();
+        let kind = kind.clone();
+        async move {
+            let jid: oktz_wa::Jid = match to.parse() {
+                Ok(j) => j,
+                Err(e) => {
+                    println!("{}", serde_json::json!({"phase":"ERR","msg":format!("JID: {e}")}));
+                    return;
+                }
+            };
+            let opts = oktz_wa::SendOptions::default()
+                .with_extra_stanza_nodes(vec![oktz_wa::biz_node()]);
+
+            let msg = match kind.as_str() {
+                "card" => oktz_wa::build_card("Kartu dari produksi Rust", Some("footer produksi")),
+                "list" => oktz_wa::build_list(),
+                _ => oktz_wa::Message::text("Halo dari produksi Rust"),
+            };
+
+            let res = if kind == "text" {
+                client.send_message(jid.clone(), msg).await.map(|r| r.message_id)
+            } else {
+                client
+                    .send_message_with_options(jid.clone(), msg, opts)
+                    .await
+                    .map(|r| r.message_id)
+            };
+
+            println!(
+                "{}",
+                serde_json::json!({
+                    "phase": if res.is_ok() { "SENT" } else { "ERR" },
+                    "kind": kind,
+                    "to": jid.to_string(),
+                    "message_id": res.as_ref().ok().map(|s| s.to_string()),
+                    "error": res.as_ref().err().map(|e| e.to_string()),
+                    "rss_kb": oktz_wa::rss::current_kb(),
+                })
+            );
+        }
+    })
+    .await?;
+
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(hold_secs.max(20));
+    while tokio::time::Instant::now() < deadline {
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    }
     handle.shutdown().await;
     Ok(())
 }
