@@ -6,6 +6,7 @@ pub mod bot;
 pub mod cards;
 pub mod creds;
 pub mod load;
+pub mod pairing;
 pub mod rss;
 pub mod session;
 
@@ -17,6 +18,6 @@ pub use session::{ImportStats, import_session_record};
 pub use whatsapp_rust::bot::BotHandle;
 
 // Re-export untuk konsumen (oktz-bin) supaya tidak perlu depend ke whatsapp-rust langsung.
-pub use whatsapp_rust::{Jid, SendOptions};
 pub use whatsapp_rust::wacore::proto_helpers::MessageBuilderExt;
 pub use whatsapp_rust::waproto::whatsapp::Message;
+pub use whatsapp_rust::{Jid, SendOptions};

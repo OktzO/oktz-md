@@ -22,7 +22,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if mode.starts_with("send-") {
-        let creds = args.get(2).cloned().unwrap_or_else(|| "../storage/session/creds.json".into());
+        let creds = args
+            .get(2)
+            .cloned()
+            .unwrap_or_else(|| "../storage/session/creds.json".into());
         let to = args.get(3).cloned().unwrap_or_default();
         let hold: u64 = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(60);
         let kind = mode.trim_start_matches("send-").to_string();
@@ -139,7 +142,11 @@ fn verify_db(dir: &str) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Smoke produksi: import device + sesi ratchet, connect, print pesan masuk.
-async fn smoke(creds: &str, fixture: &str, hold_secs: u64) -> Result<(), Box<dyn std::error::Error>> {
+async fn smoke(
+    creds: &str,
+    fixture: &str,
+    hold_secs: u64,
+) -> Result<(), Box<dyn std::error::Error>> {
     let store = oktz_wa::prepare_store(creds, "/tmp/opencode/oktz-smoke.db", Some(fixture)).await?;
 
     let handle = oktz_wa::connect_device(store, move |_client| async move {
@@ -150,8 +157,7 @@ async fn smoke(creds: &str, fixture: &str, hold_secs: u64) -> Result<(), Box<dyn
     })
     .await?;
 
-    let deadline =
-        tokio::time::Instant::now() + std::time::Duration::from_secs(hold_secs);
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(hold_secs);
     while tokio::time::Instant::now() < deadline {
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
     }
@@ -164,7 +170,12 @@ async fn smoke(creds: &str, fixture: &str, hold_secs: u64) -> Result<(), Box<dyn
 }
 
 /// Kirim satu pesan sesuai jenis: text | card | list.
-async fn send(creds: &str, to: &str, hold_secs: u64, kind: &str) -> Result<(), Box<dyn std::error::Error>> {
+async fn send(
+    creds: &str,
+    to: &str,
+    hold_secs: u64,
+    kind: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let store = oktz_wa::prepare_store(creds, "/tmp/opencode/oktz-send.db", None).await?;
     let to = to.to_string();
     let kind = kind.to_string();
@@ -176,12 +187,15 @@ async fn send(creds: &str, to: &str, hold_secs: u64, kind: &str) -> Result<(), B
             let jid: oktz_wa::Jid = match to.parse() {
                 Ok(j) => j,
                 Err(e) => {
-                    println!("{}", serde_json::json!({"phase":"ERR","msg":format!("JID: {e}")}));
+                    println!(
+                        "{}",
+                        serde_json::json!({"phase":"ERR","msg":format!("JID: {e}")})
+                    );
                     return;
                 }
             };
-            let opts = oktz_wa::SendOptions::default()
-                .with_extra_stanza_nodes(vec![oktz_wa::biz_node()]);
+            let opts =
+                oktz_wa::SendOptions::default().with_extra_stanza_nodes(vec![oktz_wa::biz_node()]);
 
             let msg = match kind.as_str() {
                 "card" => oktz_wa::build_card("Kartu dari produksi Rust", Some("footer produksi")),
@@ -190,7 +204,10 @@ async fn send(creds: &str, to: &str, hold_secs: u64, kind: &str) -> Result<(), B
             };
 
             let res = if kind == "text" {
-                client.send_message(jid.clone(), msg).await.map(|r| r.message_id)
+                client
+                    .send_message(jid.clone(), msg)
+                    .await
+                    .map(|r| r.message_id)
             } else {
                 client
                     .send_message_with_options(jid.clone(), msg, opts)
