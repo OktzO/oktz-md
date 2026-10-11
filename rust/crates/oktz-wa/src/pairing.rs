@@ -43,16 +43,15 @@ pub fn clear_pairing_pending(creds: &mut Value) {
 }
 
 pub fn reset_pairing_creds(creds: &mut Value) {
-    for k in ["me", "pairingCode", "account"] {
-        creds.as_object_mut().map(|m| m.remove(k));
-    }
-    if let Some(a) = creds
-        .get_mut("signalIdentities")
-        .and_then(Value::as_array_mut)
-    {
-        a.clear();
-    }
     if let Some(m) = creds.as_object_mut() {
+        for k in ["me", "pairingCode", "account"] {
+            m.remove(k);
+        }
+        // JS menulis `creds.signalIdentities = []` tanpa syarat
+        // (src/lib/pairing-state.js:32). Hanya mengosongkan array yang sudah
+        // ada berarti creds hasil pairing/migrasi yang belum punya field ini
+        // tetap tanpa identitas — dan identitas lama masih terbaca.
+        m.insert("signalIdentities".into(), Value::Array(Vec::new()));
         m.insert("registered".into(), Value::Bool(false));
     }
     clear_pairing_pending(creds);
@@ -109,8 +108,23 @@ pub fn classify_logout_401(
     LogoutTrust::Trust
 }
 
-pub fn is_rate_limit_error(msg: &str, status: Option<i64>) -> bool {
-    msg.contains("rate-overlimit") || msg.contains("429") || status == Some(429)
+/// Port `isRateLimitError` (src/lib/pairing-state.js:104). JS membaca EMPAT
+/// sumber; sebelumnya Rust hanya mencocokkan teks message, jadi 429 yang
+/// datang lewat `output.statusCode` (bentuk yang biasa dikirim WA/Baileys)
+/// lolos dan bot retry tanpa cooldown.
+pub fn is_rate_limit_error(err: &Value) -> bool {
+    if err.is_null() {
+        return false;
+    }
+    // (1) message berisi "rate-overlimit" atau "429"
+    let msg = err.get("message").and_then(Value::as_str).unwrap_or("");
+    if msg.contains("rate-overlimit") || msg.contains("429") {
+        return true;
+    }
+    // (2) error.output.statusCode  (3) error.data  (4) error.data.statusCode
+    ["/output/statusCode", "/data", "/data/statusCode"]
+        .iter()
+        .any(|p| err.pointer(p).and_then(Value::as_i64) == Some(429))
 }
 
 fn cooldown_path(dir: &Path) -> std::path::PathBuf {
@@ -244,11 +258,77 @@ mod tests {
     }
 
     #[test]
+    fn reset_creates_signal_identities_when_absent() {
+        // creds hasil pairing/migrasi belum tentu punya `signalIdentities`.
+        // JS (src/lib/pairing-state.js:32) menulis `creds.signalIdentities = []`
+        // tanpa syarat ada/tidaknya field — kalau tidak dibuat, identitas
+        // Signal yang lama masih terbaca dan tidak dibangun ulang.
+        let mut c = json!({"registered": true, "me": {"id": "6285:1@s.whatsapp.net"}});
+        assert!(
+            c.get("signalIdentities").is_none(),
+            "fixture memang tidak punya field"
+        );
+        reset_pairing_creds(&mut c);
+        assert_eq!(
+            c.get("signalIdentities"),
+            Some(&json!([])),
+            "reset harus selalu menghasilkan signalIdentities = []"
+        );
+    }
+
+    #[test]
+    fn reset_clears_existing_signal_identities() {
+        let mut c = json!({"signalIdentities": [
+            {"identifier": {"name": "6285:1@s.whatsapp.net"}, "accountSignatureKey": "AAA"}
+        ]});
+        reset_pairing_creds(&mut c);
+        assert_eq!(c.get("signalIdentities"), Some(&json!([])));
+    }
+
+    #[test]
     fn rate_limit_detected() {
-        assert!(is_rate_limit_error("rate-overlimit", None));
-        assert!(is_rate_limit_error("boom 429", None));
-        assert!(is_rate_limit_error("x", Some(429)));
-        assert!(!is_rate_limit_error("ok", Some(200)));
+        // Empat assert yang sama seperti sebelumnya, sekarang lewat bentuk
+        // objek error yang sama dengan JS.
+        assert!(is_rate_limit_error(&json!({"message": "rate-overlimit"})));
+        assert!(is_rate_limit_error(&json!({"message": "boom 429"})));
+        assert!(is_rate_limit_error(&json!({"message": "x", "output": {"statusCode": 429}})));
+        assert!(!is_rate_limit_error(&json!({"message": "ok", "output": {"statusCode": 200}})));
+    }
+
+    #[test]
+    fn rate_limit_from_message_text() {
+        assert!(is_rate_limit_error(&json!({"message": "rate-overlimit"})));
+        assert!(is_rate_limit_error(&json!({"message": "boom 429"})));
+    }
+
+    #[test]
+    fn rate_limit_from_output_status_code() {
+        // `error.output.statusCode` — bentuk yang dikirim WA/Baileys saat
+        // rate limit, tanpa teks "429" di message.
+        assert!(is_rate_limit_error(
+            &json!({"message": "send failed", "output": {"statusCode": 429}})
+        ));
+    }
+
+    #[test]
+    fn rate_limit_from_data_number() {
+        assert!(is_rate_limit_error(&json!({"message": "send failed", "data": 429})));
+    }
+
+    #[test]
+    fn rate_limit_from_data_status_code() {
+        assert!(is_rate_limit_error(
+            &json!({"message": "send failed", "data": {"statusCode": 429}})
+        ));
+    }
+
+    #[test]
+    fn not_rate_limit_without_any_signal() {
+        assert!(!is_rate_limit_error(&json!({"message": "connection reset"})));
+        assert!(!is_rate_limit_error(&json!({"output": {"statusCode": 500}})));
+        assert!(!is_rate_limit_error(&json!({"data": {"statusCode": 500}})));
+        assert!(!is_rate_limit_error(&json!({})));
+        assert!(!is_rate_limit_error(&Value::Null));
     }
 
     #[test]

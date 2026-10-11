@@ -137,10 +137,22 @@ fn b64_encode(bytes: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(bytes)
 }
 
+/// creds.json onigis menyimpan public key Curve25519 sebagai 32 byte POLOS.
+/// libsignal/wacore hanya menerima bentuk kanonik 33 byte = 0x05
+/// (`KeyType::Djb`) + 32; tanpa prefix, `PublicKey::deserialize` membaca byte
+/// pertama sebagai key type dan error. Aturan yang sama dipakai bot.rs dan
+/// session.rs — jangan deviate di sini.
+const DJB_PREFIX: u8 = 0x05;
+
 #[allow(dead_code)] // dipakai saat constructing Device pada tahap berikutnya
 fn kp(j: &KeyPairJson) -> Result<KeyPair> {
+    let mut pub_bytes = b64(&j.public)?;
+    if pub_bytes.len() == 32 {
+        pub_bytes.insert(0, DJB_PREFIX);
+    }
     Ok(KeyPair {
-        public_key: PublicKey::try_from(&b64(&j.public)?[..]).context("public key")?,
+        public_key: PublicKey::try_from(&pub_bytes[..])
+            .with_context(|| format!("public key (len={})", pub_bytes.len()))?,
         private_key: PrivateKey::try_from(&b64(&j.private)?[..]).context("private key")?,
     })
 }
@@ -240,6 +252,46 @@ mod tests {
             "additionalData": {}
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn kp_prefixes_plain_32_byte_public_key() {
+        // creds onigis menyimpan public key Curve25519 32 byte POLOS;
+        // libsignal/wacore hanya menerima 33 byte = 0x05 (KeyType::Djb) + 32.
+        // Tanpa prefix, `PublicKey::deserialize` membaca byte pertama sebagai
+        // key type dan error -> kunci Signal salah / tidak bisa dibangun.
+        let j = KeyPairJson {
+            private: b64_encode(&[0x03u8; 32]),
+            public: b64_encode(&[0x09u8; 32]),
+        };
+        let kp = kp(&j).expect("public key 32 byte polos harus dikonversi, bukan error");
+        let ser = kp.public_key.serialize();
+        assert_eq!(ser.len(), 33, "libsignal butuh 33 byte (0x05 + 32)");
+        assert_eq!(ser[0], DJB_PREFIX, "prefix KeyType::Djb");
+        assert_eq!(&ser[1..], &[0x09u8; 32], "isi key tidak boleh berubah");
+        assert_eq!(
+            kp.private_key.serialize().len(),
+            32,
+            "private key tidak di-prefix"
+        );
+    }
+
+    #[test]
+    fn kp_keeps_already_prefixed_33_byte_public_key() {
+        let mut raw = vec![0x05u8];
+        raw.extend_from_slice(&[0x09u8; 32]);
+        let j = KeyPairJson {
+            private: b64_encode(&[0x03u8; 32]),
+            public: b64_encode(&raw),
+        };
+        let kp = kp(&j).expect("public key 33 byte dipakai apa adanya");
+        let ser = kp.public_key.serialize();
+        assert_eq!(ser.len(), 33);
+        assert_eq!(
+            &ser[..],
+            &raw[..],
+            "public key 33 byte tidak boleh di-prefix dua kali"
+        );
     }
 
     #[test]

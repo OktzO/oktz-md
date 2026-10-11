@@ -12,10 +12,15 @@
 //! handler.js:879 → 1709 → 1810 → 1896.
 
 pub mod command;
+pub mod gates;
 pub mod mode;
 pub mod permission;
 
 pub use command::{ParseOptions, ParsedCommand, parse_command};
+pub use gates::{
+    AutoWorkGuard, CooldownStore, EnergiSettings, RateLimiter, charge_energi, check_cooldown,
+    consume_auto_work, is_spamming,
+};
 pub use mode::{BotMode, DenyMode, GroupBotMode, GroupOverrides, ModeSettings};
 pub use permission::{
     AccessGrant, Caller, DenyReason, GroupState, PermissionInput, UserState,
