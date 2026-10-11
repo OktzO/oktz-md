@@ -235,6 +235,11 @@ pub async fn prepare_store(
     let _ = std::fs::remove_file(&db);
     let store = SqliteStore::new(db.to_str().context("path tidak utf8")?).await?;
 
+    // Satu-satunya tempat di crate ini yang benar-benar menulis device row,
+    // jadi ini juga tempat yang tahu di mana artefak sesi durable hidup.
+    // Dipakai [`pairing_run::purge_handler`] saat logout dipercaya.
+    pairing_run::note_store_path(&db);
+
     let device = build_device(&c).await?;
     store.save_device_data_for_device(1, &device).await?;
 
@@ -309,6 +314,11 @@ pub fn load_guard_creds(path: Option<&str>) -> serde_json::Value {
 ///
 /// Pemasangan guard-nya milik [`crate::pairing_run`]; ini titik masuk
 /// bernama supaya semua caller punya satu jalan yang jelas.
+///
+/// Handler purge ikut terpasang, karena [`pairing_run::connect_device_guarded`]
+/// yang memasangkannya dan fungsi ini mendelegasikannya tanpa syarat apa pun —
+/// jalur produksi `oktz-bin` yang memanggil [`connect_device`] ikut dapat
+/// purge, bukan cuma caller langsung.
 pub async fn connect_device_guarded<F, Fut>(
     store: SqliteStore,
     creds: serde_json::Value,
@@ -319,6 +329,23 @@ where
     Fut: std::future::Future<Output = ()> + Send + 'static,
 {
     pairing_run::connect_device_guarded(store, creds, on_ready).await
+}
+
+/// [`connect_device_guarded`] dengan plan purge eksplisit.
+///
+/// Dipakai kalau lokasi store sesi sudah diketahui pemanggil dan tidak boleh
+/// diambil dari env / pencatatan [`pairing_run::note_store_path`].
+pub async fn connect_device_guarded_with_purge<F, Fut>(
+    store: SqliteStore,
+    creds: serde_json::Value,
+    plan: pairing_run::PurgePlan,
+    on_ready: F,
+) -> Result<(BotHandle, Arc<FalseLogoutGuard>)>
+where
+    F: Fn(Arc<Client>) -> Fut + Send + Sync + 'static,
+    Fut: std::future::Future<Output = ()> + Send + 'static,
+{
+    pairing_run::connect_device_guarded_with_purge(store, creds, plan, on_ready).await
 }
 
 /// Boot bot dan pump handle; `on_ready` dipanggil setelah connect.

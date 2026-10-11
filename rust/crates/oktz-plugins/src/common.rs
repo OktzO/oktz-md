@@ -308,6 +308,190 @@ pub(crate) fn non_empty_map_entries(value: Option<&serde_json::Value>) -> Vec<(S
 }
 
 // =============================================================================
+// Album gacha — `albumStats` (src/lib/husbu.js:147 dan src/lib/waifu.js:184)
+// =============================================================================
+
+/// `TIER_VALUE` (src/lib/romance.js:6).
+pub(crate) const TIER_VALUE: [(&str, i64); 5] = [
+    ("Common", 1),
+    ("Rare", 2),
+    ("Epic", 4),
+    ("Legendary", 8),
+    ("Mythic", 16),
+];
+
+/// `TIER_EXPECTED` (src/lib/romance.js:7) =
+/// `0.55*1 + 0.25*2 + 0.13*4 + 0.055*8 + 0.015*16` = 1.255.
+///
+/// Angka ditulis hasil hitung JS, bukan diturunkan ulang dari bobot, supaya
+/// ini persis pembanding yang dipakai JS dan tidak mengambang.
+pub(crate) const TIER_EXPECTED: f64 = 1.255;
+
+/// `tierEmoji` yang di-hardcode dua-duanya (`husbualbum.js:31`,
+/// `waifualbum.js:31`) — tier yang tidak dikenal dapat `""`, bukan fallback.
+pub(crate) fn tier_emoji(tier: &str) -> &'static str {
+    match tier {
+        "Common" => "🟢",
+        "Rare" => "🔵",
+        "Epic" => "🟣",
+        "Legendary" => "🟡",
+        "Mythic" => "🔴",
+        _ => "",
+    }
+}
+
+/// Hasil [`album_stats`]. Field-nya mengikuti bentuk yang dikembalikan JS
+/// persis, termasuk `rarest` yang boleh `null`.
+pub(crate) struct AlbumStats {
+    pub total: i64,
+    pub by_tier: serde_json::Map<String, serde_json::Value>,
+    pub pity_counter: i64,
+    pub rarest: Option<serde_json::Value>,
+    pub married_count: i64,
+    pub luck: f64,
+    pub last10: Vec<serde_json::Value>,
+}
+
+/// `Number(byTier[t] || 0)` — `||` JS membuat `0`, `""`, `false`, dan `null`
+/// semua jadi 0, jadi `as_i64` yang gagal harus ikut jadi 0.
+fn tier_count(by_tier: &serde_json::Map<String, serde_json::Value>, tier: &str) -> f64 {
+    by_tier
+        .get(tier)
+        .and_then(serde_json::Value::as_f64)
+        .unwrap_or(0.0)
+}
+
+/// Port `albumStats`. Fungsi ini ada DUA KALI di JS (husbu + waifu) dengan
+/// tubuh yang persis sama dan konstanta yang sama, jadi satu implementasi
+/// melayani keduanya — bukan dua salinan yang bisa menyimpang diam-diam.
+pub(crate) fn album_stats(history: &[serde_json::Value], stats: &serde_json::Value) -> AlbumStats {
+    let num = |k: &str| {
+        stats
+            .get(k)
+            .and_then(serde_json::Value::as_f64)
+            .unwrap_or(0.0)
+    };
+    let total = num("totalGacha");
+    let empty = serde_json::Map::new();
+    let by_tier = stats
+        .get("byTier")
+        .and_then(serde_json::Value::as_object)
+        .unwrap_or(&empty)
+        .clone();
+
+    let actual: f64 = TIER_VALUE
+        .iter()
+        .map(|(tier, v)| tier_count(&by_tier, tier) * *v as f64)
+        .sum();
+    let luck = if total > 0.0 { actual / total / TIER_EXPECTED } else { 0.0 };
+
+    // `history.slice(-10).reverse()` — 10 terakhir, newest first.
+    let start = history.len().saturating_sub(10);
+    let last10 = history[start..].iter().rev().cloned().collect();
+
+    AlbumStats {
+        total: total as i64,
+        by_tier,
+        pity_counter: num("pityCounter") as i64,
+        rarest: stats.get("rarest").filter(|v| !v.is_null()).cloned(),
+        married_count: num("marriedCount") as i64,
+        // `Number(luck.toFixed(2))` — dua desimal, dibulatkan, bukan dipotong.
+        luck: (luck * 100.0).round() / 100.0,
+        last10,
+    }
+}
+
+/// `String(count).padStart(3)` untuk angka bulat.
+pub(crate) fn pad_start3(n: i64) -> String {
+    let s = n.to_string();
+    if s.len() >= 3 { s } else { format!("{}{}", " ".repeat(3 - s.len()), s) }
+}
+
+/// `bar(count)` dari album husbu/waifu: 20 sel, `Math.round(count/total*20)`
+/// terisi. `total == 0` → semua kosong (JS short-circuit, tidak NaN).
+pub(crate) fn album_bar(count: f64, total: f64) -> String {
+    let pct = if total > 0.0 {
+        (count / total * 20.0).round().clamp(0.0, 20.0) as usize
+    } else {
+        0
+    };
+    format!("{}{}", "█".repeat(pct), "░".repeat(20 - pct))
+}
+
+/// Baris tier yang identik di dua album (`husbualbum.js:41-45`,
+/// `waifualbum.js:41-45`) — label, padding, bar, semuanya sama.
+pub(crate) const TIER_ROWS: [(&str, &str, &str); 5] = [
+    ("Common", "🟢", "🟢 Common     "),
+    ("Rare", "🔵", "🔵 Rare       "),
+    ("Epic", "🟣", "🟣 Epic       "),
+    ("Legendary", "🟡", "🟡 Legendary  "),
+    ("Mythic", "🔴", "🔴 Mythic     "),
+];
+
+/// Tubuh render yang sama untuk album husbu dan waifu. Yang berbeda cuma
+/// judulnya — perintah gacha dan cabang "album kosong" tetap di plugin masing-
+/// masing karena keduanya memeriksa `history`, bukan `stats`.
+pub(crate) fn render_album(stats: &AlbumStats, title: &str) -> String {
+    let total = stats.total as f64;
+    let mut text = format!("📚 *{title}* 📚\n\n");
+    text.push_str(&format!("🎲 *Total Gacha:* {}\n", stats.total));
+    text.push_str(&format!(
+        "🍀 *Luck Score:* {} {}\n\n",
+        stats.luck,
+        if stats.luck >= 1.0 { "🔥" } else { "😅" }
+    ));
+    text.push_str("*Distribusi Tier:*\n");
+    for (tier, _, label) in TIER_ROWS {
+        let n = tier_count(&stats.by_tier, tier);
+        text.push_str(&format!(
+            "{label}{} {}\n",
+            pad_start3(n as i64),
+            album_bar(n, total)
+        ));
+    }
+    text.push('\n');
+
+    if let Some(rarest) = &stats.rarest {
+        let tier = rarest.get("tier").and_then(serde_json::Value::as_str).unwrap_or("");
+        let name = rarest.get("name").and_then(serde_json::Value::as_str).unwrap_or("");
+        text.push_str(&format!(
+            "🏆 *Pull Paling Langka:* {} {name} ({tier})\n",
+            tier_emoji(tier)
+        ));
+    }
+    if stats.pity_counter > 0 {
+        text.push_str(&format!(
+            "🎯 *Pity aktif:* {}/20 roll tanpa Epic+\n",
+            stats.pity_counter
+        ));
+    }
+    text.push_str(&format!(
+        "💍 *Pernikahan:* {}\n\n*10 Pull Terakhir:*\n",
+        stats.married_count
+    ));
+    for (i, h) in stats.last10.iter().enumerate() {
+        let tier = h.get("tier").and_then(serde_json::Value::as_str).unwrap_or("");
+        let name = h.get("name").and_then(serde_json::Value::as_str).unwrap_or("");
+        text.push_str(&format!(
+            "{}. {} *{name}* — {tier}\n",
+            i + 1,
+            tier_emoji(tier)
+        ));
+    }
+    text
+}
+
+/// Member grup sebagai JID, apa adanya urutannya.
+///
+/// `ponytail:` beberapa plugin JS memfilter JID bot sendiri
+/// (`id !== sock.user?.id`), dan `GroupRoster` tidak punya JID bot — hanya
+/// flag `is_bot_admin`. Pemanggil yang butuh filter itu harus menambahkan
+/// `bot_jid` ke `GroupRoster` lebih dulu.
+pub(crate) fn roster_jids(ctx: &Ctx) -> Vec<String> {
+    ctx.roster.member_jids()
+}
+
+// =============================================================================
 // Waktu — Asia/Jakarta (`src/lib/time.js:9`, `TIMEZONE`)
 // =============================================================================
 
@@ -2632,179 +2816,30 @@ mod tests_batch_s {
     /// `umum` (14) dan `batch_g` (33). `batch_s` tidak boleh mengklaim satu pun.
     /// Hanya dipakai test, jadi ia hidup di dalam `mod tests` supaya build
     /// non-test tidak kena `dead_code`.
-    pub(crate) const ALREADY_PORTED: [&str; 172] = [
-        "99names",
-        "age",
-        "akan",
-        "akankah",
-        "apa",
-        "apakah",
-        "apes",
-        "asmaul",
-        "asmaulhusna",
-        "bagaimana",
-        "baik",
-        "beautiful",
-        "benefitowner",
-        "benefitpartner",
-        "benefitprem",
-        "benefitpremium",
-        "berapa",
-        "berat",
-        "bisa",
-        "bisakah",
-        "bored",
-        "bucin",
-        "cantik",
-        "cekbaik",
-        "cekberat",
-        "cekbucin",
-        "cekcantik",
-        "cekcreative",
-        "cekcupu",
-        "cekgabut",
-        "cekgacha",
-        "cekgamer",
-        "cekganteng",
-        "cekgila",
-        "cekhoki",
-        "cekimut",
-        "cekintrovert",
-        "cekjahat",
-        "cekjodoh",
-        "cekjomblo",
-        "cekkarma",
-        "cekkaya",
-        "cekkece",
-        "cekkepribadian",
-        "cekkpopers",
-        "ceklapar",
-        "cekmalas",
-        "cekmesum",
-        "cekngantuk",
-        "cekotaku",
-        "cekoverpower",
-        "cekpelit",
-        "cekpintar",
-        "cekprocastinator",
-        "cekpsikopat",
-        "cekrezeki",
-        "ceksabar",
-        "ceksetia",
-        "ceksexy",
-        "ceksial",
-        "ceksisaumur",
-        "ceksocmed",
-        "cektinggi",
-        "cektsundere",
-        "cekumur",
-        "cekwibu",
-        "cekyandere",
-        "coba",
-        "cool",
-        "crazy",
-        "creative",
-        "cupu",
-        "cute",
-        "dimana",
-        "evil",
-        "fortune",
-        "gabut",
-        "gamer",
-        "ganteng",
-        "gila",
-        "gimana",
-        "handsome",
-        "harus",
-        "haruskah",
-        "hoki",
-        "hot",
-        "how",
-        "howmany",
-        "howmuch",
-        "hungry",
-        "husna",
-        "imut",
-        "introvert",
-        "iq",
-        "jomblo",
-        "kalkulatormbg",
-        "kapan",
-        "karma",
-        "kaya",
-        "kece",
-        "kenapa",
-        "kepribadian",
-        "keuntunganpartner",
-        "kikir",
-        "kind",
-        "kkmbg",
-        "kpop",
-        "kpopers",
-        "kreatif",
-        "lapar",
-        "lazy",
-        "loyal",
-        "luck",
-        "malas",
-        "mana",
-        "medsos",
-        "mengapa",
-        "mesum",
-        "ngantuk",
-        "nilai",
-        "noob",
-        "nunda",
-        "op",
-        "otaku",
-        "overpower",
-        "ownerbenefits",
-        "ownerfitur",
-        "partnerbenefits",
-        "patience",
-        "pelit",
-        "personality",
-        "pintar",
-        "plugin-template",
-        "premiumbenefits",
-        "premiumfitur",
-        "pro",
-        "procrastinator",
-        "psikopat",
-        "psycho",
-        "rate",
-        "rating",
-        "readmore",
-        "rezeki",
-        "rich",
-        "sabar",
-        "selengkapnya",
-        "setia",
-        "sexy",
-        "should",
-        "sial",
-        "single",
-        "sisaumur",
-        "sleepy",
-        "smart",
-        "sosmed",
-        "soulmatch",
-        "spoiler",
-        "tall",
-        "templateplugin",
-        "tinggi",
-        "tplplugin",
-        "try",
-        "tsundere",
-        "umur",
-        "weeb",
-        "weight",
-        "when",
-        "where",
-        "why",
-        "wibu",
-        "will",
-        "yandere",
+    pub(crate) const ALREADY_PORTED: [&str; 184] = [
+        "99names", "age", "akan", "akankah", "albumhusbu", "albumwaifu", "apa", "apakah",
+        "apes", "asmaul", "asmaulhusna", "bagaimana", "baik", "beautiful", "benefitowner", "benefitpartner",
+        "benefitprem", "benefitpremium", "berapa", "berat", "bisa", "bisakah", "bored", "bucin",
+        "cantik", "cekbaik", "cekberat", "cekbucin", "cekcantik", "cekcreative", "cekcupu", "cekgabut",
+        "cekgacha", "cekgamer", "cekganteng", "cekgila", "cekhoki", "cekimut", "cekintrovert", "cekjahat",
+        "cekjodoh", "cekjomblo", "cekkarma", "cekkaya", "cekkece", "cekkepribadian", "cekkpopers", "ceklapar",
+        "cekmalas", "cekmesum", "cekngantuk", "cekotaku", "cekoverpower", "cekpelit", "cekpintar", "cekprocastinator",
+        "cekpsikopat", "cekrezeki", "ceksabar", "ceksetia", "ceksexy", "ceksial", "ceksisaumur", "ceksocmed",
+        "cektinggi", "cektsundere", "cekumur", "cekwibu", "cekyandere", "coba", "cool", "crazy",
+        "creative", "cupu", "cute", "dimana", "dream", "dreamworld", "evil", "fortune",
+        "gabut", "gamer", "ganteng", "gaycheck", "gila", "gimana", "handsome", "harus",
+        "haruskah", "hoki", "hot", "how", "howgay", "howmany", "howmuch", "hungry",
+        "husbualbum", "husna", "imut", "introvert", "iq", "jomblo", "kalkulatormbg", "kapan",
+        "karma", "kaya", "kece", "kenapa", "kepribadian", "keuntunganpartner", "kikir", "kind",
+        "kkmbg", "kpop", "kpopers", "kreatif", "lapar", "lazy", "loyal", "luck",
+        "malas", "mana", "medsos", "mengapa", "mesum", "mimpi", "ngantuk", "nilai",
+        "noob", "nunda", "op", "otaku", "overpower", "ownerbenefits", "ownerfitur", "partnerbenefits",
+        "patience", "pelit", "personality", "pintar", "plugin-template", "premiumbenefits", "premiumfitur", "pro",
+        "procrastinator", "psikopat", "psycho", "rate", "rating", "readmore", "rezeki", "rich",
+        "sabar", "selengkapnya", "setia", "sexy", "should", "sial", "single", "sisaumur",
+        "sleepy", "smart", "sosmed", "soulmatch", "spoiler", "tall", "templateplugin", "tinggi",
+        "top", "top5", "toplist", "tplplugin", "try", "tsundere", "umur", "waifualbum",
+        "weeb", "weight", "when", "where", "why", "wibu", "will", "yandere",
     ];
 
     fn ctx() -> Ctx {
@@ -2848,11 +2883,12 @@ mod tests_batch_s {
 
     #[test]
     fn both_plugins_are_registered() {
+        use crate::common::tests_batch_fun::NEW_PLUGINS as FUN_PLUGINS;
         use crate::common::tests_roster_state::NEW_PLUGINS;
         assert_eq!(
             oktz_plugin_api::count(),
-            63 + 2 + NEW_PLUGINS.len(),
-            "63 lama + 2 (batch_s) + batch roster/state"
+            63 + 2 + NEW_PLUGINS.len() + FUN_PLUGINS.len(),
+            "63 lama + 2 (batch_s) + batch roster/state + batch fun"
         );
         for n in ["dare", "truth"] {
             assert!(find(n).is_some(), "{n} tidak terdaftar");
@@ -3893,6 +3929,11 @@ mod tests_roster_state {
         // `dare`/`truth` milik `tests_batch_s` sendiri; `NEW_PLUGINS` milik
         // batch roster/state. Keduanya dikecualikan supaya daftar "yang sudah
         // ada sebelum batch_s" tetap bermakna.
+        //
+        // Batch fun SENGAJA tidak dikecualikan: `ALREADY_PORTED` sudah memuat
+        // key-nya (itu satu-satunya daftar yang dipakai dua test untuk
+        // membandingkan registry), jadi menyaringnya di sini justru
+        // membuat keduanya tidak bisa pernah sama.
         all_plugins()
             .iter()
             .filter(|e| {
@@ -3911,11 +3952,13 @@ mod tests_roster_state {
 
     #[test]
     fn the_registry_grew_by_exactly_the_new_plugins() {
+        use crate::common::tests_batch_fun::NEW_PLUGINS as FUN_PLUGINS;
         assert_eq!(
             oktz_plugin_api::count(),
-            65 + NEW_PLUGINS.len(),
-            "registry harus 65 (sebelum batch) + {} (batch ini)",
-            NEW_PLUGINS.len()
+            65 + NEW_PLUGINS.len() + FUN_PLUGINS.len(),
+            "registry harus 65 (sebelum batch) + {} (batch ini) + {} (batch fun)",
+            NEW_PLUGINS.len(),
+            FUN_PLUGINS.len()
         );
         for n in NEW_PLUGINS {
             assert!(find(n).is_some(), "{n} tidak terdaftar");
@@ -4185,3 +4228,114 @@ mod tests_roster_state {
         }
     }
 }
+
+/// Batch port plugin class-A yang tersisa: `fun/gay.rs`, `fun/husbualbum.rs`,
+/// `fun/mimpi.rs`, `fun/top.rs`, `fun/waifualbum.rs`.
+///
+/// ## Kenapa `fun/siapa.js` TIDAK ikut
+///
+/// `siapa.js` mendaftarkan 52 command lewat `name` berupa ARRAY, dan 8 di
+/// antaranya sudah dimiliki plugin `cek/*` yang sudah terport: `pintar`,
+/// `wibu`, `ganteng`, `cantik`, `cupu`, `noob`, `pro`, `kaya`. Di JS
+/// kedua plugin itu sama-sama terdaftar dan yang menang bergantung pada urutan
+/// load file — tidak ada jawaban yang benar. Di Rust `find()` mengembalikan
+/// entri PERTAMA, jadi satu plugin diam-diam mati. Menambahnya
+/// berarti 8 command yang sekarang bekerja jadi bergantung pada urutan
+/// `linkme`, jadi tidak dilakukan.
+#[cfg(test)]
+mod tests_batch_fun {
+    use super::*;
+    use oktz_plugin_api::all_plugins;
+    use oktz_plugin_api::registry::{GroupRoster, Participant};
+
+    /// Satu nama = satu file, jadi daftar ini sekaligus penanda apa yang
+    /// harus ada di disk.
+    pub(crate) const NEW_PLUGINS: [&str; 5] = [
+        "gaycheck",
+        "husbualbum",
+        "mimpi",
+        "top",
+        "waifualbum",
+    ];
+
+    #[test]
+    fn all_four_are_registered_and_the_registry_grew_by_exactly_them() {
+        for n in NEW_PLUGINS {
+            assert!(oktz_plugin_api::find(n).is_some(), "{n} tidak terdaftar");
+        }
+        // Batch ini tidak boleh diam-diam menambah plugin lain.
+        let others = all_plugins()
+            .iter()
+            .filter(|e| !NEW_PLUGINS.contains(&e.meta.name.as_str()))
+            .count();
+        assert_eq!(
+            oktz_plugin_api::count() - others,
+            NEW_PLUGINS.len(),
+            "ada plugin di luar NEW_PLUGINS yang ikut bertambah"
+        );
+    }
+
+    #[test]
+    fn every_alias_of_this_batch_resolves_back_to_its_own_plugin() {
+        for name in NEW_PLUGINS {
+            let entry = oktz_plugin_api::find(name).unwrap();
+            for alias in std::iter::once(&entry.meta.name).chain(entry.meta.alias.iter()) {
+                assert_eq!(
+                    oktz_plugin_api::find(alias).map(|e| e.meta.name.as_str()),
+                    Some(name),
+                    "key {alias} salah resolve"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn every_key_of_this_batch_has_exactly_one_owner_in_the_rust_registry() {
+        for name in NEW_PLUGINS {
+            let entry = oktz_plugin_api::find(name).unwrap();
+            for key in std::iter::once(&entry.meta.name).chain(entry.meta.alias.iter()) {
+                let owners: Vec<&str> = all_plugins()
+                    .iter()
+                    .filter(|e| e.meta.matches(key))
+                    .map(|e| e.meta.name.as_str())
+                    .collect();
+                assert_eq!(owners, vec![name], "key {key} diklaim oleh {owners:?}");
+            }
+        }
+    }
+
+    /// Kunci yang JS-nya memang tabrakan harus dicatat, bukan hanya lolos
+    /// karena plugin pasangannya kebetulan belum diport. Kalau suatu saat
+    /// `cek/cekkaya.js` ikut diport, test ini yang akan menjatuhkan.
+
+    #[test]
+    fn the_batch_answers_through_the_registry() {
+        for name in NEW_PLUGINS {
+            let reply = (oktz_plugin_api::find(name).unwrap().handler)(Ctx {
+                text: "Budi".into(),
+                args: vec!["Budi".into()],
+                sender: "628111@s.whatsapp.net".into(),
+                chat: "120363@g.us".into(),
+                is_group: true,
+                roster: GroupRoster {
+                    participants: vec![
+                        Participant {
+                            jid: "628111@s.whatsapp.net".into(),
+                            is_admin: false,
+                            is_owner: false,
+                        },
+                        Participant {
+                            jid: "628222@s.whatsapp.net".into(),
+                            is_admin: false,
+                            is_owner: false,
+                        },
+                    ],
+                    is_bot_admin: false,
+                },
+                ..Default::default()
+            });
+            assert!(reply.text_body().is_some(), "{name} tidak membalas teks");
+        }
+    }
+}
+
