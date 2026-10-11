@@ -119,7 +119,8 @@ pub async fn prepare_store(
         tracing::info!(
             loaded = report.sessions_loaded,
             failed = report.sessions_failed,
-            "sesi ratchet dimuat"
+            write_failed = report.write_failed,
+            "sesi ratchet dimuat (hanya yang benar-benar tersimpan)"
         );
     }
     Ok(store)

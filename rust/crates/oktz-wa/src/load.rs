@@ -13,13 +13,21 @@ pub struct LoadReport {
     pub sessions_failed: usize,
     pub records_failed: usize,
     pub skipped_unknown_basekeyrole: usize,
+    pub write_failed: usize,
     pub first_error: Option<String>,
 }
 
-/// Address key yang dipakai wacore: `<jid>.<device>` (lihat log run S1:
-/// "message from 32328738959591@lid.0")..onigis id = `<jid>_<device>`.
+/// onigis menyimpan id sesi sebagai `<addr>_<n>.<device>` dengan `addr` berupa
+/// nomor polos (tanpa @server). wacore mencari key `<user>[:device]@<server>` lalu
+/// append `.0` — lihat wacore::types::jid::write_signal_address_to. Tanpa
+/// menambah @server, sesi tersimpan di key yang tidak pernah dibaca.
 fn to_address(onigis_id: &str) -> String {
-    onigis_id.replacen('_', ".", 1)
+    let base = onigis_id.split('_').next().unwrap_or(onigis_id);
+    let num = base.split('@').next().unwrap_or(base);
+    if num.contains('@') {
+        return format!("{base}.0");
+    }
+    format!("{num}@s.whatsapp.net.0")
 }
 
 pub async fn load_into_store<S>(
@@ -94,14 +102,47 @@ where
             std::sync::Arc::from(to_address(id).as_str()),
             bytes::Bytes::from(bytes),
         ));
-        rep.sessions_loaded += 1;
     }
 
-    // Batch dalam chunks supaya tidak menumpuk semuanya di memori.
+    // `sessions_loaded` dihitung SETELAH persist sukses; kalau batch write gagal,
+    // jangan dilaporkan sebagai termuat.
+    let mut persisted = 0usize;
+    let mut write_failed = 0usize;
     for chunk in batch.chunks(64) {
-        if let Err(e) = store.put_sessions_batch(chunk).await {
-            eprintln!("gagal menyimpan batch sesi: {e}");
+        match store.put_sessions_batch(chunk).await {
+            Ok(()) => persisted += chunk.len(),
+            Err(e) => {
+                write_failed += chunk.len();
+                if rep.first_error.is_none() {
+                    rep.first_error = Some(format!("write batch gagal: {e}"));
+                }
+            }
         }
     }
+    rep.sessions_loaded = persisted;
+    rep.write_failed = write_failed;
     Ok(rep)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Bug yang ketahuan review: loader menulis key yang tidak pernah dibaca
+    // wacore, jadi impor "sukses" tapi tidak berguna.
+    #[test]
+    fn address_matches_wacore_protocol_address() {
+        assert_eq!(to_address("240406902128794_1.0"), "240406902128794@s.whatsapp.net.0");
+    }
+
+    #[test]
+    fn address_keeps_server_when_present() {
+        assert_eq!(to_address("628123@s.whatsapp.net_1.0"), "628123@s.whatsapp.net.0");
+    }
+
+    #[test]
+    fn lid_address_uses_same_server_suffix() {
+        assert_eq!(to_address("188412430651393_1.0"), "188412430651393@s.whatsapp.net.0");
+    }
+
 }
