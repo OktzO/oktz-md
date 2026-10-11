@@ -13,8 +13,10 @@
 
 pub mod command;
 pub mod gates;
+pub mod group;
 pub mod mode;
 pub mod permission;
+pub mod serialize;
 
 pub use command::{ParseOptions, ParsedCommand, parse_command};
 pub use gates::{

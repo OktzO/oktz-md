@@ -8,6 +8,7 @@ pub mod creds;
 pub mod load;
 pub mod pairing;
 pub mod pairing_run;
+pub mod pipeline;
 pub mod rss;
 pub mod session;
 
@@ -15,6 +16,10 @@ pub use bot::{build_device, connect_device, prepare_store};
 pub use cards::{biz_node, build_card, build_list};
 pub use creds::{DeviceMapping, inspect_creds};
 pub use load::{LoadReport, load_into_store};
+pub use pipeline::{
+    ClientSender, Dedup, Identity, MessageSender, Outcome, Pipeline, PipelineError, StoreContext,
+    normalize_user_key,
+};
 pub use session::{ImportStats, import_session_record};
 pub use whatsapp_rust::bot::BotHandle;
 

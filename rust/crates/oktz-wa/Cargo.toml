@@ -6,6 +6,9 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+oktz-store = { path = "../oktz-store" }
+oktz-plugin-api = { path = "../oktz-plugin-api" }
+oktz-router = { path = "../oktz-router" }
 oktz-core = { path = "../oktz-core" }
 serde.workspace = true
 serde_json.workspace = true
