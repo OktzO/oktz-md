@@ -10,3 +10,6 @@ oktz-plugin-api = { path = "../oktz-plugin-api" }
 # macro WAJIB punya linkme sebagai direct dependency.
 linkme = "0.3"
 rand = "0.9"
+# Tipe `Value` hanya, untuk baca state tersimpan lewat `Ctx::user_field` /
+# `group_field`. Tidak ada I/O store di crate ini.
+serde_json.workspace = true

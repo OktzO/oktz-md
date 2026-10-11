@@ -240,6 +240,218 @@ pub(crate) fn tanya_reply(ctx: &Ctx, answers: &[&str], help: &str) -> Reply {
     Reply::text(render_tanya(&body_stripped(ctx), answer))
 }
 
+// =============================================================================
+// State tersimpan + roster — helper untuk batch plugin roster/state
+// =============================================================================
+
+/// `jid.split('@')[0]` — sama seperti JS. Device `:9` sengaja TIDAK dibuang:
+/// itu bentuk JID yang dipakai `m.sender`/mention, dan membuangnya membuat
+/// teks yang tampil tidak sama dengan yang di-mention.
+pub(crate) fn jid_number(jid: &str) -> &str {
+    jid.split('@').next().unwrap_or(jid)
+}
+
+/// Target plugin "cek user": `m.mentionedJid[0]` kalau ada, selain itu sender.
+///
+/// `ponytail:` JS pakai `m.quoted` lebih dulu dan `m.pushName` untuk nama.
+/// `Ctx` tidak membawa keduanya, jadi reply-mode dan nama push tidak bisa
+/// dicerminkan. Tambahkan `quoted: Option<...>` + `push_name: String` ke
+/// `Ctx` kalau router mau keduanya.
+pub(crate) struct UserTarget {
+    pub jid: String,
+    pub name: String,
+}
+
+pub(crate) fn user_target(ctx: &Ctx) -> UserTarget {
+    match ctx.mentioned.first() {
+        Some(jid) => UserTarget {
+            name: jid_number(jid).to_string(),
+            jid: jid.clone(),
+        },
+        None => UserTarget {
+            name: "Kamu".to_string(),
+            jid: ctx.sender.clone(),
+        },
+    }
+}
+
+/// `Number.isFinite(user[k] ?? default)` → i64. Field yang bukan angka dibaca
+/// sebagai `0` kalau ada, sama seperti `|| 0` di JS untuk `NaN`/`undefined`.
+pub(crate) fn int_field(user: &Ctx, key: &str) -> i64 {
+    user.user_field(key).and_then(serde_json::Value::as_i64).unwrap_or(0)
+}
+
+/// `arr || []` lalu dirender `${el}` per baris. String apa adanya; nilai lain
+/// sebagai JSON kompak — persis apa yang `${el}` lakukan di JS untuk objek.
+pub(crate) fn joined_strings(list: &[serde_json::Value]) -> Vec<String> {
+    list.iter()
+        .map(|v| match v.as_str() {
+            Some(s) => s.to_string(),
+            None => v.to_string(),
+        })
+        .collect()
+}
+
+/// `Object.entries(map).filter(([, v]) => v.length > 0)` untuk peta roster-ish
+/// milik grup (`warnings`, `chatStats`). Urutan = urutan dokumen, sama seperti
+/// `Object.entries` untuk key string.
+pub(crate) fn non_empty_map_entries(value: Option<&serde_json::Value>) -> Vec<(String, serde_json::Value)> {
+    value
+        .and_then(serde_json::Value::as_object)
+        .map(|m| {
+            m.iter()
+                .filter(|(_, v)| v.as_array().is_some_and(|a| !a.is_empty()))
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+// =============================================================================
+// Waktu — Asia/Jakarta (`src/lib/time.js:9`, `TIMEZONE`)
+// =============================================================================
+
+/// `Asia/Jakarta` = UTC+7 sepanjang tahun, tanpa DST. Angka tetap, jadi
+/// konversi civil bisa ditulis tanpa dependensi tanggal.
+pub(crate) const JAKARTA_OFFSET_SECS: i64 = 7 * 60 * 60;
+
+/// `Date.now()` dalam milidetik.
+pub(crate) fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as i64)
+}
+
+/// `(tahun, bulan 1-12, hari, jam, menit, detik)` di Asia/Jakarta.
+///
+/// Implementasi algoritma civil-calendar Howard Hinnant (`days_from_civil` /
+/// `civil_from_days`) supaya crate ini tidak perlu dependensi tanggal.
+pub(crate) fn jakarta_parts(ms: i64) -> (i64, u32, u32, u32, u32, u32) {
+    let local = ms.div_euclid(1000) + JAKARTA_OFFSET_SECS;
+    let days = local.div_euclid(86_400);
+    let secs = local.rem_euclid(86_400);
+    let (y, m, d) = civil_from_days(days);
+    (
+        y,
+        m,
+        d,
+        (secs / 3600) as u32,
+        ((secs % 3600) / 60) as u32,
+        (secs % 60) as u32,
+    )
+}
+
+/// Hari sejak 1970-01-01 untuk tanggal civil (Howard Hinnant, `days_from_civil`).
+pub(crate) fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = (y - era * 400) as u64;
+    // Bulan digeser supaya Maret = 0, dan 12 -> 0 lewat `% 12` — tanpa itu
+    // Desember terhitung 13 bulan dan hasilnya meleset satu tahun.
+    let mp = (u64::from(m) + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + u64::from(d) - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe as i64 - 719_468
+}
+
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+/// `String(n).padStart(2, '0')` (`time.js:44`).
+pub(crate) fn pad2(n: u32) -> String {
+    format!("{n:02}")
+}
+
+/// `MMMM` versi `Intl.DateTimeFormat('id-ID')` — sama dengan array bulan
+/// panjang yang dip-hardcode `plugins/user/birthday.js:26`.
+pub(crate) const MONTHS_ID: [&str; 12] = [
+    "Januari",
+    "Februari",
+    "Maret",
+    "April",
+    "Mei",
+    "Juni",
+    "Juli",
+    "Agustus",
+    "September",
+    "Oktober",
+    "November",
+    "Desember",
+];
+
+/// `formatPattern(date, 'D MMMM YYYY')`.
+pub(crate) fn date_long(ms: i64) -> String {
+    let (y, m, d, ..) = jakarta_parts(ms);
+    format!("{d} {} {y}", MONTHS_ID[(m - 1) as usize])
+}
+
+/// `formatPattern(date, 'DD/MM/YYYY')`.
+pub(crate) fn date_dmy(ms: i64) -> String {
+    let (y, m, d, ..) = jakarta_parts(ms);
+    format!("{}/{}/{}", pad2(d), pad2(m), y)
+}
+
+/// `formatPattern(date, 'HH:mm')`.
+pub(crate) fn time_hm(ms: i64) -> String {
+    let (_, _, _, h, mi, _) = jakarta_parts(ms);
+    format!("{}:{}", pad2(h), pad2(mi))
+}
+
+// =============================================================================
+// Probe registry — `plugins/info/{howmuchenergy,whatrolethis}.js`
+// =============================================================================
+
+/// Loop atas `m.args` yang dipakai kedua plugin probe: header, lalu
+/// `getPlugin(cmd)` + satu blok per argumen. Argumen tak dikenal dapet baris
+/// "Tidak ditemukan!", dan seluruh hasil di-`trim()` seperti
+/// `m.reply(responseText.trim())`.
+pub(crate) fn render_probe(header: &str, args: &[String], render: impl Fn(&str) -> String) -> String {
+    let mut out = String::from(header);
+    for cmd in args {
+        let key = cmd.to_lowercase();
+        match oktz_plugin_api::find(&key) {
+            Some(p) => out.push_str(&render(&p.meta.name)),
+            None => out.push_str(&format!("❌ *{key}* : Tidak ditemukan!\n\n")),
+        }
+    }
+    out.trim().to_string()
+}
+
+macro_rules! probe_plugin {
+    ($fn_name:ident, $name:literal, $alias:expr, $desc:literal, $usage:literal,
+     $example:literal, $help:expr, $header:expr, $render:expr) => {
+        #[plugin(
+                    name = $name,
+                    alias = $alias,
+                    category = "info",
+                    description = $desc,
+                    usage = $usage,
+                    example = $example,
+                    cooldown = 5,
+                    energi = 0,
+                    is_private = false
+                )]
+        pub fn $fn_name(ctx: Ctx) -> Reply {
+            if ctx.args.is_empty() {
+                return Reply::text($help);
+            }
+            Reply::text(render_probe($header, &ctx.args, $render))
+        }
+    };
+}
+
+pub(crate) use probe_plugin;
+
 #[cfg(test)]
 mod tests_cek {
     use super::*;
@@ -2420,7 +2632,7 @@ mod tests_batch_s {
     /// `umum` (14) dan `batch_g` (33). `batch_s` tidak boleh mengklaim satu pun.
     /// Hanya dipakai test, jadi ia hidup di dalam `mod tests` supaya build
     /// non-test tidak kena `dead_code`.
-    const ALREADY_PORTED: [&str; 172] = [
+    pub(crate) const ALREADY_PORTED: [&str; 172] = [
         "99names",
         "age",
         "akan",
@@ -2610,10 +2822,12 @@ mod tests_batch_s {
     /// Nama + alias dari modul yang SUDAH ada sebelum batch_s, diambil dari
     /// registry sungguhan (bukan daftar tebakan).
     fn keys_of_other_modules() -> Vec<String> {
+        use crate::common::tests_roster_state::NEW_PLUGINS;
         all_plugins()
             .iter()
             .filter(|e| {
-                e.meta.category != "fun" || !["dare", "truth"].contains(&e.meta.name.as_str())
+                !["dare", "truth"].contains(&e.meta.name.as_str())
+                    && !NEW_PLUGINS.contains(&e.meta.name.as_str())
             })
             .flat_map(|e| {
                 let mut k = vec![e.meta.name.clone()];
@@ -2634,7 +2848,12 @@ mod tests_batch_s {
 
     #[test]
     fn both_plugins_are_registered() {
-        assert_eq!(oktz_plugin_api::count(), 65, "63 lama + 2 baru");
+        use crate::common::tests_roster_state::NEW_PLUGINS;
+        assert_eq!(
+            oktz_plugin_api::count(),
+            63 + 2 + NEW_PLUGINS.len(),
+            "63 lama + 2 (batch_s) + batch roster/state"
+        );
         for n in ["dare", "truth"] {
             assert!(find(n).is_some(), "{n} tidak terdaftar");
         }
@@ -3617,5 +3836,352 @@ mod tests_umum {
         assert_eq!(d.bulan, 1);
         assert_eq!(d.hari, 10);
         assert_eq!(d.jam, 0);
+    }
+}
+
+// =============================================================================
+// Batch roster/state — 18 plugin
+// =============================================================================
+
+#[cfg(test)]
+mod tests_roster_state {
+    use super::*;
+    use crate::common::tests_batch_s::ALREADY_PORTED;
+    use oktz_plugin_api::registry::{GroupRoster, Participant};
+    use oktz_plugin_api::{all_plugins, find};
+    use serde_json::json;
+
+    /// Plugin yang ditambahkan batch ini. Satu nama = satu file, jadi daftar
+    /// ini sekaligus penanda apa yang harus ada di disk.
+    pub(crate) const NEW_PLUGINS: [&str; 17] = [
+        // group — roster
+        "tagall",
+        "listadmin",
+        // group — state tersimpan
+        "listantilink",
+        "listtoxic",
+        "listwarn",
+        "topchat",
+        "intro",
+        "rulesgrup",
+        // rpg
+        "inventory",
+        // user
+        "koin",
+        "exp",
+        "level",
+        "energi",
+        "birthday",
+        // info
+        "howmuchenergy",
+        "whatrolethis",
+        "fiturpremium",
+    ];
+
+    fn keys_of(name: &str) -> Vec<String> {
+        let p = find(name).unwrap_or_else(|| panic!("{name} tidak terdaftar"));
+        let mut k = vec![p.meta.name.clone()];
+        k.extend(p.meta.alias.iter().cloned());
+        k
+    }
+
+    fn keys_of_new() -> Vec<String> {
+        NEW_PLUGINS.iter().flat_map(|n| keys_of(n)).collect()
+    }
+
+    fn keys_of_others() -> Vec<String> {
+        // `dare`/`truth` milik `tests_batch_s` sendiri; `NEW_PLUGINS` milik
+        // batch roster/state. Keduanya dikecualikan supaya daftar "yang sudah
+        // ada sebelum batch_s" tetap bermakna.
+        all_plugins()
+            .iter()
+            .filter(|e| {
+                !["dare", "truth"].contains(&e.meta.name.as_str())
+                    && !NEW_PLUGINS.contains(&e.meta.name.as_str())
+            })
+            .flat_map(|e| {
+                let mut k = vec![e.meta.name.clone()];
+                k.extend(e.meta.alias.iter().cloned());
+                k
+            })
+            .collect()
+    }
+
+    // -- registrasi ---------------------------------------------------------
+
+    #[test]
+    fn the_registry_grew_by_exactly_the_new_plugins() {
+        assert_eq!(
+            oktz_plugin_api::count(),
+            65 + NEW_PLUGINS.len(),
+            "registry harus 65 (sebelum batch) + {} (batch ini)",
+            NEW_PLUGINS.len()
+        );
+        for n in NEW_PLUGINS {
+            assert!(find(n).is_some(), "{n} tidak terdaftar");
+        }
+    }
+
+    #[test]
+    fn no_new_plugin_shares_a_name_or_alias_with_the_previous_65() {
+        for name in NEW_PLUGINS {
+            for key in keys_of(name) {
+                assert!(
+                    !ALREADY_PORTED.contains(&key.as_str()),
+                    "COLISI: key {key} (dari {name}) sudah dipakai modul sebelumnya"
+                );
+                assert_eq!(
+                    find(&key).map(|p| p.meta.name == name),
+                    Some(true),
+                    "key {key} resolve ke plugin yang salah"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_hardcoded_previous_list_still_matches_the_registry() {
+        // Menangkap test ini kalau ada plugin lama yangnamenya berubah tanpa
+        // daftar di `tests_batch_s` ikut diperbarui.
+        let mut from_registry = keys_of_others();
+        from_registry.sort();
+        from_registry.dedup();
+        let mut hardcoded: Vec<String> = ALREADY_PORTED.iter().map(|s| (*s).to_string()).collect();
+        hardcoded.sort();
+        hardcoded.dedup();
+        assert_eq!(from_registry, hardcoded);
+    }
+
+    #[test]
+    fn the_whole_registry_has_no_duplicate_key() {
+        let mut keys = keys_of_new();
+        keys.extend(keys_of_others());
+        let mut sorted = keys.clone();
+        sorted.sort();
+        let before = sorted.len();
+        sorted.dedup();
+        assert_eq!(sorted.len(), before, "ada key yang dipakai dua plugin");
+    }
+
+    // -- meta_guard ---------------------------------------------------------
+
+    #[test]
+    fn usage_and_example_are_never_silently_empty_for_the_new_plugins() {
+        for name in NEW_PLUGINS {
+            let p = find(name).unwrap_or_else(|| panic!("{name} tidak ada"));
+            assert!(!p.meta.name.is_empty(), "{name}: name kosong");
+            assert!(!p.meta.description.is_empty(), "{name}: description kosong");
+            assert!(
+                p.meta.description != "No description",
+                "{name}: description jatuh ke default"
+            );
+            assert!(!p.meta.usage.is_empty(), "{name}: usage kosong");
+            assert!(!p.meta.example.is_empty(), "{name}: example kosong");
+            assert!(
+                p.meta.usage.starts_with('.'),
+                "{name}: usage harus diawali prefix, dapat {:?}",
+                p.meta.usage
+            );
+            assert!(
+                p.meta.example.starts_with('.'),
+                "{name}: example harus diawali prefix, dapat {:?}",
+                p.meta.example
+            );
+        }
+    }
+
+    #[test]
+    fn every_new_plugin_lands_in_the_mirrored_category() {
+        for name in NEW_PLUGINS {
+            let p = find(name).unwrap();
+            let expected = match name {
+                "tagall" | "listadmin" | "listantilink" | "listtoxic" | "listwarn"
+                | "topchat" | "intro" | "rulesgrup" => "group",
+                "inventory" => "rpg",
+                "koin" | "exp" | "level" | "energi" | "birthday" => "user",
+                "howmuchenergy" | "whatrolethis" | "fiturpremium" => "info",
+                other => panic!("plugin baru tak dikenal: {other}"),
+            };
+            assert_eq!(p.meta.category, expected, "{name}");
+        }
+    }
+
+    // -- helper bersama -----------------------------------------------------
+
+    fn roster(participants: Vec<Participant>) -> GroupRoster {
+        GroupRoster {
+            participants,
+            is_bot_admin: false,
+        }
+    }
+
+    #[test]
+    fn jid_number_strips_the_server_but_keeps_the_device() {
+        assert_eq!(jid_number("628123@s.whatsapp.net"), "628123");
+        assert_eq!(jid_number("628123:9@s.whatsapp.net"), "628123:9");
+        assert_eq!(jid_number("628123@lid"), "628123");
+        assert_eq!(jid_number(""), "");
+        assert_eq!(jid_number("@s.whatsapp.net"), "");
+    }
+
+    #[test]
+    fn user_target_prefers_a_mention_and_falls_back_to_kamu() {
+        let mut ctx = Ctx {
+            sender: "628111@s.whatsapp.net".into(),
+            ..Default::default()
+        };
+        assert_eq!(user_target(&ctx).jid, "628111@s.whatsapp.net");
+        assert_eq!(user_target(&ctx).name, "Kamu");
+        ctx.mentioned = vec!["628999@s.whatsapp.net".into()];
+        assert_eq!(user_target(&ctx).jid, "628999@s.whatsapp.net");
+        assert_eq!(user_target(&ctx).name, "628999");
+    }
+
+    #[test]
+    fn int_field_reads_numbers_and_zeroes_everything_else() {
+        let ctx = Ctx {
+            user_data: json!({"koin": 12, "exp": null, "s": "5", "f": 1.5}),
+            ..Default::default()
+        };
+        assert_eq!(int_field(&ctx, "koin"), 12);
+        assert_eq!(int_field(&ctx, "exp"), 0);
+        assert_eq!(int_field(&ctx, "s"), 0);
+        assert_eq!(int_field(&ctx, "f"), 0);
+        assert_eq!(int_field(&ctx, "tidak-ada"), 0);
+        assert_eq!(int_field(&Ctx::default(), "koin"), 0);
+    }
+
+    #[test]
+    fn joined_strings_keeps_strings_and_jsonifies_everything_else() {
+        assert_eq!(
+            joined_strings(&[json!("a"), json!("b")]),
+            vec!["a".to_string(), "b".to_string()]
+        );
+        assert_eq!(joined_strings(&[]), Vec::<String>::new());
+        assert_eq!(joined_strings(&[json!(7)]), vec!["7".to_string()]);
+    }
+
+    #[test]
+    fn non_empty_map_entries_drops_empty_arrays_and_keeps_order() {
+        let v = json!({
+            "b@s.whatsapp.net": [1],
+            "a@s.whatsapp.net": [],
+            "c@s.whatsapp.net": [1, 2]
+        });
+        let out = non_empty_map_entries(Some(&v));
+        assert_eq!(
+            out.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>(),
+            ["b@s.whatsapp.net", "c@s.whatsapp.net"]
+        );
+        assert_eq!(non_empty_map_entries(Some(&json!({}))).len(), 0);
+        assert_eq!(non_empty_map_entries(Some(&json!(null))).len(), 0);
+        assert_eq!(non_empty_map_entries(None).len(), 0);
+    }
+
+    #[test]
+    fn render_probe_trims_and_reports_unknown_commands() {
+        let out = render_probe("HEAD\n\n", &["readmore".into(), "zzz".into()], |name| {
+            format!("ok {name}\n")
+        });
+        assert_eq!(out, "HEAD\n\nok readmore\n❌ *zzz* : Tidak ditemukan!");
+        assert_eq!(
+            render_probe("", &[], |_| String::new()),
+            "",
+            "argumen kosong menghasilkan string kosong setelah trim"
+        );
+    }
+
+    // -- kalender ----------------------------------------------------------
+
+    #[test]
+    fn jakarta_parts_is_utc_plus_seven_with_no_dst() {
+        // 2026-01-01T00:00:00Z -> 2026-01-01 07:00:00 WIB.
+        assert_eq!(jakarta_parts(1_767_225_600_000), (2026, 1, 1, 7, 0, 0));
+        // 2026-01-01T20:00:00Z -> 2026-01-02 03:00:00 WIB.
+        assert_eq!(jakarta_parts(1_767_297_600_000), (2026, 1, 2, 3, 0, 0));
+        // Epoch -> 1970-01-01 07:00:00 WIB.
+        assert_eq!(jakarta_parts(0), (1970, 1, 1, 7, 0, 0));
+    }
+
+    #[test]
+    fn days_from_civil_round_trips_through_the_civil_conversion() {
+        for (y, m, d) in [
+            (1970, 1, 1),
+            (2000, 2, 29),
+            (2024, 12, 31),
+            (2026, 6, 15),
+            (2100, 3, 1),
+        ] {
+            let days = days_from_civil(y, m, d);
+            assert_eq!(jakarta_parts(days * 86_400_000).0, y, "tahun {y}");
+            assert_eq!(jakarta_parts(days * 86_400_000).1, m, "bulan {m}");
+            assert_eq!(jakarta_parts(days * 86_400_000).2, d, "hari {d}");
+        }
+        assert_eq!(days_from_civil(1970, 1, 1), 0);
+    }
+
+    #[test]
+    fn date_helpers_use_the_same_tokens_as_the_js_time_module() {
+        assert_eq!(date_long(1_767_225_600_000), "1 Januari 2026");
+        assert_eq!(date_dmy(1_767_225_600_000), "01/01/2026");
+        assert_eq!(time_hm(1_767_225_600_000), "07:00");
+        assert_eq!(time_hm(1_767_225_600_000 + 61_000), "07:01");
+        assert_eq!(pad2(0), "00");
+        assert_eq!(pad2(7), "07");
+        assert_eq!(pad2(42), "42");
+        assert_eq!(MONTHS_ID.len(), 12);
+        assert_eq!(MONTHS_ID[0], "Januari");
+        assert_eq!(MONTHS_ID[11], "Desember");
+    }
+
+    #[test]
+    fn now_ms_is_after_the_january_2026_reference_point() {
+        assert!(now_ms() > 1_767_225_600_000, "jam sistem harus masuk akal");
+    }
+
+    // -- smoke: setiap plugin baru membalas tanpa panic --------------------
+
+    #[test]
+    fn every_new_plugin_answers_through_the_registry_for_its_own_context() {
+        for name in NEW_PLUGINS {
+            let p = find(name).unwrap();
+            for ctx in [
+                Ctx {
+                    prefix: ".".into(),
+                    command: name.into(),
+                    sender: "628111@s.whatsapp.net".into(),
+                    chat: "120363@g.us".into(),
+                    is_group: true,
+                    text: "25-12".into(),
+                    args: vec!["25-12".into()],
+                    user_data: json!({"koin": 10, "exp": 20_000, "energi": 3, "birthday": "25-12"}),
+                    group_data: json!({"intro": "hi @user", "groupRules": "r", "chatStats": {"628111@s.whatsapp.net": {"count": 1}}}),
+                    roster: roster(vec![p_participant()]),
+                    ..Default::default()
+                },
+                // Kosong total: tanpa roster, tanpa state, tanpa argumen.
+                Ctx {
+                    prefix: ".".into(),
+                    command: name.into(),
+                    sender: "628111@s.whatsapp.net".into(),
+                    chat: "628111@s.whatsapp.net".into(),
+                    ..Default::default()
+                },
+            ] {
+                let reply = (p.handler)(ctx);
+                assert!(
+                    reply.text_body().is_some(),
+                    "{name} tidak membalas teks sama sekali"
+                );
+            }
+        }
+    }
+
+    fn p_participant() -> Participant {
+        Participant {
+            jid: "628111@s.whatsapp.net".into(),
+            is_admin: false,
+            is_owner: false,
+        }
     }
 }

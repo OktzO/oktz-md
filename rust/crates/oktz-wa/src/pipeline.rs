@@ -34,14 +34,19 @@ use std::time::Instant;
 
 use oktz_plugin_api::registry::{GroupRoster, MediaSource, Participant};
 use oktz_plugin_api::{Ctx, PluginEntry, Reply};
-use oktz_router::gates::{AutoWorkDecision, AutoWorkSettings};
+use oktz_router::gates::{
+    AutoWorkDecision, AutoWorkGuard, AutoWorkSettings, EnergiSettings, resolve_energi_enabled,
+};
+use oktz_router::group::{self, GateEnv, GroupCaller};
 use oktz_router::serialize::{MessageKind, MessageParams, get_message_body, resolve_message_type};
 use oktz_router::{
     AccessGrant, Caller, Decision, DenyMode, GroupOverrides, GroupState, ModeSettings,
     ParseOptions, RateLimiter, Router, RouterContext, UserState, consume_auto_work, is_spamming,
+    parse_command,
 };
 use oktz_store::json_store::JsonStore;
 use serde_json::Value;
+use whatsapp_rust::RevokeType;
 use whatsapp_rust::http::{HttpClient, HttpRequest, UreqHttpClient};
 use whatsapp_rust::media::{ImageOptions, image_message};
 use whatsapp_rust::prelude::*;
@@ -53,6 +58,7 @@ use whatsapp_rust::wacore::download::MediaType;
 use whatsapp_rust::wacore_binary::Node;
 
 use crate::cards::{Card, biz_node};
+use crate::pipeline_gate::{self, GateState};
 
 // =============================================================================
 // 1. Normalisasi JID — port `getUser` (database.js:529-536)
@@ -373,6 +379,30 @@ impl StoreContext {
             .cloned()
             .unwrap_or(Value::Null)
     }
+
+    /// `settings.capenergi` (`handler.js:1856`) — override biaya energi per
+    /// plugin. Nilai `0` BERARTI "command ini gratis" dan harus tetap menang
+    /// atas `plugin.config.energi`, jadi setiap key ikut dibaca bukan hanya
+    /// yang truthy. Key non-numerik diabaikan, bukan diperlakukan `0`.
+    pub fn energy_overrides(&self) -> HashMap<String, i64> {
+        top(&self.store, "settings")
+            .and_then(|s| s.get("capenergi"))
+            .and_then(Value::as_object)
+            .map(|m| {
+                m.iter()
+                    .filter_map(|(k, v)| Some((k.clone(), v.as_i64()?)))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// `settings.energi` (`handler.js:1851-1854`). `None` berarti setting-nya
+    /// tidak ada, jadi ikut [`resolve_energi_enabled`] dengan nilai config.
+    pub fn energi_enabled_setting(&self) -> Option<bool> {
+        top(&self.store, "settings")
+            .and_then(|s| s.get("energi"))
+            .and_then(Value::as_bool)
+    }
 }
 
 // =============================================================================
@@ -448,6 +478,39 @@ pub trait MessageSender: Send + Sync {
             Err("pengirim ini tidak mendukung kirim media ( butuh Client )".to_string())
         })
     }
+
+    /// Hapus pesan untuk semua orang di chat (`sock.sendMessage(chat, {delete:
+    /// m.key})`, dipakai rantai group-protection di
+    /// `handler.js:811, 823, 848`).
+    ///
+    /// `original_sender` adalah pengirim pesan yang dihapus — WA membedakan
+    /// revoke-sendiri dari revoke-admin, dan ini yang kedua: bot menghapus
+    /// pesan orang lain, bukan pesan sendiri.
+    ///
+    /// Default-nya error dengan alasan yang sama seperti
+    /// [`MessageSender::send_media`]: diam berarti pesan terlarangan tetap
+    /// terlihat di grup, yaitu kegagalan yang paling mahal untuk tidak disadari.
+    fn delete_message(
+        &self,
+        _chat: &str,
+        _message_id: &str,
+        _original_sender: &str,
+    ) -> SendBox<'_> {
+        Box::pin(async move {
+            Err("pengirim ini tidak mendukung hapus pesan ( butuh Client )".to_string())
+        })
+    }
+
+    /// Reaksi ke pesan (`m.react("⏱️")`, `handler.js:1846`).
+    ///
+    /// Default-nya error dan hanya dilog, bukan dikembalikan sebagai kegagalan
+    /// ke pemanggil — di JS reaksi juga di-`.catch(() => {})`, jadi gagal
+    /// bereaksi tidak boleh menggagalkan pipeline.
+    fn react(&self, _chat: &str, _target: &wa::MessageKey, _emoji: &str) -> SendBox<'_> {
+        Box::pin(async move {
+            Err("pengirim ini tidak mendukung reaksi ( butuh Client )".to_string())
+        })
+    }
 }
 
 /// Sender sungguhan, membungkus `Arc<Client>`.
@@ -502,6 +565,61 @@ impl MessageSender for ClientSender {
             let message = build_media_message(media.kind, upload, &media);
             client
                 .send_message_with_options(jid, message, SendOptions::default())
+                .await
+                .map(|_| ())
+                .map_err(|e| e.to_string())
+        })
+    }
+
+    /// `Client::revoke_message` (`whatsapp-rust-0.7.0/src/send/actions.rs:14`).
+    ///
+    /// Bot menghapus pesan orang lain di grup, jadi `RevokeType::Admin` —
+    /// `RevokeType::Sender`-meaning `from_me=true` akan membuat WA mengarang
+    /// pesan kosong alih-alih menghapus (`actions.rs:33-38`), dan `Admin`
+    /// memang menolak di luar grup (`actions.rs:41-45`).
+    fn delete_message(
+        &self,
+        chat: &str,
+        message_id: &str,
+        original_sender: &str,
+    ) -> SendBox<'_> {
+        let client = self.client.clone();
+        let chat = chat.to_string();
+        let message_id = message_id.to_string();
+        let original_sender = original_sender.to_string();
+        Box::pin(async move {
+            let chat_jid: Jid = chat
+                .parse()
+                .map_err(|e| format!("JID grup tidak valid {chat}: {e}"))?;
+            let sender_jid: Jid = original_sender
+                .parse()
+                .map_err(|e| format!("JID pengirim tidak valid {original_sender}: {e}"))?;
+            client
+                .revoke_message(
+                    chat_jid,
+                    message_id,
+                    RevokeType::Admin {
+                        original_sender: sender_jid,
+                    },
+                )
+                .await
+                .map_err(|e| e.to_string())
+        })
+    }
+
+    /// `Client::send_reaction` (`whatsapp-rust-0.7.0/src/features/reaction.rs:35`)
+    /// dengan `MessageContext::message_key()` (`bot.rs:172`) sebagai target.
+    fn react(&self, chat: &str, target: &wa::MessageKey, emoji: &str) -> SendBox<'_> {
+        let client = self.client.clone();
+        let chat = chat.to_string();
+        let target = target.clone();
+        let emoji = emoji.to_string();
+        Box::pin(async move {
+            let jid: Jid = chat
+                .parse()
+                .map_err(|e| format!("JID tidak valid {chat}: {e}"))?;
+            client
+                .send_reaction(jid, target, &emoji)
                 .await
                 .map(|_| ())
                 .map_err(|e| e.to_string())
@@ -968,6 +1086,42 @@ pub fn extract_body(m: &wa::Message) -> Option<String> {
 // 7. Pipeline
 // =============================================================================
 
+/// `config.messages?.energiExceeded || "⚡ Energi habis!"` (`handler.js:1879`).
+/// Tidak datang dari store, jadi constant — `config.messages` tidak ada di
+/// `oktz_core::Config`.
+const ENERGI_EXCEEDED: &str = "⚡ Energi habis!";
+
+/// `MessageKey` untuk pesan inbound — port `MessageContext::message_key`
+/// (`whatsapp-rust-0.7.0/src/bot.rs:172-182`).
+///
+/// `MessageContext` adalah struct yang butuh `Arc<Client>`, sedangkan pipeline
+/// hanya pegang `Arc<dyn MessageSender>` yang mungkin tidak punya Client sama
+/// sekali (test, mode offline). Rumus key-nya pendek dan tidak bergantung
+/// Client, jadi disalin di sini; `participant` hanya diisi untuk grup/status
+/// karena di sana saja WA butuh untuk identifies pengirim asli.
+fn message_key_of(m: &InboundMessage) -> wa::MessageKey {
+    use whatsapp_rust::wacore_binary::JidExt;
+    let needs_participant =
+        m.info.source.is_group || m.info.source.chat.is_status_broadcast();
+    wa::MessageKey {
+        remote_jid: Some(m.info.source.chat.to_string()),
+        from_me: Some(m.info.source.is_from_me),
+        id: Some(m.info.id.clone()),
+        participant: needs_participant.then(|| m.info.source.sender.to_string()),
+    }
+}
+
+/// Sumber plugin untuk satu command. Default-nya registry global
+/// [`oktz_plugin_api::find`].
+///
+/// Ada sebagai seam, bukan sebagai kebutuhan produksi: `oktz-wa` tidak
+/// depend ke `oktz-plugins`, jadi registry plugin KOSONG di test binary crate
+/// ini — `#[plugin]` menulis ke `linkme::distributed_slice`, dan `linkme` bukan
+/// dependency langsung `oktz-wa`. Tanpa seam, gate cooldown dan energi tidak
+/// bisa diuji sama sekali karena keduanya butuh `meta.cooldown` / `meta.energi`
+/// dari plugin yang benar-benar terdaftar.
+pub type PluginLookup = Arc<dyn Fn(&str) -> Option<&'static PluginEntry> + Send + Sync>;
+
 /// Sumber roster grup. Pipeline yang tidak punya `Client` (test, mode offline)
 /// memakai [`NoRoster`] dan dapat roster kosong — sama dengan "tidak diketahui",
 /// bukan "grup ini kosong".
@@ -1183,6 +1337,16 @@ pub enum Outcome {
     Deduped,
     /// Kena rate limiter spam.
     SpamBlocked,
+    /// Rantai group-protection menghentikan pesan (`handler.js:770-871`).
+    /// Pesan sudah dihapus kalau gate-nya `DeleteAndStop`, jadi tidak ada
+    /// balasan yang dikirim — bedanya dari [`Outcome::Denied`] yang membalas.
+    GroupStopped,
+    /// Cooldown masih aktif: pipeline bereaksi `⏱️` dan membatalkan dispatch
+    /// (`handler.js:1846`). Tidak ada pesan yang dikirim.
+    CooldownBlocked,
+    /// Saldo energi kurang: user diberi tahu dan dispatch dibatalkan
+    /// (`handler.js:1879-1880`). Energi TIDAK dipotong.
+    EnergiDenied,
     /// Mode/permission ditolak, dan memang ada pesan yang dikirim.
     Denied,
     /// Plugin jalan dan balasan terkirim.
@@ -1197,12 +1361,39 @@ pub enum Outcome {
     MediaMissing,
 }
 
+/// `AutoWorkGuard` yang diikat ke satu pesan.
+///
+/// JS membuat guard baru per pesan (`handler.js:416-422`) lalu dibuang setelah
+/// pesan selesai. Di sini satu pesan diproses oleh satu task
+/// ([`Pipeline::run`]), jadi slot tunggal cukup: guard direset begitu
+/// `message_id` berganti. Scoped per-pesan dengan begini persis sama dengan
+/// scope JS, tapi tanpa alokasi per pesan.
+#[derive(Default)]
+struct AutoWorkSlot {
+    message_id: String,
+    guard: AutoWorkGuard,
+}
+
 pub struct Pipeline {
     ctx: Arc<StoreContext>,
     sender: Arc<dyn MessageSender>,
     dedup: Mutex<Dedup>,
     spam: Mutex<RateLimiter>,
     auto_work_limiter: Mutex<RateLimiter>,
+    /// Rantai group-protection. `OnceLock` karena rantai itu konstan —
+    /// daftar gate-nya sudah ditentukan saat compile.
+    group_guard: OnceLock<group::GroupGuard>,
+    /// Cooldown per `(user, command)`, saldo energi per user, dan timestamp
+    /// slowmode. Satu proses = satu instance; lihat catatan disk di
+    /// [`pipeline_gate`].
+    gates: Arc<GateState>,
+    /// `createAutoWorkGuard` (`handler.js:416-422`) — satu keputusan per pesan.
+    /// Auto-AI, transkripsi, dan smart trigger semua memanggil `allowAutoWork`
+    /// pada pesan yang sama; tanpa ini satu pesan bisa membakar kuota 6×.
+    auto_work: Mutex<AutoWorkSlot>,
+    /// Setelan energi global (`handler.js:1851-1854`). Override biaya
+    /// per-plugin dibaca per-message dari store, jadi tidak disimpan di sini.
+    energi_settings: EnergiSettings,
     parse_opts: ParseOptions,
     bot_id: String,
     identity: Identity,
@@ -1211,6 +1402,8 @@ pub struct Pipeline {
     /// Sumber roster grup. Default [`NoRoster`] supaya konstruktor tetap
     /// kompatibel dengan pemanggil lama (`bot.rs`).
     roster: Arc<dyn RosterSource>,
+    /// Registry plugin global, kecuali[`Pipeline::with_plugin_lookup`] menggantinya.
+    plugin_lookup: PluginLookup,
     /// Yang boleh dibaca handler plugin: store + cache roster.
     plugin_src: PluginCtxSource,
     /// Handler yang sudah dibungkus — satu per plugin.
@@ -1241,12 +1434,17 @@ impl Pipeline {
             dedup: Mutex::new(Dedup::new()),
             spam: Mutex::new(RateLimiter::command_global()),
             auto_work_limiter: Mutex::new(RateLimiter::auto_work()),
+            group_guard: OnceLock::new(),
+            gates: Arc::new(GateState::new()),
+            auto_work: Mutex::new(AutoWorkSlot::default()),
+            energi_settings: EnergiSettings::default(),
             parse_opts,
             bot_id: bot_id.into(),
             identity: Identity::default(),
             anti_spam_enabled: true,
             auto_work_settings: AutoWorkSettings::default(),
             roster: Arc::new(NoRoster),
+            plugin_lookup: Arc::new(oktz_plugin_api::find),
             wrapped: Mutex::new(WrappedHandlers::default()),
             subscription: Mutex::new(None),
         }
@@ -1268,6 +1466,38 @@ impl Pipeline {
         self
     }
 
+    /// Setelan gate energi (`config.energi`, `handler.js:1859-1862`).
+    pub fn with_energi_settings(mut self, settings: EnergiSettings) -> Self {
+        self.energi_settings = settings;
+        self
+    }
+
+    /// Setelan kuota auto-work (`config.autoWork`, `handler.js:382-408`).
+    pub fn with_auto_work_settings(mut self, settings: AutoWorkSettings) -> Self {
+        self.auto_work_settings = settings;
+        self
+    }
+
+    /// Ganti sumber plugin (test). Produksi tidak pernah memanggil ini.
+    pub fn with_plugin_lookup(mut self, lookup: PluginLookup) -> Self {
+        self.plugin_lookup = lookup;
+        self
+    }
+
+    /// State gate — tempat cooldown dan energi hidup. Dibaca test untuk
+    /// membuktikan charge terjadi tepat sekali.
+    pub fn gates(&self) -> &Arc<GateState> {
+        &self.gates
+    }
+
+    /// Bagikan state gate dengan pipeline lain di proses yang sama (test).
+    pub fn with_gate_state(self, gates: Arc<GateState>) -> Self {
+        Self {
+            gates,
+            ..self
+        }
+    }
+
     pub fn ctx(&self) -> &StoreContext {
         &self.ctx
     }
@@ -1278,16 +1508,36 @@ impl Pipeline {
 
     /// Kuota auto-work untuk fitur yang memang memakainya. Dipanggil per-fitur,
     /// bukan per-pesan — lihat catatan modul.
-    pub fn allow_auto_work(&self, caller: &Caller, key: &str, user_energi: Option<i64>, now_ms: i64) -> AutoWorkDecision {
-        let mut limiter = self.auto_work_limiter.lock().expect("auto_work limiter");
-        consume_auto_work(
-            &mut limiter,
-            caller,
-            key,
-            &self.auto_work_settings,
-            user_energi,
-            now_ms,
-        )
+    ///
+    /// `message_id` mengikat keputusan ke satu pesan: panggilan kedua pada
+    /// pesan yang sama membaca hasil yang tersimpan, jadi kuota tidak dibakar
+    /// dua kali (sesuai `createAutoWorkGuard`, `handler.js:416-422`).
+    pub fn allow_auto_work(
+        &self,
+        message_id: &str,
+        caller: &Caller,
+        key: &str,
+        user_energi: Option<i64>,
+        now_ms: i64,
+    ) -> AutoWorkDecision {
+        let mut slot = self.auto_work.lock().unwrap_or_else(|e| e.into_inner());
+        if slot.message_id != message_id {
+            slot.message_id.clear();
+            slot.message_id.push_str(message_id);
+            slot.guard = AutoWorkGuard::new();
+        }
+        let settings = self.auto_work_settings;
+        slot.guard.allow(|| {
+            let mut limiter = self.auto_work_limiter.lock().expect("auto_work limiter");
+            consume_auto_work(
+                &mut limiter,
+                caller,
+                key,
+                &settings,
+                user_energi,
+                now_ms,
+            )
+        })
     }
 
     /// Caller dari `MessageInfo.source` (`MessageSource`, wacore-0.7.0
@@ -1305,6 +1555,200 @@ impl Pipeline {
             is_premium: self.identity.is_premium(&sender),
             is_admin: s.is_group && self.identity.is_admin(&sender),
             is_bot_admin: false,
+        }
+    }
+
+    /// Bentuk buggy `sock.user.id.split(":")[0] + "@s.whatsapp.net"` yang dipakai
+    /// `handleAntilink*` (`group-protection.js:1327/1898/1953`). Gate yang pakai
+    /// bentuk yang benar (`botJidOf`) memang tidak di-port ke `group.rs`.
+    fn bot_id_at(&self) -> String {
+        let id = self.bot_id.split(':').next().unwrap_or(&self.bot_id);
+        format!("{id}@s.whatsapp.net")
+    }
+
+    /// Caller untuk rantai group-protection, dari flag yang sudah dibaca
+    /// [`Pipeline::caller_of`] plus sisa field yang cuma group.rs yang baca.
+    ///
+    /// `is_bot_admin` diisi dari roster, bukan `false` seperti di
+    /// [`Pipeline::caller_of`]: tanpa itu, gate yang butuh menghapus pesan akan
+    /// selalu melihat "bot bukan admin" dan membalas `NOT_ADMIN`.
+    fn group_caller_of(
+        &self,
+        m: &InboundMessage,
+        caller: &Caller,
+        body: &str,
+        roster: &GroupRoster,
+    ) -> GroupCaller {
+        let sender = caller.sender.clone();
+        // `m.key.participant` — di grup addressing LID ini bisa beda dari
+        // `m.sender`; `is_admin_check` mencocokkan keduanya.
+        let participant = m
+            .message
+            .get_base_message()
+            .extended_text_message
+            .as_option()
+            .and_then(|e| e.context_info.as_option())
+            .and_then(|c| c.participant.clone());
+        let parsed = parse_command(body, &self.parse_opts);
+        GroupCaller {
+            sender: sender.clone(),
+            participant,
+            chat: caller.chat.clone(),
+            is_group: caller.is_group,
+            // `is_newsletter` — grup tidak punya DialogType newsletter, dan
+            // `group_guard` sendiri sudah melewati apa pun yang bukan grup.
+            is_newsletter: false,
+            is_owner: caller.is_owner,
+            is_admin: caller.is_admin,
+            is_partner: caller.is_partner,
+            is_bot_admin: roster.is_bot_admin,
+            from_me: m.info.source.is_from_me,
+            is_command: parsed.is_command,
+            is_document: wire_type_of(&m.message) == MessageKind::Document.wire_type(),
+            message_type: wire_type_of(&m.message).to_string(),
+            body: body.to_string(),
+            mentioned_jid: m
+                .message
+                .get_base_message()
+                .extended_text_message
+                .as_option()
+                .and_then(|e| e.context_info.as_option())
+                .map(|c| c.mentioned_jid.clone())
+                .unwrap_or_default(),
+            participant_count: roster.participants.len(),
+        }
+    }
+
+    /// Plugin yang AKAN dipanggil router untuk pesan ini, atau `None` kalau
+    /// router akan menolak/menolak diam sebelum dispatch.
+    ///
+    /// Mengulang langkah 1-4 [`Router::route`] (`oktz-router/src/lib.rs:94-139`)
+    /// dengan fungsi yang PERSAMA, jadi hasilnya tidak mungkin beda dari
+    /// keputusan router. Semua fungsi itu murni — tanpa I/O, tanpa efek
+    /// samping — jadi mengulangnya aman; yang tidak boleh diulang adalah
+    /// `handler(c)` di langkah 5, dan itulah yang tidak diulang.
+    ///
+    /// Mengembalikan `Some` berarti gate 4/5 boleh membakar kuota: kalau
+    /// router ternyata menolak nanti (karena state berubah di antara dua
+    /// pemanggilan), konsekuensinya sama seperti di JS, karena JS juga punya
+    /// jendela di antara permission dan dispatch.
+    fn dispatch_target(
+        &self,
+        caller: &mut Caller,
+        body: &str,
+        lookup: impl Fn(&str) -> Option<&'static PluginEntry>,
+        now_ms: i64,
+    ) -> Option<&'static PluginEntry> {
+        use oktz_router::{mode, permission};
+        let parsed = parse_command(body, &self.parse_opts);
+        if !parsed.is_command {
+            return None;
+        }
+        // `caller.command` diisi router di `route` (lib.rs:92); diisi di sini
+        // juga supaya `start_cooldown` setelah dispatch memakai nama yang
+        // sama dengan yang dilihat gate.
+        caller.command = parsed.command.clone();
+
+        // 1. Mode global (handler.js:879).
+        let overrides = if caller.is_group {
+            self.ctx.group_overrides(&caller.chat)
+        } else {
+            None
+        };
+        mode::check_mode(caller, &self.ctx.mode_settings(), overrides).ok()?;
+
+        let entry = lookup(&parsed.command)?;
+
+        // 2. Permission (handler.js:1810).
+        permission::check(
+            caller,
+            &self.ctx.user_state(&caller.sender),
+            &permission::PermissionInput {
+                meta: &entry.meta,
+                now_ms,
+                capprem: self.ctx.capprem(&entry.meta.name),
+                group: if caller.is_group {
+                    self.ctx.group_state(&caller.chat)
+                } else {
+                    None
+                },
+            },
+        )
+        .ok()?;
+
+        // 3. botMode per-grup (handler.js:1709).
+        if caller.is_group && !caller.is_owner && !caller.is_admin {
+            let bot_mode = self.ctx.group_bot_mode(&caller.chat);
+            mode::group_feature_mode(caller, &entry.meta, None, &bot_mode, false).ok()?;
+        }
+        Some(entry)
+    }
+
+    /// Kirim hasil render: media lewat jalur upload, teks lewat `send`.
+    async fn deliver(&self, chat: &str, rendered: Rendered) -> Result<(), PipelineError> {
+        // `Rendered` untuk media sengaja punya `message` kosong, jadi TIDAK
+        // mungkin terkirim apa adanya — harus lewat `send_media`.
+        let sent = match rendered.media {
+            Some(pending) => self.sender.send_media(chat, pending).await,
+            None => self
+                .sender
+                .send(chat, rendered.message, rendered.extra_nodes)
+                .await,
+        };
+        sent.map_err(|e| PipelineError::Other(format!("gagal kirim: {e}")))
+    }
+
+    /// `db.setting("capenergi") || {}` (`handler.js:1856`) — override biaya
+    /// per-plugin. Dibaca per-pesan supaya perubahan dari panel langsung berlaku.
+    fn cap_energi_overrides(&self) -> HashMap<String, i64> {
+        self.ctx
+            .energy_overrides()
+    }
+
+    /// Eksekusi keputusan rantai group-protection di live path.
+    ///
+    /// Urutan delete → reply mengikuti JS: `await sock.sendMessage(m.chat,
+    /// {delete: m.key}); await m.reply(...)` (`handler.js:811/823/848`). Reply
+    /// TANPA delete dikirim apa adanya; `DeleteAndStop` tidak mengirim apa pun.
+    ///
+    /// Kegagalan delete TIDAK membatalkan reply dan tidak menggagalkan
+    /// pipeline — di JS `sock.sendMessage` pada gate ini dibungkus `try/catch`
+    /// yang menelan error, jadi meniru `?` di sini akan mengubah perilaku.
+    async fn execute_group_decision(
+        &self,
+        decision: group::Decision,
+        m: &InboundMessage,
+        caller: &Caller,
+    ) -> Result<Outcome, PipelineError> {
+        let deletes = matches!(
+            decision,
+            group::Decision::DeleteAndStop
+                | group::Decision::DeleteAndReply(_)
+                | group::Decision::KickAndReply(_)
+        );
+        if deletes
+            && let Err(e) = self
+                .sender
+                .delete_message(&caller.chat, &m.info.id, &caller.sender)
+                .await
+        {
+            tracing::warn!(
+                error = %e,
+                chat = %caller.chat,
+                id = %m.info.id,
+                "gagal menghapus pesan terlarangan"
+            );
+        }
+        match decision.reply_text() {
+            Some(text) => {
+                let reply = Reply::text(text);
+                let quote = QuoteSource::from_inbound(m);
+                if let Some(rendered) = render_reply(&reply, quote.as_ref())? {
+                    self.deliver(&caller.chat, rendered).await?;
+                }
+                Ok(Outcome::Sent)
+            }
+            None => Ok(Outcome::GroupStopped),
         }
     }
 
@@ -1371,7 +1815,51 @@ impl Pipeline {
             return Ok(Outcome::Deduped);
         }
 
-        // Spam: kunci `${botId}_${m.sender}` (handler.js:1508).
+        // Roster dimuat SEBELUM gate grup supaya `isBotAdmin` (yang menentukan
+        // boleh/tidaknya bot menghapus pesan) benar, dan supaya plugin pertama
+        // yang jalan melihat `Ctx` lengkap. Router tidak punya Client maupun
+        // store.
+        let roster = self.roster_of(&caller.chat, caller.is_group).await;
+
+        // --- Gate 1: rantai group-protection (`handler.js:770-871`) ---------
+        // Dijalankan untuk SETIAP pesan grup, sebelum command apa pun. Ini
+        // yang membuat `DeleteAndStop` masuk akal: pesan sudah hilang dari
+        // grup sebelum plugin pernah melihatnya.
+        if caller.is_group {
+            let settings = pipeline_gate::group_settings_from(&self.ctx.group_entry(&caller.chat));
+            let env = GateEnv {
+                // `sock.user.id.split(":")[0] + "@s.whatsapp.net"` — bentuk
+                // buggy yang dipakai `handleAntilink*`
+                // (group-protection.js:1327/1898/1953); group.rs sudah tahu.
+                bot_number: self.bot_id_at().to_string(),
+                bot_lid: None,
+                self_mode: self.ctx.mode_settings().mode.eq_ignore_ascii_case("self"),
+                participants: pipeline_gate::participants_from(&roster),
+                now_ms,
+            };
+            let gcaller = self.group_caller_of(m, &caller, &body, &roster);
+            let slow_key = format!("{}_{}", caller.chat, caller.sender);
+            let input = group::GateInput {
+                caller: &gcaller,
+                settings: &settings,
+                env: &env,
+                last_message_ms: self.gates.last_message_ms(&slow_key),
+            };
+            let (decision, record) = self
+                .group_guard
+                .get_or_init(group::default_gate_chain)
+                .run_with_record(&input);
+            // `lastMessageTime.set()` hanya saat rantai lolos (`slowmode.js:142`).
+            if record {
+                self.gates.record_message(&slow_key, now_ms);
+            }
+            if !matches!(decision, group::Decision::Allow) {
+                return self.execute_group_decision(decision, m, &caller).await;
+            }
+        }
+
+        // --- Gate 2: rate limiter spam (`handler.js:1508`) ------------------
+        // Hanya untuk yang bukan owner/premium — dicek di dalam `is_spamming`.
         let spam_key = format!("{}_{}", self.bot_id, caller.sender);
         if is_spamming(
             &mut self.spam.lock().expect("spam"),
@@ -1383,21 +1871,83 @@ impl Pipeline {
             return Ok(Outcome::SpamBlocked);
         }
 
-        // Roster dimuat SEBELUM route supaya plugin pertama yang jalan sudah
-        // melihat `Ctx` lengkap. Router tidak punya Client maupun store.
-        self.roster_of(&caller.chat, caller.is_group).await;
+        let lookup = |cmd: &str| {
+            let real = (self.plugin_lookup)(cmd)?;
+            // Kunci hanya selama lookup cache; TIDAK dipegang lintas
+            // pemanggilan handler, jadi dua pesan paralel tidak saling blokir.
+            Some(
+                self.wrapped
+                    .lock()
+                    .expect("wrapped handlers")
+                    .get_or_insert(real, &self.plugin_src),
+            )
+        };
+
+        // --- Gate 3: kuota auto-work + `AutoWorkGuard` ----------------------
+        // Gate-nya dibakar per-FEATURE yang memakainya, bukan per-pesan: di JS
+        // `allowAutoWork()` dipanggil auto-AI, CAI chat, auto-download,
+        // auto-join, transkripsi, dan smart trigger saja
+        // (`handler.js:984,1129,1136,1143,1149,1422`), tidak pernah untuk
+        // command biasa. Membakarnya per-pesan akan menguras kuota orang yang
+        // cuma mengetik `/menu`. Yang dijaga di sini adalah memoization-nya:
+        // satu pesan tidak boleh membakar kuota lebih dari sekali
+        // (`createAutoWorkGuard`, `handler.js:416-422`) — itu yang
+        // [`Pipeline::allow_auto_work`] jamin.
+        //
+        // --- Gate 4 + 5: cooldown lalu energi, HANYA untuk pesan yang akan
+        // benar-benar dispatch -------------------------------------------
+        // `Router::route` menyatukan permission DAN pemanggilan handler
+        // (`oktz-router/src/lib.rs:122-159`), sedangkan JS memakai permission
+        // di 1810, cooldown di 1837, energi di 1851, baru dispatch di 1896.
+        // Gate 4/5 butuh `meta` plugin, jadi keduanya hanya jalan setelah
+        // router menyatakan pesan ini layak — kalau tidak, user yang
+        // permission-nya ditolak akan tetap kehilangan energi dan cooldown-nya
+        // dibakar untuk command yang tidak pernah dieksekusi.
+        // ------------------------------------------------------------------------
+        let mut cooldown_key: Option<(String, u32)> = None;
+        if let Some(entry) = self.dispatch_target(&mut caller, &body, lookup, now_ms) {
+            cooldown_key = Some((entry.meta.name.clone(), entry.meta.cooldown));
+            let meta = &entry.meta;
+            // `cmdKey` (`handler.js:1816`) — nama plugin, bukan command yang
+            // diketik user, jadi alias menulis cooldown yang sama.
+            let cmd_key = meta.name.as_str();
+
+            if self
+                .gates
+                .cooldown_remaining(&caller, cmd_key, meta.cooldown, now_ms)
+                .is_some()
+            {
+                // `m.react("⏱️")` gagal tidak boleh menggagalkan pipeline —
+                // di JS juga `.catch(() => {})`.
+                if let Err(e) = self
+                    .sender
+                    .react(&caller.chat, &message_key_of(m), "⏱️")
+                    .await
+                {
+                    tracing::warn!(error = %e, "gagal bereaksi cooldown");
+                }
+                return Ok(Outcome::CooldownBlocked);
+            }
+
+            // `energiEnabled = db.setting("energi") !== undefined ? ... : config.energi?.enabled !== false`
+            // (`handler.js:1851-1854`) — setting store menang atas config.
+            let mut energi = self.energi_settings;
+            energi.enabled =
+                resolve_energi_enabled(self.ctx.energi_enabled_setting(), self.energi_settings.enabled);
+            let energy =
+                self.gates
+                    .charge_energi(&caller, meta, &energi, &self.cap_energi_overrides());
+            if !energy.allowed {
+                let reply = Reply::text(ENERGI_EXCEEDED);
+                let quote = QuoteSource::from_inbound(m);
+                if let Some(rendered) = render_reply(&reply, quote.as_ref())? {
+                    self.deliver(&caller.chat, rendered).await?;
+                }
+                return Ok(Outcome::EnergiDenied);
+            }
+        }
+
         {
-            let lookup = |cmd: &str| {
-                let real = oktz_plugin_api::find(cmd)?;
-                // Kunci hanya selama lookup cache; TIDAK dipegang lintas
-                // pemanggilan handler, jadi dua pesan paralel tidak saling blokir.
-                Some(
-                    self.wrapped
-                        .lock()
-                        .expect("wrapped handlers")
-                        .get_or_insert(real, &self.plugin_src),
-                )
-            };
             // `&*self.ctx`: trait-nya diimplementasikan untuk `StoreContext`, bukan
             // `Arc<StoreContext>` — Arc cuma dipakai supaya bisa dipegang wrapper.
             let router = Router::new(&*self.ctx, self.parse_opts.clone(), now_ms);
@@ -1420,17 +1970,15 @@ impl Pipeline {
                 Outcome::Denied
             };
 
-            // Media lewat jalur upload; `message` yang ada di `Rendered` media
-            // sengaja kosong, jadi TIDAK mungkin terkirim apa adanya.
-            let sent = match rendered.media {
-                Some(pending) => self.sender.send_media(&caller.chat, pending).await,
-                None => self
-                    .sender
-                    .send(&caller.chat, rendered.message, rendered.extra_nodes)
-                    .await,
-            };
-            if let Err(e) = sent {
-                return Err(PipelineError::Other(format!("gagal kirim: {e}")));
+            self.deliver(&caller.chat, rendered).await?;
+
+            // Cooldown baru mulai SETELAH handler selesai
+            // (`handler.js:1922-1924`), jadi command yang gagal di tengah tidak
+            // membekukan cooldown.
+            if matches!(decision, Decision::Handled(_))
+                && let Some((name, secs)) = cooldown_key
+            {
+                self.gates.start_cooldown(&caller, &name, secs, now_ms);
             }
             Ok(outcome)
         }
@@ -1561,6 +2109,27 @@ mod tests {
     struct RecordingSender {
         sent: Arc<Mutex<Vec<(String, wa::Message, usize)>>>,
         media: Arc<Mutex<Vec<(String, PendingMedia)>>>,
+        /// `(chat, message_id, original_sender)` per panggilan hapus.
+        deleted: Arc<Mutex<Vec<(String, String, String)>>>,
+        /// `(chat, emoji)` per panggilan reaksi.
+        reacted: Arc<Mutex<Vec<(String, String)>>>,
+    }
+
+    impl RecordingSender {
+        fn deleted(&self) -> Vec<(String, String, String)> {
+            self.deleted.lock().unwrap().clone()
+        }
+        fn reacted(&self) -> Vec<(String, String)> {
+            self.reacted.lock().unwrap().clone()
+        }
+        fn texts(&self) -> Vec<String> {
+            self.sent
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|(to, m, _)| format!("{to}: {}", body_of(m).unwrap_or("<non-teks>")))
+                .collect()
+        }
     }
 
     impl MessageSender for RecordingSender {
@@ -1578,6 +2147,59 @@ mod tests {
                 .unwrap()
                 .push((to.to_string(), media));
             Box::pin(async move { Ok(()) })
+        }
+
+        fn delete_message(
+            &self,
+            chat: &str,
+            message_id: &str,
+            original_sender: &str,
+        ) -> SendBox<'_> {
+            self.deleted.lock().unwrap().push((
+                chat.to_string(),
+                message_id.to_string(),
+                original_sender.to_string(),
+            ));
+            Box::pin(async move { Ok(()) })
+        }
+
+        fn react(&self, chat: &str, _target: &wa::MessageKey, emoji: &str) -> SendBox<'_> {
+            self.reacted
+                .lock()
+                .unwrap()
+                .push((chat.to_string(), emoji.to_string()));
+            Box::pin(async move { Ok(()) })
+        }
+    }
+
+    /// Roster tetap yang mengaku bot sebagai admin grup.
+    struct AdminRoster;
+
+    impl RosterSource for AdminRoster {
+        fn roster(&self, _chat: &str) -> SendBoxRoster<'_> {
+            Box::pin(async {
+                Ok(GroupRoster {
+                    is_bot_admin: true,
+                    participants: vec![
+                        Participant {
+                            jid: "628111@s.whatsapp.net".into(),
+                            is_admin: false,
+                            is_owner: false,
+                        },
+                        Participant {
+                            jid: "628222@s.whatsapp.net".into(),
+                            is_admin: true,
+                            is_owner: true,
+                        },
+                        // Bot = participant admin dengan nomor "bot".
+                        Participant {
+                            jid: "628999@lid".into(),
+                            is_admin: true,
+                            is_owner: false,
+                        },
+                    ],
+                })
+            })
         }
     }
 
@@ -2373,10 +2995,49 @@ fn group_number_and_long_number_are_rejected() {
             p.process(&m, 2_000).await.unwrap();
         }
         // Kuota 10/menit; 5 perintah biasa tidak boleh memakainya -> saldo penuh.
+        // `W{i}` yang berbeda dari id pesan di atas, jadi guard-nya belum diputus.
         for i in 0..10 {
-            let d = p.allow_auto_work(&caller, "auto", Some(999_999), 3_000);
+            let d = p.allow_auto_work(&format!("probe{i}"), &caller, "auto", Some(999_999), 3_000);
             assert!(d.allowed, "kuota tak boleh terpakai: #{i}");
         }
+    }
+
+    #[tokio::test]
+    async fn auto_work_guard_charges_once_per_message_not_once_per_caller() {
+        // `createAutoWorkGuard` (handler.js:416-422): auto-AI, CAI chat,
+        // auto-download, auto-join, transkripsi, dan smart trigger semuanya
+        // panggil `allowAutoWork()` pada pesan yang sama. Tanpa memoization
+        // satu pesan bisa membakar kuota berkali-kali.
+        let (p, _s) = pipeline_with("{}", Identity::default());
+        let caller = Caller {
+            sender: "6281@s.whatsapp.net".into(),
+            chat: "6281@s.whatsapp.net".into(),
+            ..Default::default()
+        };
+        // Satu pesan, enam fitur auto-work — seperti di JS.
+        let mut hits = 0;
+        for _ in 0..6 {
+            let d = p.allow_auto_work("MSG-1", &caller, "auto", Some(999_999), 1_000);
+            if d.allowed {
+                hits += 1;
+            }
+            assert_eq!(d.deduct, 1, "potongan selalu sama, di-cache atau bukan");
+        }
+        assert_eq!(hits, 6, "semua caller melihat keputusan yang sama");
+
+        // Bukti bahwa kuota benar-benar dibakar SATU kali, bukan enam: kuota
+        // 10/menit, MSG-1 sudah memakai titik ke-1, jadi 9 pesan berikutnya
+        // masih muat (titik 2..10).
+        for i in 0..9 {
+            let d = p.allow_auto_work(&format!("next{i}"), &caller, "auto", Some(999_999), 1_000);
+            assert!(d.allowed, "pesan #{i} seharusnya masih punya kuota");
+        }
+        // Titik ke-11 habis. Kalau MSG-1 sempat membakar 6, titik ke-11 ini
+        // masih muat — jadi test ini memang menangkap peng Calculating ganda.
+        assert!(
+            !p.allow_auto_work("last", &caller, "auto", Some(999_999), 1_000).allowed,
+            "kuota harus habis setelah 10 titik, jadi MSG-1 membakar tepat 1"
+        );
     }
 
     #[tokio::test]
@@ -2980,5 +3641,495 @@ fn group_number_and_long_number_are_rejected() {
             );
             tokio::time::sleep(std::time::Duration::from_millis(5)).await;
         }
+    }
+
+    // =====================================================================
+    // Gate di live path — semua memakai `RecordingSender`, tanpa koneksi WA
+    // =====================================================================
+
+    /// Plugin uji nyata untuk gate.
+///
+/// `oktz-wa` tidak depend ke `oktz-plugins`, jadi registry plugin kosong di
+/// test binary ini — `#[plugin]` menulis ke `linkme::distributed_slice`, dan
+/// `linkme` bukan dependency langsung `oktz-wa` (lihat
+/// [`PluginLookup`]). Jadi plugin-nya dibuat langsung dan dipasang lewat
+/// `with_plugin_lookup`.
+///
+/// Yang dibuktikan test ini bukan cuma "tidak ada balasan", tapi "handler
+/// plugin benar-benar tidak dipanggil": `calls` dihitung DI DALAM handler.
+struct TestPlugin {
+    entry: &'static PluginEntry,
+    calls: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl TestPlugin {
+    fn new(cooldown: u32, energi: i64, is_premium: bool) -> Self {
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = Arc::clone(&calls);
+        let entry: &'static PluginEntry = Box::leak(Box::new(PluginEntry {
+            meta: oktz_plugin_api::meta::PluginMeta {
+                name: "gatetest".into(),
+                category: "fun".into(),
+                cooldown,
+                energi,
+                is_premium,
+                is_private: false,
+                ..Default::default()
+            },
+            handler: Arc::new(move |_c: Ctx| {
+                counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                Reply::text("gatetest:jalan")
+            }),
+        }));
+        Self { entry, calls }
+    }
+
+    fn calls(&self) -> usize {
+        self.calls.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Lookup yang menjawab command apa pun ke plugin ini — cukup untuk
+    /// membuktikan gate, tanpa perlu mendaftarkan 30 plugin sungguhan.
+    fn lookup(&self) -> PluginLookup {
+        let entry = self.entry;
+        Arc::new(move |_cmd| Some(entry))
+    }
+
+    fn pipeline_with_sender(
+        &self,
+        ctx: StoreContext,
+        sender: Arc<RecordingSender>,
+        energi: EnergiSettings,
+    ) -> Pipeline {
+        Pipeline::new(ctx, sender, BOT, ParseOptions::default())
+            .with_identity(Identity::default())
+            .with_plugin_lookup(self.lookup())
+            .with_energi_settings(energi)
+    }
+}
+
+    const GROUP: &str = "120363@g.us";
+    const MEMBER: &str = "628111@s.whatsapp.net";
+    /// `bot_id` harus mengandung angka karena `is_bot_admin_check` membandingkan
+    /// digit (`digits("628999@s.whatsapp.net")` = "628999"), dan roster
+    /// [`AdminRoster`] menaruh bot di `628999@lid`.
+    const BOT: &str = "628999";
+
+    /// Tier default 1 — cukup untuk membuktikan gate menolak, dan cukup untuk
+    /// membuktikan `capenergi: 0` benar-benar mematikan biaya. Owner/premium
+    /// `-1` (tak terbatas) sudah sesuai `config.js:112-117`.
+    fn poor() -> EnergiSettings {
+        EnergiSettings {
+            enabled: true,
+            owner: -1,
+            premium: -1,
+            default: 1,
+        }
+    }
+
+    /// Pipeline DM yang memakai plugin uji. Sender dikembalikan supaya test
+    /// bisa memeriksa isi pesan yang benar-benar terkirim.
+    fn dm(plugin: &TestPlugin, store: &str, energi: EnergiSettings) -> (Arc<Pipeline>, Arc<RecordingSender>) {
+        let sender = Arc::new(RecordingSender::default());
+        let ctx = StoreContext::new(store_with(&format!("gate-dm-{}", n()), store));
+        let p = plugin.pipeline_with_sender(ctx, sender.clone(), energi);
+        (Arc::new(p), sender)
+    }
+
+    /// Pipeline grup dengan roster yang mengaku bot admin — tanpa itu gate
+    /// hapus-pesan membalas `NOT_ADMIN` alih-alih menghapus.
+    fn grp(plugin: &TestPlugin, store: &str) -> (Arc<Pipeline>, Arc<RecordingSender>) {
+        let sender = Arc::new(RecordingSender::default());
+        let ctx = StoreContext::new(store_with(&format!("gate-grp-{}", n()), store));
+        let p = plugin
+            .pipeline_with_sender(ctx, sender.clone(), EnergiSettings::default())
+            .with_roster_source(Arc::new(AdminRoster));
+        (Arc::new(p), sender)
+    }
+
+    fn n() -> usize {
+        SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    }
+
+    fn inbound_n(body: &str, sender: &str, chat: &str, is_group: bool) -> InboundMessage {
+        inbound(body, sender, chat, is_group, &format!("M{}", n()))
+    }
+
+    // --- Gate 1: rantai group-protection ------------------------------
+
+    #[tokio::test]
+    async fn blocked_link_in_group_is_deleted_and_the_plugin_never_runs() {
+        // `antilink: "on"` → `handleAntilink` (handler.js:782) →
+        // `DeleteAndReply`: pesan dihapus, peringatan dikirim, chain berhenti
+        // SEBELUM dispatch.
+        let plug = TestPlugin::new(3, 0, false);
+        let (p, s) = grp(&plug, r#"{"groups": {"120363@g.us": {"antilink": "on"}}}"#);
+        // `.example` bukan TLD, jadi `contains_link` (group.rs:746) sengaja tidak
+        // menghitungnya — pakai host sungguhan.
+        let m = inbound_n(".gatetest https://contoh.com/x", MEMBER, GROUP, true);
+        let out = p.process(&m, 1_000).await.unwrap();
+
+        assert_eq!(out, Outcome::Sent, "gate membalas peringatan, bukan plugin");
+        assert_eq!(plug.calls(), 0, "handler plugin TIDAK boleh dipanggil");
+        assert_eq!(
+            s.deleted(),
+            vec![(GROUP.to_string(), m.info.id.clone(), MEMBER.to_string())],
+            "pesan link harus dihapus untuk semua orang"
+        );
+        let texts = s.texts();
+        assert_eq!(texts.len(), 1, "tepat satu balasan: {texts:?}");
+        assert!(
+            texts[0].contains("Antilink"),
+            "balasan harus peringatan antilink, bukan hasil plugin: {:?}",
+            texts[0]
+        );
+    }
+
+    #[tokio::test]
+    async fn delete_and_stop_removes_the_message_and_says_nothing() {
+        // `mute: true` → `gate_mute` (handler.js:809) → `DeleteAndStop`:
+        // bot admin menghapus, TANPA balasan. Inilah yang butuh API delete
+        // sungguhan — tanpa `delete_message` pesannya hanya diam dan tetap
+        // terlihat di grup.
+        let plug = TestPlugin::new(3, 0, false);
+        let (p, s) = grp(&plug, r#"{"groups": {"120363@g.us": {"mute": true}}}"#);
+        let m = inbound_n(".gatetest halo", MEMBER, GROUP, true);
+        let out = p.process(&m, 1_000).await.unwrap();
+
+        assert_eq!(out, Outcome::GroupStopped);
+        assert_eq!(plug.calls(), 0, "plugin harus berhenti di chain");
+        assert_eq!(s.deleted().len(), 1, "pesan harus dihapus");
+        assert!(
+            s.sent.lock().unwrap().is_empty(),
+            "DeleteAndStop tidak mengirim apa pun, tapi terkirim: {:?}",
+            s.texts()
+        );
+    }
+
+    #[tokio::test]
+    async fn group_chain_runs_before_the_plugin_even_for_a_valid_command() {
+        // Tanpa gate, `.gatetest halo` di grup yang dimute akan tetap dibalas
+        // plugin-nya. Ini yang mengunci urutan: chain < dispatch.
+        let plug = TestPlugin::new(3, 0, false);
+        let (p, s) = grp(&plug, r#"{"groups": {"120363@g.us": {"mute": true}}}"#);
+        let m = inbound_n(".gatetest halo", MEMBER, GROUP, true);
+        p.process(&m, 1_000).await.unwrap();
+        assert_eq!(plug.calls(), 0);
+        assert!(s.sent.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn group_admin_is_exempt_from_the_chain() {
+        // `!isAdmin && !isOwner` ada di handler JS untuk mute/hidetag/mutegc,
+        // jadi admin grup yang mengirim pesan tidak dihapus.
+        let plug = TestPlugin::new(3, 0, false);
+        let sender = Arc::new(RecordingSender::default());
+        let mut id = Identity::default();
+        id.admins.insert("628222@s.whatsapp.net".to_string());
+        let p = plug
+            .pipeline_with_sender(
+                StoreContext::new(store_with("admin-exempt", "{}")),
+                sender.clone(),
+                EnergiSettings::default(),
+            )
+            .with_roster_source(Arc::new(AdminRoster))
+            .with_identity(id);
+        let p = Arc::new(p);
+
+        let m = inbound_n(".gatetest halo", "628222@s.whatsapp.net", GROUP, true);
+        let out = p.process(&m, 1_000).await.unwrap();
+
+        assert_ne!(out, Outcome::GroupStopped, "admin tidak boleh dihapus");
+        assert!(sender.deleted().is_empty(), "tidak boleh ada delete");
+        assert_eq!(plug.calls(), 1, "command admin harus sampai ke plugin");
+    }
+
+    // --- Gate 2: rate limiter spam ------------------------------------
+
+    #[tokio::test]
+    async fn spammed_user_is_dropped_and_the_plugin_stops_running() {
+        // Limiter global 8 titik / 3 detik (`gates.rs:64-66`).
+        let plug = TestPlugin::new(0, 0, false);
+        let (p, s) = dm(&plug, "{}", EnergiSettings::default());
+        let mut ran = 0;
+        for i in 0..12 {
+            let before = s.sent.lock().unwrap().len();
+            let m = inbound_n(".gatetest halo", MEMBER, MEMBER, false);
+            if p.process(&m, 2_000).await.unwrap() == Outcome::SpamBlocked {
+                assert_eq!(
+                    s.sent.lock().unwrap().len(),
+                    before,
+                    "pesan #{i} kena spam tapi pipeline tetap mengirim"
+                );
+            } else {
+                ran += 1;
+            }
+        }
+        assert_eq!(ran, 8, "tepat 8 yang lolos");
+        assert_eq!(plug.calls(), 8, "plugin hanya jalan untuk 8 pesan itu");
+    }
+
+    #[tokio::test]
+    async fn owner_never_hits_the_spam_limiter() {
+        // `handler.js:1508`: `!m.isOwner && !m.isPremium`.
+        let plug = TestPlugin::new(0, 0, false);
+        let mut id = Identity::default();
+        id.owners.insert(MEMBER.to_string());
+        let sender = Arc::new(RecordingSender::default());
+        let p = Arc::new(
+            plug
+                .pipeline_with_sender(
+                    StoreContext::new(store_with("spam-owner", "{}")),
+                    sender,
+                    EnergiSettings::default(),
+                )
+                .with_identity(id),
+        );
+
+        for _ in 0..30 {
+            let m = inbound_n(".gatetest halo", MEMBER, MEMBER, false);
+            assert_ne!(
+                p.process(&m, 2_000).await.unwrap(),
+                Outcome::SpamBlocked,
+                "owner diblokir"
+            );
+        }
+        assert_eq!(plug.calls(), 30, "owner tidak pernah kena limiter");
+    }
+
+    // --- Gate 4: cooldown ---------------------------------------------
+
+    #[tokio::test]
+    async fn user_in_cooldown_gets_the_reaction_path_and_no_dispatch() {
+        let plug = TestPlugin::new(3, 0, false);
+        let (p, s) = dm(&plug, "{}", EnergiSettings::default());
+
+        let first = inbound_n(".gatetest halo", MEMBER, MEMBER, false);
+        assert_eq!(p.process(&first, 1_000).await.unwrap(), Outcome::Sent);
+        assert_eq!(plug.calls(), 1, "command pertama jalan");
+        assert_eq!(s.texts().len(), 1);
+
+        // Pemanggilan kedua dalam cooldown → reaksi, bukan pesan.
+        let second = inbound_n(".gatetest halo", MEMBER, MEMBER, false);
+        let out = p.process(&second, 2_000).await.unwrap();
+        assert_eq!(out, Outcome::CooldownBlocked);
+        assert_eq!(plug.calls(), 1, "plugin TIDAK boleh jalan dua kali");
+        assert_eq!(s.reacted(), vec![(MEMBER.to_string(), "⏱️".to_string())]);
+        assert_eq!(s.texts().len(), 1, "tidak boleh ada balasan kedua");
+
+        // Setelah cooldown 3 detik habis, command boleh jalan lagi.
+        let third = inbound_n(".gatetest halo", MEMBER, MEMBER, false);
+        assert_eq!(p.process(&third, 5_000).await.unwrap(), Outcome::Sent);
+        assert_eq!(plug.calls(), 2);
+        assert_eq!(s.texts().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn cooldown_is_keyed_per_command_not_per_user() {
+        // `cmdKey` = `plugin.config.name` (`handler.js:1816`), jadi alias
+        // menulis cooldown yang sama dan command lain tidak ikut.
+        let plug = TestPlugin::new(3, 0, false);
+        let (p, _s) = dm(&plug, "{}", EnergiSettings::default());
+        let m1 = inbound_n(".gatetest halo", MEMBER, MEMBER, false);
+        p.process(&m1, 1_000).await.unwrap();
+        assert_eq!(plug.calls(), 1);
+
+        // `.other` dipetakan ke plugin yang sama oleh lookup uji, jadi ini
+        // membuktikanhaust-nya per COMMAND: key plugin sama → tetap kena.
+        let m2 = inbound_n(".gatetestpremium", MEMBER, MEMBER, false);
+        assert_eq!(p.process(&m2, 1_100).await.unwrap(), Outcome::CooldownBlocked);
+    }
+
+    // --- Gate 5: energi -----------------------------------------------
+
+    #[tokio::test]
+    async fn insufficient_energi_is_denied_and_not_charged() {
+        // `capenergi` memberi `.gatetest` biaya 5; tier default 1 → kurang.
+        let plug = TestPlugin::new(0, 0, false);
+        let (p, s) = dm(
+            &plug,
+            r#"{"settings": {"capenergi": {"gatetest": 5}}}"#,
+            poor(),
+        );
+
+        let m = inbound_n(".gatetest halo", MEMBER, MEMBER, false);
+        let out = p.process(&m, 1_000).await.unwrap();
+
+        assert_eq!(out, Outcome::EnergiDenied);
+        assert_eq!(plug.calls(), 0, "plugin TIDAK boleh jalan tanpa energi");
+        assert_eq!(
+            s.texts(),
+            vec![format!("{MEMBER}: {ENERGI_EXCEEDED}")],
+            "user diberi tahu, dan tidak ada balasan plugin"
+        );
+        // Saldo tetap 1: gate menolak SEBELUM memotong (`handler.js:1879-1880`
+        // `return` tanpa `updateEnergi`).
+        assert_eq!(p.gates().energy(MEMBER), Some(1), "energi tak boleh berkurang");
+    }
+
+    #[tokio::test]
+    async fn a_denied_energi_check_does_not_charge_on_retry() {
+        // Kalau gate sempat memotong sebelum menolak, saldo akan turun tiap
+        // percobaan.
+        let plug = TestPlugin::new(0, 0, false);
+        let (p, _s) = dm(
+            &plug,
+            r#"{"settings": {"capenergi": {"gatetest": 5}}}"#,
+            poor(),
+        );
+
+        for _ in 0..5 {
+            let m = inbound_n(".gatetest halo", MEMBER, MEMBER, false);
+            assert_eq!(p.process(&m, 1_000).await.unwrap(), Outcome::EnergiDenied);
+        }
+        assert_eq!(
+            p.gates().energy(MEMBER),
+            Some(1),
+            "lima penolakan tidak boleh memotong apa pun"
+        );
+    }
+
+    #[tokio::test]
+    async fn enough_energi_is_charged_exactly_once_before_dispatch() {
+        let plug = TestPlugin::new(0, 0, false);
+        let (p, s) = dm(
+            &plug,
+            r#"{"settings": {"capenergi": {"gatetest": 5}}}"#,
+            EnergiSettings { default: 10, ..poor() },
+        );
+
+        let m = inbound_n(".gatetest halo", MEMBER, MEMBER, false);
+        assert_eq!(p.process(&m, 1_000).await.unwrap(), Outcome::Sent);
+        assert_eq!(plug.calls(), 1, "plugin jalan setelah charge");
+        assert_eq!(p.gates().energy(MEMBER), Some(5), "10 - 5 = 5");
+        assert_eq!(s.texts().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn energi_override_of_zero_wins_over_the_plugin_cost() {
+        // `capenergi[name] !== undefined ? ... : energi` — operatornya
+        // `!== undefined`, jadi override `0` mematikan biaya
+        // (`gates.rs:461-466`).
+        let plug = TestPlugin::new(0, 5, false);
+        let (p, _s) = dm(
+            &plug,
+            r#"{"settings": {"capenergi": {"gatetest": 0}}}"#,
+            poor(),
+        );
+        let m = inbound_n(".gatetest halo", MEMBER, MEMBER, false);
+        assert_eq!(p.process(&m, 1_000).await.unwrap(), Outcome::Sent);
+        assert_eq!(plug.calls(), 1);
+        assert_eq!(p.gates().energy(MEMBER), Some(1), "override 0 = gratis");
+    }
+
+    #[tokio::test]
+    async fn energi_disabled_in_settings_skips_the_gate_entirely() {
+        // `db.setting("energi") === false` mematikan gate
+        // (`handler.js:1851-1854`, `gates.rs:414-416`).
+        let plug = TestPlugin::new(0, 5, false);
+        let (p, _s) = dm(
+            &plug,
+            r#"{"settings": {"energi": false, "capenergi": {"gatetest": 5}}}"#,
+            poor(),
+        );
+        let m = inbound_n(".gatetest halo", MEMBER, MEMBER, false);
+        assert_eq!(
+            p.process(&m, 1_000).await.unwrap(),
+            Outcome::Sent,
+            "gate energi mati = semua orang lolos"
+        );
+        assert_eq!(plug.calls(), 1);
+    }
+
+    #[tokio::test]
+    async fn owner_energi_is_unlimited_and_never_charged() {
+        // `handler.js:1866-1869`: owner/partner dengan tier `-1` keluar tanpa
+        // cek dan tanpa potong.
+        let plug = TestPlugin::new(0, 5, false);
+        let mut id = Identity::default();
+        id.owners.insert(MEMBER.to_string());
+        let sender = Arc::new(RecordingSender::default());
+        let p = Arc::new(
+            plug
+                .pipeline_with_sender(
+                    StoreContext::new(store_with("energi-owner", "{}")),
+                    sender,
+                    poor(),
+                )
+                .with_identity(id),
+        );
+        let m = inbound_n(".gatetest halo", MEMBER, MEMBER, false);
+        assert_eq!(p.process(&m, 1_000).await.unwrap(), Outcome::Sent);
+        assert_eq!(p.gates().energy(MEMBER), Some(-1), "saldo owner tak terbatas");
+    }
+
+    // --- Urutan antar gate --------------------------------------------
+
+    #[tokio::test]
+    async fn group_chain_beats_the_spam_limiter() {
+        // `handler.js:770-871` (chain) dihitung SEBELUM `handler.js:1508`
+        // (spam). Kalau urutannya dibalik, pesan yang sudah dihapus dari grup
+        // tetap membakar kuota spam pengirimnya.
+        let plug = TestPlugin::new(0, 0, false);
+        let (p, s) = grp(&plug, r#"{"groups": {"120363@g.us": {"mute": true}}}"#);
+        for _ in 0..12 {
+            let m = inbound_n("halo dunia", MEMBER, GROUP, true);
+            assert_eq!(
+                p.process(&m, 2_000).await.unwrap(),
+                Outcome::GroupStopped,
+                "pesan harus berhenti di chain, bukan di limiter"
+            );
+        }
+        assert_eq!(s.deleted().len(), 12);
+        assert_eq!(plug.calls(), 0);
+        assert!(s.sent.lock().unwrap().is_empty(), "tidak ada balasan sama sekali");
+    }
+
+    #[tokio::test]
+    async fn cooldown_beats_energi_so_a_blocked_message_is_never_charged() {
+        // Urutan `handler.js:1837` → `1851`. Kalau dibalik, percobaan kedua
+        // akan memotong energi lalu baru ditolak cooldown.
+        let plug = TestPlugin::new(3, 0, false);
+        let (p, _s) = dm(
+            &plug,
+            r#"{"settings": {"capenergi": {"gatetest": 5}}}"#,
+            EnergiSettings { default: 10, ..poor() },
+        );
+
+        let m1 = inbound_n(".gatetest halo", MEMBER, MEMBER, false);
+        assert_eq!(p.process(&m1, 1_000).await.unwrap(), Outcome::Sent);
+        assert_eq!(p.gates().energy(MEMBER), Some(5));
+
+        let m2 = inbound_n(".gatetest halo", MEMBER, MEMBER, false);
+        assert_eq!(p.process(&m2, 1_100).await.unwrap(), Outcome::CooldownBlocked);
+        assert_eq!(
+            p.gates().energy(MEMBER),
+            Some(5),
+            "pesan yang diblokir cooldown tidak boleh memotong energi"
+        );
+        assert_eq!(plug.calls(), 1);
+    }
+
+    #[tokio::test]
+    async fn permission_denial_never_burns_cooldown_or_energi() {
+        // `handler.js:1810` permission menolak dan `return` — gate cooldown
+        // (1837) dan energi (1851) TIDAK pernah tercapai. Kalau
+        // `dispatch_target` longgar, user kehilangan energi untuk command yang
+        // tidak pernah jalan.
+        let plug = TestPlugin::new(3, 5, true);
+        let (p, _s) = dm(&plug, "{}", poor());
+        let m = inbound_n(".gatetest halo", MEMBER, MEMBER, false);
+        let out = p.process(&m, 1_000).await.unwrap();
+
+        assert_eq!(out, Outcome::Denied, "plugin premium, user biasa");
+        assert_eq!(plug.calls(), 0);
+        assert!(
+            p.gates().energy(MEMBER).is_none(),
+            "energi tidak boleh disentuh untuk command yang ditolak — gate tidak pernah jalan"
+        );
+        // Tidak ada cooldown yang dimulai, jadi percobaan berikutnya (dengan
+        // plugin yang sama) juga harus ditolak oleh permission, bukan cooldown.
+        let m2 = inbound_n(".gatetest halo", MEMBER, MEMBER, false);
+        assert_eq!(p.process(&m2, 1_100).await.unwrap(), Outcome::Denied);
     }
 }

@@ -9,6 +9,7 @@ pub mod load;
 pub mod pairing;
 pub mod pairing_run;
 pub mod pipeline;
+pub mod pipeline_gate;
 pub mod rss;
 pub mod session;
 
@@ -20,6 +21,7 @@ pub use pipeline::{
     ClientSender, Dedup, Identity, MessageSender, Outcome, Pipeline, PipelineError, StoreContext,
     normalize_user_key,
 };
+pub use pipeline_gate::GateState;
 pub use session::{ImportStats, import_session_record};
 pub use whatsapp_rust::bot::BotHandle;
 
