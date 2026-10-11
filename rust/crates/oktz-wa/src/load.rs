@@ -17,17 +17,41 @@ pub struct LoadReport {
     pub first_error: Option<String>,
 }
 
-/// onigis menyimpan id sesi sebagai `<addr>_<n>.<device>` dengan `addr` berupa
-/// nomor polos (tanpa @server). wacore mencari key `<user>[:device]@<server>` lalu
-/// append `.0` — lihat wacore::types::jid::write_signal_address_to. Tanpa
-/// menambah @server, sesi tersimpan di key yang tidak pernah dibaca.
+/// Terjemahkan id sesi onigis ke protocol address wacore.
+///
+/// onigis (`Onigi/lib/Signal/libsignal.js:384`) membangun address sebagai
+/// `ProtocolAddress(signalUser, device).toString()`, dengan
+/// `signalUser = domainType !== WHATSAPP ? "{user}_{domainType}" : user`.
+/// Jadi suffix `_N` BUKAN device — itu penanda domain (WAJIDDomains: 0=PN,
+/// 1=LID, 128=hosted, 129=hosted.lid). Field setelah titik terakhir adalah
+/// device, di-{0} menjadi suffix `.0` oleh `ProtocolAddress::toString`.
+///
+/// wacore (`types::jid.rs:79` `write_signal_address_to`) mencari
+/// `{user}[:{device}]@{server}` lalu append `.0`, dengan `mapped_server`
+/// menerjemahkan `s.whatsapp.net` -> `c.us`. Tanpa terjemahan ini, sesi
+/// tersimpan di key yang tidak pernah dibaca wacore.
 fn to_address(onigis_id: &str) -> String {
-    let base = onigis_id.split('_').next().unwrap_or(onigis_id);
-    let num = base.split('@').next().unwrap_or(base);
-    if num.contains('@') {
-        return format!("{base}.0");
+    let (name, device) = match onigis_id.rsplit_once('.') {
+        Some((name, device)) => (name, device.parse::<u16>().unwrap_or(0)),
+        None => (onigis_id, 0),
+    };
+    // `rsplit_once` aman: user onigis hanya digit, jadi `_` terakhir selalu
+    // pemisah domain — sama seperti `split('_')` di sisi JS.
+    let (user, domain) = match name.rsplit_once('_') {
+        Some((user, domain)) => (user, domain.parse::<u32>().unwrap_or(0)),
+        None => (name, 0),
+    };
+    let server = match domain {
+        1 => "lid",
+        128 => "hosted",
+        129 => "hosted.lid",
+        _ => "c.us",
+    };
+    if device == 0 {
+        format!("{user}@{server}.0")
+    } else {
+        format!("{user}:{device}@{server}.0")
     }
-    format!("{num}@s.whatsapp.net.0")
 }
 
 pub async fn load_into_store<S>(
@@ -130,19 +154,63 @@ mod tests {
 
     // Bug yang ketahuan review: loader menulis key yang tidak pernah dibaca
     // wacore, jadi impor "sukses" tapi tidak berguna.
+    //
+    // Fixtures nyata: `247957890850846_1.0` ada di turso_session_keys.json dan
+    // wacore sendiri menulis `247957890850846@lid.0` (lihat `identities` di
+    // oktz-smoke.db) — jadi `_1` harus jadi `@lid`, bukan PN.
     #[test]
-    fn address_matches_wacore_protocol_address() {
-        assert_eq!(to_address("240406902128794_1.0"), "240406902128794@s.whatsapp.net.0");
+    fn lid_session_maps_to_lid_server() {
+        assert_eq!(to_address("247957890850846_1.0"), "247957890850846@lid.0");
     }
 
     #[test]
-    fn address_keeps_server_when_present() {
-        assert_eq!(to_address("628123@s.whatsapp.net_1.0"), "628123@s.whatsapp.net.0");
+    fn pn_session_maps_to_legacy_c_us() {
+        // `mapped_server` di wacore menerjemahkan s.whatsapp.net -> c.us, jadi
+        // `@s.whatsapp.net` TIDAK PERNAH dibaca. Lihat jid.rs:16.
+        assert_eq!(to_address("628123456789_0.0"), "628123456789@c.us.0");
+        assert_eq!(to_address("628123456789.0"), "628123456789@c.us.0");
     }
 
     #[test]
-    fn lid_address_uses_same_server_suffix() {
-        assert_eq!(to_address("188412430651393_1.0"), "188412430651393@s.whatsapp.net.0");
+    fn device_suffix_is_kept_and_moves_into_the_name() {
+        // onigis `240406902128794_1.80`: user, domain LID, device 80.
+        assert_eq!(
+            to_address("240406902128794_1.80"),
+            "240406902128794:80@lid.0"
+        );
     }
 
+    #[test]
+    fn hosted_domains_keep_their_own_server() {
+        assert_eq!(to_address("123_128.0"), "123@hosted.0");
+        assert_eq!(to_address("123_129.0"), "123@hosted.lid.0");
+    }
+
+    /// Bentuk id yang benar-benar muncul di fixture onigis: device 0 (452
+    /// dari 514) plus device 1..88 pada PN maupun LID.
+    #[test]
+    fn every_real_fixture_id_shape_maps_to_a_readable_address() {
+        for (user, domain, device) in [
+            ("247957890850846", 1, 0),
+            ("240406902128794", 1, 80),
+            ("86222139600981", 1, 80),
+            ("188412430651393", 1, 54),
+            ("628123456789", 0, 0),
+            ("628123456789", 0, 33),
+            ("120363428677398", 1, 12),
+        ] {
+            let id = format!("{user}_{domain}.{device}");
+            let address = to_address(&id);
+            assert!(
+                address.ends_with(".0") && address.contains('@'),
+                "address tidak pernah dibaca wacore: {id} -> {address}"
+            );
+            let expected = if device == 0 {
+                format!("{user}@{}.0", if domain == 1 { "lid" } else { "c.us" })
+            } else {
+                format!("{user}:{device}@{}.0", if domain == 1 { "lid" } else { "c.us" })
+            };
+            assert_eq!(address, expected, "id: {id}");
+        }
+    }
 }
