@@ -37,20 +37,30 @@
 
 - `load.rs to_address()` lama: onigis id `2404068921294_1.0` → ditulis `2404068921294.1.0`.
 - Tapi wacore mencari `<user>[:device]@<server>` + `.0` (`wacore/src/types/jid.rs:79` `write_signal_address_to`).
-- Bukti: `identities` table isinya `...@lid.0`, `...@s.whatsapp.net.0` — **ada `@server`**.
-- Konsekuensi: "514/514 termuat" = konversi sukses, TIDAK berarti berguna. Pesan "hemz" dulu terbaca karena kontak **baru** (prekey), bukan sesi lama. "0 BadMac" karena tidak ada traffic kontak lama saat smoke.
 
-**Yang sudah diperbaiki (commit setelah review):**
-- `to_address()` sekarang menambah `@s.whatsapp.net` → `{num}@s.whatsapp.net.0`.
-- `sessions_loaded` dihitung SETELAH `put_sessions_batch` sukses (sebelumnya dihitung sebelum — false reporting).
-- 3 test address (`address_matches_wacore_protocol_address` dll).
+**✅ SUDAH DIPERBAIKI + DIBUKTIKAN (commit `47402d6`).** Temuan reviewer benar, tapi kesimpulannya belum lengkap — ada **dua** bug, bukan satu:
 
-**MASIH PERLU DIVERIFIKASI (sesi berikutnya):**
-1. **Server-nya benar?** Untuk kontak LID seharusnya `@lid.0` BUKAN `@s.whatsapp.net.0`. onigis id storing nomor polos tanpa info LID/PN. Perlu resolve via `lid_pn_mapping` (tabel ada di DB) atau `session_keys category=lid-mapping` di Turso. **Belum-comingle test ini.**
-2. Rebuild `oktz-bin` (perubahan hanya di test sebelum ini) + jalankan smoke.
-3. **Bukti akhir:** session dari kontak yang SUDAH ADA harus decrypt, dan session count di `sessions` table harus ~514 dengan format `@server.0`.
+1. **Server tidak pernah ditulis.** Loader lama menempelkan `@s.whatsapp.net`. Tapi `mapped_server` (`jid.rs:16`) menerjemahkan `s.whatsapp.net` → **`c.us`**. Jadi `@s.whatsapp.net` tidak dibaca wacore dalam bentuk apa pun.
+2. **Suffix `_N` disalahartikan sebagai device.** Onigi `libsignal.js:384`: `signalUser = domainType !== WHATSAPP ? "{user}_{domainType}" : user`. Jadi `_1` = **LID**, bukan device. Field setelah titik terakhir yang device.
 
-Test decisive: `sqlite` DB `sessions` table sample harus `2404068921294@s.whatsapp.net.0`, bukan `2404068921294.1.0`.
+Bukti sebelum/sesudah di `oktz-smoke.db`:
+
+| | sebelum | sesudah |
+|---|---|---|
+| sesi tersimpan | 519 | 515 |
+| punya `@server` (dibaca wacore) | **5** | **515** |
+| key mati | **514** | 0 |
+
+Runtime wacore sekarang **memang load** sesi: `Session loaded for 247957890850846@lid.0`, dan `247957890850846` memang ada di fixture. Device non-zero juga benar: `86222139600981_1.80` → `86222139600981:80@lid.0`.
+
+**Jawaban §3.1 (server LID vs PN): semuanya LID.** Semua 514 id fixture punya suffix `_1`. Tidak perlu `lid_pn_mapping` — suffix itu sudah membawa jawabannya.
+
+**MASIH TERBUKA — BadMac di smoke.** 27 `UndecryptableMessage`. Ini **bukan** regresi impor:
+- Base key lokal yang dilaporkan wacore (`1ed71e3c…`) **tidak ada** di 515 record impor (sudah dicek binary-search per blob) → itu sesi baru dari prekey server.
+- `262281069899982` tidak punya sesi di fixture sama sekali.
+- Semua 514 record fixture punya ratchet state utuh (bukan kosong): 453 `baseKeyType=1`, 85 `=0`, dan 60 record dicek → semua base key hadir di blob hasil konversi.
+
+Jadi: **importasi terbukti benar secara struktur, tapi "pesan kontak lama berhasil decrypt" BELUM terbukti.** Itu masih target §3.3. Kemungkinan besar sisi server (device lama perlu prekey baru / retry receipt), tapi belum dibuktikan — jangan tulis "selesai" sebelum ada output decrypt nyata.
 
 ## 4. Temuan lain reviewer (prioritas di bawah blocker)
 
@@ -76,10 +86,14 @@ Test decisive: `sqlite` DB `sessions` table sample harus `2404068921294@s.whatsa
 - Build: `nix-shell -p stdenv.cc pkg-config -I nixpkgs=/tmp/opencode/nixpkgs-25.05 --run "cargo <cmd> --release"`
 - `/home` cuma ~695MB free — jangan taruh apa pun besar di sana.
 - Untuk iterasi cepat: `cargo check --release -p <crate>`.
+- **Binary hasil build bernama `oktz`**, bukan `oktz-bin` (crate `oktz-bin`, tapi `[[bin]] name = "oktz"`). Ada di `/tmp/opencode/rust/target/release/oktz`.
+- Smoke run: hapus `oktz-smoke.db*` dulu kalau mau bukti bersih, atau sekalian `cp` ke `.bak` biar state "sebelum" bisa dibandingkan.
+- **Cara cek isi DB tanpa sqlite3/python** (tidak ada di PATH): `node -e "const {DatabaseSync}=require('node:sqlite'); ..."` — Node 22 punya SQLite bawaan.
+- `$NS "cargo ..."` diam-diam bisa exit 0 tanpa output test kalau `nix-shell` gagal dapat `cc`. Cek `EXIT=$?` **dan** isi log, jangan percaya exit code saja. Jalankan dari dalam `rust/` (bukan repo root).
 
 ## 6.Langkah berikutnya (urut)
 
-1. **Tutup blocker §3** (verifikasi + fix server LID/PN). Bukti: session decrypt dari kontak lama.
+1. **Tutup sisanya: BadMac / decrypt kontak lama.** Address sudah benar (§3). Sekarang buktikan decrypt beneran: kontak yang punya sesi lama, ambil plaintext-nya, bandingkan. Kalau masih Gagal, periksa `retry receipt` — wacore sudah mengirim `Sending retry receipt` tiap BadMac, tunggu balasan lalu ulangi.
 2. H3: pasang reconnect/logout handler sesuai `pairing-state.js` (grace 60s×2) — supaya 401 palsu tak mematikan.
 3. H4: generikkan `build_card(body, footer, buttons)` + `build_list(sections)` jadi API berparameter.
 4. Reviewer lagi untuk GATE 2.
