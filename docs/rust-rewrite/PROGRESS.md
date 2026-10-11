@@ -31,8 +31,34 @@ Belum ada satu baris kode Rust produksi. Belum ada `rust/` directory.
 | **Spike S2 (RSS)** | ✅ **26.6 MB** saat connect (target 60) |
 | Test suite / clippy | ✅ 33 test, clippy -D warnings bersih |
 | Fase 1 (oktz-core/store/plugin-api) | ✅ **GATE 1 LOLOS** (reviewer independen: LAYAK) |
-| Fase 2 (oktz-wa + router produksi) | 🔄 **sedang** — plan `2026-10-10-fase-2-oktz-wa.md`, Task 1 (promosi spike) build berjalan |
+| Fase 2 (oktz-wa) | 🔄 Task 1+2 **selesai** — smoke nyata: 514 sesi + authenticated, RSS **16.8 MB** |
+| Fase 2 Task 3 (kirim text/card/list) | ⏳ next |
+| Fase 2 Task 4 (pairing) | ⏳ next |
 | Fase 3+ / 830 plugin | ⏳ setelah GATE 2 |
+
+## Fase 2 — berjalan (Task 1–2)
+
+Commit: `410c4da` (crate `oktz-wa`) · `fae3375` (smoke `oktz-bin`).
+
+Spike yang sudah terverifikasi **dipromosikan** jadi crate produksi `oktz-wa` (bukan tulis
+ulang): `build_device`, `prepare_store` (import device + sesi ratchet), `connect_device`,
+`build_card`/`build_list`/`biz_node`, `inspect_creds`, `import_session_record`,
+`load_into_store`.
+
+**Smoke nyata (`oktz smoke`) — bukti:**
+```
+sesi ratchet dimuat  loaded=514  failed=0
+Successfully authenticated with WhatsApp servers!
+{"phase":"CONNECTED","rss_kb":15936}
+{"phase":"done","rss_kb":16828}
+```
+**RSS produksi 16.8 MB** (spike 26.6 MB; release `opt-level="z"` + `lto="fat"` membantu).
+Target 60 MB → headroom 43 MB.
+
+Gate workspace: **42 test hijau**, clippy `-D warnings` EXIT=0, verify-db 24 file identik.
+
+**Operasional (penting):** di mesin ini `cargo test` (debug) **recompile wacore dari nol**
+(~15 menit sia-sia). Selalu `cargo test --release` / `cargo clippy --release`.
 
 ## ⚠️ INSIDEN LINGKUNGAN — 2026-10-10
 
