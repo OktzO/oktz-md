@@ -32,9 +32,48 @@ Belum ada satu baris kode Rust produksi. Belum ada `rust/` directory.
 | Test suite / clippy | ✅ 33 test, clippy -D warnings bersih |
 | Fase 1 (oktz-core/store/plugin-api) | ✅ **GATE 1 LOLOS** (reviewer independen: LAYAK) |
 | Fase 2 (oktz-wa) | 🔄 Task 1+2 **selesai** — smoke nyata: 514 sesi + authenticated, RSS **16.8 MB** |
-| Fase 2 Task 3 (kirim text/card/list) | ⏳ next |
-| Fase 2 Task 4 (pairing) | ⏳ next |
-| Fase 3+ / 830 plugin | ⏳ setelah GATE 2 |
+| Fase 2 Task 3 (kirim text/card/list) | ✅ 3/3 terkirim ke owner, RSS ~13 MB |
+| Fase 2 Task 4 (pairing logic) | ✅ **12 test**, port 1:1 pairing-state.js |
+| Fase 2 Task 4 (alur pairing ke WA) | ⏳ butuh device baru + interaksi Oktz |
+| Reviewer Fase 2 + GATE 2 | ⏳ next |
+
+## Fase 2 — Task 1–4 (2026-10-10)
+
+Commit: `410c4da` (crate `oktz-wa`) · `fae3375` (smoke) · `646843b` (send) · `2004791` (pairing logic).
+
+**Task 1** — spike dipromosikan jadi crate produksi `oktz-wa` (bukan tulis ulang):
+`build_device`, `prepare_store`, `connect_device`, `build_card`/`build_list`/`biz_node`,
+`inspect_creds`, `import_session_record`, `load_into_store`.
+
+**Task 2 — smoke nyata:**
+```
+sesi ratchet dimuat  loaded=514  failed=0
+Successfully authenticated with WhatsApp servers!
+{"phase":"CONNECTED","rss_kb":15936}  {"phase":"done","rss_kb":16828}
+```
+
+**Task 3 — kirim pesan (3/3 ke `6285608953677`):**
+```
+text  3EB0B66F3F03EFFF3F6B78   card  3EB053563A8662478C948D   list  3EB089E2B0A9630B87439A
+```
+
+**Task 4 — pairing logic** `oktz-wa/src/pairing.rs` port 1:1 `src/lib/pairing-state.js`:
+`classifyClose`, `classifyLogout401` (grace 60s ×2 retry), marker `pairingPending`,
+cooldown `.pairing-cooldown`, `pruneBrokenSessions` (keep 3), `normalizePairingNumber`.
+12 test offline. **Belum:** alur pairing ke server WA (butuh device baru + interaksi).
+
+**RSS produksi 13–17 MB** (smoke 16.8, send ~13). Target 60 → headroom besar.
+
+**Gate:** 54 test hijau · clippy `-D warnings` EXIT=0 · fmt bersih · verify-db 24 file identik.
+
+### Yang perlu Oktz (tidak bisa diverifikasi dari sini)
+1. **Klik tombol card/list** yang terkirim di Task 3 — log hanya bukti "terkirim", bukan
+   "ter-render + bisa diklik" di WA. Tiga pesan: teks, "Kartu dari produksi Rust", "Pilih Mode".
+2. **Kirim pesan dari HP** saat `oktz smoke` jalan → bukti decrypt real-time produksi.
+
+### Operasional
+- `cargo test` (debug) recompile wacore dari nol — **selalu `--release`**.
+- `/tmp` pernah di-reset (lihat insiden di bawah).
 
 ## Fase 2 — berjalan (Task 1–2)
 
