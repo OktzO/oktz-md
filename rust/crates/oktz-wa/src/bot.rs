@@ -4,27 +4,38 @@ use whatsapp_rust::prelude::*;
 use crate::creds;
 
 fn jid(s: &str) -> Result<Jid> {
-    s.parse::<Jid>().map_err(|e| anyhow::anyhow!("JID {s}: {e}"))
+    s.parse::<Jid>()
+        .map_err(|e| anyhow::anyhow!("JID {s}: {e}"))
 }
 
 pub async fn build_device(c: &creds::Creds) -> Result<whatsapp_rust::wacore::store::Device> {
     use wacore_libsignal::core::curve::{KeyPair, PrivateKey, PublicKey};
     // onigis/Baileys menyimpan public key Curve25519 sebagai 32 byte POLOS.
-// libsignal/wacore memakai bentuk kanonik 33 byte = 0x05 (KeyType::Djb) + 32.
-// Kalau sudah 33 byte, biarkan apa adanya.
-const DJB_PREFIX: u8 = 0x05;
+    // libsignal/wacore memakai bentuk kanonik 33 byte = 0x05 (KeyType::Djb) + 32.
+    // Kalau sudah 33 byte, biarkan apa adanya.
+    const DJB_PREFIX: u8 = 0x05;
 
-fn kp(j: &creds::KeyPairJson, label: &str) -> Result<KeyPair> {
+    fn kp(j: &creds::KeyPairJson, label: &str) -> Result<KeyPair> {
         let mut pb = creds::b64(&j.public)?;
         let vb = creds::b64(&j.private)?;
         if pb.len() == 32 {
             pb.insert(0, DJB_PREFIX);
         }
         Ok(KeyPair {
-            public_key: PublicKey::try_from(&pb[..])
-                .map_err(|e| anyhow::anyhow!("{label}.public (len={} first={:#x}): {e}", pb.len(), pb.first().unwrap_or(&0)))?,
-            private_key: PrivateKey::try_from(&vb[..])
-                .map_err(|e| anyhow::anyhow!("{label}.private (len={} first={:#x}): {e}", vb.len(), vb.first().unwrap_or(&0)))?,
+            public_key: PublicKey::try_from(&pb[..]).map_err(|e| {
+                anyhow::anyhow!(
+                    "{label}.public (len={} first={:#x}): {e}",
+                    pb.len(),
+                    pb.first().unwrap_or(&0)
+                )
+            })?,
+            private_key: PrivateKey::try_from(&vb[..]).map_err(|e| {
+                anyhow::anyhow!(
+                    "{label}.private (len={} first={:#x}): {e}",
+                    vb.len(),
+                    vb.first().unwrap_or(&0)
+                )
+            })?,
         })
     }
     fn arr<const N: usize>(b: Vec<u8>, what: &str) -> Result<[u8; N]> {
@@ -57,20 +68,26 @@ fn kp(j: &creds::KeyPairJson, label: &str) -> Result<KeyPair> {
     // grup yang gagal decrypt akan bermasalah.
     if let Some(a) = c.account.as_ref() {
         let nb = |s: &str| -> Result<Option<Vec<u8>>> {
-            if s.is_empty() { Ok(None) } else { Ok(Some(creds::b64(s)?)) }
+            if s.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(creds::b64(s)?))
+            }
         };
-        d.account = Some(std::sync::Arc::new(whatsapp_rust::waproto::whatsapp::ADVSignedDeviceIdentity {
-            details: nb(a.details.as_deref().unwrap_or(""))?,
-            account_signature_key: nb(a.account_signature_key.as_deref().unwrap_or(""))?,
-            account_signature: match &a.account_signature {
-                Some(s) => nb(s)?,
-                None => None,
+        d.account = Some(std::sync::Arc::new(
+            whatsapp_rust::waproto::whatsapp::ADVSignedDeviceIdentity {
+                details: nb(a.details.as_deref().unwrap_or(""))?,
+                account_signature_key: nb(a.account_signature_key.as_deref().unwrap_or(""))?,
+                account_signature: match &a.account_signature {
+                    Some(s) => nb(s)?,
+                    None => None,
+                },
+                device_signature: match &a.device_signature {
+                    Some(s) => nb(s)?,
+                    None => None,
+                },
             },
-            device_signature: match &a.device_signature {
-                Some(s) => nb(s)?,
-                None => None,
-            },
-        }));
+        ));
     }
     Ok(d)
 }
@@ -80,8 +97,7 @@ pub async fn prepare_store(
     db_path: &str,
     session_fixture: Option<&str>,
 ) -> Result<SqliteStore> {
-    let raw = std::fs::read_to_string(creds_path)
-        .with_context(|| format!("baca {creds_path}"))?;
+    let raw = std::fs::read_to_string(creds_path).with_context(|| format!("baca {creds_path}"))?;
     let (_m, c) = crate::creds::inspect_creds(&raw)?;
 
     let db = std::path::PathBuf::from(db_path);
@@ -110,14 +126,15 @@ pub async fn prepare_store(
 }
 
 /// Boot bot dan pump handle; `on_ready` dipanggil setelah connect.
-pub async fn connect_device<F, Fut>(
-    store: SqliteStore,
-    on_ready: F,
-) -> Result<BotHandle>
+pub async fn connect_device<F, Fut>(store: SqliteStore, on_ready: F) -> Result<BotHandle>
 where
     F: Fn(std::sync::Arc<Client>) -> Fut + Send + Sync + 'static,
-    Fut: std::future::Future<Output = ()> + Send,
+    Fut: std::future::Future<Output = ()> + Send + 'static,
 {
-    let bot = Bot::builder().with_backend(store).on_connected(on_ready).build().await?;
+    let bot = Bot::builder()
+        .with_backend(store)
+        .on_connected(on_ready)
+        .build()
+        .await?;
     Ok(bot.spawn())
 }

@@ -9,8 +9,9 @@ pub mod load;
 pub mod rss;
 pub mod session;
 
-pub use bot::{build_device, BotHandle, connect_device};
-pub use cards::{build_card, build_list, biz_node};
-pub use creds::{inspect_creds, DeviceMapping};
-pub use load::{load_into_store, LoadReport};
-pub use session::{import_session_record, ImportStats};
+pub use bot::{build_device, connect_device};
+pub use cards::{biz_node, build_card, build_list};
+pub use creds::{DeviceMapping, inspect_creds};
+pub use load::{LoadReport, load_into_store};
+pub use session::{ImportStats, import_session_record};
+pub use whatsapp_rust::bot::BotHandle;

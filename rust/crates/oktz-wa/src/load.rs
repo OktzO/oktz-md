@@ -1,11 +1,11 @@
 // Muat 538 sesi onigis dari dump Turso ke SQLite store sebelum connect,
 // supaya pesan lama/offline-queue bisa decrypt (tanpa ini: "Bad Mac" semua).
-use whatsapp_rust::wacore::store::traits::SignalStore;
 use anyhow::Result;
 use wacore_libsignal::core::curve::PublicKey;
 use wacore_libsignal::protocol::{IdentityKey, LegacySessionLocalContext, LegacySessionRecordV1};
+use whatsapp_rust::wacore::store::traits::SignalStore;
 
-use crate::session::{import_session_record, ImportStats};
+use crate::session::{ImportStats, import_session_record};
 
 #[derive(Default)]
 pub struct LoadReport {
@@ -22,7 +22,12 @@ fn to_address(onigis_id: &str) -> String {
     onigis_id.replacen('_', ".", 1)
 }
 
-pub async fn load_into_store<S>(store: &S, fixture: &str, our_identity: &[u8], our_registration: u32) -> Result<LoadReport, anyhow::Error>
+pub async fn load_into_store<S>(
+    store: &S,
+    fixture: &str,
+    our_identity: &[u8],
+    our_registration: u32,
+) -> Result<LoadReport, anyhow::Error>
 where
     S: SignalStore + ?Sized,
 {
@@ -36,7 +41,10 @@ where
         .cloned()
         .unwrap_or_default();
 
-    let pk = match PublicKey::try_from(our_identity) { Ok(k) => k, Err(e) => return Err(anyhow::anyhow!("identity key: {e}")) };
+    let pk = match PublicKey::try_from(our_identity) {
+        Ok(k) => k,
+        Err(e) => return Err(anyhow::anyhow!("identity key: {e}")),
+    };
     let identity = IdentityKey::new(pk);
     let ctx = LegacySessionLocalContext {
         identity_key: identity,
@@ -47,8 +55,12 @@ where
     let mut rep = LoadReport::default();
 
     for row in &rows {
-        let Some(id) = row.get("id").and_then(|v| v.as_str()) else { continue };
-        let Some(data) = row.get("data").and_then(|v| v.as_str()) else { continue };
+        let Some(id) = row.get("id").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let Some(data) = row.get("data").and_then(|v| v.as_str()) else {
+            continue;
+        };
 
         let mut stats = ImportStats::default();
         let legacy: LegacySessionRecordV1 = match import_session_record(data, &mut stats) {
@@ -64,7 +76,9 @@ where
             Ok(r) => r,
             Err(e) => {
                 rep.sessions_failed += 1;
-                if rep.first_error.is_none() { rep.first_error = Some(format!("{e:?}")); }
+                if rep.first_error.is_none() {
+                    rep.first_error = Some(format!("{e:?}"));
+                }
                 continue;
             }
         };
@@ -76,7 +90,10 @@ where
             }
         };
 
-        batch.push((std::sync::Arc::from(to_address(id).as_str()), bytes::Bytes::from(bytes)));
+        batch.push((
+            std::sync::Arc::from(to_address(id).as_str()),
+            bytes::Bytes::from(bytes),
+        ));
         rep.sessions_loaded += 1;
     }
 

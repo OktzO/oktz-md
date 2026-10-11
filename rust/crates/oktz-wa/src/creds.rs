@@ -163,7 +163,7 @@ pub struct DeviceMapping {
 
 /// Validasi creds + ekstrak nilai yang bisa dipetakan, tanpa menyentuh
 /// struktur Device (dipakai test tanpa perlu construct Device penuh).
-pub(crate) fn inspect_creds(raw: &str) -> Result<(DeviceMapping, Creds)> {
+pub fn inspect_creds(raw: &str) -> Result<(DeviceMapping, Creds)> {
     let c: Creds = serde_json::from_str(raw).context("parse creds.json")?;
     let me =
         c.me.as_ref()
