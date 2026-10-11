@@ -77,13 +77,13 @@ Test decisive: `sqlite` DB `sessions` table sample harus `2404068921294@s.whatsa
 - `/home` cuma ~695MB free — jangan taruh apa pun besar di sana.
 - Untuk iterasi cepat: `cargo check --release -p <crate>`.
 
-## 6.(1) Urut langkah
+## 6.Langkah berikutnya (urut)
 
 1. **Tutup blocker §3** (verifikasi + fix server LID/PN). Bukti: session decrypt dari kontak lama.
 2. H3: pasang reconnect/logout handler sesuai `pairing-state.js` (grace 60s×2) — supaya 401 palsu tak mematikan.
 3. H4: generikkan `build_card(body, footer, buttons)` + `build_list(sections)` jadi API berparameter.
 4. Reviewer lagi untuk GATE 2.
-5. **Fase 3**: `oktz-router` (port `handler.js` 2405 baris) + `oktz-scheduler`. Plan sudah: `docs/superpowers/plans/2026-10-10-fase-2-oktz-wa.md` Task list延伸.
+5. **Fase 3**: `oktz-router` (port `handler.js` 2405 baris) + `oktz-scheduler`. Plan sudah: `docs/superpowers/plans/2026-10-10-fase-2-oktz-wa.md` Task list (Task 3+ sudah berubah — baca plan).
 6. Baru Fase 6–8: 830 plugin (60–80 batch, subagent paralel max 3–4).
 
 ## 7. Dokumen penting
