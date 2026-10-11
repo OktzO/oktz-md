@@ -1,32 +1,9 @@
-//! Port batch kedua plugin class A — `plugins/fun/*` dan `plugins/tools/*`.
+//! 14 plugin class A dari `plugins/fun/*` dan `plugins/tools/*`.
 //!
-//! Dipilih dari `docs/rust-rewrite/plugin-manifest.json` (`class: "A"`), yang
-//! semuanya constructor statis: tanpa HTTP, tanpa media, tanpa fitur WA
-//! khusus, tanpa akses database. Total 14 plugin di sini.
-//!
-//! Tiga bentuk yang berulang di sumber:
-//!
-//! 1. **Keluarga "tanya bot" (10 plugin)** — `apakah`, `mengapa`, `kapan`,
-//!    `akankah`, `bagaimana`, `bisakah`, `coba`, `dimana`, `haruskah`,
-//!    `berapa`. Kerangkanya identik: teks kosong -> teks bantuan; teks ada ->
-//!    `` `${m.body.slice(1)}?\n*${answers[...]}*` ``. Yang berbeda cuma 20 baris
-//!    jawaban + teks bantuan per plugin, jadi dipisah jadi konstanta.
-//! 2. **`rate`** — bentuk sama tapi tanpa echoed question; keluar sebagai
-//!    pasangan `(score, comment)`.
-//! 3. **`readmore`, `soulmatch`, `kalkulatormbg`** — masing-masing satu logic
-//!    sendiri, tetap pure.
-//!
-//! Catatan semantik JS→Rust yang dipakai di file ini:
-//!
-//! - `answers[Math.floor(Math.random() * answers.length)]` → indeks **inklusif
-//!   0, eksklusif `len`**. Kalau pakai `0..=len` maka baris terakhir jadi
-//!   dead dan `pick` bisa panic di `len`.
-//! - `m.body` adalah body pesan mentah (prefix ikut). `Ctx` tidak menyimpan
-//!   `body`, jadi [`body_stripped`] menyusun ulang dari `prefix + command +
-//!   " " + text`.
-//! - `Array.from(name.toLowerCase()).reduce((a,c)=>a+c.charCodeAt(0),0)` memakai
-//!   code unit UTF-16; `chars()` memberi scalar value. Sama untuk seluruh BMP
-//!   (semua nama yang masuk ke `soulmatch`).
+//! 10-nya satu bentuk ("tanya bot": apakah/mengapa/kapan/akankah/
+//! bagaimana/bisakah/coba/dimana/haruskah/berapa): teks kosong -> teks
+//! bantuan, teks ada -> echoed question + jawaban acak. Semua lewat
+//! `tanya_plugin!`.
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 use rand::Rng as _;

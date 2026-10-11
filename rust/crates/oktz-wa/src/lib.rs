@@ -7,6 +7,7 @@ pub mod cards;
 pub mod creds;
 pub mod load;
 pub mod pairing;
+pub mod pairing_run;
 pub mod rss;
 pub mod session;
 

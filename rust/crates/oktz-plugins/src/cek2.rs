@@ -1,35 +1,6 @@
-//! Port batch kedua plugin class A — 6 plugin `cek*` yang TIDAK seragam.
-//!
-//! `cek.rs` (port pertama) menangani 10 plugin yang semua berbentuk
-//! `Math.floor(Math.random() * 101)` + ambang `90/70/50/30`. Enam plugin di sini
-//! tidak cocok dengan makro itu — masing-masing punya bentuk sendiri:
-//!
-//! | plugin      | RNG (JS)                          | nilai            | ambang              |
-//! |-------------|-----------------------------------|------------------|---------------------|
-//! | cekkarma    | `floor(r*101)`                    | 0..=100          | `>=` 80/60/40/20     |
-//! | cekumur     | `floor(r*80) + 5`                 | 5..=84           | `>=` 60/40/20        |
-//! | cekberat    | `floor(r*60) + 40`                | 40..=99          | `>=` 90/70/55/45     |
-//! | cektinggi   | `floor(r*50) + 150`               | 150..=199        | `>=` 190/175/165/155 |
-//! | ceksisaumur | `floor(r*80)+20`, `*12`, `*30`    | 20..=99,0..=11,0..=29 | `>` 80/60/40     |
-//! | cekpintar   | `floor(r*100) + 70`               | 70..=169         | `>=` 150/130/110/90  |
-//!
-//! Dua jebakan yang membuat port ini salah kalau ditulis dengan naluri:
-//! 1. `Math.floor(Math.random() * N)` menghasilkan 0..=N-1 (N eksklusif),
-//!    jadi Rust-nya `random_range(0..N)`, bukan `0..=N`. Offset `+ 40` dan
-//!    sejenisnya ditambahkan SESUDAH floors — jadi `roll(n) + offset`, bukan
-//!    `roll(n + offset)`.
-//! 2. `ceksisaumur` satu-satunya yang memakai `>` (bukan `>=`), sehingga
-//!    80 tahun masuk tier kedua, bukan tier pertama.
-//!
-//! Yang di-share antar 6 file ini cuma tiga hal: bentuk RNG (`roll`),
-//! pemecahan target (`num_and_self`), dan `Reply::Text` + `mentions`. Sisanya —
-//! ambang, teks tier, kalimat self-vs-others — ditulis eksplisit per plugin
-//! karena memang beda-beda. Makro di sini hanya akan menyembunyikan perbedaan
-//! yang justru paling rawan salah.
-//!
-//! `ponytail:` RNG memakai thread-local CSPRNG `rand`, bukan `Math.random()`.
-//! Batasnya: JS bisa di-seed dari test, di sini tidak. Kalau perlu replay
-//! deterministik, tambahkan `seed: Option<u64>` ke `Ctx`.
+//! 6 plugin `cek*` yang tidak cocok dengan makro 4-tier di `cek.rs` —
+//! masing-masing punya ambang dan offset RNG sendiri. Tabel aslinya ada
+//! di commit message; angka asli dipin test tiap plugin.
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 

@@ -1,24 +1,8 @@
 //! Gate yang butuh state & waktu: rate limiter, kuota auto-work, cooldown, energi.
 //!
-//! `permission` dan `mode` sengaja hanya berisi fungsi murni. Empat gate di
-//! sini memang butuh state (counter per sender) dan jam, tapi TIDAK butuh I/O:
-//! waktu masuk sebagai `now_ms: i64`, saldo keluar lewat trait yang caller
-//! isi (DB, cache, atau stub test). Konsekuensinya semua test di file ini
-//! sinkron, tanpa async dan tanpa DB.
-//!
-//! Sumber JS:
-//! - rate limiter global — `handler.js:358-362` + `handler.js:643-652`,
-//!   algoritma `rate-limiter-flexible@9.1.1` (`RateLimiterMemory.consume` +
-//!   `MemoryStorage.incrby`).
-//! - kuota auto-work — `handler.js:373-422`.
-//! - cooldown — `handler.js:1837-1849` + `handler.js:1922-1924`,
-//!   `database.js:682-709`.
-//! - energi — `handler.js:1851-1890` + `database.js:627-644`.
-//!
-//! Yang TIDAK sengaja direplikasi: `setTimeout` untuk meng-expire entri
-//! limiter. JS memakai timer, di sini entri basi dibuang secara lazy saat
-//! diakses (`expires_at <= now_ms`). Perilaku yang bisa diamati identik; yang
-//! hilang hanya timer yang jalan di background.
+//! Waktu masuk sebagai `now_ms`; saldo keluar lewat trait yang diisi caller.
+//! Tanpa I/O, jadi semua test sinkron. Sumber JS: handler.js:358-422,
+//! handler.js:1837-1890, database.js:627-709.
 
 use std::cell::OnceCell;
 use std::collections::HashMap;
@@ -29,8 +13,6 @@ use crate::permission::Caller;
 
 /// Sentinel "energi tak terbatas" (`-1`) di JS.
 pub const UNLIMITED: i64 = -1;
-
-// ================= Rate limiter =================
 
 #[derive(Debug, Clone, Copy)]
 struct Entry {
@@ -53,20 +35,11 @@ pub struct ConsumeErr {
     pub ms_before_next: i64,
 }
 
-/// Leaky window counter per key — port `RateLimiterMemory` + `MemoryStorage`.
+/// Window counter per key (port `RateLimiterMemory`).
 ///
-/// Semantik yang harus dijaga persis (sumber: `node_modules/rate-limiter-flexible@9.1.1`):
-/// 1. `consume` menambah DULU laluMLETAK (`handler.js:647`: `await
-///    globalRateLimiter.consume(jid)` yang di-`try/catch` → gagal = sedang
-///    spam). Jadi command ke-9 tetap TERKONSUMSI walau ditolak.
-/// 2. `MemoryStorage.incrby` menambah ke entri yang masih hidup; kalau sudah
-///    kedaluwarsa ia mulai jendela baru dengan nilai 1, bukan menambah.
-/// 3. Blokir hanya terjadi pada consumption pertama yang melewati `points`:
-///    `consumedPoints <= points + pointsToConsume` (satu operasi = 1). Stroke
-///    berikutnya saat blokir masih hidup menambah angka tapi TIDAK memperpanjang
-///    blokir — jadi blokir benar-benar lasts `blockDuration`.
-/// 4. Saat blokir dipasang, entri ditimpa: nilai = `consumedPoints`,-deadline
-///    baru `now + blockDuration`. Jendela durasi awal dibuang.
+/// Dua detail dari `rate-limiter-flexible@9.1.1` yang bikin test ini gagal kalau
+/// dibalik: `consume` menambah DULU baru check (jadi command ke-9 tetap
+/// increment walau ditolak), dan entri basi mulai dari 1, bukan menambah.
 #[derive(Debug, Clone)]
 pub struct RateLimiter {
     points: u32,
@@ -76,8 +49,7 @@ pub struct RateLimiter {
 }
 
 impl RateLimiter {
-    /// `block_ms == 0` = tanpa blokir, hanya jendela bergulir (default
-    /// `rate-limiter-flexible`).
+    /// `block_ms == 0` = tanpa blokir.
     pub fn new(points: u32, duration_ms: i64, block_ms: i64) -> Self {
         Self {
             points,
@@ -133,10 +105,7 @@ impl RateLimiter {
             .map_or(0, |e| e.expires_at_ms.saturating_sub(now_ms))
     }
 
-    /// Satu operasi = satu titik. `Ok` = boleh jalan, `Err` = kena limit.
-    ///
-    /// `now_ms` masuk sebagai parameter, bukan dibaca dari jam — itu yang
-    /// membuat test deterministik.
+    /// Satu operasi = satu titik. `now_ms` masuk sebagai parameter supaya test deterministik.
     pub fn consume(&mut self, key: &str, now_ms: i64) -> Result<ConsumeOk, ConsumeErr> {
         let (consumed, _ms_before_next) = self.incr(key, now_ms);
         if consumed > i64::from(self.points) {
@@ -155,7 +124,6 @@ impl RateLimiter {
         }
     }
 
-    /// Nilai entri tanpa menaikkan — untuk observasi/test.
     pub fn peek(&self, key: &str, now_ms: i64) -> Option<u32> {
         self.entries
             .get(key)
@@ -163,12 +131,10 @@ impl RateLimiter {
             .map(|e| e.value as u32)
     }
 
-    /// Buang state satu key (mis. reset manual admin).
     pub fn forget(&mut self, key: &str) {
         self.entries.remove(key);
     }
 
-    /// Jumlah key yang masih hidup — hook metrics/debug.
     pub fn live_keys(&self, now_ms: i64) -> usize {
         self.entries
             .values()
@@ -202,20 +168,13 @@ pub fn is_spam_exempt(caller: &Caller) -> bool {
     caller.is_owner || caller.is_premium
 }
 
-// ================= Kuota auto-work =================
 
-/// Setting yang dibaca `consumeAutoWorkQuota` (`handler.js:382-408`):
-/// `config.autoWork.*` plus bagian `config.energi` yang dipakai untuk cek saldo.
+/// Setting dari `consumeAutoWorkQuota` (handler.js:382-408).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AutoWorkSettings {
-    /// `config.autoWork.enabled` — kill switch (`config.js:171`).
     pub enabled: bool,
-    /// Energi per pekerjaan auto (`config.autoWork.energi`, default 1).
-    /// `0` = tanpa potong energi.
     pub cost: i64,
-    /// `config.energi.enabled !== false` setelah resolusi setting DB.
     pub energi_enabled: bool,
-    /// `config.energi.default` — saldo kalau user tidak punya record.
     pub default_energi: i64,
 }
 
@@ -339,7 +298,6 @@ impl AutoWorkGuard {
     }
 }
 
-// ================= Cooldown =================
 
 /// Sumber deadline cooldown per `(user, command)`. Di JS ini field
 /// `user.cooldowns` di DB (`database.js:701-709`) — trait supaya caller bisa
@@ -423,7 +381,6 @@ pub fn set_cooldown<S: CooldownStore + ?Sized>(
     store.set_cooldown_end(&caller.sender, cmd_key, end);
 }
 
-// ================= Energi =================
 
 /// Sumber/penerima saldo energi. `None` = user tidak ada di DB.
 pub trait EnergiBalance {

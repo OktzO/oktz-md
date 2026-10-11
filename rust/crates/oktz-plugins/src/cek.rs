@@ -1,18 +1,6 @@
-//! Port batch pertama plugin class A — keluarga `cek*`.
-//!
-//! Pola yang dipakai 10 plugin `cek*` (lihat `plugins/cek/*.js`):
-//! 1. `percent = Math.floor(Math.random() * 101)` — 0..=100 inklusif.
-//! 2. Empat ambang `>= 90 / 70 / 50 / 30`, plus fallback.
-//! 3. Target = `m.mentionedJid[0] || m.sender`.
-//! 4. Dua kalimat berbeda: self ("kamu") vs orang lain ("dia").
-//! 5. `m.reply(txt, { mentions: [mentioned] })`.
-//!
-//! Yang di-share: RNG + kerangka teks —CX yang mengulang di 10 file. Yang TIDAK
-//! di-share: lima string tier tiap plugin, karena tiap plugin punya sendiri.
-//!
-//! `ponytail:` RNG pakai thread-local CSPRNG `rand`, bukan `Math.random()`.
-//! Batasnya: JS bisa di-seed dari test, di sini tidak. Kalau perlu replay
-//! deterministik, tambahkan `seed: Option<u64>` ke `Ctx`.
+//! 10 plugin `cek*` seragam: `floor(r*101)` + ambang 90/70/50/30,
+//! target `mentioned[0] || sender`, dua varian kalimat (self vs orang
+//! lain). Yang di-share: RNG + kerangka teks.
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
