@@ -8,7 +8,9 @@
 //! - `cek`  — 10 plugin `cek*` dengan pola 4-tier seragam (90/70/50/30).
 //! - `cek2` — 6 plugin `cek*` yang tidak seragam: ambang dan offset RNG beda.
 //! - `umum` — 14 plugin class A lain (fun/tools), termasuk `tanya_plugin!`.
+//! - `batch_g` — 33 plugin class A: sisa `cek*` + benefit*/templateplugin.
 
+pub mod batch_g;
 pub mod cek;
 pub mod cek2;
 pub mod umum;
