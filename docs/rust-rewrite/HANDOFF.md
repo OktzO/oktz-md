@@ -7,18 +7,20 @@
 
 ## 1. Di mana kita
 
-**Fase 0 + Fase 1 DONE (GATE 1 ✅). Fase 2 Task 1–4 DONE — TAPI ada blocker aktif dari reviewer (lihat §3).**
+**Fase 0 + Fase 1 DONE (GATE 1 ✅). Fase 2 Task 1–4 DONE. Address sesi ratchet DIPERBAIKI + terbukti. `oktz-router` + batch plugin pertama selesai. BadMac masih terbuka.**
 
 | Komponen | Status | Bukti |
 |---|---|---|
 | Engine `whatsapp-rust` 0.7 | jalan di stable Rust 1.94 | build + run |
-| Impor 514 sesi ratchet | 514 convert, **tapi loader BERMASALAH (lihat §3)** | `loaded=514` |
-| Connect + decrypt | authenticated, pesan real-time terbaca | `Successfully authenticated` |
+| Impor 514 sesi ratchet | 514 convert, **515 address terbaca wacore** (dari 5) | `loaded=514` |
+| Connect + decrypt | authenticated; **decrypt kontak lama BELUM terbukti** | `Successfully authenticated` |
 | Tombol WA (S3) | **✅ render + bisa diklik** (verifikasi Oktz) | OKE/GAGAW |
 | List native-flow (S4) | **✅ render + bisa diklik** (verifikasi Oktz) | single_select |
 | RSS produksi | 13–18 MB (target 60) | smoke 16.8, send 13.1 |
 | Data user | 24 file / 874KB byte-identik | `verify-db` |
-| Test + clippy | 58 hijau, clippy EXIT=0 | `cargo test --release` |
+| **`oktz-router`** | ✅ permission + mode + parsing, **53 test** | `c72dd03` |
+| **Plugin** | ✅ **10 plugin `cek*`** (dari 830) | `{"plugins":10}` |
+| Test + clippy | **130 hijau**, clippy **0 warning** | `cargo test --release` |
 
 ## 2. Decisions yang sudah dikunci (jangan diubah tanpa Oktz)
 
@@ -90,12 +92,15 @@ Jadi: **importasi terbukti benar secara struktur, tapi "pesan kontak lama berhas
 - Smoke run: hapus `oktz-smoke.db*` dulu kalau mau bukti bersih, atau sekalian `cp` ke `.bak` biar state "sebelum" bisa dibandingkan.
 - **Cara cek isi DB tanpa sqlite3/python** (tidak ada di PATH): `node -e "const {DatabaseSync}=require('node:sqlite'); ..."` — Node 22 punya SQLite bawaan.
 - `$NS "cargo ..."` diam-diam bisa exit 0 tanpa output test kalau `nix-shell` gagal dapat `cc`. Cek `EXIT=$?` **dan** isi log, jangan percaya exit code saja. Jalankan dari dalam `rust/` (bukan repo root).
+- **WAJIB: crate plugin harus dirujuk di `oktz-bin`.** Rust membuang dependency tak terpakai, jadi statik `linkme`-nya ikut hilang dan `all_plugins()` melaporkan **0 tanpa error** — `oktz boot` tetap exit 0 sambil bilang `plugins: 0`. Cek `use_plugin_crates()` di `oktz-bin/src/main.rs` setiap tambah crate plugin. Test `oktz-bin/tests/plugin_link.rs` menjaganya. Verifikasi cepat: `oktz boot | tail -1` harus `{"plugins":N}` dengan N > 0.
 
-## 6.Langkah berikutnya (urut)
+## 6. Langkah berikutnya (urut)
 
-1. **Tutup sisanya: BadMac / decrypt kontak lama.** Address sudah benar (§3). Sekarang buktikan decrypt beneran: kontak yang punya sesi lama, ambil plaintext-nya, bandingkan. Kalau masih Gagal, periksa `retry receipt` — wacore sudah mengirim `Sending retry receipt` tiap BadMac, tunggu balasan lalu ulangi.
-2. H3: pasang reconnect/logout handler sesuai `pairing-state.js` (grace 60s×2) — supaya 401 palsu tak mematikan.
-3. H4: generikkan `build_card(body, footer, buttons)` + `build_list(sections)` jadi API berparameter.
+1. **Lanjut port plugin batch 2–4 (class A = 396 total).** Batch 1 (`cek*`, 10 plugin) sudah jadi di `c72dd03` dan polanya jelas: macro `cek_plugin!` dipakai ulang, RNG + kerangka teks di-share, lima string tier per plugin. Sisa `cek*`: `cekkarma` (ambang 80/60/40/20), `cekumur` (60/40/20), `cekberat`/`cektinggi`/`ceksisaumur`/`cekpintar` (RNG bukan 0..100), plus `cekowner`/`cekprem`/`cekpartner`/`cekkepribadian` (butuh DB). Setelah itu plugin lain di class A. **Jangan** port class B/C/D sebelum router ada jalur I/O-nya.
+2. **Lanjut `oktz-router`:** yang BELUM ada adalah gate yang butuh state — cooldown, energi, rate limiter, dedup 100ms, group protection (16 sub-gate). Semua butuh implementasi `RouterContext` di atas `oktz-store`. Serializer (`getMessageBody`) juga belum.
+3. **Tutup sisanya: BadMac / decrypt kontak lama.** Address sudah benar (§3), import terbukti byte-faithful. Yang belum: bukti plaintext nyata dari kontak lama. Semua 27 pesan gagal datang dari **satu grup** (`120363@g.us`) — jalur sender-key. Dan `48400707903630` (tidak ada di fixture) menerima pesan dengan counter 4→5→6, padahal kontak baru harus mulai session baru: itu defect berbeda, arahkan ke `process_prekey`/prekey lookup.
+4. H3: pasang reconnect/logout handler sesuai `pairing-state.js` (grace 60s×2) — supaya 401 palsu tak mematikan.
+5. H4: generikkan `build_card(body, footer, buttons)` + `build_list(sections)` jadi API berparameter.
 4. Reviewer lagi untuk GATE 2.
 5. **Fase 3**: `oktz-router` (port `handler.js` 2405 baris) + `oktz-scheduler`. Plan sudah: `docs/superpowers/plans/2026-10-10-fase-2-oktz-wa.md` Task list (Task 3+ sudah berubah — baca plan).
 6. Baru Fase 6–8: 830 plugin (60–80 batch, subagent paralel max 3–4).

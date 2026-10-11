@@ -1,4 +1,19 @@
 # Fase 2 Implementation Plan — `oktz-wa` (produksi)
+> **STATUS UPDATE (2026-10-11).** Checkbox di file ini TIDAK lagi akurat — plan ini
+> ditulis sebelum Task 1–4 dikerjakan dan tidak pernah di-update. Sumber kebenaran
+> sekarang `docs/rust-rewrite/PROGRESS.md`. Ringkasan:
+>
+> - Task 1 DONE — `410c4da`
+> - Task 2 DONE — `fae3375`
+> - Task 3 DONE — `646843b`
+> - Task 4 PARTIAL — logika pairing sudah `2004791` (12 test), tapi subcommand
+>   `pair-code`/`pair-qr` BELUM ada di `oktz-bin`, dan `pairing.rs` masih nol
+>   call-site (item H3)
+> - Task 5 belum mulai
+> - GATE 2 belum
+> - Di luar plan ini: fix address sesi ratchet `47402d6`, `oktz-router` + 10 plugin
+>   `cek*` `c72dd03`
+
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 

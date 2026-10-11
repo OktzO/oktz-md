@@ -23,19 +23,53 @@ Belum ada satu baris kode Rust produksi. Belum ada `rust/` directory.
 | **Probe Turso (S1 pre-check)** | ✅ **selesai — 12.639 session_keys** |
 | **GATE 0 — approval Oktz** | ✅ **lolos** (engine, F=port-all, RSS delegated) |
 | Spike Task 1 (scaffold+baseline) | ✅ binary 2.0MB, RSS start 3.1MB |
-| **Spike S1 (impor sesi)** | ✅ **514/514 sesi ratchet, 0 BadMac** |
+| **Spike S1 (impor sesi)** | ✅ **514/514 sesi ratchet** — ⚠️ klaim "0 BadMac" DIBATALKAN, lihat §Fase 2A |
 | S1 — pemetaan creds→Device | ✅ connect authenticated |
-| S1 — decrypt via sesi impor | ✅ **"hemz" terbaca** (bukti kompatibilitas oktz-signal↔wacore) |
+| S1 — decrypt via sesi impor | ⚠️ "hemz terbaca" = kontak **baru** (prekey), bukan bukti sesi lama |
 | **Spike S3 (tombol)** | ✅ **muncul + bisa diklik** |
 | **Spike S4 (list)** | ✅ terkirim, render menunggu verifikasi Oktz |
 | **Spike S2 (RSS)** | ✅ **26.6 MB** saat connect (target 60) |
-| Test suite / clippy | ✅ 33 test, clippy -D warnings bersih |
+| Test suite / clippy | ✅ **130 test**, clippy 0 warning |
 | Fase 1 (oktz-core/store/plugin-api) | ✅ **GATE 1 LOLOS** (reviewer independen: LAYAK) |
 | Fase 2 (oktz-wa) | 🔄 Task 1+2 **selesai** — smoke nyata: 514 sesi + authenticated, RSS **16.8 MB** |
 | Fase 2 Task 3 (kirim text/card/list) | ✅ 3/3 terkirim ke owner, RSS ~13 MB |
 | Fase 2 Task 4 (pairing logic) | ✅ **12 test**, port 1:1 pairing-state.js |
+| **Fix address sesi ratchet** | ✅ `47402d6` — 5 → **515** address terbaca wacore |
+| **oktz-router (FLOW)** | ✅ `c72dd03` — permission + mode + parsing, **53 test** |
+| **Plugin batch 1 (class A)** | ✅ `c72dd03` — **10 plugin `cek*`**, registry proven `plugins:10` |
 | Fase 2 Task 4 (alur pairing ke WA) | ⏳ butuh device baru + interaksi Oktz |
+| **BadMac / decrypt kontak lama** | ❌ **BELUM terbukti** — investigasi selesai, root cause eksternal |
 | Reviewer Fase 2 + GATE 2 | ⏳ next |
+
+## Fase 2A — Fix address sesi ratchet (`47402d6`)
+
+Blocker dari reviewer sesi lalu **tertutup dan terbukti**. Diagnosis awal tidak lengkap: ada **dua** bug.
+
+1. Loader menempelkan `@s.whatsapp.net`, tapi `mapped_server` (`jid.rs:16`) memetakan `s.whatsapp.net` → **`c.us`**. Alamat itu tidak dibaca wacore dalam bentuk apa pun.
+2. Suffix `_N` disalahartikan sebagai device. `libsignal.js:384`: `signalUser = domainType !== WHATSAPP ? "{user}_{domainType}" : user` — jadi `_1` = **LID**.
+
+| | sebelum | sesudah |
+|---|---|---|
+| sesi punya `@server` (dibaca wacore) | **5** | **515** |
+| key mati | **514** | 0 |
+
+Jawaban pertanyaan lama "LID atau PN?": **semua 514 id punya `_1`** → semuanya LID. `lid_pn_mapping` tidak perlu disentuh.
+
+## Fase 2B — Investigasi BadMac (selesai, tapi decrypt belum terbukti)
+
+- methodical debugging + 3 subagent. Yang **DIREFUTASI** (hipotesis yang sempat masuk):
+- ❌ Address salah → sudah diperbaiki, wacore runtime jelas load: `Session loaded for 247957890850846@lid.0`.
+- ❌ Import lose data → 60 record dicek, rootKey/lastRemoteEphemeralKey/ephemeral pub+priv semua ada di blob hasil konversi.
+- ❌ Identity/session selection → semua kontak punya **tepat satu** `closed == -1`; `retention_order` wacore sudah sama dengan aturan JS (`Current` dulu).
+- ❌ `pending_pre_key: None` → hanya dibaca saat **encrypt** dan export, tidak menyentuh decrypt.
+
+**Yang CONFIRMED:**
+- Semua 27 pesan gagal datang dari **satu grup** (`120363428677398852@g.us`) — jalannya sender-key, bukan session 1:1.
+- `lastRemoteEphemeralKey` tersimpan = `05658aea…`, tapi pesan masuk pakai ratchet key `4dfcaa47…` / `57eb5031…` / `b1735e82…` — **tidak ada yang cocok**. Sender sudah ratchet jauh melewati state yang kita simpan.
+- `48400707903630` **tidak ada** di fixture, tapi menerima pesan dengan counter **4→5→6**. Kontak yang benar-benar baru seharusnya mulai session baru dan decrypt. Ini poke defect berbeda, dan `No current session` (3x) mengarah ke `process_prekey`/prekey lookup.
+- wacore sudah mengirim **24 retry receipt** (0 kegagalan kirim). Sender tidak pernah mengirim balik dalam jendela smoke — itu perilaku yang diharapkan: receiver ack dan server membuang, pemulihan bergantung device pengirim.
+
+**Kesimpulan:** impor terbukti benar secara struktural; "pesan kontak lama berhasil decrypt" **belum terbukti** dan butuh bukti plaintext nyata. Jangan tandai selesai tanpa itu.
 
 ## Fase 2 — Task 1–4 (2026-10-10)
 
