@@ -28,11 +28,12 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::future::Future;
+use std::path::PathBuf;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::Instant;
 
-use oktz_plugin_api::registry::{GroupRoster, MediaSource, Participant};
+use oktz_plugin_api::registry::{GroupRoster, MediaSource, Mutation, Participant};
 use oktz_plugin_api::{Ctx, PluginEntry, Reply};
 use oktz_router::gates::{
     AutoWorkDecision, AutoWorkGuard, AutoWorkSettings, EnergiSettings, resolve_energi_enabled,
@@ -295,59 +296,516 @@ pub fn capprem_from(settings: Option<&Value>, name: &str) -> Option<bool> {
 
 /// [`RouterContext`] di atas `JsonStore`.
 ///
-/// Simpan dibungkus `Arc` dan hanya dibaca. Penulisan di runtime adalah urusan
-/// jalur lain yang menukar `Arc` — `&self` di sini tidak bisa menulis, sesuai
-/// tanda tangan trait.
+/// Snapshot dibaca lewat `RwLock` bukan `Arc` polos karena `JsonStore::set`
+/// butuh `&mut self` sementara store ini dipakai bersama: setelah mutasi
+/// ditulis, snapshot di-GANTI dengan `JsonStore` hasil baca ulang, bukan
+/// diubah in-place. Itu satu-satunya cara supaya pesan berikutnya membaca
+/// hasil yang sama dengan yang ada di disk.
 ///
 /// `Clone` dipakai runtime: satu pipeline hidup sudah menempel ke bus event,
 /// jadi saat `Event::Connected` datang lagi (reconnect) pipeline itu yang
-/// dipakai ulang, bukan yang dibangun ulang dari store yang sudah Terbaca.
+/// dipakai ulang, bukan yang dibangun ulang dari store yang sudah terbaca.
 #[derive(Clone)]
 pub struct StoreContext {
-    store: Arc<JsonStore>,
+    /// Apa yang dibaca pipeline sekarang. Ditukar penuh oleh
+    /// [`StoreContext::apply`] setiap kali mutasi ditulis.
+    snapshot: Arc<RwLock<Arc<JsonStore>>>,
+    /// Lokasi dokumen. Tulis selalu lewat buka-ulang file ini, jadi proses
+    /// lain yang menulis file yang sama tidak diam-diam ditimpa.
+    path: PathBuf,
     started: Instant,
 }
 
 impl StoreContext {
     pub fn new(store: Arc<JsonStore>) -> Self {
+        let path = store.path().to_path_buf();
         Self {
-            store,
+            snapshot: Arc::new(RwLock::new(store)),
+            path,
             started: Instant::now(),
         }
     }
 
     /// Dengan titik mulai tetap — supaya `uptime_secs` bisa diuji.
     pub fn with_started_at(store: Arc<JsonStore>, started: Instant) -> Self {
-        Self { store, started }
+        let mut this = Self::new(store);
+        this.started = started;
+        this
     }
+
+    fn read(&self) -> Arc<JsonStore> {
+        Arc::clone(&self.snapshot.read().unwrap_or_else(|e| e.into_inner()))
+    }
+
+    /// Terapkan mutasi lalu PERSIST ke disk, sebelum pemanggil membalas.
+    ///
+    /// Urutan penting dan bukan pilihan: plugin JS menulis `db.save()` lalu
+    /// baru `m.reply(...)`, jadi saat user melihat "✅ tersimpan", datanya
+    /// sudah ada. Kalau pipeline membalas dulu dan menulis kemudian, user
+    /// bisa melihat konfirmasi untuk data yang hilang kalau proses mati di
+    /// antaranya.
+    ///
+    /// Kegagalan dikembalikan, TIDAK ditelan: pemanggil wajib melaporkannya
+    /// (lihat pemakaian di `Pipeline::process`).
+    ///
+    /// Mengembalikan jumlah mutasi yang benar-benar diterapkan.
+    pub fn apply(&self, mutations: &[Mutation], now_ms: i64) -> Result<usize, StoreWriteError> {
+        if mutations.is_empty() {
+            return Ok(0);
+        }
+        // Lock penuh: mutate + tulis + tukar snapshot satu transaksi. Dua
+        // pesan yang sama-sama menulis user yang sama tidak boleh saling
+        // menimpa snapshot di antara baca dan tulis.
+        let mut guard = self.snapshot.write().unwrap_or_else(|e| e.into_inner());
+        let mut fresh = JsonStore::open(&self.path).map_err(|e| StoreWriteError {
+            path: self.path.clone(),
+            detail: format!("buka gagal: {e}"),
+        })?;
+
+        for m in mutations {
+            apply_mutation(&mut fresh, m, now_ms, self.path.clone())?;
+        }
+
+        fresh.write().map_err(|e| StoreWriteError {
+            path: self.path.clone(),
+            detail: format!("tulis gagal: {e}"),
+        })?;
+
+        // Snapshot ditukar HANYA setelah `write()` sukses. Kalau tulis
+        // gagal, pipeline masih membaca state lama — sama dengan isi disk.
+        *guard = Arc::new(fresh);
+        Ok(mutations.len())
+    }
+}
+
+/// Mutasi gagal ditulis. Path ikut dibawa supaya log menyebut file yang
+/// bermasalah, bukan cuma "write failed".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreWriteError {
+    pub path: PathBuf,
+    pub detail: String,
+}
+
+impl fmt::Display for StoreWriteError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} ({})", self.detail, self.path.display())
+    }
+}
+
+impl std::error::Error for StoreWriteError {}
+
+/// Terapkan satu mutasi ke store yang SUDAH dibuka untuk tulis.
+///
+/// Tidak menyentuh disk, jadi semantik `setUser`/`setGroup` bisa diuji
+/// tanpa file sama sekali.
+fn apply_mutation(
+    store: &mut JsonStore,
+    m: &Mutation,
+    now_ms: i64,
+    path: PathBuf,
+) -> Result<(), StoreWriteError> {
+    match m {
+        Mutation::SetUser { jid, data } => {
+            // `getUser` mengembalikan `null` untuk jid yang tidak bisa
+            // dinormalisasi (`database.js:530-531`), jadi `setUser` ikut
+            // `return null` — diam, tanpa menulis apa pun.
+            let Some(key) = normalize_user_key(jid) else {
+                return Ok(());
+            };
+            let mut users = store
+                .get("users")
+                .cloned()
+                .unwrap_or_else(|| Value::Object(Default::default()));
+            apply_set_user(&mut users, &key, data, now_ms);
+            store.set("users", users).map_err(|e| StoreWriteError {
+                path,
+                detail: format!("setUser({key}) gagal: {e}"),
+            })?;
+        }
+        Mutation::SetGroup { jid, data } => {
+            if jid.is_empty() {
+                return Ok(());
+            }
+            let mut groups = store
+                .get("groups")
+                .cloned()
+                .unwrap_or_else(|| Value::Object(Default::default()));
+            apply_set_group(&mut groups, jid, data);
+            store.set("groups", groups).map_err(|e| StoreWriteError {
+                path,
+                detail: format!("setGroup({jid}) gagal: {e}"),
+            })?;
+        }
+        Mutation::SetSetting { key, value } => {
+            let mut settings = store
+                .get("settings")
+                .cloned()
+                .unwrap_or_else(|| Value::Object(Default::default()));
+            if !settings.is_object() {
+                settings = Value::Object(Default::default());
+            }
+            settings[key] = value.clone();
+            store.set("settings", settings).map_err(|e| StoreWriteError {
+                path,
+                detail: format!("setting({key}) gagal: {e}"),
+            })?;
+        }
+    }
+    Ok(())
+}
+
+/// `setUser` (`database.js:536-603`) atas `users[key]`.
+///
+/// Bentuk implementannya: map user yang ada di-TIRU ke `u` (owned),
+/// semua nilai dihitung dari `u`, lalu ditulis balik sekali di akhir.
+/// Menyalin-pintas menghindari borrow conflict dan sekaligus membuat
+/// urutan "hapus field legacy → salin field bebas → tulis field default"
+/// sama persis dengan urutan baris di JS.
+///
+/// Dua bagian yang sering terlewat dan di sini dijaga:
+///
+/// 1. `USER_SET_OVERRIDDEN` (`database.js:23-28`) — key yang ADA di
+///    `data` TIDAK disalin mentah; nilainya ditulis ulang dari
+///    `data.k ?? existing.k ?? default`. Bedanya chiefly di `name`:
+///    `data.name || ...` memakai `||`, jadi `name: ""` jatuh ke
+///    `"Unknown"`, bukan tersimpan sebagai string kosong.
+/// 2. `existing.rpg` / `existing.inventory` di-MERGE satu level
+///    (`{...existing, ...data}`), bukan diganti. Plugin seperti `bank.js`
+///    menulis `rpg.bank` tanpa mengirim ulang seluruh blok `rpg`; kalau
+///    ini jadi replace, `rpg.exp` milik user hilang.
+pub fn apply_set_user(users: &mut Value, key: &str, data: &Value, now_ms: i64) {
+    let mut u = users
+        .get(key)
+        .cloned()
+        .filter(Value::is_object)
+        .unwrap_or_else(|| Value::Object(Default::default()));
+    let u = u.as_object_mut().expect("dijamin object di atas");
+
+    // `existing.balance`/`existing.limit` dibaca lalu DIHAPUS supaya field
+    // legacy tidak ikut di-serialize; `balance` jadi `koin`, `limit`
+    // jadi `energi` (database.js:539-548).
+    let existing_balance = u.get("balance").and_then(Value::as_i64).unwrap_or(0);
+    let existing_limit = u
+        .get("limit")
+        .and_then(Value::as_i64)
+        .unwrap_or(DEFAULT_USER_LIMIT);
+    u.remove("balance");
+    u.remove("limit");
+
+    if let Some(d) = data.as_object() {
+        for (k, v) in d {
+            if !USER_SET_OVERRIDDEN.contains(&k.as_str()) {
+                u.insert(k.clone(), v.clone());
+            }
+        }
+    }
+
+    // `data.x ?? existing.x ?? default` — `??` hanya jatuh ke kanan saat
+    // kiri `null`/`undefined`, jadi `0` dan `""` TIDAK jadi default.
+    // Plugin rpg bergantung pada ini: `koin: 0` harus tersimpan 0.
+    let num_or = |field: &str, default: Value| -> Value {
+        let exist_v = u.get(field).cloned();
+        match data.get(field) {
+            Some(v) if !v.is_null() => v.clone(),
+            _ => match exist_v {
+                Some(v) if !v.is_null() => v,
+                _ => default,
+            },
+        }
+    };
+
+    // `data.rpg !== undefined && data.rpg !== existing.rpg
+    //  ? {...existing.rpg, ...data.rpg} : existing.rpg || {}`
+    // (database.js:592-594). Perbandingan `!==` JS di sini sama dengan
+    // "kedua sisi ada dan berbeda nilainya".
+    let merged = |field: &str| -> Value {
+        let exist_v = u.get(field).cloned();
+        match (data.get(field), &exist_v) {
+            (Some(dv), Some(ev)) if dv != ev => {
+                let mut m = ev.clone();
+                match (m.as_object_mut(), dv.as_object()) {
+                    (Some(m), Some(dv)) => {
+                        for (k, v) in dv {
+                            m.insert(k.clone(), v.clone());
+                        }
+                    }
+                    // Salah satu bukan object: spread di JS hanya berlaku
+                    // kalau keduanya object; selain itu `data` yang menang.
+                    _ => m = dv.clone(),
+                }
+                m
+            }
+            _ => exist_v.unwrap_or_else(|| Value::Object(Default::default())),
+        }
+    };
+
+    let is_lid = key.starts_with(USER_KEY_LID_PREFIX);
+    let clean = key.strip_prefix(USER_KEY_LID_PREFIX).unwrap_or(key);
+    let num = || {
+        if is_lid {
+            Value::Null
+        } else {
+            Value::from(clean)
+        }
+    };
+
+    // `data.name || existing.name || "Unknown"` — `||`, bukan `??`.
+    let name = data
+        .get("name")
+        .filter(|v| truthy(v))
+        .or_else(|| u.get("name").filter(|v| truthy(v)))
+        .cloned()
+        .unwrap_or_else(|| Value::from("Unknown"));
+    // `data.access || existing.access || []` — `||` juga: array kosong di
+    // `data` TIDAK menang, existing dipakai.
+    let access = data
+        .get("access")
+        .filter(|v| truthy(v))
+        .or_else(|| u.get("access").filter(|v| truthy(v)))
+        .cloned()
+        .unwrap_or_else(|| Value::Array(Vec::new()));
+    let lid = if is_lid {
+        Value::from(clean)
+    } else {
+        u.get("lid").cloned().unwrap_or(Value::Null)
+    };
+    let rpg = merged("rpg");
+    let inventory = merged("inventory");
+
+    // Semua nilai dihitung DULU ke dalam daftar, baru ditulis. Kalau
+    // `u.insert` diselang dengan `num_or(...)` yang membaca `u`, borrow
+    // checker menolak — dan urutan hitungannya jadi tidak bisa
+    // dibandingkan baris-per-baris dengan JS.
+    let fields: Vec<(&str, Value)> = vec![
+        ("jid", num()),
+        ("lid", lid),
+        ("name", name),
+        ("number", num()),
+        ("energi", num_or("energi", Value::from(existing_limit))),
+        ("isPremium", num_or("isPremium", Value::from(false))),
+        ("isBanned", num_or("isBanned", Value::from(false))),
+        ("exp", num_or("exp", Value::from(0))),
+        ("level", num_or("level", Value::from(1))),
+        ("koin", num_or("koin", Value::from(existing_balance))),
+        ("saldo", num_or("saldo", Value::from(0))),
+        (
+            "unlockedFeatures",
+            num_or("unlockedFeatures", Value::Array(Vec::new())),
+        ),
+        ("registeredAt", num_or("registeredAt", Value::Null)),
+        (
+            "lastRegisteredAt",
+            num_or("lastRegisteredAt", Value::Null),
+        ),
+        (
+            "registrationCount",
+            num_or("registrationCount", Value::from(0)),
+        ),
+        (
+            "hasClaimedRegisterReward",
+            num_or("hasClaimedRegisterReward", Value::from(false)),
+        ),
+        ("unregisteredAt", num_or("unregisteredAt", Value::Null)),
+        ("lastSeen", Value::from(iso_utc(now_ms))),
+        (
+            "cooldowns",
+            num_or("cooldowns", Value::Object(Default::default())),
+        ),
+        ("clanId", num_or("clanId", Value::Null)),
+        (
+            "isRegistered",
+            num_or("isRegistered", Value::from(false)),
+        ),
+        ("regName", num_or("regName", Value::Null)),
+        ("regAge", num_or("regAge", Value::Null)),
+        ("regGender", num_or("regGender", Value::Null)),
+        ("rpg", rpg),
+        ("inventory", inventory),
+        ("access", access),
+    ];
+    // Urutan list di atas = urutan baris `u.x = ...` di `database.js:559-601`.
+    for (k, v) in fields {
+        u.insert(k.to_string(), v);
+    }
+
+    if let Some(root) = users.as_object_mut() {
+        root.insert(key.to_string(), Value::Object(u.clone()));
+    }
+}
+
+/// `setGroup` (`database.js:717-746`) atas `groups[jid]`.
+pub fn apply_set_group(groups: &mut Value, jid: &str, data: &Value) {
+    let mut g = groups
+        .get(jid)
+        .cloned()
+        .filter(Value::is_object)
+        .unwrap_or_else(|| Value::Object(Default::default()));
+    let g = g.as_object_mut().expect("dijamin object di atas");
+
+    // `{...existing, ...data}` dulu — field lain ikut mewarisi.
+    if let Some(d) = data.as_object() {
+        for (k, v) in d {
+            g.insert(k.clone(), v.clone());
+        }
+    }
+
+    // `data.x ?? existing.x ?? default` untuk field yang punya default
+    // eksplisit di JS. Dihitung semua dulu supaya tidak ada `&g` hidup
+    // sementara `g` di-`insert`.
+    let pick = |field: &str, default: Value| -> Value {
+        let exist_v = g.get(field).cloned();
+        match data.get(field) {
+            Some(v) if !v.is_null() => v.clone(),
+            _ => match exist_v {
+                Some(v) if !v.is_null() => v,
+                _ => default,
+            },
+        }
+    };
+    // Urutan = urutan baris di `database.js:735-744`.
+    let toggles: Vec<(&str, Value)> = vec![
+        // `config.welcome?.defaultEnabled ?? false` (`database.js:723-725`);
+        // config repo ini `false` (`config.js:186`).
+        ("welcome", pick("welcome", Value::from(GROUP_TOGGLE_DEFAULT))),
+        ("leave", pick("leave", Value::from(GROUP_TOGGLE_DEFAULT))),
+        ("goodbye", pick("goodbye", Value::from(GROUP_TOGGLE_DEFAULT))),
+        ("antilink", pick("antilink", Value::from(false))),
+        ("antitoxic", pick("antitoxic", Value::from(false))),
+        ("mute", pick("mute", Value::from(false))),
+        ("game", pick("game", Value::from(true))),
+        ("rpg", pick("rpg", Value::from(true))),
+        ("warnings", pick("warnings", Value::Array(Vec::new()))),
+    ];
+    for (field, v) in toggles {
+        g.insert(field.to_string(), v);
+    }
+    // `welcomeMsg`/`goodbyeMsg`/`intro` TIDAK punya default:
+    // `data.x ?? existing.x ?? undefined` berarti key yang tidak ada di
+    // `data` DAN existing tetap `null` di JSON, bukan `undefined` yang
+    // akan hilang saat serialize.
+    for field in ["welcomeMsg", "goodbyeMsg", "intro"] {
+        g.entry(field.to_string()).or_insert(Value::Null);
+        if let Some(v) = data.get(field) {
+            g.insert(field.to_string(), v.clone());
+        }
+    }
+    g.entry("chat".to_string())
+        .or_insert_with(|| Value::Object(Default::default()));
+    // `name` dihitung dari objek yang SUDAH ter-merge di atas, jadi
+    // `name` dari `existing` tidak hilang oleh default.
+    let name = data
+        .get("name")
+        .filter(|v| truthy(v))
+        .or_else(|| g.get("name").filter(|v| truthy(v)))
+        .cloned()
+        .unwrap_or_else(|| Value::from("Unknown Group"));
+    g.insert("jid".into(), Value::from(jid));
+    g.insert("name".into(), name);
+
+    if let Some(root) = groups.as_object_mut() {
+        root.insert(jid.to_string(), Value::Object(g.clone()));
+    }
+}
+
+/// Key yang `setUser` TULIS ULANG dari `data`, jadi tidak boleh disalin
+/// mentah lebih dulu — `USER_SET_OVERRIDDEN` (`database.js:23-28`).
+const USER_SET_OVERRIDDEN: &[&str] = &[
+    "jid", "name", "number", "energi", "isPremium", "isBanned", "exp", "level", "koin", "saldo",
+    "unlockedFeatures", "registeredAt", "lastRegisteredAt", "registrationCount",
+    "hasClaimedRegisterReward", "unregisteredAt", "lastSeen", "cooldowns", "clanId",
+    "isRegistered", "regName", "regAge", "regGender", "rpg", "inventory", "access",
+];
+
+/// Prefiks kunci user untuk JID LID (`normalize_user_key`).
+const USER_KEY_LID_PREFIX: &str = "lid:";
+
+/// `existing.limit !== undefined ? existing.limit : config.energi?.default || 25`
+/// (`database.js:541-543`). Default bot sebenarnya `99999`
+/// (`config.js:114` = `EnergiSettings::default().default`), jadi kedua
+/// angka itu sama dan `25` tidak pernah terlihat di produksi.
+const DEFAULT_USER_LIMIT: i64 = 99_999;
+
+/// `config.welcome.defaultEnabled` (`config.js:186`).
+const GROUP_TOGGLE_DEFAULT: bool = false;
+
+/// Truthiness JavaScript: `false`, `0`, `""`, `null`, `NaN` salah.
+/// `serde_json` tidak punya `NaN`, jadi yang tersisa empat kasus itu.
+/// Array dan object — termasuk yang KOSONG — selalu truthy di JS.
+fn truthy(v: &Value) -> bool {
+    match v {
+        Value::Null => false,
+        Value::Bool(b) => *b,
+        Value::Number(n) => n.as_f64().is_some_and(|f| f != 0.0),
+        Value::String(s) => !s.is_empty(),
+        _ => true,
+    }
+}
+
+/// `new Date(ms).toISOString()` — format sama persis dengan yang ditulis
+/// `database.js:585`, karena `lastSeen` dibaca `Date.parse` oleh
+/// `handler.js:960` dan dibandingkan sebagai string ISO di
+/// `data-pruner.js:36`.
+pub fn iso_utc(ms: i64) -> String {
+    let (secs, milli) = (ms.div_euclid(1000), ms.rem_euclid(1000));
+    let days = secs.div_euclid(86_400);
+    let tod = secs.rem_euclid(86_400);
+    let (y, mo, da) = civil_from_days(days);
+    format!(
+        "{y:04}-{mo:02}-{da:02}T{:02}:{:02}:{:02}.{milli:03}Z",
+        tod / 3600,
+        (tod % 3600) / 60,
+        tod % 60
+    )
+}
+
+/// Hari sejak epoch → `(tahun, bulan, hari)`, algoritma Howard Hinnant.
+/// `chrono` tidak dipakai: satu fungsi 20 baris lebih murah daripada
+/// dependency untuk satu format string.
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    (if m <= 2 { y + 1 } else { y }, m as u32, d as u32)
 }
 
 impl RouterContext for StoreContext {
     fn user_state(&self, sender: &str) -> UserState {
+        let store = self.read();
         match normalize_user_key(sender) {
-            Some(key) => user_state_from(top(&self.store, "users"), &key),
+            Some(key) => user_state_from(top(&store, "users"), &key),
             None => UserState::default(),
         }
     }
 
     fn group_state(&self, chat: &str) -> Option<GroupState> {
-        group_state_from(top(&self.store, "groups"), chat)
+        let store = self.read();
+        group_state_from(top(&store, "groups"), chat)
     }
 
     fn group_bot_mode(&self, chat: &str) -> String {
-        group_bot_mode_from(top(&self.store, "groups"), chat)
+        let store = self.read();
+        group_bot_mode_from(top(&store, "groups"), chat)
     }
 
     fn mode_settings(&self) -> ModeSettings {
-        mode_settings_from(top(&self.store, "settings"))
+        let store = self.read();
+        mode_settings_from(top(&store, "settings"))
     }
 
     fn group_overrides(&self, chat: &str) -> Option<GroupOverrides> {
-        group_overrides_from(top(&self.store, "groups"), chat)
+        let store = self.read();
+        group_overrides_from(top(&store, "groups"), chat)
     }
 
     fn capprem(&self, name: &str) -> Option<bool> {
-        capprem_from(top(&self.store, "settings"), name)
+        let store = self.read();
+        capprem_from(top(&store, "settings"), name)
     }
 
     /// JS memakai `process.uptime()`. Tidak ada backing di store, jadi ini
@@ -365,7 +823,8 @@ impl StoreContext {
         let Some(key) = normalize_user_key(sender) else {
             return Value::Null;
         };
-        top(&self.store, "users")
+        self.read()
+            .get("users")
             .and_then(|u| u.get(&key))
             .cloned()
             .unwrap_or(Value::Null)
@@ -374,10 +833,17 @@ impl StoreContext {
     /// `groups[chat]` mentah untuk `chat`. Tanpa normalisasi JID, sama seperti
     /// `getGroup` (`database.js:711-714`).
     pub fn group_entry(&self, chat: &str) -> Value {
-        top(&self.store, "groups")
+        self.read()
+            .get("groups")
             .and_then(|g| g.get(chat))
             .cloned()
             .unwrap_or(Value::Null)
+    }
+
+    /// `settings` mentah — objek yang jadi `Ctx::settings`, sumber
+    /// `db.setting(key)` (`database.js:753`).
+    pub fn settings_entry(&self) -> Value {
+        self.read().get("settings").cloned().unwrap_or(Value::Null)
     }
 
     /// `settings.capenergi` (`handler.js:1856`) — override biaya energi per
@@ -385,7 +851,8 @@ impl StoreContext {
     /// atas `plugin.config.energi`, jadi setiap key ikut dibaca bukan hanya
     /// yang truthy. Key non-numerik diabaikan, bukan diperlakukan `0`.
     pub fn energy_overrides(&self) -> HashMap<String, i64> {
-        top(&self.store, "settings")
+        let store = self.read();
+        top(&store, "settings")
             .and_then(|s| s.get("capenergi"))
             .and_then(Value::as_object)
             .map(|m| {
@@ -399,7 +866,8 @@ impl StoreContext {
     /// `settings.energi` (`handler.js:1851-1854`). `None` berarti setting-nya
     /// tidak ada, jadi ikut [`resolve_energi_enabled`] dengan nilai config.
     pub fn energi_enabled_setting(&self) -> Option<bool> {
-        top(&self.store, "settings")
+        let store = self.read();
+        top(&store, "settings")
             .and_then(|s| s.get("energi"))
             .and_then(Value::as_bool)
     }
@@ -700,6 +1168,12 @@ pub enum PipelineError {
     MediaSourceMissing { variant: &'static str },
     /// Sumber media ada tapi gagal jadi byte / gagal upload.
     Media(String),
+    /// `Reply::Mutate` mencapai [`render_reply`] tanpa lewat
+    /// `Reply::into_parts` dulu — mutasi store tidak ditulis, jadi
+    /// pesan yang dikirim akan mengklaim sesuatu yang tidak terjadi.
+    UnappliedMutation { count: usize },
+    /// Varian `Reply` yang tidak punya jalur render pesan.
+    Unsupported(String),
     Other(String),
 }
 
@@ -712,6 +1186,13 @@ impl fmt::Display for PipelineError {
                  ada byte yang bisa di-upload. Pesan TIDAK dikirim."
             ),
             Self::Media(m) => write!(f, "{m}"),
+            Self::Unsupported(m) => write!(f, "{m}"),
+            Self::UnappliedMutation { count } => write!(
+                f,
+                "Reply::Mutate dengan {count} mutasi mencapai render_reply tanpa ditulis ke \
+                 store dulu. Pesan TIDAK dikirim — mengirimpesan 'tersimpan' tanpa \
+                 write = berbohong ke user."
+            ),
             Self::Other(m) => write!(f, "{m}"),
         }
     }
@@ -868,6 +1349,15 @@ fn context_info(mentions: &[String], quote: Option<&QuoteSource>) -> wa::Context
 ///
 /// `Ok(None)` = jangan kirim apa pun (`Reply::None`).
 ///
+/// `Reply::Mutate` yang tiba di sini itu ERROR, bukan "ambil bagian
+/// dalamnya": mutasi adalah efek samping yang harus ditulis store, dan
+/// fungsi ini tidak punya akses ke store. `Pipeline::process` memanggil
+/// [`Reply::into_parts`] lebih dulu supaya tulisnya terjadi sebelum
+/// balasan dikirim. Kalau `Mutate` tetap sampai ke sini, ada pemanggil
+/// yang melewatkan langkah itu — dan diam-diamnya membuang write
+///ersistent adalah kegagalan yang paling mahal, jadi ia jadi error
+/// bertipe.
+///
 /// Per-varian:
 /// - `Text` tanpa mention → `conversation` polos; dengan mention →
 ///   `extendedTextMessage` + `context_info.mentioned_jid`
@@ -928,6 +1418,15 @@ pub fn render_reply(
             Card::new(body).to_message(),
             vec![biz_node()],
         ))),
+        // Reaksi bukan message; dikirim lewat `send_reaction`, bukan render.
+        Reply::Reaction { .. } => Err(PipelineError::Unsupported(
+            "Reaction harus lewat send_reaction, bukan render".into(),
+        )),
+        // Pagar: mutasi yang belum ditulis store TIDAK boleh dirender
+        // menjadi pesan "✅ tersimpan" yang bohong. Lihat catatan fungsi.
+        Reply::Mutate { mutations, .. } => Err(PipelineError::UnappliedMutation {
+            count: mutations.len(),
+        }),
     }
 }
 
@@ -1243,6 +1742,11 @@ struct PluginCtxSource {
 impl PluginCtxSource {
     /// Isi field `Ctx` yang tidak bisa dihitung router: roster grup + state
     /// store. Idempoten dan bebas I/O — semua sudah ada di memori.
+    ///
+    /// `settings` ikut di sini karena `db.setting(key)` (`database.js:753`)
+    /// dibaca plugin dari snapshot yang SAMA dengan yang dibaca gate
+    /// permission. Kalau plugin membaca settings lewat jalur lain, ia bisa
+    /// melihat override yang tidak dipakai gate untuk pesan yang sama.
     fn fill(&self, c: &mut Ctx) {
         c.roster = self
             .rosters
@@ -1252,6 +1756,7 @@ impl PluginCtxSource {
             .unwrap_or_default();
         c.user_data = self.store.user_entry(&c.sender);
         c.group_data = self.store.group_entry(&c.chat);
+        c.settings = self.store.settings_entry();
     }
 }
 
@@ -1351,14 +1856,23 @@ pub enum Outcome {
     Denied,
     /// Plugin jalan dan balasan terkirim.
     Sent,
-    /// Plugin membalas media yang `Reply` tidak punya sumbernya.
+/// Plugin membalas media yang `Reply` tidak punya sumbernya.
     ///
     /// TIDAK lagi dipakai: kasus itu sekarang jadi
-    /// [`PipelineError::MediaSourceMissing`], bukan `Outcome` — `process`
-    /// mengembalikan `Err` supaya tidak ada yang mengira pesan terkirim.
+    /// [`PipelineError::MediaSourceMissing`], bukan `Outcome` —
+    /// `process` mengembalikan `Err` supaya tidak ada yang mengira pesan terkirim.
     /// Varian dipertahankan supaya `Outcome` tidak berubah bentuk bagi
     /// pemanggil yang sudah mematch-nya.
     MediaMissing,
+    /// Mutasi plugin gagal ditulis ke store. Balasan plugin TIDAK dikirim,
+    /// karena hampir semua teksnya mengklaim data sudah tersimpan.
+    ///
+    /// `Outcome` dan bukan `Err`: kegagalan ini TERJADI pada jalur normal
+    /// (disk penuh, file terkunci proses lain, file jadi rusak) dan tidak
+    /// boleh menghentikan loop pesan — pesan berikutnya tetap diproses dan
+    /// akan membaca store apa adanya. Yang akibatnya dicatat di sini dan
+    /// di-`tracing::error!`, bukan hilang.
+    StoreWriteFailed,
 }
 
 /// `AutoWorkGuard` yang diikat ke satu pesan.
@@ -1953,7 +2467,54 @@ impl Pipeline {
             let router = Router::new(&*self.ctx, self.parse_opts.clone(), now_ms);
             let decision = router.route(&mut caller, &body, lookup);
             let reply = decision_to_reply(&decision);
+
+            // --- Tulis mutasi SEBELUM balasan dikirim --------------------
+            // Plugin JS melakukan `db.save()` lalu `m.reply(...)`, jadi
+            // pada saat user membaca "✅ tersimpan", data sudah di disk.
+            // Kalau urutannya dibalik, user bisa melihat konfirmasi untuk
+            // data yang hilang kalau proses mati di antaranya.
+            //
+            // Kegagalan TIDAK ditelan: teks balasan plugin hampir selalu
+            // mengklaim berhasil ("PRODUK DITAMBAHKAN", "TERSIMPAN"), jadi
+            // mengirim pesan itu tanpa data = berbohong ke user. Yang
+            // dilakukan: log error dengan konteks penuh dan JANGAN kirim
+            // balasan yang menyesatkan. Pesan berikutnya dari user yang
+            // sama akan membaca store apa adanya, jadi tidak ada state
+            // setengah jadi.
+            let (reply, mutations) = reply.into_parts();
+            if !mutations.is_empty() {
+                let plugin = match &decision {
+                    Decision::Handled(_) => caller.command.clone(),
+                    _ => "<router>".to_string(),
+                };
+                if let Err(e) = self.ctx.apply(&mutations, now_ms) {
+                    tracing::error!(
+                        error = %e,
+                        plugin = %plugin,
+                        chat = %caller.chat,
+                        sender = %caller.sender,
+                        mutations = mutations.len(),
+                        "gagal menyimpan mutasi plugin; balasan tidak dikirim"
+                    );
+                    return Ok(Outcome::StoreWriteFailed);
+                }
+            }
+
             let quote = QuoteSource::from_inbound(m);
+            // `Reply::Reaction` (JS `m.react('✅')`) bukan message — dikirim
+            // lewat jalur reaksi. Seperti cooldown, kegagalan bereaksi tidak
+            // boleh menggagalkan sisa pipeline.
+            if let Reply::Reaction { emoji, reply: inner } = &reply {
+                if let Err(e) = self.sender.react(&caller.chat, &message_key_of(m), emoji).await {
+                    tracing::warn!(error = %e, emoji = %emoji, "gagal bereaksi");
+                }
+                // Teks balasan (kalau ada) tetap dikirim setelah reaksi.
+                if let Some(rendered) = render_reply(inner, quote.as_ref())? {
+                    self.deliver(&caller.chat, rendered).await?;
+                }
+                return Ok(Outcome::Sent);
+            }
+
             let Some(rendered) = render_reply(&reply, quote.as_ref())? else {
                 // `Reply::None`: `DeniedMode::Silent`, `SelfGroup`, `NoPlugin`,
                 // `NotACommand`, atau `Reply::None` dari plugin — semua sengaja diam.
@@ -4131,5 +4692,482 @@ impl TestPlugin {
         // plugin yang sama) juga harus ditolak oleh permission, bukan cooldown.
         let m2 = inbound_n(".gatetest halo", MEMBER, MEMBER, false);
         assert_eq!(p.process(&m2, 1_100).await.unwrap(), Outcome::Denied);
+    }
+
+    // =====================================================================
+    // Task 2 — mutasi store: round-trip dua pesan lewat store sungguhan
+    // =====================================================================
+
+    /// Satu entry plugin dengan handler yang ditentukan pemanggil.
+    fn entry_named(
+        name: &'static str,
+        handler: impl Fn(Ctx) -> Reply + Send + Sync + 'static,
+    ) -> PluginLookup {
+        let entry: &'static PluginEntry = Box::leak(Box::new(PluginEntry {
+            meta: oktz_plugin_api::meta::PluginMeta {
+                name: name.into(),
+                category: "store".into(),
+                ..Default::default()
+            },
+            handler: Arc::new(handler),
+        }));
+        Arc::new(move |cmd| (cmd == name).then_some(entry))
+    }
+
+    /// Plugin yang MEMBACA `ctx.user_data` dan mengembalikan apa yang dia
+    /// lihat — dipakai sebagai "pesan berikutnya" untuk membuktikan write
+    /// tidak hanya hidup di memori plugin.
+    fn echo_koin_lookup() -> PluginLookup {
+        entry_named("balance", |c: Ctx| {
+            let koin = c.user_field("koin").and_then(Value::as_i64).unwrap_or(-1);
+            Reply::text(format!("koin={koin}"))
+        })
+    }
+
+    fn pipeline_for(store_body: &str, lookup: PluginLookup) -> (Arc<Pipeline>, Arc<RecordingSender>) {
+        let ctx = StoreContext::new(store_with("mutate", store_body));
+        let sender = Arc::new(RecordingSender::default());
+        let p = Arc::new(
+            Pipeline::new(ctx, sender.clone(), BOT, ParseOptions::default())
+                .with_identity(Identity::default())
+                .with_plugin_lookup(lookup),
+        );
+        (p, sender)
+    }
+
+    const EMPTY_STORE: &str = r#"{"users":{},"groups":{},"settings":{}}"#;
+
+    /// BUKTI KUNCI Task 2: mutasi yang ditulis plugin untuk pesan pertama
+    /// HARUS terlihat oleh pesan kedua, dan harus benar-benar ada di file.
+    ///
+    /// Yang dibuktikan tiga lapis, bukan cuma yang pertama:
+    /// 1. pesan #2 (plugin berbeda, `Ctx` baru) membaca nilai baru —
+    ///    jadi snapshot `StoreContext` benar-benar tertukar;
+    /// 2. file JSON di disk memuat nilai baru — jadi `JsonStore::write`
+    ///    benar-benar dipanggil, bukan hanya state di memori;
+    /// 3. `JsonStore` yang di-BUKA ULANG dari disk memuat nilai yang sama —
+    ///    jadi tidak ada cache yang menutupi masalah.
+    #[tokio::test]
+    async fn mutation_from_one_message_is_visible_to_the_next_through_the_real_store() {
+        // Pesan #1: plugin menyimpan, pesan #2: plugin membaca.
+        let saving = entry_named("nabung", |c: Ctx| {
+            let before = c.user_field("koin").and_then(Value::as_i64).unwrap_or(0);
+            Reply::text("✅ TERSIMPAN").with_mutation(Mutation::SetUser {
+                jid: c.sender.clone(),
+                data: serde_json::json!({ "koin": before + 500 }),
+            })
+        });
+        let reader = echo_koin_lookup();
+        let lookup = Arc::new(move |cmd: &str| {
+            let s = saving(cmd);
+            s.or_else(|| reader(cmd))
+        });
+        let (p, sender) = pipeline_for(EMPTY_STORE, lookup);
+
+        let path = p.ctx().read().path().to_path_buf();
+
+        // --- pesan #1: menulis ------------------------------------------
+        let m1 = inbound_n(".nabung", MEMBER, MEMBER, false);
+        assert_eq!(p.process(&m1, 10_000).await.unwrap(), Outcome::Sent);
+        assert_eq!(
+            sender.texts(),
+            vec![format!("{MEMBER}: ✅ TERSIMPAN")],
+            "pesan konfirmasi harus terkirim"
+        );
+
+        // (2) file di disk sudah memuat nilai baru SEBELUM pesan #2.
+        let disk = std::fs::read_to_string(&path).unwrap();
+        let v: Value = serde_json::from_str(&disk).unwrap();
+        assert_eq!(
+            v["users"]["628111"]["koin"].as_i64(),
+            Some(500),
+            "write harus sampai ke disk, bukan hanya ke state pipeline"
+        );
+
+        // (3) store yang dibuka ULANG dari disk punya nilai yang sama —
+        //     tidak ada cache yang menahan data lama.
+        let reopened = JsonStore::open(&path).unwrap();
+        assert_eq!(
+            reopened.get("users").unwrap()["628111"]["koin"].as_i64(),
+            Some(500),
+            "store baru dari file yang sama harus melihat write tadi"
+        );
+
+        // (1) pesan #2, plugin berbeda, Ctx baru: nilai baru harus terlihat.
+        let m2 = inbound_n(".balance", MEMBER, MEMBER, false);
+        assert_eq!(p.process(&m2, 11_000).await.unwrap(), Outcome::Sent);
+        assert_eq!(
+            sender.texts().last().unwrap(),
+            &format!("{MEMBER}: koin=500"),
+            "pesan kedua harus membaca hasil write pesan pertama"
+        );
+    }
+
+    /// `setSetting` juga harus lintas-pesan lewat disk — inilah yang
+    /// plugin `store/*` andalkan (`db.setting('storeLists', ...)`).
+    #[tokio::test]
+    async fn a_setting_written_by_a_plugin_is_read_by_the_next_message() {
+        let saving = entry_named("setlist", |_c: Ctx| {
+            Reply::text("ok").with_mutation(Mutation::SetSetting {
+                key: "storeLists".into(),
+                value: serde_json::json!([{"name": "S&K"}]),
+            })
+        });
+        let reading = entry_named("lists", |c: Ctx| {
+            let n = c.setting_list("storeLists").len();
+            Reply::text(format!("jumlah={n}"))
+        });
+        let lookup = Arc::new(move |cmd: &str| saving(cmd).or_else(|| reading(cmd)));
+        let (p, sender) = pipeline_for(EMPTY_STORE, lookup);
+
+        p.process(&inbound_n(".setlist", MEMBER, MEMBER, false), 1_000)
+            .await
+            .unwrap();
+        p.process(&inbound_n(".lists", MEMBER, MEMBER, false), 2_000)
+            .await
+            .unwrap();
+
+        assert_eq!(sender.texts().last().unwrap(), &format!("{MEMBER}: jumlah=1"));
+    }
+
+    /// Mutasi TANPA balasan (`Reply::Mutate { reply: None }`) harus tetap
+    /// ditulis. Ini padanan pola JS `await m.react('✅')` lalu `return`.
+    #[tokio::test]
+    async fn a_plugin_can_store_without_replying() {
+        let saving = entry_named("diam", |c: Ctx| {
+            Reply::None.with_mutation(Mutation::SetUser {
+                jid: c.sender.clone(),
+                data: serde_json::json!({ "level": 7 }),
+            })
+        });
+        let reader = echo_koin_lookup();
+        let lookup = Arc::new(move |cmd: &str| saving(cmd).or_else(|| reader(cmd)));
+        let (p, sender) = pipeline_for(EMPTY_STORE, lookup);
+
+        assert_eq!(
+            p.process(&inbound_n(".diam", MEMBER, MEMBER, false), 1_000)
+                .await
+                .unwrap(),
+            Outcome::Sent,
+            "reply None = sengaja diam, bukan gagal"
+        );
+        assert!(sender.texts().is_empty(), "tidak ada pesan yang dikirim");
+
+        let disk: Value =
+            serde_json::from_str(&std::fs::read_to_string(p.ctx().read().path()).unwrap()).unwrap();
+        assert_eq!(disk["users"]["628111"]["level"].as_i64(), Some(7));
+    }
+
+    /// Kegagalan write TIDAK boleh diam: outcome-nya harus berbeda dari
+    /// `Sent`, dan TIDAK ada pesan "tersimpan" yang terkirim.
+    ///
+    /// Cara memaksa gagalnya: file store diganti jadi DIREKTORI, jadi
+    /// `JsonStore::open` gagal dan `write()` tidak pernah kesampaian.
+    #[tokio::test]
+    async fn a_failed_write_is_surfaced_and_the_optimistic_reply_is_withheld() {
+        let saving = entry_named("nabung", |c: Ctx| {
+            Reply::text("✅ TERSIMPAN").with_mutation(Mutation::SetUser {
+                jid: c.sender.clone(),
+                data: serde_json::json!({ "koin": 999 }),
+            })
+        });
+        let (p, sender) = pipeline_for(EMPTY_STORE, saving);
+
+        // Ganti file dengan direktori yang namanya sama.
+        let path = p.ctx().read().path().to_path_buf();
+        std::fs::remove_file(&path).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        let guard = TempDirGuard(Some(path.clone()));
+
+        let out = p
+            .process(&inbound_n(".nabung", MEMBER, MEMBER, false), 1_000)
+            .await
+            .unwrap();
+        assert_eq!(
+            out,
+            Outcome::StoreWriteFailed,
+            "kegagalan write harus terlihat di outcome"
+        );
+        assert!(
+            sender.texts().is_empty(),
+            "pesan 'TERSIMPAN' TIDAK boleh dikirim kalau tidak ada yang tersimpan: {:?}",
+            sender.texts()
+        );
+
+        // Pesan BERIKUTNYA tetap jalan — loop tidak boleh mati.
+        let reader = echo_koin_lookup();
+        drop(reader);
+        guard.remove();
+    }
+
+    /// Direktori yang dibikin test dibersihkan setelah test, apa pun hasilnya.
+    /// Dipakai `Drop` supaya test yang gagal di tengah tidak meninggalkan
+    /// `/tmp` penuh file bernama `oktz-pipeline-mutate-N.json`.
+    struct TempDirGuard(Option<PathBuf>);
+
+    impl TempDirGuard {
+        fn remove(mut self) {
+            if let Some(p) = self.0.take() {
+                let _ = std::fs::remove_dir_all(p);
+            }
+        }
+    }
+
+    impl Drop for TempDirGuard {
+        fn drop(&mut self) {
+            if let Some(p) = self.0.take() {
+                let _ = std::fs::remove_dir_all(p);
+            }
+        }
+    }
+
+    /// `render_reply` harus MENOLAK `Reply::Mutate`, bukan diam-diam
+    /// mengirim teksnya tanpa menulis store. Ini pagar gegen pemanggil
+    /// baru yang lupa `into_parts`.
+    #[test]
+    fn rendering_an_unapplied_mutation_is_an_error_not_a_lie() {
+        let r = Reply::text("✅ TERSIMPAN").with_mutation(Mutation::SetUser {
+            jid: "628111@s.whatsapp.net".into(),
+            data: serde_json::json!({"koin": 1}),
+        });
+        match render_reply(&r, None) {
+            Err(PipelineError::UnappliedMutation { count }) => assert_eq!(count, 1),
+            other => panic!("harus error UnappliedMutation, dapat {other:?}"),
+        }
+    }
+
+    // --- Semantik setUser (murni, tanpa file) ---------------------------
+
+    fn users_with(body: &str) -> Value {
+        serde_json::from_str(body).unwrap()
+    }
+
+    #[test]
+    fn set_user_creates_a_full_record_with_all_defaults() {
+        let mut users = users_with("{}");
+        apply_set_user(
+            &mut users,
+            "628111",
+            &serde_json::json!({}),
+            0,
+        );
+        let u = &users["628111"];
+        // Setiap field default dari `database.js:559-601` harus ada.
+        for (field, want) in [
+            ("jid", serde_json::json!("628111")),
+            ("number", serde_json::json!("628111")),
+            ("lid", serde_json::Value::Null),
+            ("name", serde_json::json!("Unknown")),
+            ("energi", serde_json::json!(99_999)),
+            ("isPremium", serde_json::json!(false)),
+            ("isBanned", serde_json::json!(false)),
+            ("exp", serde_json::json!(0)),
+            ("level", serde_json::json!(1)),
+            ("koin", serde_json::json!(0)),
+            ("saldo", serde_json::json!(0)),
+            ("unlockedFeatures", serde_json::json!([])),
+            ("registeredAt", serde_json::Value::Null),
+            ("registrationCount", serde_json::json!(0)),
+            ("hasClaimedRegisterReward", serde_json::json!(false)),
+            ("unregisteredAt", serde_json::Value::Null),
+            ("clanId", serde_json::Value::Null),
+            ("isRegistered", serde_json::json!(false)),
+            ("regName", serde_json::Value::Null),
+            ("regAge", serde_json::Value::Null),
+            ("regGender", serde_json::Value::Null),
+            ("rpg", serde_json::json!({})),
+            ("inventory", serde_json::json!({})),
+            ("access", serde_json::json!([])),
+            ("cooldowns", serde_json::json!({})),
+            ("lastSeen", serde_json::json!("1970-01-01T00:00:00.000Z")),
+        ] {
+            assert_eq!(u[field], want, "field {field}");
+        }
+    }
+
+    /// `rpg.bank = 5000` tanpa mengirim ulang blok `rpg` harus MEMERGE.
+    /// Kalau jadi replace, `rpg.exp` yang sudah ada ikut hilang — dan itu
+    /// persis yang terjadi pada `plugins/rpg/bank.js:50-51`.
+    #[test]
+    fn set_user_merges_rpg_and_inventory_one_level_deep() {
+        let mut users = users_with(r#"{"628111":{"rpg":{"exp":250,"bank":0},"inventory":{"potion":2}}}"#);
+        apply_set_user(
+            &mut users,
+            "628111",
+            &serde_json::json!({ "rpg": { "bank": 5000 } }),
+            0,
+        );
+        assert_eq!(users["628111"]["rpg"]["bank"].as_i64(), Some(5000));
+        assert_eq!(
+            users["628111"]["rpg"]["exp"].as_i64(),
+            Some(250),
+            "rpg.exp harus selamat dari merge"
+        );
+        assert_eq!(users["628111"]["inventory"]["potion"].as_i64(), Some(2));
+    }
+
+    /// `koin: 0` harus tersimpan 0. `??` (bukan `||`) yang dipakai
+    /// `database.js:578` — kalau `||`, saldo habis akan naik lagi ke default.
+    #[test]
+    fn set_user_keeps_zero_because_js_uses_nullish_coalescing() {
+        let mut users = users_with(r#"{"628111":{"koin":900,"level":9}}"#);
+        apply_set_user(
+            &mut users,
+            "628111",
+            &serde_json::json!({ "koin": 0, "level": 0 }),
+            0,
+        );
+        assert_eq!(users["628111"]["koin"].as_i64(), Some(0));
+        assert_eq!(users["628111"]["level"].as_i64(), Some(0));
+    }
+
+    /// `data.name || existing.name || "Unknown"` memakai `||`, jadi
+    /// string KOSONG di `data` harus jatuh ke existing, bukan disimpan "".
+    #[test]
+    fn empty_name_falls_back_because_set_user_uses_or_not_nullish() {
+        let mut users = users_with(r#"{"628111":{"name":"Budi"}}"#);
+        apply_set_user(&mut users, "628111", &serde_json::json!({ "name": "" }), 0);
+        assert_eq!(users["628111"]["name"].as_str(), Some("Budi"));
+    }
+
+    /// `balance`/`limit` adalah field legacy: dibaca lalu DIHAPUS, dan
+    /// nilainya jadi `koin`/`energi` (`database.js:539-548`).
+    #[test]
+    fn legacy_balance_and_limit_migrate_into_koin_and_energi() {
+        let mut users = users_with(r#"{"628111":{"balance":777,"limit":42}}"#);
+        apply_set_user(&mut users, "628111", &serde_json::json!({}), 0);
+        assert_eq!(users["628111"]["koin"].as_i64(), Some(777));
+        assert_eq!(users["628111"]["energi"].as_i64(), Some(42));
+        assert!(users["628111"].get("balance").is_none(), "balance harus hilang");
+        assert!(users["628111"].get("limit").is_none(), "limit harus hilang");
+    }
+
+    /// JID LID: key `lid:xxx`, tapi `jid`/`number` jadi `null` dan `lid`
+    /// diisi bersihnya (`database.js:583-586`).
+    #[test]
+    fn lid_user_gets_null_jid_and_a_filled_lid_field() {
+        let mut users = users_with("{}");
+        apply_set_user(&mut users, "lid:9998887771", &serde_json::json!({}), 0);
+        let u = &users["lid:9998887771"];
+        assert_eq!(u["jid"], serde_json::Value::Null);
+        assert_eq!(u["number"], serde_json::Value::Null);
+        assert_eq!(u["lid"].as_str(), Some("9998887771"));
+    }
+
+/// `access` pakai `||` (`database.js:600`), dan `[]` di JS itu TRUTHY —
+/// jadi `access: []` dari plugin BENAR-BENAR mengosongkan grant. Yang
+/// membuat `existing.access` dipakai adalah `access` tidak ada sama sekali
+/// atau `null`. Dikunci karena mudah salah di sini: kalau `access`
+/// ikut diperlakukan `??`, `[]` jadi tidak bisa dipakai untuk mencabut
+/// akses — dan `handler.js` justru bergantung pada itu.
+#[test]
+fn an_explicit_empty_access_array_clears_grants_because_arrays_are_truthy_in_js() {
+    let mut users = users_with(r#"{"628111":{"access":[{"cmd":"hd","expired":null}]}}"#);
+    apply_set_user(&mut users, "628111", &serde_json::json!({ "access": [] }), 0);
+    assert_eq!(
+        users["628111"]["access"],
+        serde_json::json!([]),
+        "[] harus menang atas access lama — `[]` truthy di JS"
+    );
+}
+
+/// `access` yang tidak disebut plugin harus MEWARISI yang lama, karena
+/// `data.access` `undefined` falsy lalu jatuh ke `existing.access`.
+#[test]
+fn an_absent_access_field_keeps_the_existing_grant() {
+    let mut users = users_with(r#"{"628111":{"access":[{"cmd":"hd","expired":null}]}}"#);
+    apply_set_user(&mut users, "628111", &serde_json::json!({ "koin": 5 }), 0);
+    assert_eq!(
+        users["628111"]["access"][0]["cmd"].as_str(),
+        Some("hd"),
+        "access lama harus bertahan saat plugin tidak menyebut field itu"
+    );
+}
+
+/// `access: null` juga falsy, jadi grant lama ikut dipakai — inilah
+/// perbedaan nyata antara `||` dan `??` di baris ini.
+#[test]
+fn a_null_access_field_keeps_the_existing_grant() {
+    let mut users = users_with(r#"{"628111":{"access":[{"cmd":"hd","expired":null}]}}"#);
+    apply_set_user(&mut users, "628111", &serde_json::json!({ "access": null }), 0);
+    assert_eq!(users["628111"]["access"][0]["cmd"].as_str(), Some("hd"));
+}
+
+    #[test]
+    fn unknown_fields_survive_set_user() {
+        let mut users = users_with(r#"{"628111":{"rpg":{"guildId":"g1"},"custom":{"deep":[1,2]}}}"#);
+        apply_set_user(&mut users, "628111", &serde_json::json!({ "koin": 5 }), 0);
+        assert_eq!(users["628111"]["rpg"]["guildId"].as_str(), Some("g1"));
+        assert_eq!(users["628111"]["custom"]["deep"][1].as_i64(), Some(2));
+    }
+
+    /// --- setGroup -----------------------------------------------------
+
+    #[test]
+    fn set_group_creates_a_full_record_with_documented_defaults() {
+        let mut groups = users_with("{}");
+        apply_set_group(&mut groups, "120363@g.us", &serde_json::json!({}));
+        let g = &groups["120363@g.us"];
+        for (field, want) in [
+            ("jid", serde_json::json!("120363@g.us")),
+            ("name", serde_json::json!("Unknown Group")),
+            ("welcome", serde_json::json!(false)),
+            ("leave", serde_json::json!(false)),
+            ("goodbye", serde_json::json!(false)),
+            ("antilink", serde_json::json!(false)),
+            ("antitoxic", serde_json::json!(false)),
+            ("mute", serde_json::json!(false)),
+            ("game", serde_json::json!(true)),
+            ("rpg", serde_json::json!(true)),
+            ("warnings", serde_json::json!([])),
+            ("chat", serde_json::json!({})),
+        ] {
+            assert_eq!(g[field], want, "field {field}");
+        }
+    }
+
+    /// `mute: true` yang sudah ada tidak boleh dikembalikan `false` oleh
+    /// default saat plugin cuma menulis field lain.
+    #[test]
+    fn set_group_keeps_existing_toggles_when_data_omits_them() {
+        let mut groups = users_with(
+            r#"{"120363@g.us":{"mute":true,"game":false,"name":"Komunitas","custom":1}}"#,
+        );
+        apply_set_group(&mut groups, "120363@g.us", &serde_json::json!({ "antilink": true }));
+        let g = &groups["120363@g.us"];
+        assert_eq!(g["mute"], serde_json::json!(true), "mute lama harus bertahan");
+        assert_eq!(g["game"], serde_json::json!(false), "game:false bukan 'tak ada'");
+        assert_eq!(g["antilink"], serde_json::json!(true));
+        assert_eq!(g["name"].as_str(), Some("Komunitas"));
+        assert_eq!(g["custom"].as_i64(), Some(1), "field asing harus bertahan");
+    }
+
+    // --- iso_utc -------------------------------------------------------
+
+    #[test]
+    fn iso_timestamps_match_javascript_to_iso_string() {
+        assert_eq!(iso_utc(0), "1970-01-01T00:00:00.000Z");
+        assert_eq!(iso_utc(1_767_225_600_000), "2026-01-01T00:00:00.000Z");
+        // Milidetik tidak boleh terpotong.
+        assert_eq!(iso_utc(1_767_225_600_123), "2026-01-01T00:00:00.123Z");
+        // 2024 adalah tahun loncat (Feb 29) — algoritma kabisat.
+        assert_eq!(iso_utc(1_709_164_800_000), "2024-02-29T00:00:00.000Z");
+        // Sisa milidetik sebelum rollover.
+        assert_eq!(iso_utc(999), "1970-01-01T00:00:00.999Z");
+        assert_eq!(iso_utc(1_000), "1970-01-01T00:00:01.000Z");
+    }
+
+    #[test]
+    fn js_truthiness_matches_the_four_falsy_values() {
+        assert!(!truthy(&Value::Null));
+        assert!(!truthy(&Value::from(false)));
+        assert!(!truthy(&Value::from(0)));
+        assert!(!truthy(&serde_json::json!("")));
+        assert!(truthy(&Value::from(1)));
+        assert!(truthy(&serde_json::json!("x")));
+        // Array dan object KOSONG tetap truthy di JS — sumber bug klasik
+        // kalau `||` dipakai untuk nilai yang bisa berupa array.
+        assert!(truthy(&serde_json::json!([])));
+        assert!(truthy(&serde_json::json!({})));
     }
 }

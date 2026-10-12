@@ -143,7 +143,7 @@ mod tests {
             (json!({"birthday": "salah"}), "❌ Kamu belum set birthday!"),
         ] {
             let reply = (entry.handler)(ctx_of(user.clone(), vec![]));
-            let body = reply.text_body().expect("harus ada teks");
+            let body = reply.without_mutations().text_body().expect("harus ada teks");
             assert!(body.starts_with(head), "{user}: {body:?}");
             match reply {
                 Reply::Text { mentions, .. } => assert_eq!(mentions, ["628111@s.whatsapp.net"]),

@@ -97,6 +97,29 @@ impl MediaSource {
     }
 }
 
+/// Satu perubahan state yang diminta plugin.
+///
+/// Setara salah satu dari pemanggilan tulis di `src/lib/database.js`:
+/// `setUser` (`:536`), `setGroup` (`:717`), `setting(key, value)` (`:753`).
+///
+/// Bentuknya disengaja mengikuti granularity yang benar-benar dipakai plugin,
+/// bukan "patch JSON bebas": hanya tiga operasi store yang ada di
+/// `database.js`, dan ketiganya punya semantik default sendiri
+/// (lihat [`Mutation`] di `oktz-wa`). Tidak ada `set_users`/arbitrary key
+/// karena tidak ada padanannya di JS.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Mutation {
+    /// `db.setUser(jid, data)` (`database.js:536-603`).
+    ///
+    /// `data` adalah objek partial — field yang tidak ada di `data` memakai
+    /// nilai lama, persis operator `??` di JS.
+    SetUser { jid: String, data: Value },
+    /// `db.setGroup(jid, data)` (`database.js:717-746`).
+    SetGroup { jid: String, data: Value },
+    /// `db.setting(key, value)` (`database.js:753-758`).
+    SetSetting { key: String, value: Value },
+}
+
 /// Balasan plugin.
 ///
 /// JS tidak `return` apa pun — plugin memanggil `m.reply(...)` / `sock.sendMessage(...)`
@@ -109,7 +132,7 @@ impl MediaSource {
 /// `Image` dipakai class C (media), `Interactive` untuk card WA.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum Reply {
-    /// Tidak membalas (JS: handler yang hanya副作用 samping atau `return`).
+    /// Tidak membalas (JS: handler yang hanya efek samping atau `return`).
     #[default]
     None,
     /// Balasan teks biasa. `mentions` diisijid yang harus di-mention (WA
@@ -140,6 +163,26 @@ pub enum Reply {
     Sticker { media: Option<MediaSource> },
     /// Card/button list interaktif (WA native flow).
     Interactive { body: String },
+    /// Reaksi emoji pada pesan yang memicu (JS `m.react`).
+    ///
+    /// 502 plugin JS memakainya, jadi absen di enum berarti setiap plugin itu
+    /// kehilangan konfirmasi. Reaksi tidak selalu mengirim teks balasan,
+    /// jadi ini berdiri sendiri, bukan tempelan pada `Text`.
+    Reaction { emoji: String, reply: Box<Reply> },
+    /// Balasan PLUS mutasi store yang harus ditulis pipeline.
+    ///
+    /// Dipisah dari variant lain supaya 87 plugin lama yang `-> Reply` tidak
+    /// perlu berubah sama sekali, dan supaya "balas tapi tidak menyimpan"
+    /// tetap mungkin: `Mutate { reply: None }` = simpan tanpa kirim pesan
+    /// (mis. `m.react('✅')` di JS yang tidak punya teks balasan).
+    ///
+    /// Kotak di dalam kotak: `Reply` adalah enum tanpa pointer, jadi
+    /// recursive tanpa alokasi tambahan butuh `Box`. `new`/`with_mutation`
+    /// meratakan nesting, jadi plugin tidak pernah melihat bentuk dalam.
+    Mutate {
+        reply: Box<Reply>,
+        mutations: Vec<Mutation>,
+    },
 }
 
 impl Reply {
@@ -174,20 +217,98 @@ impl Reply {
         }
     }
 
+    /// Bungkus balasan dengan mutasi store, diratakan.
+    ///
+    /// `Mutate` di dalam `Mutate` digabung ke vektor yang sama, jadi
+    /// `with_mutation` boleh dipanggil berkali-kali tanpa membentuk
+    /// sarang `Box` yang tidak perlu.
+    pub fn mutating(self, mutations: Vec<Mutation>) -> Self {
+        if mutations.is_empty() {
+            return self;
+        }
+        match self {
+            Self::Mutate {
+                reply,
+                mutations: mut existing,
+            } => {
+                existing.extend(mutations);
+                Self::Mutate {
+                    reply,
+                    mutations: existing,
+                }
+            }
+            other => Self::Mutate {
+                reply: Box::new(other),
+                mutations,
+            },
+        }
+    }
+
+    /// Menambah satu mutasi. Kalau reply ini sudah `Mutate`, digabung —
+    /// tidak pernah membentuk `Mutate { reply: Mutate { .. } }`.
+    pub fn with_mutation(self, mutation: Mutation) -> Self {
+        self.mutating(vec![mutation])
+    }
+
+    /// Tambahkan reaksi pada pesan pemicu (JS `m.react(emoji)`).
+    ///
+    /// Reaksi dibungkus `Mutate` yang sudah ada, jadi tidak menambah field
+    /// baru dan tidak mengubah bentuk plugin mana pun.
+    pub fn with_reaction(self, emoji: impl Into<String>) -> Self {
+        let (reply, mutations) = self.into_parts();
+        Self::Mutate {
+            reply: Box::new(Self::Reaction {
+                emoji: emoji.into(),
+                reply: Box::new(reply),
+            }),
+            mutations,
+        }
+    }
+    /// Pisahkan jadi (balasan, mutasi). Reply biasa selalu mutate kosong.
+    pub fn into_parts(self) -> (Self, Vec<Mutation>) {
+        match self {
+            Self::Mutate { reply, mutations } => (*reply, mutations),
+            other => (other, Vec::new()),
+        }
+    }
+
+    /// Balasan tanpa mutasi — untuk pipeline yang sudah menulis mutasi dan
+    /// sekarang hanya perlu merender teksnya.
+    pub fn without_mutations(&self) -> &Self {
+        let mut cur = self;
+        while let Self::Mutate { reply, .. } = cur {
+            cur = reply;
+        }
+        cur
+    }
+
+    /// Mutasi yang dibawa reply ini (Kosong kalau bukan `Mutate`).
+    pub fn mutations(&self) -> &[Mutation] {
+        match self {
+            Self::Mutate { mutations, .. } => mutations,
+            _ => &[],
+        }
+    }
+
     /// `true` kalau plugin tidak mau membalas.
+    ///
+    /// `Mutate { reply: None }` = simpan tanpa balas, jadi ikut `true`.
     pub fn is_none(&self) -> bool {
-        matches!(self, Self::None)
+        matches!(self.without_mutations(), Self::None)
     }
 
     /// `true` kalau reply ini butuh upload media sebelum bisa dikirim.
     pub fn has_media(&self) -> bool {
-        matches!(self, Self::Image { .. } | Self::Sticker { .. })
+        matches!(
+            self.without_mutations(),
+            Self::Image { .. } | Self::Sticker { .. }
+        )
     }
 
     /// Sumber media yang di-carry, kalau ada. `None` = tidak ada sumber yang
     /// bisa dikirim — pemanggil WAJIB memperlakukan itu sebagai error.
     pub fn media_source(&self) -> Option<&MediaSource> {
-        match self {
+        match self.without_mutations() {
             Self::Image { media, .. } | Self::Sticker { media } => media.as_ref(),
             _ => None,
         }
@@ -195,11 +316,16 @@ impl Reply {
 
     /// Teks balasan kalau ada (router butuh ini untuk log/permission reply).
     pub fn text_body(&self) -> Option<&str> {
-        match self {
+        match self.without_mutations() {
             Self::Text { text, .. } | Self::TextQuoted { text, .. } => Some(text),
             Self::Image { caption, .. } => Some(caption),
             Self::Interactive { body } => Some(body),
-            Self::None | Self::Sticker { .. } => None,
+            Self::Reaction { reply, .. } => reply.text_body(),
+            // `Sticker` tidak punya teks — router tidak boleh reply teks kosong.
+            // Cabang `Mutate` mustahil (`without_mutations` sudah turun),
+            // tapi tetap ditulis supaya menambah variant baru tidak diam-diam
+            // jadi teks kosong yang terkirim ke user.
+            Self::None | Self::Sticker { .. } | Self::Mutate { .. } => None,
         }
     }
 }
@@ -303,6 +429,13 @@ pub struct Ctx {
     /// Seluruh objek grup dari store untuk `chat`, apa adanya.
     /// `Null` kalau grup belum pernah ada.
     pub group_data: Value,
+    /// Seluruh objek settings global dari store (`settings.json`), apa adanya.
+    /// `Null` kalau store belum punya key `settings`.
+    ///
+    /// Ini padanan `db.setting(key)` (`database.js:753-758`) — plugin yang
+    /// butuh `storeLists`/`energi`/`capprem` membacanya lewat
+    /// [`Ctx::setting`] dan turunan bertipe, bukan menggali JSON mentah.
+    pub settings: Value,
 }
 
 impl Ctx {
@@ -343,6 +476,54 @@ impl Ctx {
         self.group_field(key)
             .and_then(Value::as_array)
             .map_or(&[], Vec::as_slice)
+    }
+
+    /// `db.setting(key)` (`database.js:753`) — nilai mentah, `None` kalau
+    /// key tidak ada. Plugin yang butuh bentuk mentah pakai ini; yang butuh
+    /// bentuk bertipe pakai turunan di bawah.
+    pub fn setting(&self, key: &str) -> Option<&Value> {
+        self.settings.get(key)
+    }
+
+    /// `db.setting(key)` sebagai bool, dengan `default` kalau key tidak ada
+    /// atau nilainya bukan bool.
+    ///
+    /// `default` wajib diberikan, bukan hardcode `false`: `db.setting("energi")`
+    /// yang belum pernah di-set berarti "belum decided", dan memutuskan itu
+    /// hak caller — `energi_enabled_setting` di pipeline memakai default
+    /// yang BERBEDA (`EnergiSettings::enabled`) dari plugin mana pun.
+    pub fn setting_bool(&self, key: &str, default: bool) -> bool {
+        self.setting(key).and_then(Value::as_bool).unwrap_or(default)
+    }
+
+    /// `db.setting(key)` sebagai integer. `None` kalau bukan angka.
+    pub fn setting_i64(&self, key: &str) -> Option<i64> {
+        self.setting(key).and_then(Value::as_i64)
+    }
+
+    /// `db.setting(key) || []` (`database.js`, plugin `store/*.js`).
+    /// Slice kosong kalau key tidak ada atau bukan array.
+    pub fn setting_list(&self, key: &str) -> &[Value] {
+        self.setting(key)
+            .and_then(Value::as_array)
+            .map_or(&[], Vec::as_slice)
+    }
+
+    /// `db.setting(key) || {}` (`capfree.js`, `whatrolethis.js`).
+    /// Mengembalikan entry `(key, value)` dengan urutan key apa adanya —
+    /// persis urutan iterasi `Object.entries` di JS, yang dipakai plugin
+    /// untuk menyusun daftar fitur.
+    pub fn setting_entries(&self, key: &str) -> impl Iterator<Item = (&str, &Value)> {
+        self.setting(key)
+            .and_then(Value::as_object)
+            .map(|m| m.iter().map(|(k, v)| (k.as_str(), v)))
+            .into_iter()
+            .flatten()
+    }
+
+    /// `db.setting("capprem")?.[name]` — `middleware.js:65-69`.
+    pub fn setting_bool_at(&self, key: &str, name: &str) -> Option<bool> {
+        self.setting(key)?.get(name)?.as_bool()
     }
 }
 
@@ -408,6 +589,136 @@ mod tests {
             }
             other => panic!("harus Text, dapat {other:?}"),
         }
+    }
+
+    fn set_user(jid: &str, koin: i64) -> Mutation {
+        Mutation::SetUser {
+            jid: jid.into(),
+            data: serde_json::json!({ "koin": koin }),
+        }
+    }
+
+    #[test]
+    fn a_mutation_carries_its_payload_and_renders_the_wrapped_reply() {
+        let r = Reply::text("tersimpan").with_mutation(set_user("628123@s.whatsapp.net", 5));
+        assert_eq!(r.text_body(), Some("tersimpan"), "teks harus dari reply");
+        assert_eq!(r.mutations().len(), 1);
+        assert_eq!(
+            r.mutations()[0],
+            set_user("628123@s.whatsapp.net", 5),
+            "mutasi harus utuh, tidak berubah oleh pembungkusan"
+        );
+        assert!(!r.is_none());
+    }
+
+    #[test]
+    fn mutations_flatten_instead_of_nesting_boxes() {
+        let r = Reply::text("x")
+            .with_mutation(set_user("a@s.whatsapp.net", 1))
+            .with_mutation(Mutation::SetSetting {
+                key: "energi".into(),
+                value: serde_json::json!(true),
+            })
+            .with_mutation(Mutation::SetGroup {
+                jid: "g".into(),
+                data: serde_json::json!({}),
+            });
+        assert_eq!(r.mutations().len(), 3, "tiga mutasi, bukan tiga sarang");
+        let (inner, muts) = r.into_parts();
+        assert_eq!(inner.text_body(), Some("x"));
+        assert_eq!(muts.len(), 3);
+    }
+
+    // `Reply::Mutate { reply: None }` = plugin menyimpan tanpa membalas
+    // (padanan `await m.react('✅')` di JS yang tidak punya teks).
+    #[test]
+    fn storing_without_replying_is_still_a_reply_that_says_nothing() {
+        let r = Reply::None.with_mutation(set_user("a@s.whatsapp.net", 1));
+        assert!(r.is_none(), "tidak ada pesan yang harus dikirim");
+        assert_eq!(r.text_body(), None);
+        assert_eq!(r.mutations().len(), 1, "tapi mutasinya tetap ada");
+    }
+
+    #[test]
+    fn an_empty_mutation_list_does_not_wrap_the_reply() {
+        let r = Reply::text("x").mutating(Vec::new());
+        assert_eq!(r, Reply::text("x"), "harus identik, bukan Mutate kosong");
+        assert!(r.mutations().is_empty());
+    }
+
+    #[test]
+    fn media_accessors_see_through_the_mutation_wrapper() {
+        let r = Reply::image(MediaSource::url("https://x/y.png"), "cap")
+            .with_mutation(set_user("a@s.whatsapp.net", 1));
+        assert!(r.has_media());
+        assert_eq!(
+            r.media_source().map(MediaSource::label).as_deref(),
+            Some("url"),
+            "sumber media tidak boleh hilang di balik Mutate"
+        );
+        assert_eq!(r.text_body(), Some("cap"));
+    }
+
+    #[test]
+    fn settings_are_read_by_key_with_typed_defaults() {
+        let ctx = Ctx {
+            settings: serde_json::json!({
+                "energi": true,
+                "capprem": {"ping": false, "tebak": true},
+                "storeLists": [{"name": "S&K"}, {"name": "Order"}],
+                "storeTrxCounter": 7,
+            }),
+            ..Default::default()
+        };
+        assert!(ctx.setting_bool("energi", false));
+        // Key yang tidak ada dapat default yang diminta caller, bukan `false`
+        // diam-diam: pipeline memakai default ENERGI sendiri.
+        assert!(ctx.setting_bool("tidakAda", true));
+        assert!(!ctx.setting_bool("tidakAda", false));
+        assert_eq!(ctx.setting_i64("storeTrxCounter"), Some(7));
+        assert_eq!(ctx.setting_list("storeLists").len(), 2);
+        assert_eq!(
+            ctx.setting_list("storeLists")[0]["name"].as_str(),
+            Some("S&K")
+        );
+        assert_eq!(ctx.setting_bool_at("capprem", "ping"), Some(false));
+        assert_eq!(ctx.setting_bool_at("capprem", "tebak"), Some(true));
+        assert_eq!(ctx.setting_bool_at("capprem", "nope"), None);
+    }
+
+    #[test]
+    fn missing_settings_yield_defaults_never_a_panic() {
+        // `Ctx::default()` = settings belum pernah ada di store — persis
+        // `db.setting("storeLists")` mengembalikan `undefined`.
+        let ctx = Ctx::default();
+        assert_eq!(ctx.setting("energi"), None);
+        assert!(ctx.setting_bool("energi", true));
+        assert_eq!(ctx.setting_i64("storeTrxCounter"), None);
+        assert!(ctx.setting_list("storeLists").is_empty());
+        assert_eq!(ctx.setting_entries("capprem").count(), 0);
+        assert_eq!(ctx.setting_bool_at("capprem", "ping"), None);
+
+        // Tipe salah juga tidak boleh panic — plugin JS Mana pun yang
+        // menulis string ke key ini akan melihat `undefined`, bukan crash.
+        let ctx = Ctx {
+            settings: serde_json::json!({"energi": "ya", "storeLists": 5}),
+            ..Default::default()
+        };
+        assert!(!ctx.setting_bool("energi", false), "bukan bool -> default");
+        assert!(ctx.setting_list("storeLists").is_empty(), "bukan array -> kosong");
+        assert_eq!(ctx.setting_entries("energi").count(), 0, "bukan objek -> kosong");
+    }
+
+    #[test]
+    fn setting_entries_preserve_key_order_and_dotted_access() {
+        let ctx = Ctx {
+            settings: serde_json::json!({"capprem": {"z": false, "a": true}}),
+            ..Default::default()
+        };
+        let e: Vec<_> = ctx.setting_entries("capprem").collect();
+        assert_eq!(e.len(), 2);
+        assert_eq!(e[0].0, "z", "urutan key harus sama seperti di JSON");
+        assert_eq!(e[1].0, "a");
     }
 
     #[test]

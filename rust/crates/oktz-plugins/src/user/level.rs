@@ -112,7 +112,7 @@ mod tests {
     }
 
     fn text_of(r: &Reply) -> &str {
-        r.text_body().expect("harus ada teks")
+        r.without_mutations().text_body().expect("harus ada teks")
     }
 
     #[test]

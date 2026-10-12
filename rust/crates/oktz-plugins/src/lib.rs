@@ -9,5 +9,6 @@ pub mod main;
 pub mod owner;
 pub mod religi;
 pub mod rpg;
+pub mod store;
 pub mod tools;
 pub mod user;
