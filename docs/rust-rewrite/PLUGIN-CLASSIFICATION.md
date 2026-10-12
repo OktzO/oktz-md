@@ -160,8 +160,6 @@ Config tidak bisa di-resolve tanpa eksekusi runtime. **Tidak di-eval.**
 |---|---|
 | `plugins/convert/audiofx.js` | `alias` dibangun dari loop |
 | `plugins/group/giveaway.js` | config dinamis |
-| `plugins/media/mengkane.js` | config dinamis |
-| `plugins/media/music.js` | `alias` dibangun dari loop (`MUSIC_LIST`) |
 | `plugins/nsfw/nsfw.js` | config dinamis |
 | `plugins/owner/eval.js` | **`customTrigger` adalah function** + config dinamis |
 | `plugins/panel/cadmin.js` | config dinamis |
