@@ -33,7 +33,8 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::Instant;
 
-use oktz_plugin_api::registry::{GroupRoster, MediaSource, Mutation, Participant};
+use oktz_plugin_api::registry::{GroupRoster, HttpGet, MediaSource, Mutation, Participant};
+use oktz_plugin_api::{NoHttp, QuotedKind, QuotedMessage, SessionStore, new_session_store};
 use oktz_plugin_api::{Ctx, PluginEntry, Reply};
 use oktz_router::gates::{
     AutoWorkDecision, AutoWorkGuard, AutoWorkSettings, EnergiSettings, resolve_energi_enabled,
@@ -1463,6 +1464,150 @@ pub fn decision_to_reply(d: &Decision) -> Reply {
 // =============================================================================
 
 /// Nama field protobuf untuk pesan ini, `""` kalau di luar daftar serialize.
+/// `context_info` pertama yang ada di pesan. WA menaruhnya di variant yang
+/// berbeda-beda; satu penjelajahuan dipakai untuk mention maupun quote supaya
+/// keduanya tidak bisa melihat sumber berbeda untuk pesan yang sama.
+fn context_info_of(m: &wa::Message) -> Option<&wa::ContextInfo> {
+    let b = m.get_base_message();
+    [
+        b.extended_text_message.as_option().and_then(|v| v.context_info.as_option()),
+        b.image_message.as_option().and_then(|v| v.context_info.as_option()),
+        b.video_message.as_option().and_then(|v| v.context_info.as_option()),
+        b.document_message.as_option().and_then(|v| v.context_info.as_option()),
+        b.audio_message.as_option().and_then(|v| v.context_info.as_option()),
+        b.sticker_message.as_option().and_then(|v| v.context_info.as_option()),
+        b.contact_message.as_option().and_then(|v| v.context_info.as_option()),
+        b.location_message.as_option().and_then(|v| v.context_info.as_option()),
+        b.buttons_response_message
+            .as_option()
+            .and_then(|v| v.context_info.as_option()),
+        b.list_response_message
+            .as_option()
+            .and_then(|v| v.context_info.as_option()),
+        b.template_button_reply_message
+            .as_option()
+            .and_then(|v| v.context_info.as_option()),
+        b.poll_creation_message
+            .as_option()
+            .and_then(|v| v.context_info.as_option()),
+        b.poll_creation_message_v2
+            .as_option()
+            .and_then(|v| v.context_info.as_option()),
+        b.poll_creation_message_v3
+            .as_option()
+            .and_then(|v| v.context_info.as_option()),
+        b.view_once_message
+            .as_option()
+            .and_then(|v| v.message.as_option())
+            .and_then(context_info_of),
+        b.ephemeral_message
+            .as_option()
+            .and_then(|v| v.message.as_option())
+            .and_then(context_info_of),
+    ]
+    .into_iter()
+    .flatten()
+    .next()
+}
+
+fn mentioned_jids(m: &InboundMessage) -> Vec<String> {
+    context_info_of(&m.message)
+        .map(|c| c.mentioned_jid.clone())
+        .unwrap_or_default()
+}
+
+/// `m.quoted` — pesan yang di-reply pengirim.
+fn quoted_of(m: &InboundMessage) -> Option<QuotedMessage> {
+    let ci = context_info_of(&m.message)?;
+    let quoted = ci.quoted_message.as_option()?;
+    Some(QuotedMessage {
+        id: ci.stanza_id.clone().unwrap_or_default(),
+        // `participant` = pengirim asli di grup. Kalau kosong, pesan itu
+        // dikirim di private chat oleh `sender` — bukan berarti pesannya dari
+        // bot, jadi `from_me` harus dibaca terpisah.
+        sender: ci
+            .participant
+            .clone()
+            .unwrap_or_else(|| m.info.source.sender.to_string()),
+        chat: m.info.source.chat.to_string(),
+        text: quoted_body(quoted),
+        kind: quoted_kind(quoted),
+        mimetype: quoted_mimetype(quoted),
+        file_name: quoted_file_name(quoted),
+        from_me: m.info.source.is_from_me,
+    })
+}
+
+fn quoted_kind(m: &wa::Message) -> QuotedKind {
+    let b = m.get_base_message();
+    if b.conversation.is_some() || b.extended_text_message.as_option().is_some() {
+        QuotedKind::Text
+    } else if b.image_message.as_option().is_some() {
+        QuotedKind::Image
+    } else if b.video_message.as_option().is_some() {
+        QuotedKind::Video
+    } else if b.audio_message.as_option().is_some() {
+        QuotedKind::Audio
+    } else if b.sticker_message.as_option().is_some() {
+        QuotedKind::Sticker
+    } else if b.document_message.as_option().is_some() {
+        QuotedKind::Document
+    } else if b.contact_message.as_option().is_some() {
+        QuotedKind::Contact
+    } else if b.location_message.as_option().is_some() {
+        QuotedKind::Location
+    } else if b.reaction_message.as_option().is_some() {
+        QuotedKind::Reaction
+    } else if b.poll_creation_message.as_option().is_some()
+        || b.poll_creation_message_v2.as_option().is_some()
+        || b.poll_creation_message_v3.as_option().is_some()
+    {
+        QuotedKind::Poll
+    } else {
+        QuotedKind::Other(wire_type_of(m).to_string())
+    }
+}
+
+/// `getMessageBody` (`src/lib/serialize.js:327-372`) — sama persis dengan yang
+/// dipakai untuk pesan biasa, termasuk `""` untuk tipe yang tidak punya body.
+fn quoted_body(m: &wa::Message) -> String {
+    extract_body(m).unwrap_or_default()
+}
+
+fn quoted_mimetype(m: &wa::Message) -> Option<String> {
+    let b = m.get_base_message();
+    b.image_message
+        .as_option()
+        .and_then(|v| v.mimetype.clone())
+        .or_else(|| {
+            b.video_message
+                .as_option()
+                .and_then(|v| v.mimetype.clone())
+        })
+        .or_else(|| {
+            b.audio_message
+                .as_option()
+                .and_then(|v| v.mimetype.clone())
+        })
+        .or_else(|| {
+            b.sticker_message
+                .as_option()
+                .and_then(|v| v.mimetype.clone())
+        })
+        .or_else(|| {
+            b.document_message
+                .as_option()
+                .and_then(|v| v.mimetype.clone())
+        })
+}
+
+fn quoted_file_name(m: &wa::Message) -> Option<String> {
+    let b = m.get_base_message();
+    b.document_message
+        .as_option()
+        .and_then(|v| v.file_name.clone())
+}
+
 fn wire_type_of(m: &wa::Message) -> &'static str {
     use MessageKind as K;
     let b = m.get_base_message();
@@ -1698,6 +1843,7 @@ pub fn roster_from(meta: &GroupMetadata, bot_jids: &[String]) -> GroupRoster {
                 jid: p.jid.to_string(),
                 is_admin: p.is_admin(),
                 is_owner: p.is_super_admin(),
+                data: Value::Null,
             })
             .collect(),
     }
@@ -1737,6 +1883,8 @@ impl RosterCache {
 struct PluginCtxSource {
     store: Arc<StoreContext>,
     rosters: Arc<Mutex<RosterCache>>,
+    sessions: SessionStore,
+    http: Arc<dyn HttpGet>,
 }
 
 impl PluginCtxSource {
@@ -1748,15 +1896,23 @@ impl PluginCtxSource {
     /// permission. Kalau plugin membaca settings lewat jalur lain, ia bisa
     /// melihat override yang tidak dipakai gate untuk pesan yang sama.
     fn fill(&self, c: &mut Ctx) {
-        c.roster = self
+        let mut roster = self
             .rosters
             .lock()
             .expect("roster cache")
             .get(&c.chat)
             .unwrap_or_default();
+        // `db.getUser(p.jid)` per peserta — di JS tiap plugin yang mengiterasi
+        // roster memanggilnya sendiri, jadi ini satu baca per peserta per pesan.
+        for p in &mut roster.participants {
+            p.data = self.store.user_entry(&p.jid);
+        }
+        c.roster = roster;
         c.user_data = self.store.user_entry(&c.sender);
         c.group_data = self.store.group_entry(&c.chat);
         c.settings = self.store.settings_entry();
+        c.sessions = self.sessions.clone();
+        c.http = self.http.clone();
     }
 }
 
@@ -1942,6 +2098,8 @@ impl Pipeline {
                     map: HashMap::new(),
                     ttl: RosterCache::DEFAULT_TTL,
                 })),
+                sessions: new_session_store(),
+                http: Arc::new(NoHttp),
             },
             ctx,
             sender,
@@ -1972,6 +2130,13 @@ impl Pipeline {
     /// Pasang sumber roster. Tanpa ini, `Ctx::roster` selalu kosong.
     pub fn with_roster_source(mut self, roster: Arc<dyn RosterSource>) -> Self {
         self.roster = roster;
+        self
+    }
+
+    /// Klien HTTP untuk plugin class B. Default-nya [`NoHttp`] supaya unit
+    /// test tidak pernah menembak jaringan.
+    pub fn with_http(mut self, http: Arc<dyn HttpGet>) -> Self {
+        self.plugin_src.http = http;
         self
     }
 
@@ -2069,6 +2234,8 @@ impl Pipeline {
             is_premium: self.identity.is_premium(&sender),
             is_admin: s.is_group && self.identity.is_admin(&sender),
             is_bot_admin: false,
+            mentioned: mentioned_jids(m),
+            quoted: quoted_of(m),
         }
     }
 
@@ -2746,17 +2913,20 @@ mod tests {
                             jid: "628111@s.whatsapp.net".into(),
                             is_admin: false,
                             is_owner: false,
+                            data: Default::default(),
                         },
                         Participant {
                             jid: "628222@s.whatsapp.net".into(),
                             is_admin: true,
                             is_owner: true,
+                            data: Default::default(),
                         },
                         // Bot = participant admin dengan nomor "bot".
                         Participant {
                             jid: "628999@lid".into(),
                             is_admin: true,
                             is_owner: false,
+                            data: Default::default(),
                         },
                     ],
                 })
@@ -3940,6 +4110,8 @@ fn group_number_and_long_number_are_rejected() {
                 map: HashMap::new(),
                 ttl: RosterCache::DEFAULT_TTL,
             })),
+            sessions: new_session_store(),
+            http: Arc::new(NoHttp),
         }
     }
 
@@ -3954,6 +4126,7 @@ fn group_number_and_long_number_are_rejected() {
                 jid: "111@s.whatsapp.net".into(),
                 is_admin: true,
                 is_owner: true,
+                data: Default::default(),
             }],
             is_bot_admin: true,
         };
@@ -4132,6 +4305,7 @@ fn group_number_and_long_number_are_rejected() {
                 jid: "a".into(),
                 is_admin: false,
                 is_owner: false,
+                data: Default::default(),
             }],
             is_bot_admin: false,
         };
@@ -5169,5 +5343,187 @@ fn a_null_access_field_keeps_the_existing_grant() {
         // kalau `||` dipakai untuk nilai yang bisa berupa array.
         assert!(truthy(&serde_json::json!([])));
         assert!(truthy(&serde_json::json!({})));
+    }
+
+    fn inbound_reply(
+        body: &str,
+        sender: &str,
+        chat: &str,
+        is_group: bool,
+        quoted_body: &str,
+        participant: Option<&str>,
+    ) -> InboundMessage {
+        let mut m = inbound(body, sender, chat, is_group, "Q1");
+        m.message = Arc::new(wa::Message {
+            extended_text_message: MessageField::some(wa::message::ExtendedTextMessage {
+                text: Some(body.to_string()),
+                context_info: MessageField::some(wa::ContextInfo {
+                    stanza_id: Some("QUOTED1".to_string()),
+                    participant: participant.map(str::to_string),
+                    mentioned_jid: vec!["628999@s.whatsapp.net".to_string()],
+                    quoted_message: MessageField::some(wa::Message {
+                        conversation: Some(quoted_body.to_string()),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        m
+    }
+
+    #[test]
+    fn quoted_and_mentions_reach_the_plugin_context() {
+        let p = Pipeline::new(
+            StoreContext::new(store_with("q", "{}")),
+            Arc::new(RecordingSender::default()),
+            "bot",
+            ParseOptions::default(),
+        );
+        let m = inbound_reply(
+            "halo",
+            "628111@s.whatsapp.net",
+            "120363@g.us",
+            true,
+            "pesan lama",
+            Some("628222@s.whatsapp.net"),
+        );
+
+        let caller = p.caller_of(&m);
+        assert_eq!(caller.mentioned, vec!["628999@s.whatsapp.net"]);
+        let q = caller.quoted.expect("quoted harus terbaca");
+        assert_eq!(q.id, "QUOTED1");
+        assert_eq!(q.text, "pesan lama");
+        assert_eq!(q.kind, QuotedKind::Text);
+        assert_eq!(q.sender, "628222@s.whatsapp.net");
+        assert_eq!(q.chat, "120363@g.us");
+        assert!(!q.is_media());
+    }
+
+    #[test]
+    fn message_without_context_info_has_no_quoted_and_no_mentions() {
+        let p = Pipeline::new(
+            StoreContext::new(store_with("q0", "{}")),
+            Arc::new(RecordingSender::default()),
+            "bot",
+            ParseOptions::default(),
+        );
+        let m = inbound("halo", "628111@s.whatsapp.net", "628111@s.whatsapp.net", false, "M0");
+        let caller = p.caller_of(&m);
+        assert!(caller.quoted.is_none());
+        assert!(caller.mentioned.is_empty());
+    }
+
+    #[test]
+    fn quoted_image_carries_mimetype_and_media_flag() {
+        let mut m = inbound("lihat", "628111@s.whatsapp.net", "628111@s.whatsapp.net", false, "M1");
+        m.message = Arc::new(wa::Message {
+            extended_text_message: MessageField::some(wa::message::ExtendedTextMessage {
+                text: Some("lihat".into()),
+                context_info: MessageField::some(wa::ContextInfo {
+                    quoted_message: MessageField::some(wa::Message {
+                        image_message: MessageField::some(wa::message::ImageMessage {
+                            mimetype: Some("image/jpeg".into()),
+                            caption: Some("foto".into()),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        let p = Pipeline::new(
+            StoreContext::new(store_with("qi", "{}")),
+            Arc::new(RecordingSender::default()),
+            "bot",
+            ParseOptions::default(),
+        );
+        let q = p.caller_of(&m).quoted.expect("quoted image");
+        assert_eq!(q.kind, QuotedKind::Image);
+        assert_eq!(q.kind.wire_type(), "imageMessage");
+        assert!(q.is_media());
+        assert_eq!(q.text, "foto");
+        assert_eq!(q.mimetype.as_deref(), Some("image/jpeg"));
+        // Tanpa participant = pesan di private chat, jadi sender tetap sumber
+        // aslinya — bukan `""`.
+        assert_eq!(q.sender, "628111@s.whatsapp.net");
+    }
+
+    #[test]
+    fn every_participant_carries_its_own_store_entry() {
+        let src = plugin_src_with(r#"{"users":{"628111":{"limit":3},"628222":{"limit":7}}}"#);
+        src.rosters.lock().unwrap().put(
+            "120363@g.us",
+            GroupRoster {
+                participants: vec![
+                    Participant {
+                        jid: "628111@s.whatsapp.net".into(),
+                        is_admin: false,
+                        is_owner: false,
+                        data: Value::Null,
+                    },
+                    Participant {
+                        jid: "628222@s.whatsapp.net".into(),
+                        is_admin: false,
+                        is_owner: false,
+                        data: Value::Null,
+                    },
+                ],
+                is_bot_admin: false,
+            },
+        );
+        let mut c = Ctx {
+            chat: "120363@g.us".into(),
+            ..Default::default()
+        };
+        src.fill(&mut c);
+        let limits: Vec<i64> = c
+            .roster
+            .participants
+            .iter()
+            .map(|p| p.data.get("limit").and_then(Value::as_i64).unwrap())
+            .collect();
+        assert_eq!(limits, vec![3, 7]);
+    }
+
+    #[test]
+    fn sessions_survive_across_fills_because_they_are_shared() {
+        let src = plugin_src_with("{}");
+        let mut a = Ctx {
+            chat: "628111@s.whatsapp.net".into(),
+            ..Default::default()
+        };
+        src.fill(&mut a);
+        a.session_set("game", serde_json::json!({"skor": 10}));
+        a.session_update("game", |v| {
+            v["skor"] = serde_json::json!(11);
+        });
+
+        let mut b = Ctx {
+            chat: "628111@s.whatsapp.net".into(),
+            ..Default::default()
+        };
+        src.fill(&mut b);
+        assert_eq!(
+            b.session_get("game").and_then(|v| v["skor"].as_i64()),
+            Some(11),
+            "pesan kedua harus melihat state pesan pertama"
+        );
+        assert!(b.session_take("game").is_some());
+        assert!(b.session_take("game").is_none());
+    }
+
+    #[test]
+    fn default_http_never_reaches_the_network() {
+        let src = plugin_src_with("{}");
+        let mut c = Ctx::default();
+        src.fill(&mut c);
+        assert!(c.http.get("https://example.invalid").is_err());
+        assert!(c.http.post_json("https://example.invalid", &Value::Null).is_err());
     }
 }

@@ -73,6 +73,7 @@ mod tests {
                         jid: (*j).into(),
                         is_admin: false,
                         is_owner: false,
+                        data: Default::default(),
                     })
                     .collect(),
                 is_bot_admin: false,

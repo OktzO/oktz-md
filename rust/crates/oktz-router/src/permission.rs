@@ -8,7 +8,7 @@
 //! - `hasAccess` di JS menulis ke DB (prune grant expired). Di sini murni
 //!   terhadap `&UserState`; prune jadi urusan caller.
 
-use oktz_plugin_api::PluginMeta;
+use oktz_plugin_api::{PluginMeta, QuotedMessage};
 
 /// Identitas caller — cerminan flag `m.*` yang dipakai checkPermission.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -23,6 +23,10 @@ pub struct Caller {
     pub is_premium: bool,
     pub is_admin: bool,
     pub is_bot_admin: bool,
+    /// `m.mentionedJid` — router meneruskannya apa adanya ke `Ctx`.
+    pub mentioned: Vec<String>,
+    /// `m.quoted` — pesan yang di-reply, diteruskan ke `Ctx`.
+    pub quoted: Option<QuotedMessage>,
 }
 
 /// Grant per-command dari `user.access[]`.

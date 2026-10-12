@@ -86,6 +86,7 @@ mod tests {
             jid: jid.into(),
             is_admin: admin,
             is_owner: owner,
+            data: Default::default(),
         }
     }
 

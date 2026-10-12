@@ -144,16 +144,16 @@ impl<'a, C: RouterContext> Router<'a, C> {
             args: parsed.args.clone(),
             sender: caller.sender.clone(),
             chat: caller.chat.clone(),
-            mentioned: Vec::new(),
+            mentioned: caller.mentioned.clone(),
             command: parsed.command.clone(),
             prefix: parsed.prefix.clone(),
+            quoted: caller.quoted.clone(),
             is_group: caller.is_group,
             is_owner: caller.is_owner,
             uptime_secs: self.ctx.uptime_secs(),
-            // Field `Ctx` yang lain (roster grup, state user/grup) diisi di
-            // lapisan atas router — `oktz-wa::pipeline` membungkus `handler`
-            // dan menyuntikkannya sebelum handler asli dipanggil. Router tidak
-            // punya roster maupun store, jadi di sini sengaja `Default`.
+            // Field `Ctx` yang lain (roster, state store, sessions, http) diisi
+            // `oktz-wa::pipeline` lewat pembungkus handler; router tidak punya
+            // akses ke sana.
             ..Default::default()
         };
         Decision::Handled((entry.handler)(c))

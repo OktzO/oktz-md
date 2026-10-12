@@ -112,6 +112,7 @@ mod tests {
                     jid: format!("62800{i}@s.whatsapp.net"),
                     is_admin: false,
                     is_owner: false,
+                    data: Default::default(),
                 })
                 .collect(),
             is_bot_admin: false,

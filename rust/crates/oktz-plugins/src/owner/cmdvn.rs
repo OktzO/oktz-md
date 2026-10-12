@@ -189,6 +189,7 @@ mod tests {
             jid: "628111@s.whatsapp.net".into(),
             is_admin: admin,
             is_owner: owner,
+            data: Default::default(),
         };
         let rosters = [
             GroupRoster::default(),

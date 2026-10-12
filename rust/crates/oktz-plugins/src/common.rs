@@ -4323,6 +4323,7 @@ mod tests_roster_state {
             jid: "628111@s.whatsapp.net".into(),
             is_admin: false,
             is_owner: false,
+            data: Default::default(),
         }
     }
 }
@@ -4421,11 +4422,13 @@ mod tests_batch_fun {
                             jid: "628111@s.whatsapp.net".into(),
                             is_admin: false,
                             is_owner: false,
+                            data: Default::default(),
                         },
                         Participant {
                             jid: "628222@s.whatsapp.net".into(),
                             is_admin: false,
                             is_owner: false,
+                            data: Default::default(),
                         },
                     ],
                     is_bot_admin: false,

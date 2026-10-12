@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 
 use serde_json::Value;
@@ -345,6 +346,9 @@ pub struct Participant {
     pub is_admin: bool,
     /// Hanya `superadmin` — pemilik grup. JS: `a.admin === 'superadmin'`.
     pub is_owner: bool,
+    /// `db.getUser(p.jid)` — di JS tiap iterasi roster memanggilnya sendiri.
+    /// `Null` kalau peserta belum pernah ada di store.
+    pub data: Value,
 }
 
 /// Roster grup untuk satu pesan.
@@ -393,13 +397,95 @@ impl GroupRoster {
     }
 }
 
+/// `m.quoted.type`. Baileys menyimpan nama field protobuf mentah dan plugin
+/// membandingkan persis string itu, jadi `wire_type()` tidak diterjemahkan.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum QuotedKind {
+    Text,
+    Image,
+    Video,
+    Audio,
+    Sticker,
+    Document,
+    Contact,
+    Location,
+    Reaction,
+    Poll,
+    Other(String),
+}
+
+impl QuotedKind {
+    pub fn wire_type(&self) -> &str {
+        match self {
+            Self::Text => "conversation",
+            Self::Image => "imageMessage",
+            Self::Video => "videoMessage",
+            Self::Audio => "audioMessage",
+            Self::Sticker => "stickerMessage",
+            Self::Document => "documentMessage",
+            Self::Contact => "contactMessage",
+            Self::Location => "locationMessage",
+            Self::Reaction => "reactionMessage",
+            Self::Poll => "pollCreationMessage",
+            Self::Other(s) => s,
+        }
+    }
+
+    pub fn is_media(&self) -> bool {
+        matches!(
+            self,
+            Self::Image | Self::Video | Self::Audio | Self::Sticker | Self::Document
+        )
+    }
+
+    pub fn is_image(&self) -> bool {
+        matches!(self, Self::Image)
+    }
+    pub fn is_video(&self) -> bool {
+        matches!(self, Self::Video)
+    }
+    pub fn is_audio(&self) -> bool {
+        matches!(self, Self::Audio)
+    }
+    pub fn is_sticker(&self) -> bool {
+        matches!(self, Self::Sticker)
+    }
+    pub fn is_document(&self) -> bool {
+        matches!(self, Self::Document)
+    }
+}
+
+/// `m.quoted` — pesan yang di-reply pengirim.
+///
+/// Bacaan saja: method Baileys (`download()`, `delete()`, `react()`) butuh I/O
+/// dan tidak ikut di-port.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QuotedMessage {
+    pub id: String,
+    /// Participant asli di grup, bukan pengirim reply.
+    pub sender: String,
+    pub chat: String,
+    /// Teks atau caption; `""` kalau media tanpa caption.
+    pub text: String,
+    pub kind: QuotedKind,
+    pub mimetype: Option<String>,
+    pub file_name: Option<String>,
+    pub from_me: bool,
+}
+
+impl QuotedMessage {
+    pub fn is_media(&self) -> bool {
+        self.kind.is_media()
+    }
+}
+
 /// Konteks yang diterima handler.
 ///
 /// Cerminan subset yang dipakai plugin class A. Field JS lain (`sock`, `db`,
 /// `config`) sengaja tidak ada di sini: plugin yang butuh I/O、网络 atau media
 /// belong ke class B/C/D dan akan dapat API sendiri nanti. Jangan diam-diam
 /// menambah field — kalau port plugin butuh,itu keputusan sadar.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Ctx {
     /// `m.text` — semua teks setelah command word.
     pub text: String,
@@ -415,6 +501,14 @@ pub struct Ctx {
     pub command: String,
     /// `m.prefix` — prefix yang cocok, `""` kalau mode noprefix.
     pub prefix: String,
+    /// `m.quoted` — `None` kalau pengirim tidak me-reply.
+    pub quoted: Option<QuotedMessage>,
+    /// Map globalSessions milik JS. Keyed bebas, bukan per-plugin: beberapa
+    /// plugin JS berbagi satu map yang sama.
+    pub sessions: SessionStore,
+    /// HTTP untuk plugin class B. Tidak pernah `None` — default-nya gagal dengan
+    /// alasan jelas, bukan `Option` yang wajib di-unwrap di tiap plugin.
+    pub http: Arc<dyn HttpGet>,
     pub is_group: bool,
     pub is_owner: bool,
     pub uptime_secs: u64,
@@ -446,6 +540,47 @@ impl Ctx {
             .first()
             .map(String::as_str)
             .unwrap_or(&self.sender)
+    }
+
+    /// `m.quoted` — pesan yang di-reply, `None` kalau tidak reply.
+    pub fn quoted(&self) -> Option<&QuotedMessage> {
+        self.quoted.as_ref()
+    }
+
+    /// `global.sessions.get(key)` — clone, bukan referensi, supaya plugin
+    /// tidak bisa memegang borrow `Ctx` lintas `Mutex`.
+    pub fn session_get(&self, key: &str) -> Option<Value> {
+        self.sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(key)
+            .cloned()
+    }
+
+    /// `global.sessions.set(key, value)`.
+    pub fn session_set(&self, key: &str, value: Value) {
+        self.sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(key.to_string(), value);
+    }
+
+    /// Baca-kemudian-hapus dalam satu lock. `None` kalau key tidak ada.
+    pub fn session_take(&self, key: &str) -> Option<Value> {
+        self.sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(key)
+    }
+
+    /// Mutasi di bawah lock: `session_update(k, |v| …)`. `None` = key baru,
+    /// jadi closure menerima `Value::Null`.
+    pub fn session_update(&self, key: &str, f: impl FnOnce(&mut Value)) {
+        let mut guard = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        let entry = guard
+            .entry(key.to_string())
+            .or_insert(Value::Null);
+        f(entry);
     }
 
     /// Nomor saja dari jid (`628123@s.whatsapp.net` → `628123`), untuk seed
@@ -567,6 +702,115 @@ pub fn find(command: &str) -> Option<&'static PluginEntry> {
         .iter()
         .copied()
         .find(|e| e.meta.matches(command))
+}
+
+/// State volatil antar-pesan. Pakai suffix `""` kalau mau menyimpan JSON
+/// utuh, bukan cuma [`Mutex`] biasa.
+pub type SessionStore = Arc<std::sync::Mutex<HashMap<String, Value>>>;
+
+pub fn new_session_store() -> SessionStore {
+    Arc::new(std::sync::Mutex::new(HashMap::new()))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HttpBody {
+    Bytes { data: Arc<[u8]>, mimetype: Option<String> },
+    Form(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HttpResponse {
+    pub status: u16,
+    pub body: HttpBody,
+    pub headers: Vec<(String, String)>,
+}
+
+impl HttpBody {
+    pub fn bytes(&self) -> &[u8] {
+        match self {
+            Self::Bytes { data, .. } => data.as_ref(),
+            Self::Form(s) => s.as_bytes(),
+        }
+    }
+}
+
+impl HttpResponse {
+    pub fn json(&self) -> Option<Value> {
+        serde_json::from_slice(self.body.bytes()).ok()
+    }
+    pub fn text(&self) -> String {
+        String::from_utf8_lossy(self.body.bytes()).to_string()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HttpError {
+    pub message: String,
+}
+
+/// Klien HTTP sinkron untuk plugin.
+///
+/// `ponytail:` trait, bukan implementasi. Default-nya [`NoHttp`] yang
+/// selalu error, dipakai pipeline test/offline. `oktz-wa` yang menyediakan
+/// [`UreqHttp`]-nya; pindah ke reqwest async tinggal ganti implementasinya.
+pub trait HttpGet: Send + Sync + std::fmt::Debug {
+    fn get(&self, url: &str) -> Result<HttpResponse, HttpError>;
+    fn post_json(&self, url: &str, body: &Value) -> Result<HttpResponse, HttpError>;
+    fn post_form(&self, url: &str, form: &str) -> Result<HttpResponse, HttpError>;
+    fn post_multipart(
+        &self,
+        url: &str,
+        parts: &[(&str, HttpBody)],
+    ) -> Result<HttpResponse, HttpError>;
+}
+
+/// Default [`Ctx::http`]. Selalu gagal, tidak pernah jaringan.
+#[derive(Debug, Default)]
+pub struct NoHttp;
+
+fn no_http<T>() -> Result<T, HttpError> {
+    Err(HttpError {
+        message: "HTTP tidak tersedia di konteks ini".into(),
+    })
+}
+
+impl HttpGet for NoHttp {
+    fn get(&self, _: &str) -> Result<HttpResponse, HttpError> {
+        no_http()
+    }
+    fn post_json(&self, _: &str, _: &Value) -> Result<HttpResponse, HttpError> {
+        no_http()
+    }
+    fn post_form(&self, _: &str, _: &str) -> Result<HttpResponse, HttpError> {
+        no_http()
+    }
+    fn post_multipart(&self, _: &str, _: &[(&str, HttpBody)]) -> Result<HttpResponse, HttpError> {
+        no_http()
+    }
+}
+
+impl Default for Ctx {
+    fn default() -> Self {
+        Self {
+            text: String::new(),
+            args: Vec::new(),
+            sender: String::new(),
+            chat: String::new(),
+            mentioned: Vec::new(),
+            command: String::new(),
+            prefix: String::new(),
+            quoted: None,
+            sessions: new_session_store(),
+            http: Arc::new(NoHttp),
+            is_group: false,
+            is_owner: false,
+            uptime_secs: 0,
+            roster: GroupRoster::default(),
+            user_data: Value::Null,
+            group_data: Value::Null,
+            settings: Value::Null,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -781,6 +1025,7 @@ mod tests {
             jid: jid.into(),
             is_admin: admin,
             is_owner: owner,
+            data: Default::default(),
         }
     }
 

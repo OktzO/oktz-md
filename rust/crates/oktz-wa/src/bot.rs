@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
+use oktz_plugin_api::UreqHttp;
 use oktz_router::ParseOptions;
 use oktz_store::json_store::JsonStore;
 use whatsapp_rust::prelude::*;
@@ -120,7 +121,8 @@ impl PipelineWiring {
                         self.bot_id.clone(),
                         ParseOptions::default(),
                     )
-                    .with_identity(self.identity.clone()),
+                    .with_identity(self.identity.clone())
+                    .with_http(Arc::new(UreqHttp::new())),
                 );
                 *slot = Some(p.clone());
                 p

@@ -13,6 +13,7 @@ serde_json.workspace = true
 tracing.workspace = true
 linkme = "0.3"
 async-trait = "0.1"
+ureq = { version = "3.4", features = ["multipart"] }
 
 
 [dev-dependencies]
