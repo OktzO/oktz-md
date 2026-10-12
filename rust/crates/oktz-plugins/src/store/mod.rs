@@ -1,5 +1,9 @@
 pub mod addlist;
 pub mod editlist;
+pub mod editstok;
 pub mod hapuslist;
+pub mod hapusproduk;
+pub mod hapusstok;
 pub mod list;
 pub mod listproduk;
+pub mod liststok;

@@ -636,6 +636,121 @@ macro_rules! probe_plugin {
 
 pub(crate) use probe_plugin;
 
+// =============================================================================
+// Helper batch owner/group/rpg — `on/off`, list-of-strings, group flags
+// =============================================================================
+
+/// Kebenaran JavaScript untuk satu nilai JSON — padanan `!value` / `if (value)`
+/// yang dipakai seluruh plugin guard.
+///
+/// Bedanya dari `Option::is_some` dan dari `as_bool`: `null`, `false`, `0`,
+/// `""` semuanya falsy, sementara `{}` dan `[]` truthy. Plugin yang menulis
+/// `if (!user.x)` di JS tidak boleh memperlakukan objek kosong sebagai "tidak
+/// ada".
+pub(crate) fn js_truthy(v: Option<&serde_json::Value>) -> bool {
+    match v {
+        None | Some(serde_json::Value::Null) => false,
+        Some(serde_json::Value::Bool(b)) => *b,
+        Some(serde_json::Value::Number(n)) => n.as_f64().is_some_and(|f| f != 0.0 && !f.is_nan()),
+        Some(serde_json::Value::String(s)) => !s.is_empty(),
+        Some(_) => true,
+    }
+}
+
+/// Bentuk single-argument untuk pemanggilan method-chain di
+/// `Option<&Value>::is_some_and`, yang meneruskan
+/// `&Value` (bukan `Option<&Value>`).
+pub(crate) fn js_truthy_value(v: &serde_json::Value) -> bool {
+    js_truthy(Some(v))
+}
+
+/// `!value` — bentuk yang dipakai plugin guard.
+pub(crate) fn js_falsy(v: Option<&serde_json::Value>) -> bool {
+    !js_truthy(v)
+}
+
+/// `m.args[0]?.toLowerCase()` — argumen pertama sebagai kata kunci.
+///
+/// `None` kalau tidak ada argumen. Plugin yang cabangnya `if (!args[0])`
+/// memakai ini sebagai pemisah cabang status-vs-tulis.
+pub(crate) fn first_keyword(ctx: &Ctx) -> Option<String> {
+    ctx.args.first().map(|a| a.to_lowercase())
+}
+
+/// `m.text?.toLowerCase()?.trim()` — SELURUH teks setelah command, bukan hanya
+/// token pertama. Plugin yang cabangnya `if (!args[0])`
+/// memakai ini sebagai pemisah cabang status-vs-tulis.
+pub(crate) fn text_keyword(ctx: &Ctx) -> String {
+    ctx.text.trim().to_lowercase()
+}
+
+/// `arr || []` dari store, dipakai saat menulis balik daftar.
+///
+/// Membaca JSON array; bentuk lain (termasuk `null` dari grup yang belum pernah
+/// ada) menjadi vektor kosong — persis `|| []` di JS, bukan `as_array` yang
+/// diam-diam homeowner data lain.
+pub(crate) fn string_list(value: Option<&serde_json::Value>) -> Vec<String> {
+    value
+        .and_then(serde_json::Value::as_array)
+        .map(|a| {
+            a.iter()
+                .map(|v| match v.as_str() {
+                    Some(s) => s.to_string(),
+                    // `${el}` di JS: objek jadi JSON kompak, bukan error.
+                    None => v.to_string(),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// `parseInt(x)` — `Option<i64>`: `None` untuk string yang tidak diawali
+/// angka, sama seperti `NaN`. String `"50px"` jadi `50`, bukan error, karena
+/// `parseInt` berhenti di karakter non-digit pertama.
+pub(crate) fn parse_int(raw: &str) -> Option<i64> {
+    let t = raw.trim_start();
+    let mut end = 0;
+    for (i, c) in t.char_indices() {
+        if c.is_ascii_digit() || (i == 0 && (c == '-' || c == '+')) {
+            end = i + c.len_utf8();
+        } else {
+            break;
+        }
+    }
+    t[..end].parse::<i64>().ok()
+}
+
+/// `Number.isInteger(parseInt(args[i]) || 0)` untuk indeks berbasis-1 dari
+/// argumen: `hapusstok 1 3` → produk 0, item 2. Argumen yang bukan angka
+/// menjadi `0`, sama seperti `|| 0` di JS.
+pub(crate) fn arg_index(ctx: &Ctx, pos: usize) -> i64 {
+    ctx.args
+        .get(pos)
+        .and_then(|a| parse_int(a))
+        .unwrap_or(0)
+        - 1
+}
+
+/// `formatDuration(botafk.js:78-90)` — jam/hari ke-atas diturunkan dari
+/// Menit ke-atas, bukan dari detik ke-atas, jadi `1 jam 0 menit` bukan
+/// `60 menit 0 detik`.
+pub(crate) fn format_duration(ms: i64) -> String {
+    let ms = ms.max(0);
+    let seconds = ms / 1000;
+    let minutes = seconds / 60;
+    let hours = minutes / 60;
+    let days = hours / 24;
+    if days > 0 {
+        format!("{days} hari {} jam", hours % 24)
+    } else if hours > 0 {
+        format!("{hours} jam {} menit", minutes % 60)
+    } else if minutes > 0 {
+        format!("{minutes} menit {} detik", seconds % 60)
+    } else {
+        format!("{seconds} detik")
+    }
+}
+
 #[cfg(test)]
 mod tests_cek {
     use super::*;
@@ -2096,6 +2211,28 @@ mod tests_batch_g {
             "addlist",
             "editlist",
             "hapuslist",
+            // Batch owner/group/rpg — semua `isOwner: true` di pluginConfig JS.
+            "onlygc",
+            "onlypc",
+            "similarity",
+            "sistemenergi",
+            "cmdvn",
+            "aktifaudiomenu",
+            "autojoingc",
+            "autoreactsw",
+            "autoreadsw",
+            "bcpcjeda",
+            "setlimitdefault",
+            "resetlimitdefault",
+            "resetrules",
+            "botafk",
+            "botmode",
+            "liststok",
+            "editstok",
+            "hapusstok",
+            "hapusproduk",
+            "selfthisgc",
+            "publicthisgc",
         ];
         for m in oktz_plugin_api::all_plugins().iter().map(|p| &p.meta) {
             if m.is_owner && m.is_enabled {

@@ -1,1 +1,10 @@
+pub mod aktifaudiomenu;
+pub mod autoreactsw;
+pub mod autoreadsw;
+pub mod botafk;
+pub mod cmdvn;
+pub mod onlygc;
+pub mod onlypc;
+pub mod similarity;
+pub mod sistemenergi;
 pub mod templateplugin;
