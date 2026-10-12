@@ -18,9 +18,9 @@
 | List native-flow (S4) | **✅ render + bisa diklik** (verifikasi Oktz) | single_select |
 | RSS produksi | 13–18 MB (target 60) | smoke 16.8, send 13.1 |
 | Data user | 24 file / 874KB byte-identik | `verify-db` |
-| **`oktz-router`** | ✅ permission + mode + parsing, **53 test** | `c72dd03` |
-| **Plugin** | ✅ **10 plugin `cek*`** (dari 830) | `{"plugins":10}` |
-| Test + clippy | **130 hijau**, clippy **0 warning** | `cargo test --release` |
+| **`oktz-router`** | ✅ permission + mode + parsing + gate + group + serializer | — |
+| **Plugin** | 🔄 **126 plugin** (dari 828) — **BELUM semua** | `{"plugins":126}` |
+| Test + clippy | **1352 hijau**, clippy **0 warning** | `cargo test --release` |
 
 ## 2. Decisions yang sudah dikunci (jangan diubah tanpa Oktz)
 
@@ -63,6 +63,32 @@ Runtime wacore sekarang **memang load** sesi: `Session loaded for 24795789085084
 - Semua 514 record fixture punya ratchet state utuh (bukan kosong): 453 `baseKeyType=1`, 85 `=0`, dan 60 record dicek → semua base key hadir di blob hasil konversi.
 
 Jadi: **importasi terbukti benar secara struktur, tapi "pesan kontak lama berhasil decrypt" BELUM terbukti.** Itu masih target §3.3. Kemungkinan besar sisi server (device lama perlu prekey baru / retry receipt), tapi belum dibuktikan — jangan tulis "selesai" sebelum ada output decrypt nyata.
+
+## 3.5 ⚠️ YANG BELUM SELESAI — plugin 126 dari 828
+
+Ini yang paling penting dibaca sesi berikutnya. **Plugin BELUM semua
+direalisasi.** `plugins:126` bukan berarti hampir jadi — itu 15%.
+
+| Class | Sisa | Kenapa belum |
+|---|---|---|
+| A | **274** | butuh `m.quoted`, per-participant read, session state, atau `config` runtime |
+| B | 260 | HTTP/API eksternal — perlu API client + endpoint audit |
+| C | 44 | canvas/ffmpeg/OCR — perlu toolchain media |
+| D | 102 | fitur WA non-portabel (interactiveMessage, newsletter, relayMessage…) |
+| E | 5 | upstream mati — keputusan sendiri apakah dibuang |
+| F | 20 | platform-risky (jadibot dll) |
+
+Ter-port: 126 dari 828 = **15%**. Yang sudah: `cek` (44), `fun`, `group`,
+`owner`, `rpg`, `store`, `user`, `tools`, `main`, `info`, `religi`.
+
+Kapabilitas API yang MASIH hilang dan menahan sisanya:
+1. `m.quoted` (pesan yang di-reply) — menahan forward, tag reply, dll.
+2. Per-participant read (`user_data` hanya untuk SENDER, bukan tiap anggota grup).
+3. Thread/session state per-user (untuk game, rpg progres, quiz).
+4. HTTP client (class B = 260 plugin, blok terbesar).
+
+Pakai yang sudah ada: `Ctx.roster`, `Ctx.user_data`/`group_data`, `Ctx.setting_*`,
+`Reply::with_mutation` (tulis store), `Reply::with_reaction`, `Reply::MediaSource`.
 
 ## 4. Temuan lain reviewer (prioritas di bawah blocker)
 
