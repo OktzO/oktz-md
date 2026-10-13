@@ -29,6 +29,7 @@ pub mod delenergi;
 pub mod delexp;
 pub mod delkoin;
 pub mod dellevel;
+pub mod delpremall;
 pub mod energitoggle;
 pub mod goodbyeall;
 pub mod heapsnap;

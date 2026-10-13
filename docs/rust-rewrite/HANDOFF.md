@@ -19,8 +19,8 @@
 | RSS produksi | 13–18 MB (target 60) | smoke 16.8, send 13.1 |
 | Data user | 24 file / 874KB byte-identik | `verify-db` |
 | **`oktz-router`** | ✅ permission + mode + parsing + gate + group + serializer | — |
-| **Plugin** | 🔄 **342 plugin** (dari 828) — **BELUM semua** | `{"plugins":342}` |
-| Test + clippy | **3651 hijau**, clippy **0 warning** | `cargo test --release` |
+| **Plugin** | 🔄 **343 plugin** (dari 828) — **BELUM semua** | `{"plugins":343}` |
+| Test + clippy | **3661 hijau**, clippy **0 warning** | `cargo test --release` |
 
 ## 2. Decisions yang sudah dikunci (jangan diubah tanpa Oktz)
 
@@ -64,29 +64,45 @@ Runtime wacore sekarang **memang load** sesi: `Session loaded for 24795789085084
 
 Jadi: **importasi terbukti benar secara struktur, tapi "pesan kontak lama berhasil decrypt" BELUM terbukti.** Itu masih target §3.3. Kemungkinan besar sisi server (device lama perlu prekey baru / retry receipt), tapi belum dibuktikan — jangan tulis "selesai" sebelum ada output decrypt nyata.
 
-## 3.5 ⚠️ YANG BELUM SELESAI — plugin 293 dari 828
+## 3.5 ⚠️ YANG BELUM SELESAI — plugin 343 dari 828
 
 Ini yang paling penting dibaca sesi berikutnya. **Plugin BELUM semua
-direalisasi.** `plugins:342` itu 41%, bukan hampir jadi.
+direalisasi.** `plugins:343` itu 41%, bukan hampir jadi.
 
 | Class | Sisa | Kenapa belum |
 |---|---|---|
-| A | **104** | butuh `sock.*`, `downloadContentMessage`, `fs`, store terpisah, `setTimeout` multi-langkah |
+| A | **54** | butuh `sock.*`, `downloadContentMessage`, `fs`, store terpisah, `setTimeout` multi-langkah |
 | B | 260 | HTTP sudah ada (`ctx.http`), tapi butuh audit endpoint + scraping/canvas |
 | C | 44 | canvas/ffmpeg/OCR — perlu toolchain media |
 | D | 102 | fitur WA non-portabel (interactiveMessage, newsletter, relayMessage…) |
 | E | 5 | upstream mati — keputusan sendiri apakah dibuang |
 | F | 20 | platform-risky (jadibot dll) |
 
-Ter-port: 293 dari 828 = **35%** (342 file plugin, karena satu file bisa menambah
-lebih dari satu entri manifest lewat alias). Per kategori: cek 47, clan 9,
-download 3, fun 26, game 8, group 68, info 4, main 6, owner 54, panel 9, random 7,
-religi 1, rpg 59, search 2, sticker 1, store 11, tools 12, user 13, utility 2.
-Kategori baru di batch terakhir: `download` dan `sticker`.
+Ter-port: 343 dari 828 = **41%**. Satu file plugin = satu entri manifest.
+Per kategori: cek 47, clan 9, download 3, fun 26, game 8, group 68, info 4,
+main 6, owner 55, panel 9, random 7, religi 1, rpg 59, search 2, sticker 1,
+store 11, tools 12, user 13, utility 2. Kategori baru di batch terakhir:
+`download` dan `sticker`.
+
+**Class A praktis habis: sisa 54, semuanya terblokir kapabilitas.** Angka ini
+dihitung per-file (ada/tidaknya `.rs` dengan nama sama), bukan per-nama
+registry — versi nama dibutuhkan 104 dan itu keliru. Tiap file ke-54 dibaca
+manual; nol yang lolos. Yang dibutuhkan, per file yang butuh (tumpang tindih):
+
+| Kapabilitas | File |
+|---|---|
+| `child_process` / `process.*` | 27 |
+| `sock.*` hapus/pin/read/table/media | 22 |
+| `fs` | 21 |
+| `sock.*` mutate/promote/grup | 10 |
+| `await import()` dinamis | 4 |
+| `os.*` | 3 |
+| store terpisah (`sewa.json`) | 2 |
+| `config.payment` | 1 |
 
 ### Kapabilitas yang SUDAH ditambahkan
 
-Keempatnya yang membuka 156 port terakhir; dipakai juga oleh port berikutnya.
+Kelimanya yang membuka 156 port terakhir; dipakai juga oleh port berikutnya.
 
 | JS | Rust | Status |
 |---|---|---|
