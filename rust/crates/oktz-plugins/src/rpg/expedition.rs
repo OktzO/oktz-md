@@ -413,7 +413,17 @@ mod tests {
         assert!(t.contains("🗺️ *Rombongan 1* -> 🌲 Hutan Laba-laba"), "{t}");
         assert!(t.contains("✅ SELESAI! (Siap Claim)"), "{t}");
         assert!(t.contains("🗺️ *Rombongan 2* -> 🌲 Hutan Laba-laba"), "{t}");
-        assert!(t.contains("🕒 Sisa 30m 0s"), "{t}");
+        // `format_time` sudah dikunci persis di test sendiri. Di sini yang
+        // dikunci cuma sisa ~30 menit, karena handler membaca `now_ms()`
+        // sendiri beberapa ms setelah test — 1 ms cukup mengubah "30m 0s"
+        // jadi "29m 59s".
+        let sisa: i64 = t
+            .split("Sisa ")
+            .nth(1)
+            .and_then(|s| s.split('m').next())
+            .and_then(|s| s.trim().parse().ok())
+            .unwrap_or_else(|| panic!("sisa waktu tak terbaca: {t}"));
+        assert!((29..=30).contains(&sisa), "sisa harus ~30 menit: {t}");
     }
 
     #[test]

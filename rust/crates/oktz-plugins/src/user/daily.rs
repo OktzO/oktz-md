@@ -211,11 +211,52 @@ mod tests {
 
     #[test]
     fn the_cooldown_reply_reports_hours_and_minutes_floored() {
+        // Angka menitnya tidak bisa dikunci di level handler: `run()` memanggil
+        // `now_ms()` sendiri beberapa milidetik setelah test membacanya, dan 1
+        // ms saja sudah memotong 60.000 → 59 dari hitungan menit. Bentuknya
+        // yang dikunci di sini, angkanya dikunci di test `remaining_text_*`.
         let just_now = now_ms();
         let r = run(json!({ "cooldowns": { "daily": just_now - 60_000 } }));
         let t = text_of(&r);
-        // Tersisa 23 jam 59 menit.
-        assert!(t.contains("23 jam 59 menit"), "{t}");
+        assert!(t.starts_with("🕕 *ᴄᴏᴏʟᴅᴏᴡɴ*"), "{t}");
+        assert!(t.contains("Kamu sudah klaim hari ini"), "{t}");
+        let (h, m) = parse_hours_minutes(t);
+        assert!((23..=24).contains(&h), "sisa ~23 jam: {t}");
+        assert!(m <= 59, "menit selalu 0..=59: {t}");
+        assert!(r.mutations().is_empty(), "cooldown tidak boleh menulis");
+    }
+
+    /// `"Tunggu: *23 jam 58 menit* lagi."` → `(23, 58)`.
+    fn parse_hours_minutes(text: &str) -> (i64, i64) {
+        let (left, right) = text
+            .split_once(" jam ")
+            .unwrap_or_else(|| panic!("format jam tak dikenal: {text}"));
+        let h = left
+            .rsplit('*')
+            .next()
+            .and_then(|s| s.trim().parse().ok())
+            .unwrap_or_else(|| panic!("jam tak terbaca: {text}"));
+        let m = right
+            .split_once(" menit")
+            .map(|(m, _)| m)
+            .and_then(|s| s.trim().parse().ok())
+            .unwrap_or_else(|| panic!("menit tak terbaca: {text}"));
+        (h, m)
+    }
+
+    #[test]
+    fn remaining_text_floors_the_hours_and_the_minutes() {
+        assert_eq!(
+            remaining_text(23 * 3_600_000 + 59 * 60_000),
+            "🕕 *ᴄᴏᴏʟᴅᴏᴡɴ*\n\n> Kamu sudah klaim hari ini.\n\
+             > Tunggu: *23 jam 59 menit* lagi."
+        );
+        // Sisa 0,5 menit dipotong ke 0 menit, bukan 1.
+        assert!(remaining_text(59_999).contains("*0 jam 0 menit*"));
+        // Sisa 59,999 detik tetap 0 menit, bukan 1.
+        assert!(remaining_text(3_599_999).contains("*0 jam 59 menit*"));
+        // Satu jam penuh: 59 menit 59,999 detik bukan 60 menit.
+        assert!(remaining_text(3_600_000).contains("*1 jam 0 menit*"));
     }
 
     #[test]

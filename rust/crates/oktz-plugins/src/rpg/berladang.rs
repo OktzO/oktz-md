@@ -190,10 +190,14 @@ mod tests {
     /// `if (results.length === 0)` memberi 1 padi bernilai 100. Baris hasil
     /// panen yang cuma SATU-SATUNYA tidak berarti cabang ini — hanya baris
     /// `padi` berisi `+1` dengan total 100 yang menandai fallback.
+    ///
+    /// Semua 6 tanaman harus gagal agar cabang ini kena: 0.10·0.30·0.50·0.60·
+    /// 0.80·0.90 = 0.00648 per panen. 600 percobaan masih gagal ~2% dan test
+    /// ini diam-diam jadi flaky; 2400 menurunkan ke ~1e-7.
     #[test]
     fn a_failed_harvest_still_yields_one_padi() {
         let mut fallback = 0;
-        for _ in 0..600 {
+        for _ in 0..2400 {
             let r = run(json!({ "rpg": { "stamina": 100 } }));
             let t = text_of(&r);
             assert!(t.starts_with("PANEN RAYA KAK!"), "{t}");
@@ -209,7 +213,7 @@ mod tests {
             assert_eq!(t.matches("Est. Rp").count(), 1, "fallback tak boleh baris lain: {t}");
             assert_eq!(write_of(&r)["inventory"]["padi"], json!(1));
         }
-        assert!(fallback > 0, "dalam 600 percobaan harus ada panen kosong");
+        assert!(fallback > 0, "dalam 2400 percobaan harus ada panen kosong");
     }
 
     #[test]

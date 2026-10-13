@@ -13,6 +13,14 @@ use serde_json::{Value, json};
 /// `SESSION_TIMEOUT` (`dungeon.js:147`) — 5 menit.
 pub(crate) const SESSION_TIMEOUT_MS: i64 = 5 * 60 * 1000;
 
+/// `Date.now() - session.time > SESSION_TIMEOUT` — strict, jadi sesi yang
+/// umurnya persis 5 menit masih hidup. Dipisah dari handler karena batasnya
+/// hanya bisa dikunci persis kalau `now` dikontrol test; lewat handler,
+/// `now_ms()` di dalam selalu beberapa ms lebih besar dari yang dibaca test.
+pub(crate) fn session_still_alive(now: i64, at: i64) -> bool {
+    now - at <= SESSION_TIMEOUT_MS
+}
+
 /// `DUNGEONS` — id, nama, level minimal. Monster/reward tidak dipakai lobi.
 pub(crate) const DUNGEONS: [(i64, &str, i64); 10] = [
     (1, "🌲 Hutan Gelap", 1),
@@ -103,7 +111,7 @@ pub fn dungeon(ctx: Ctx) -> Reply {
         && !session.is_null()
     {
         let at = session.get("time").and_then(Value::as_i64).unwrap_or(0);
-        if crate::common::now_ms() - at <= SESSION_TIMEOUT_MS {
+        if session_still_alive(crate::common::now_ms(), at) {
             return Reply::text(ACTIVE);
         }
         // `delete user.rpg.dungeon_session` lalu jatuh ke lobby — penulisan
@@ -260,10 +268,25 @@ mod tests {
 
     #[test]
     fn a_session_exactly_at_the_timeout_is_still_alive() {
-        // `Date.now() - session.time > TIMEOUT` — strict, jadi 5 menit pas
-        // masih dianggap aktif.
-        let edge = crate::common::now_ms() - SESSION_TIMEOUT_MS;
-        let r = run(json!({"rpg": {"dungeon_session": {"stage": "lobi", "time": edge}}}));
+        let t0 = 1_000_000_000_000;
+        assert!(
+            session_still_alive(t0 + SESSION_TIMEOUT_MS, t0),
+            "tepat 5 menit masih hidup"
+        );
+        assert!(
+            !session_still_alive(t0 + SESSION_TIMEOUT_MS + 1, t0),
+            "1 ms lewat timeout sudah mati"
+        );
+        assert!(session_still_alive(t0 + 1, t0), "sesi baru hidup");
+    }
+
+    #[test]
+    fn a_session_a_minute_short_of_the_timeout_keeps_the_lobby_reply() {
+        // Batasnya dikunci di `session_still_alive`; lewat handler cukup
+        // membuktikan cabang "masih hidup" yang dipilih, dengan margin 1 menit
+        // supaya pencatatan jam di test tidak ikut menentukan hasilnya.
+        let fresh = crate::common::now_ms() - SESSION_TIMEOUT_MS + 60_000;
+        let r = run(json!({"rpg": {"dungeon_session": {"stage": "lobi", "time": fresh}}}));
         assert_eq!(text_of(&r), ACTIVE);
     }
 

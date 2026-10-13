@@ -9,6 +9,15 @@ use serde_json::{Value, json};
 
 pub(crate) const SESSION_TIMEOUT_MS: i64 = 5 * 60 * 1000;
 
+/// `now - at <= SESSION_TIMEOUT_MS` (`kyubigame.js:214`) — `<=`, jadi sesi
+/// yang umurnya persis 5 menit masih aktif. Dipisah dari handler karena
+/// batasnya hanya bisa dikunci persis kalau `now` dikontrol test; lewat
+/// handler, `now_ms()` di dalam selalu beberapa ms lebih besar dari yang
+/// dibaca test.
+pub(crate) fn session_still_running(now: i64, at: i64) -> bool {
+    now - at <= SESSION_TIMEOUT_MS
+}
+
 pub(crate) const SESSION_FIELD: &str = "rpg.kyubigame_session";
 
 /// `LOCATIONS` — id, nama, level minimal.
@@ -90,7 +99,7 @@ pub fn kyubigame(ctx: Ctx) -> Reply {
         && !session.is_null()
     {
         let at = session.get("time").and_then(Value::as_i64).unwrap_or(0);
-        if crate::common::now_ms() - at <= SESSION_TIMEOUT_MS {
+        if session_still_running(crate::common::now_ms(), at) {
             return Reply::text(ACTIVE);
         }
     }
@@ -235,9 +244,26 @@ mod tests {
 
     #[test]
     fn a_mission_exactly_at_the_timeout_is_still_running() {
-        let edge = crate::common::now_ms() - SESSION_TIMEOUT_MS;
-        let r = run(json!({"rpg": {"kyubigame_session": {"stage": "lobi", "time": edge}}}));
-        assert_eq!(text_of(&r), ACTIVE, "`>` strict, jadi 5 menit pas masih aktif");
+        let t0 = 1_000_000_000_000;
+        assert!(
+            session_still_running(t0 + SESSION_TIMEOUT_MS, t0),
+            "tepat 5 menit masih aktif"
+        );
+        assert!(
+            !session_still_running(t0 + SESSION_TIMEOUT_MS + 1, t0),
+            "1 ms lewat timeout sudah expired"
+        );
+        assert!(session_still_running(t0 + 1, t0), "sesi baru aktif");
+    }
+
+    #[test]
+    fn a_just_short_of_the_timeout_is_dispatched_by_the_handler() {
+        // Batasnya dikunci di `session_still_running`; lewat handler cukup
+        // membuktikan cabang "masih aktif" benar-benar dipilih, dengan
+        // margin 1 menit supaya jam tidak bisa ikut menentukan hasilnya.
+        let fresh = crate::common::now_ms() - SESSION_TIMEOUT_MS + 60_000;
+        let r = run(json!({"rpg": {"kyubigame_session": {"stage": "lobi", "time": fresh}}}));
+        assert_eq!(text_of(&r), ACTIVE);
     }
 
     #[test]
