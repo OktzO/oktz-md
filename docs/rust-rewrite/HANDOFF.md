@@ -19,8 +19,8 @@
 | RSS produksi | 13–18 MB (target 60) | smoke 16.8, send 13.1 |
 | Data user | 24 file / 874KB byte-identik | `verify-db` |
 | **`oktz-router`** | ✅ permission + mode + parsing + gate + group + serializer | — |
-| **Plugin** | 🔄 **126 plugin** (dari 828) — **BELUM semua** | `{"plugins":126}` |
-| Test + clippy | **1352 hijau**, clippy **0 warning** | `cargo test --release` |
+| **Plugin** | 🔄 **282 plugin** (dari 828) — **BELUM semua** | `{"plugins":282}` |
+| Test + clippy | **2826 hijau**, clippy **0 warning** | `cargo test --release` |
 
 ## 2. Decisions yang sudah dikunci (jangan diubah tanpa Oktz)
 
@@ -64,31 +64,54 @@ Runtime wacore sekarang **memang load** sesi: `Session loaded for 24795789085084
 
 Jadi: **importasi terbukti benar secara struktur, tapi "pesan kontak lama berhasil decrypt" BELUM terbukti.** Itu masih target §3.3. Kemungkinan besar sisi server (device lama perlu prekey baru / retry receipt), tapi belum dibuktikan — jangan tulis "selesai" sebelum ada output decrypt nyata.
 
-## 3.5 ⚠️ YANG BELUM SELESAI — plugin 126 dari 828
+## 3.5 ⚠️ YANG BELUM SELESAI — plugin 232 dari 828
 
 Ini yang paling penting dibaca sesi berikutnya. **Plugin BELUM semua
-direalisasi.** `plugins:126` bukan berarti hampir jadi — itu 15%.
+direalisasi.** `plugins:282` itu 34%, bukan hampir jadi.
 
 | Class | Sisa | Kenapa belum |
 |---|---|---|
-| A | **274** | butuh `m.quoted`, per-participant read, session state, atau `config` runtime |
-| B | 260 | HTTP/API eksternal — perlu API client + endpoint audit |
+| A | **165** | butuh `sock.*`, `downloadContentMessage`, `fs`, store terpisah, `setTimeout` multi-langkah |
+| B | 260 | HTTP sudah ada (`ctx.http`), tapi butuh audit endpoint + scraping/canvas |
 | C | 44 | canvas/ffmpeg/OCR — perlu toolchain media |
 | D | 102 | fitur WA non-portabel (interactiveMessage, newsletter, relayMessage…) |
 | E | 5 | upstream mati — keputusan sendiri apakah dibuang |
 | F | 20 | platform-risky (jadibot dll) |
 
-Ter-port: 126 dari 828 = **15%**. Yang sudah: `cek` (44), `fun`, `group`,
-`owner`, `rpg`, `store`, `user`, `tools`, `main`, `info`, `religi`.
+Ter-port: 232 dari 828 = **28%**. Kategori yang sudah terisi: `cek` 47,
+`clan` 8, `fun` 24, `game` 6, `group` 54, `info` 5, `main` 6, `owner` 43,
+`panel` 1, `random` 6, `religi` 1, `rpg` 59, `search` 1, `store` 9, `tools` 10,
+`user` 9, `utility` 2.
 
-Kapabilitas API yang MASIH hilang dan menahan sisanya:
-1. `m.quoted` (pesan yang di-reply) — menahan forward, tag reply, dll.
-2. Per-participant read (`user_data` hanya untuk SENDER, bukan tiap anggota grup).
-3. Thread/session state per-user (untuk game, rpg progres, quiz).
-4. HTTP client (class B = 260 plugin, blok terbesar).
+### Kapabilitas yang SUDAH ditambahkan
 
-Pakai yang sudah ada: `Ctx.roster`, `Ctx.user_data`/`group_data`, `Ctx.setting_*`,
-`Reply::with_mutation` (tulis store), `Reply::with_reaction`, `Reply::MediaSource`.
+Keempatnya yang membuka 156 port terakhir; dipakai juga oleh port berikutnya.
+
+| JS | Rust | Status |
+|---|---|---|
+| `m.quoted` | `Ctx.quoted() -> Option<&QuotedMessage>` | ✅ |
+| `m.mentionedJid` | `Ctx.mentioned` | ✅ (sebelumnya selalu kosong — bug nyata) |
+| `db.getUser(peserta)` | `Participant.data` | ✅ |
+| `global.*Sessions` | `ctx.session_get/set/take/update` | ✅ |
+| `axios`/`fetch` | `ctx.http` (`UreqHttp`; default `NoHttp`) | ✅ |
+
+### Yang MASIH menahan sisanya
+
+1. **`sock.*`** — mutate grup (promote/demote/ubah nama/deskripsi/pic), hapus
+   pesan dari plugin, block/unblock, pin, leave. Butuh surface async di `Ctx`
+   atau Reply baru. Ini blocker terbesar class A sekarang.
+2. **`downloadContentMessage`** — `m.quoted.download`. Reply sudah punya
+   `MediaSource`, jalur unduh byte-nya yang belum.
+3. **Store terpisah** — `premium.json`, `sewa.json`, `guilds`, `listResponse`.
+   `Mutation` cuma punya `SetUser`/`SetGroup`/`SetSetting`.
+4. **`getAllUsers`/`getAllGroups`** — butuh iterasi seluruh store.
+5. **Canvas/ffmpeg/OCR** — class C.
+6. **Reply satu pesan** — JS bisa `react` → tunggu → kirim. Plugin multi-langkah
+   jadi mengirim hasil akhir saja (reaksi tetap lewat `with_reaction`).
+
+Pakai yang sudah ada: `Ctx.roster`, `Ctx.user_data`/`group_data`,
+`Ctx.setting_*`, `ctx.sessions`, `ctx.http`, `Ctx.quoted`, `Ctx.mentioned`,
+`Reply::with_mutation`, `Reply::with_reaction`, `Reply::MediaSource`.
 
 ## 4. Temuan lain reviewer (prioritas di bawah blocker)
 
@@ -110,20 +133,38 @@ Pakai yang sudah ada: `Ctx.roster`, `Ctx.user_data`/`group_data`, `Ctx.setting_*
   cd /tmp/opencode && curl -sSL https://github.com/NixOS/nixpkgs/archive/refs/tags/25.05.tar.gz -o n.tar.gz
   mkdir -p nixpkgs-25.05 && tar xzf n.tar.gz -C nixpkgs-25.05 --strip-components=1
   ```
-- `source /tmp/opencode/build_env.sh` set env + `$NS`.
-- Build: `nix-shell -p stdenv.cc pkg-config -I nixpkgs=/tmp/opencode/nixpkgs-25.05 --run "cargo <cmd> --release"`
+- `source /tmp/opencode/build_env.sh` set env + fungsi `NS`.
+- **PAKAI `NS "..."`, JANGAN `$NS "..."`.** Di harness ini bentuk `$NS "..."`
+  menyatukan seluruh argumen jadi satu kata, jadi `nix-shell` gagal
+  `cargo ...: command not found` tanpa executor yang jelas.
+- Build: `NS "cargo test --release"`. `build_env.sh` sudah export
+  `NIX_PATH=nixpkgs=/tmp/opencode/nixpkgs-25.05` — `nix-shell` yang terpasang
+  TIDAK punya flag `--nixpkgs`, jangan pakai.
 - `/home` cuma ~695MB free — jangan taruh apa pun besar di sana.
 - Untuk iterasi cepat: `cargo check --release -p <crate>`.
 - **Binary hasil build bernama `oktz`**, bukan `oktz-bin` (crate `oktz-bin`, tapi `[[bin]] name = "oktz"`). Ada di `/tmp/opencode/rust/target/release/oktz`.
 - Smoke run: hapus `oktz-smoke.db*` dulu kalau mau bukti bersih, atau sekalian `cp` ke `.bak` biar state "sebelum" bisa dibandingkan.
 - **Cara cek isi DB tanpa sqlite3/python** (tidak ada di PATH): `node -e "const {DatabaseSync}=require('node:sqlite'); ..."` — Node 22 punya SQLite bawaan.
-- `$NS "cargo ..."` diam-diam bisa exit 0 tanpa output test kalau `nix-shell` gagal dapat `cc`. Cek `EXIT=$?` **dan** isi log, jangan percaya exit code saja. Jalankan dari dalam `rust/` (bukan repo root).
+- `NS "cargo ..."` diam-diam bisa exit 0 tanpa output test kalau `nix-shell` gagal dapat `cc`. Cek `EXIT=$?` **dan** isi log, jangan percaya exit code saja. Jalankan dari dalam `rust/` (bukan repo root).
+- **Subagent paralel:** satu kategori = satu agent, supaya tidak ada dua agent
+  menulis `mod.rs` yang sama. `src/lib.rs` dan `src/common.rs` selalu milik
+  orkestrator; `mod.rs` di-sync ulang dari isi direktori setelah semua agent
+  selesai (bukan oleh agent).
 - **WAJIB: crate plugin harus dirujuk di `oktz-bin`.** Rust membuang dependency tak terpakai, jadi statik `linkme`-nya ikut hilang dan `all_plugins()` melaporkan **0 tanpa error** — `oktz boot` tetap exit 0 sambil bilang `plugins: 0`. Cek `use_plugin_crates()` di `oktz-bin/src/main.rs` setiap tambah crate plugin. Test `oktz-bin/tests/plugin_link.rs` menjaganya. Verifikasi cepat: `oktz boot | tail -1` harus `{"plugins":N}` dengan N > 0.
 
 ## 6. Langkah berikutnya (urut)
 
-1. **Lanjut port plugin batch 2–4 (class A = 396 total).** Batch 1 (`cek*`, 10 plugin) sudah jadi di `c72dd03` dan polanya jelas: macro `cek_plugin!` dipakai ulang, RNG + kerangka teks di-share, lima string tier per plugin. Sisa `cek*`: `cekkarma` (ambang 80/60/40/20), `cekumur` (60/40/20), `cekberat`/`cektinggi`/`ceksisaumur`/`cekpintar` (RNG bukan 0..100), plus `cekowner`/`cekprem`/`cekpartner`/`cekkepribadian` (butuh DB). Setelah itu plugin lain di class A. **Jangan** port class B/C/D sebelum router ada jalur I/O-nya.
-2. **Lanjut `oktz-router`:** yang BELUM ada adalah gate yang butuh state — cooldown, energi, rate limiter, dedup 100ms, group protection (16 sub-gate). Semua butuh implementasi `RouterContext` di atas `oktz-store`. Serializer (`getMessageBody`) juga belum.
+1. **Lanjut port plugin.** Yosh. Delapan batch paralel sudah menurunkan sisa
+   class A ke **165**. Triage ulang pakai `docs/rust-rewrite/plugin-manifest.json`
+   (828 entri, sumber kebenaran class A–F) plus daftar nama yang sudah ada di
+   `oktz-plugins/src/*/*.rs`. Kapabilitas yang menahan sisanya ada di §3.5.
+   **Jangan** port class C/D sebelum toolchain media ada.
+2. **`oktz-router` sudah lengkap** — parsing, permission, mode, gate berstate
+   (`oktz-wa/src/pipeline_gate.rs`), group protection (`oktz-router/src/group.rs`,
+   `default_gate_chain`), serializer (`oktz-router/src/serialize.rs`). Semua
+   sudah terpasang di `Pipeline` dan dipanggil dari inbound pesan sungguhan
+   (`pipeline.rs` — `Router::route`, `group::default_gate_chain`). Yang BELUM
+   ada adalah kapabilitas `sock.*` yang dibutuhkan plugin, bukan router.
 3. **Tutup sisanya: BadMac / decrypt kontak lama.** Address sudah benar (§3), import terbukti byte-faithful. Yang belum: bukti plaintext nyata dari kontak lama. Semua 27 pesan gagal datang dari **satu grup** (`120363@g.us`) — jalur sender-key. Dan `48400707903630` (tidak ada di fixture) menerima pesan dengan counter 4→5→6, padahal kontak baru harus mulai session baru: itu defect berbeda, arahkan ke `process_prekey`/prekey lookup.
 4. H3: pasang reconnect/logout handler sesuai `pairing-state.js` (grace 60s×2) — supaya 401 palsu tak mematikan.
 5. H4: generikkan `build_card(body, footer, buttons)` + `build_list(sections)` jadi API berparameter.

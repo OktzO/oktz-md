@@ -298,18 +298,30 @@ impl Reply {
         matches!(self.without_mutations(), Self::None)
     }
 
+    /// [`Self::Mutate`] dan [`Self::Reaction`] diratakan: keduanya cuma
+    /// pembungkus. `without_mutations` berhenti di `Reaction` karena pipeline
+    /// perlu melihat reaksi itu sendiri; untuk mencari isi balasan, turunkan
+    /// keduanya. Tanpa ini `Image.with_reaction(..)` terbaca sebagai "tidak
+    /// ada media" padahal pipeline tetap meng-upload-nya.
+    fn payload(&self) -> &Self {
+        let mut cur = self;
+        loop {
+            cur = match cur {
+                Self::Mutate { reply, .. } | Self::Reaction { reply, .. } => reply,
+                other => return other,
+            };
+        }
+    }
+
     /// `true` kalau reply ini butuh upload media sebelum bisa dikirim.
     pub fn has_media(&self) -> bool {
-        matches!(
-            self.without_mutations(),
-            Self::Image { .. } | Self::Sticker { .. }
-        )
+        matches!(self.payload(), Self::Image { .. } | Self::Sticker { .. })
     }
 
     /// Sumber media yang di-carry, kalau ada. `None` = tidak ada sumber yang
     /// bisa dikirim — pemanggil WAJIB memperlakukan itu sebagai error.
     pub fn media_source(&self) -> Option<&MediaSource> {
-        match self.without_mutations() {
+        match self.payload() {
             Self::Image { media, .. } | Self::Sticker { media } => media.as_ref(),
             _ => None,
         }
@@ -1018,6 +1030,16 @@ mod tests {
         assert_eq!(MediaSource::bytes(vec![1, 2, 3]).label(), "bytes(3)");
         assert_eq!(MediaSource::url("https://h/token123").label(), "url");
         assert_eq!(MediaSource::path("/home/user/a.png").label(), "path");
+    }
+
+    #[test]
+    fn media_survives_the_reaction_wrapper() {
+        let wrapped = Reply::image(MediaSource::bytes(vec![9]), "cap")
+            .with_reaction("✅");
+        assert!(wrapped.has_media());
+        assert_eq!(wrapped.media_source().map(MediaSource::label).as_deref(), Some("bytes(1)"));
+        // Reaksi tanpa balasan tetap bukan media.
+        assert!(!Reply::None.with_reaction("✅").has_media());
     }
 
     fn participant(jid: &str, admin: bool, owner: bool) -> Participant {

@@ -6,8 +6,9 @@
 
 ## Status saat ini
 
-**Fase 0 (Audit & Riset) — SELESAI, menunggu GATE 0 (approval Oktz).**
-Belum ada satu baris kode Rust produksi. Belum ada `rust/` directory.
+**Fase 0 (Audit & Riset) — selesai, GATE 0 lolos. Fase 1 (GATE 1) ✅. Fase 2 Task 1–4 ✅.
+`oktz-router` lengkap dan tersambung ke inbound pesan WA. Plugin 282 dari 828.
+BadMac / decrypt kontak lama masih terbuka.**
 
 | Item | Status |
 |---|---|
@@ -29,14 +30,16 @@ Belum ada satu baris kode Rust produksi. Belum ada `rust/` directory.
 | **Spike S3 (tombol)** | ✅ **muncul + bisa diklik** |
 | **Spike S4 (list)** | ✅ terkirim, render menunggu verifikasi Oktz |
 | **Spike S2 (RSS)** | ✅ **26.6 MB** saat connect (target 60) |
-| Test suite / clippy | ✅ **130 test**, clippy 0 warning |
+| Test suite / clippy | ✅ **2826 test**, clippy 0 warning (`cargo test --release`) |
 | Fase 1 (oktz-core/store/plugin-api) | ✅ **GATE 1 LOLOS** (reviewer independen: LAYAK) |
 | Fase 2 (oktz-wa) | 🔄 Task 1+2 **selesai** — smoke nyata: 514 sesi + authenticated, RSS **16.8 MB** |
 | Fase 2 Task 3 (kirim text/card/list) | ✅ 3/3 terkirim ke owner, RSS ~13 MB |
 | Fase 2 Task 4 (pairing logic) | ✅ **12 test**, port 1:1 pairing-state.js |
 | **Fix address sesi ratchet** | ✅ `47402d6` — 5 → **515** address terbaca wacore |
-| **oktz-router (FLOW)** | ✅ `c72dd03` — permission + mode + parsing, **53 test** |
-| **Plugin batch 1 (class A)** | ✅ `c72dd03` — **10 plugin `cek*`**, registry proven `plugins:10` |
+| **oktz-router** | ✅ parsing + permission + mode + gate berstate + **group protection** + **serializer** — semua terpasang di `Pipeline` |
+| **Kapabilitas Ctx** | ✅ `quoted`, `Participant.data` (store per peserta), `sessions`, `http`, `mentioned` (fix bug) |
+| **Plugin** | 🔄 **282 plugin** terdaftar dari 828 (232 entri manifest ter-port) — `{"plugins":282}` |
+| **on_purge** | ✅ terpasang (`pairing_run::connect_device_guarded_with_purge`) |
 | Fase 2 Task 4 (alur pairing ke WA) | ⏳ butuh device baru + interaksi Oktz |
 | **BadMac / decrypt kontak lama** | ❌ **BELUM terbukti** — investigasi selesai, root cause eksternal |
 | Reviewer Fase 2 + GATE 2 | ⏳ next |
