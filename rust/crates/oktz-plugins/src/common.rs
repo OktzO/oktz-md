@@ -2204,35 +2204,73 @@ mod tests_batch_g {
 
     #[test]
     fn every_is_owner_plugin_is_known() {
-        // Daftar grows; yang dijamin adalah setiap is_owner yang terdaftar ada
-        // di allow-list, bukan sebaliknya.
+        // Dibuat dari `docs/rust-rewrite/plugin-manifest.json`
+        // (`isOwner === true` di pluginConfig JS), difilter ke plugin yang
+        // sudah ter-port. Tujuannya catch plugin baru yang Diam-diam
+        // menyalakan `is_owner` tanpa dihitung — bukan daftar plugin owner.
+        // Dibuat dari `docs/rust-rewrite/plugin-manifest.json`
+        // (`isOwner === true` di pluginConfig JS), difilter ke plugin yang
+        // sudah ter-port. Tujuannya catch plugin baru yang Diam-diam
+        // menyalakan `is_owner` tanpa dihitung — bukan daftar plugin owner.
+        // Dibuat dari `docs/rust-rewrite/plugin-manifest.json`
+        // (`isOwner === true` di pluginConfig JS), difilter ke plugin yang
+        // sudah ter-port. Tujuannya catch plugin baru yang Diam-diam
+        // menyalakan `is_owner` tanpa dihitung — bukan daftar plugin owner.
         const KNOWN: &[&str] = &[
-            "templateplugin",
+            "addenergi",
+            "addenergiall",
+            "addexp",
+            "addkoin",
+            "addlevel",
             "addlist",
-            "editlist",
-            "hapuslist",
-            // Batch owner/group/rpg — semua `isOwner: true` di pluginConfig JS.
-            "onlygc",
-            "onlypc",
-            "similarity",
-            "sistemenergi",
-            "cmdvn",
+            "addpartner",
+            "addpremall",
             "aktifaudiomenu",
+            "autobio",
             "autojoingc",
             "autoreactsw",
             "autoreadsw",
+            "autosambut",
+            "ban",
             "bcpcjeda",
-            "setlimitdefault",
-            "resetlimitdefault",
-            "resetrules",
             "botafk",
             "botmode",
-            "liststok",
+            "capenergi",
+            "capfree",
+            "capprem",
+            "checkban",
+            "cmdvn",
+            "custompayment",
+            "delenergi",
+            "delexp",
+            "delkoin",
+            "dellevel",
+            "disableenergi",
+            "editlist",
             "editstok",
-            "hapusstok",
+            "hapuslist",
             "hapusproduk",
-            "selfthisgc",
+            "hapusstok",
+            "jedacreate",
+            "listban",
+            "liststok",
+            "notiflimit",
+            "onlyadmin",
+            "onlygc",
+            "onlypc",
+            "public",
             "publicthisgc",
+            "resetlimitdefault",
+            "resetrules",
+            "self",
+            "selfthisgc",
+            "setlimitdefault",
+            "setrules",
+            "similarity",
+            "sistemenergi",
+            "stopbcpc",
+            "templateplugin",
+            "unban",
         ];
         for m in oktz_plugin_api::all_plugins().iter().map(|p| &p.meta) {
             if m.is_owner && m.is_enabled {
@@ -2789,14 +2827,13 @@ mod tests_batch_g {
     }
 
     #[test]
-    fn benefitpremium_uses_the_empty_branch_with_the_current_registry() {
-        // Tidak ada plugin `is_premium` yang terport, jadi cabangnya yang
-        // kosong - persis yang akan terlihat di registry sekarang.
-        assert!(registry_command_lines(|m| m.is_premium && m.is_enabled).is_empty());
-        assert_eq!(
-            text_of(&benefitpremium(ctx_with(None))),
-            premium_message(&[])
-        );
+    fn benefitpremium_lists_exactly_the_premium_commands_in_the_registry() {
+        // Bocor ke registry dengan sengaja: `benefitpremium` memang
+        // menghitung plugin `is_premium` yang aktif, jadi daftar kosong
+        // hanya benar kalau memang tidak ada. Yang diuji: barisnya sinkron
+        // dengan hitungan yang sama.
+        let listed = registry_command_lines(|m| m.is_premium && m.is_enabled);
+        assert_eq!(text_of(&benefitpremium(ctx_with(None))), premium_message(&listed));
     }
 
     // -- templateplugin -----------------------------------------------------
@@ -3988,7 +4025,7 @@ mod tests_roster_state {
     use super::*;
     use crate::common::tests_batch_s::ALREADY_PORTED;
     use oktz_plugin_api::registry::{GroupRoster, Participant};
-    use oktz_plugin_api::{all_plugins, find};
+    use oktz_plugin_api::find;
     use serde_json::json;
 
     /// Plugin yang ditambahkan batch ini. Satu nama = satu file, jadi daftar
@@ -4025,33 +4062,6 @@ mod tests_roster_state {
         k
     }
 
-    fn keys_of_new() -> Vec<String> {
-        NEW_PLUGINS.iter().flat_map(|n| keys_of(n)).collect()
-    }
-
-    fn keys_of_others() -> Vec<String> {
-        // `dare`/`truth` milik `tests_batch_s` sendiri; `NEW_PLUGINS` milik
-        // batch roster/state. Keduanya dikecualikan supaya daftar "yang sudah
-        // ada sebelum batch_s" tetap bermakna.
-        //
-        // Batch fun SENGAJA tidak dikecualikan: `ALREADY_PORTED` sudah memuat
-        // key-nya (itu satu-satunya daftar yang dipakai dua test untuk
-        // membandingkan registry), jadi menyaringnya di sini justru
-        // membuat keduanya tidak bisa pernah sama.
-        all_plugins()
-            .iter()
-            .filter(|e| {
-                !["dare", "truth"].contains(&e.meta.name.as_str())
-                    && !NEW_PLUGINS.contains(&e.meta.name.as_str())
-            })
-            .flat_map(|e| {
-                let mut k = vec![e.meta.name.clone()];
-                k.extend(e.meta.alias.iter().cloned());
-                k
-            })
-            .collect()
-    }
-
     // -- registrasi ---------------------------------------------------------
 
     #[test]
@@ -4065,6 +4075,9 @@ mod tests_roster_state {
     #[test]
     fn no_new_plugin_shares_a_name_or_alias_with_the_previous_65() {
         for name in NEW_PLUGINS {
+            if JS_COLLISIONS.contains(&name) {
+                continue;
+            }
             for key in keys_of(name) {
                 assert!(
                     !ALREADY_PORTED.contains(&key.as_str()),
@@ -4093,15 +4106,40 @@ mod tests_roster_state {
         }
     }
 
+    /// Key yang DIWUJUDKAN dua plugin di JS juga. Bukan bug port: tiga baris
+    /// di bawah disalin apa adanya dari `plugins/**.js`, dan map plugin JS
+    /// menimpa diam-diam saat dua fileNx punya alias yang sama.
+    const JS_COLLISIONS: [&str; 3] = ["berburu", "exp", "ngemis"];
+
     #[test]
-    fn the_whole_registry_has_no_duplicate_key() {
-        let mut keys = keys_of_new();
-        keys.extend(keys_of_others());
-        let mut sorted = keys.clone();
-        sorted.sort();
-        let before = sorted.len();
-        sorted.dedup();
-        assert_eq!(sorted.len(), before, "ada key yang dipakai dua plugin");
+    fn every_duplicate_key_is_one_we_inherited_from_js() {
+        // Dibaca dari registry langsung, bukan lewat `find()`: `find` ikut
+        // memperhitungkan alias, jadi satu plugin bisa terhitung dua kali
+        // persis pada tabrakan yang justru sedang diuji.
+        let mut keys: Vec<String> = oktz_plugin_api::all_plugins()
+            .iter()
+            .flat_map(|p| {
+                std::iter::once(p.meta.name.clone()).chain(p.meta.alias.iter().cloned())
+            })
+            .collect();
+        keys.sort();
+        let mut i = 0;
+        let mut found: Vec<&str> = Vec::new();
+        while i < keys.len() {
+            if i + 1 < keys.len() && keys[i] == keys[i + 1] {
+                found.push(keys[i].as_str());
+                while i + 1 < keys.len() && keys[i] == keys[i + 1] {
+                    i += 1;
+                }
+            }
+            i += 1;
+        }
+        found.sort();
+        found.dedup();
+        assert_eq!(
+            found, JS_COLLISIONS,
+            "tabrakan key baru yang tidak ada di JS"
+        );
     }
 
     // -- meta_guard ---------------------------------------------------------
@@ -4134,7 +4172,12 @@ mod tests_roster_state {
     #[test]
     fn every_new_plugin_lands_in_the_mirrored_category() {
         for name in NEW_PLUGINS {
-            let p = find(name).unwrap();
+            // Cocokkan by NAMA, bukan `find`: `find` ikut memperhitungkan
+            // alias, dan `exp` jadi alias `expedition` di JS.
+            let p = oktz_plugin_api::all_plugins()
+                .iter()
+                .find(|p| p.meta.name == name)
+                .unwrap();
             let expected = match name {
                 "tagall" | "listadmin" | "listantilink" | "listtoxic" | "listwarn"
                 | "topchat" | "intro" | "rulesgrup" => "group",

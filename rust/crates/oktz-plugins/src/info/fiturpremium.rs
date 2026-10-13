@@ -90,10 +90,21 @@ mod tests {
 
     #[test]
     fn the_empty_branch_is_the_one_the_current_registry_shows() {
-        assert!(premium_lines().is_empty(), "tidak ada plugin is_premium di port ini");
-        assert_eq!(run(), EMPTY);
-        assert!(EMPTY.starts_with("📝 *DAFTAR FITUR PREMIUM*\n\n"));
-        assert!(!EMPTY.contains("💎"), "ikon berbeda antara cabang kosong dan terisi");
+        // Cabang yang dipakai ditentukan isi registry, bukan tebakan: kalau
+        // ada plugin `is_premium`, balasan WAJIB branche terisi.
+        let names = premium_lines();
+        let out = run();
+        if names.is_empty() {
+            assert_eq!(out, EMPTY);
+            assert!(EMPTY.starts_with("📝 *DAFTAR FITUR PREMIUM*\n\n"));
+            assert!(!EMPTY.contains("💎"), "ikon berbeda antara cabang kosong dan terisi");
+        } else {
+            assert_eq!(out, render(&names));
+            assert!(out.starts_with("💎 *DAFTAR FITUR PREMIUM*"), "{out}");
+            for n in &names {
+                assert!(out.contains(&format!("- {n}\n")), "nama {n} hilang: {out}");
+            }
+        }
     }
 
     #[test]

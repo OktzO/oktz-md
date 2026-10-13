@@ -1,8 +1,8 @@
 //! `plugins/owner/botafk.js` — toggle `setting('botAfk')`.
 //!
 //! Plugin ini adalah TOGGLE tanpa argumen: kalau bot sedang AFK, satu
-//! perintah apa pun让它 kembali online dan melaporkan durasinya. Durasi
-//! dihitung dari `since` yang disimpan, jadi store adalah sumber kebenaran
+//! perintah apa pun akan mengembalikannya online dan melaporkan durasinya.
+//! Durasi dihitung dari `since` yang disimpan, jadi store adalah sumber kebenaran
 //! tunggal — tidak ada state in-memory terpisah seperti di JS.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};

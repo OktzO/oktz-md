@@ -1,14 +1,20 @@
 pub mod common;
 
 pub mod cek;
+pub mod clan;
 pub mod fun;
+pub mod game;
 pub mod group;
 pub mod info;
 #[path = "main/mod.rs"]
 pub mod main;
 pub mod owner;
+pub mod panel;
+pub mod random;
 pub mod religi;
 pub mod rpg;
+pub mod search;
 pub mod store;
 pub mod tools;
 pub mod user;
+pub mod utility;

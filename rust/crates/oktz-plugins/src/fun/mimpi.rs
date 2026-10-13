@@ -253,7 +253,7 @@ mod tests {
     fn the_seeded_pick_never_leaves_the_table() {
         // Hanya 5 slot level tapi seed bisa nilai apa pun — ini yang membuat
         // `mod` (bukan `random_index`) wajib dipakai.
-        for name in ["", "a", "Keisya", "😀 emoji", "超长名字测试"] {
+        for name in ["", "a", "Keisya", "😀 emoji", "nama panjang sekali"] {
             let seed = seed_num(name);
             assert!(DREAM_LEVELS.contains(pick_by_seed(&DREAM_LEVELS, seed)), "{name}");
             assert!(DREAM_QUALITIES.contains(pick_by_seed(&DREAM_QUALITIES, seed)), "{name}");

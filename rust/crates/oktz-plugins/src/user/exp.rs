@@ -79,6 +79,18 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    /// `find("exp")` ambigu: `exp` juga alias plugin `expedition.js`, dan
+    /// `find` mengembalikan siapa pun yang terdaftar lebih dulu di
+    /// `distributed_slice`. Cari lewat `meta.name` supaya test ini selalu
+    /// menguji plugin yang namanya `exp`.
+    fn plugin() -> &'static oktz_plugin_api::registry::PluginEntry {
+        oktz_plugin_api::all_plugins()
+            .iter()
+            .copied()
+            .find(|e| e.meta.name == "exp")
+            .expect("plugin exp harus terdaftar")
+    }
+
     fn run(user: serde_json::Value, mentioned: Vec<&str>) -> String {
         let ctx = Ctx {
             prefix: ".".into(),
@@ -89,7 +101,7 @@ mod tests {
             user_data: user,
             ..Default::default()
         };
-        (oktz_plugin_api::find("exp").unwrap().handler)(ctx)
+        (plugin().handler)(ctx)
             .text_body()
             .expect("harus ada teks")
             .to_string()
@@ -97,7 +109,7 @@ mod tests {
 
     #[test]
     fn registers_with_the_js_plugin_config() {
-        let p = oktz_plugin_api::find("exp").unwrap();
+        let p = plugin();
         assert_eq!(p.meta.name, "exp");
         assert_eq!(p.meta.alias, ["cekexp", "myexp", "xp"]);
         assert_eq!(p.meta.category, "user");

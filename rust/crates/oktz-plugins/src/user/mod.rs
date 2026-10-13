@@ -5,4 +5,5 @@ pub mod exp;
 pub mod koin;
 pub mod level;
 pub mod levelup;
+pub mod notiflimit;
 pub mod setbirthday;
