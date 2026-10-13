@@ -75,3 +75,60 @@ data_plugin!(
     ".truth",
     TRUTH
 );
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oktz_plugin_api::find;
+
+    const SENDER: &str = "628111@s.whatsapp.net";
+
+    fn run(text: &str) -> Reply {
+        let ctx = Ctx {
+            prefix: ".".into(),
+            command: "truth".into(),
+            sender: SENDER.into(),
+            chat: SENDER.into(),
+            text: text.into(),
+            args: text.split_whitespace().map(str::to_string).collect(),
+            ..Default::default()
+        };
+        (find("truth").unwrap().handler)(ctx)
+    }
+
+    fn text_of(r: &Reply) -> String {
+        r.text_body().expect("plugin harus membalas teks").to_string()
+    }
+
+    #[test]
+    fn registers_with_the_js_plugin_config() {
+        let m = &find("truth").unwrap().meta;
+        assert_eq!(m.name, "truth");
+        assert_eq!(m.alias, ["truthq"]);
+        assert_eq!(m.category, "fun");
+        assert_eq!(m.description, "Random pertanyaan truth");
+        assert_eq!(m.usage, ".truth");
+        assert_eq!(m.example, ".truth");
+        assert_eq!(m.cooldown, 3);
+        assert_eq!(m.energi, 0);
+        assert!(!m.is_private && !m.is_group && !m.is_owner && !m.is_premium);
+        assert_eq!(find("truthq").unwrap().meta.name, "truth");
+    }
+
+    #[test]
+    fn the_reply_wraps_the_question_in_a_code_fence() {
+        for _ in 0..50 {
+            let t = text_of(&run("")).to_string();
+            assert!(t.starts_with("```") && t.ends_with("```"), "{t}");
+            let inner = &t[3..t.len() - 3];
+            assert!(TRUTH.contains(&inner), "di luar daftar JS: {inner}");
+        }
+    }
+
+    #[test]
+    fn the_table_is_the_sixty_one_entries_of_truth_json() {
+        assert_eq!(TRUTH.len(), 61);
+        assert_eq!(TRUTH[0], "Acara tv apa yang paling memuakkan? Berikan alasannya!");
+        assert!(TRUTH.iter().all(|q| !q.is_empty()));
+    }
+}

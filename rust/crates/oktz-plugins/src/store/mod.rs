@@ -1,4 +1,6 @@
 pub mod addlist;
+pub mod addstok;
+pub mod beli;
 pub mod editlist;
 pub mod editstok;
 pub mod hapuslist;

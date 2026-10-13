@@ -1,5 +1,8 @@
 pub mod common;
 
+pub mod download;
+pub mod sticker;
+
 pub mod cek;
 pub mod clan;
 pub mod fun;

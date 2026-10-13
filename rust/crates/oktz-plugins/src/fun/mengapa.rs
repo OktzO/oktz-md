@@ -37,3 +37,77 @@ tanya_plugin!(
     MENGAPA,
     HELP_MENGAPA
 );
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oktz_plugin_api::find;
+
+    const SENDER: &str = "628111@s.whatsapp.net";
+
+    fn run(text: &str) -> Reply {
+        let ctx = Ctx {
+            prefix: ".".into(),
+            command: "mengapa".into(),
+            sender: SENDER.into(),
+            chat: SENDER.into(),
+            text: text.into(),
+            args: text.split_whitespace().map(str::to_string).collect(),
+            ..Default::default()
+        };
+        (find("mengapa").unwrap().handler)(ctx)
+    }
+
+    fn text_of(r: &Reply) -> String {
+        r.text_body().expect("plugin harus membalas teks").to_string()
+    }
+
+    #[test]
+    fn registers_with_the_js_plugin_config() {
+        let m = &find("mengapa").unwrap().meta;
+        assert_eq!(m.name, "mengapa");
+        assert_eq!(m.alias, ["kenapa", "why"]);
+        assert_eq!(m.category, "fun");
+        assert_eq!(m.description, "Tanya bot mengapa sesuatu");
+        assert_eq!(m.usage, ".mengapa <pertanyaan>");
+        assert_eq!(m.example, ".mengapa langit biru?");
+        assert_eq!(m.cooldown, 3);
+        assert_eq!(m.energi, 0);
+        assert!(!m.is_private && !m.is_group && !m.is_owner && !m.is_premium);
+        for a in ["kenapa", "why"] {
+            assert_eq!(find(a).unwrap().meta.name, "mengapa", "alias {a}");
+        }
+    }
+
+    #[test]
+    fn an_empty_or_whitespace_question_returns_the_help_text() {
+        for empty in ["", "\t\t"] {
+            assert_eq!(text_of(&run(empty)), HELP_MENGAPA, "input {empty:?}");
+        }
+    }
+
+    #[test]
+    fn the_question_is_echoed_and_the_reason_is_one_of_the_js_entries() {
+        for _ in 0..50 {
+            let t = text_of(&run("langit biru")).to_string();
+            let reason = t.strip_prefix("mengapa langit biru?\n*").unwrap();
+            let reason = reason.strip_suffix('*').unwrap();
+            assert!(MENGAPA.contains(&reason), "di luar daftar JS: {reason}");
+        }
+    }
+
+    #[test]
+    fn the_question_mark_is_appended_even_when_the_input_already_has_one() {
+        // JS: `${m.body.slice(1)}?` — `?` ditambahkan tanpa syarat, jadi
+        // input yang sudah berakhir `?` jadi `??`. Bukan salah port.
+        let t = text_of(&run("langit biru?"));
+        assert!(t.starts_with("mengapa langit biru??\n*"), "{t}");
+    }
+
+    #[test]
+    fn the_table_matches_the_js_answer_list() {
+        assert_eq!(MENGAPA.len(), 20);
+        assert_eq!(MENGAPA[0], "Karena memang sudah takdirnya begitu.");
+        assert_eq!(MENGAPA[19], "Nah itu aku juga mikir!");
+    }
+}

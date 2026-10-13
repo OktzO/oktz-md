@@ -611,31 +611,6 @@ pub(crate) fn render_probe(header: &str, args: &[String], render: impl Fn(&str) 
     out.trim().to_string()
 }
 
-macro_rules! probe_plugin {
-    ($fn_name:ident, $name:literal, $alias:expr, $desc:literal, $usage:literal,
-     $example:literal, $help:expr, $header:expr, $render:expr) => {
-        #[plugin(
-                    name = $name,
-                    alias = $alias,
-                    category = "info",
-                    description = $desc,
-                    usage = $usage,
-                    example = $example,
-                    cooldown = 5,
-                    energi = 0,
-                    is_private = false
-                )]
-        pub fn $fn_name(ctx: Ctx) -> Reply {
-            if ctx.args.is_empty() {
-                return Reply::text($help);
-            }
-            Reply::text(render_probe($header, &ctx.args, $render))
-        }
-    };
-}
-
-pub(crate) use probe_plugin;
-
 // =============================================================================
 // Helper batch owner/group/rpg — `on/off`, list-of-strings, group flags
 // =============================================================================
@@ -1542,14 +1517,23 @@ mod tests_cek2 {
 
     /// Kalau plugin dari batch lain memakai alias yang sama, `find()` mengembalikan
     /// yang menang duluan —alias hilang tanpa error. Test ini yang menangkapnya.
+    ///
+    /// Pengecualian: key yang memang bentrok di JS (lihat `JS_COLLISIONS`). Di
+    /// sana duplikasi memang terjadi juga di JS, jadi yang diuji只剩
+    /// "plugin pemilik batch ini masih ikut tercantum", bukan keunikannya.
     #[test]
     fn every_alias_of_this_batch_is_claimed_by_exactly_one_plugin() {
+        let collisions = super::tests_roster_state::JS_COLLISIONS;
         for (alias, name) in ALIAS_OWNERS {
             let owners: Vec<&str> = oktz_plugin_api::all_plugins()
                 .iter()
                 .filter(|p| p.meta.alias.iter().any(|a| a == alias))
                 .map(|p| p.meta.name.as_str())
                 .collect();
+            if collisions.contains(&alias) {
+                assert!(owners.contains(&name), "alias {alias} hilang: {owners:?}");
+                continue;
+            }
             assert_eq!(
                 owners,
                 vec![name],
@@ -2206,71 +2190,25 @@ mod tests_batch_g {
     fn every_is_owner_plugin_is_known() {
         // Dibuat dari `docs/rust-rewrite/plugin-manifest.json`
         // (`isOwner === true` di pluginConfig JS), difilter ke plugin yang
-        // sudah ter-port. Tujuannya catch plugin baru yang Diam-diam
-        // menyalakan `is_owner` tanpa dihitung — bukan daftar plugin owner.
-        // Dibuat dari `docs/rust-rewrite/plugin-manifest.json`
-        // (`isOwner === true` di pluginConfig JS), difilter ke plugin yang
-        // sudah ter-port. Tujuannya catch plugin baru yang Diam-diam
-        // menyalakan `is_owner` tanpa dihitung — bukan daftar plugin owner.
-        // Dibuat dari `docs/rust-rewrite/plugin-manifest.json`
-        // (`isOwner === true` di pluginConfig JS), difilter ke plugin yang
-        // sudah ter-port. Tujuannya catch plugin baru yang Diam-diam
+        // sudah ter-port. Tujuannya menangkap plugin baru yang diam-diam
         // menyalakan `is_owner` tanpa dihitung — bukan daftar plugin owner.
         const KNOWN: &[&str] = &[
-            "addenergi",
-            "addenergiall",
-            "addexp",
-            "addkoin",
-            "addlevel",
-            "addlist",
-            "addpartner",
-            "addpremall",
-            "aktifaudiomenu",
-            "autobio",
-            "autojoingc",
-            "autoreactsw",
-            "autoreadsw",
-            "autosambut",
-            "ban",
-            "bcpcjeda",
-            "botafk",
-            "botmode",
-            "capenergi",
-            "capfree",
-            "capprem",
-            "checkban",
-            "cmdvn",
-            "custompayment",
-            "delenergi",
-            "delexp",
-            "delkoin",
-            "dellevel",
-            "disableenergi",
-            "editlist",
-            "editstok",
-            "hapuslist",
-            "hapusproduk",
-            "hapusstok",
-            "jedacreate",
-            "listban",
-            "liststok",
-            "notiflimit",
-            "onlyadmin",
-            "onlygc",
-            "onlypc",
-            "public",
-            "publicthisgc",
-            "resetlimitdefault",
-            "resetrules",
-            "self",
-            "selfthisgc",
-            "setlimitdefault",
-            "setrules",
-            "similarity",
-            "sistemenergi",
-            "stopbcpc",
-            "templateplugin",
-            "unban",
+            "addenergi", "addenergiall", "addexp", "addkoin", "addlevel",
+            "addlist", "addpartner", "addpremall", "addstok", "aktifaudiomenu",
+            "autobackup", "autobio", "autojoingc", "autoreactsw", "autoreadsw",
+            "autosambut", "backupdb", "ban", "banchat", "bcpcjeda",
+            "block", "botafk", "botmode", "capenergi", "capfree",
+            "capprem", "checkban", "cmdvn", "cpuprofile", "custompayment",
+            "delenergi", "delexp", "delkoin", "dellevel", "delpp",
+            "disableenergi", "editlist", "editstok", "goodbyeall", "hapuslist",
+            "hapusproduk", "hapusstok", "heapsnap", "installtemabilling", "installtemaenigma",
+            "installtemanebula", "installtemastellar", "jedacreate", "listban", "liststok",
+            "notiflimit", "onlyadmin", "onlygc", "onlypc", "public",
+            "publicthisgc", "q", "resetlimitdefault", "resetrules", "self",
+            "selfthisgc", "setaudioallmenu", "setbio", "setlimitdefault", "setname",
+            "setpp", "setrules", "similarity", "sistemenergi", "stop",
+            "stopbcpc", "templateplugin", "uinstalltema", "unban", "unblock",
+            "welcomeall",
         ];
         for m in oktz_plugin_api::all_plugins().iter().map(|p| &p.meta) {
             if m.is_owner && m.is_enabled {
@@ -2298,9 +2236,12 @@ mod tests_batch_g {
 
     /// `find()` mengembalikan entri pertama yang cocok, jadi satu alias yang
     /// diklaim dua plugin akan membuat `find(alias)` mengembalikan plugin yang
-    /// salah. Semua key (nama + alias) batch ini harus eksklusif.
+    /// salah. Semua key (nama + alias) batch ini harus eksklusif — kecuali key
+    /// yang memang bentrok di JS, yang tidak bisa dipisah tanpa mengubah
+    /// perilaku yang sudah berjalan di produksi JS.
     #[test]
     fn no_key_collides_with_another_registered_plugin() {
+        let collisions = super::tests_roster_state::JS_COLLISIONS;
         for (name, aliases, ..) in META {
             for key in std::iter::once(name).chain(aliases.iter().copied()) {
                 let owners: Vec<&str> = all_plugins()
@@ -2308,6 +2249,10 @@ mod tests_batch_g {
                     .filter(|e| e.meta.matches(key))
                     .map(|e| e.meta.name.as_str())
                     .collect();
+                if collisions.contains(&key) {
+                    assert!(owners.contains(&name), "key {key} hilang: {owners:?}");
+                    continue;
+                }
                 assert_eq!(
                     owners,
                     vec![name],
@@ -4106,10 +4051,18 @@ mod tests_roster_state {
         }
     }
 
-    /// Key yang DIWUJUDKAN dua plugin di JS juga. Bukan bug port: tiga baris
-    /// di bawah disalin apa adanya dari `plugins/**.js`, dan map plugin JS
-    /// menimpa diam-diam saat dua fileNx punya alias yang sama.
-    const JS_COLLISIONS: [&str; 3] = ["berburu", "exp", "ngemis"];
+    /// Key yang DIWUJUDKAN dua plugin di JS juga. Bukan bug port: baris di
+    /// bawah disalin apa adanya dari `plugins/**.js`, dan map plugin JS
+    /// menimpa diam-diam saat dua file punya alias yang sama.
+    ///
+    /// Sembilan dari enam belas muncul karena `plugins/fun/siapa.js`
+    /// mendeklarasikan `name` sebagai array 48 kata; kata-kata itu diklaim
+    /// plugin `cek*` juga sebagai alias. `beli`, `block`, `unblock`, dan
+    /// `heapsnap` sudah bentrok di JS tanpa lewat `siapa`.
+    pub(crate) const JS_COLLISIONS: [&str; 16] = [
+        "beli", "berburu", "block", "bucin", "cantik", "cupu", "exp", "ganteng", "heapsnap",
+        "kaya", "ngemis", "noob", "pintar", "pro", "unblock", "wibu",
+    ];
 
     #[test]
     fn every_duplicate_key_is_one_we_inherited_from_js() {

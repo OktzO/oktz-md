@@ -77,3 +77,70 @@ data_plugin!(
     ".dare",
     DARE
 );
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oktz_plugin_api::find;
+
+    const SENDER: &str = "628111@s.whatsapp.net";
+
+    fn run(text: &str) -> Reply {
+        let ctx = Ctx {
+            prefix: ".".into(),
+            command: "dare".into(),
+            sender: SENDER.into(),
+            chat: SENDER.into(),
+            text: text.into(),
+            args: text.split_whitespace().map(str::to_string).collect(),
+            ..Default::default()
+        };
+        (find("dare").unwrap().handler)(ctx)
+    }
+
+    fn text_of(r: &Reply) -> String {
+        r.text_body().expect("plugin harus membalas teks").to_string()
+    }
+
+    #[test]
+    fn registers_with_the_js_plugin_config() {
+        let m = &find("dare").unwrap().meta;
+        assert_eq!(m.name, "dare");
+        assert_eq!(m.alias, ["dareq", "tantang"]);
+        assert_eq!(m.category, "fun");
+        assert_eq!(m.description, "Random tantangan dare");
+        assert_eq!(m.usage, ".dare");
+        assert_eq!(m.example, ".dare");
+        assert_eq!(m.cooldown, 3);
+        assert_eq!(m.energi, 0);
+        assert!(!m.is_private && !m.is_group && !m.is_owner && !m.is_premium);
+        for a in ["dareq", "tantang"] {
+            assert_eq!(find(a).unwrap().meta.name, "dare", "alias {a}");
+        }
+    }
+
+    #[test]
+    fn the_reply_wraps_the_dare_in_a_code_fence_without_quotes() {
+        // JS: `` `\`\`\`${challenge}\`\`\`` — tanpa kutip, beda dari bucin.js.
+        for _ in 0..50 {
+            let t = text_of(&run("")).to_string();
+            assert!(t.starts_with("```") && t.ends_with("```"), "{t}");
+            assert!(!t.starts_with("```\""), "tidak ada kutip: {t}");
+            let inner = &t[3..t.len() - 3];
+            assert!(DARE.contains(&inner), "di luar daftar JS: {inner}");
+        }
+    }
+
+    #[test]
+    fn an_argument_does_not_change_the_shape_of_the_reply() {
+        let t = text_of(&run("teman"));
+        assert!(t.starts_with("```") && t.ends_with("```"), "{t}");
+    }
+
+    #[test]
+    fn the_table_is_the_sixty_three_entries_of_dare_json() {
+        assert_eq!(DARE.len(), 63);
+        assert_eq!(DARE[0], "Ajak orang yg tidak kamu kenal itu selfie berdua dengan mu lalu upload ke snapgram");
+        assert!(DARE.iter().all(|d| !d.is_empty()));
+    }
+}

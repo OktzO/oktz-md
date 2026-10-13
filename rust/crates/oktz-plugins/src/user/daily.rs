@@ -198,7 +198,11 @@ mod tests {
     #[test]
     fn a_recent_claim_is_blocked_and_writes_nothing() {
         let just_now = now_ms();
-        for gap in [0i64, 1000, 3_600_000, DAILY_COOLDOWN - 1] {
+        // Batas bawah dipakai `DAILY_COOLDOWN - 1_000`, bukan `- 1`: handler
+        // memanggil `now_ms()` sendiri beberapa milidetik setelah baris ini,
+        // jadi gap `- 1` bisa naik ke cooldown penuh di antara dua pembacaan
+        // dan test jadi flaky.
+        for gap in [0i64, 1000, 3_600_000, DAILY_COOLDOWN - 1_000] {
             let r = run(json!({ "cooldowns": { "daily": just_now - gap } }));
             assert!(text_of(&r).starts_with("🕕 *ᴄᴏᴏʟᴅᴏᴡɴ*"), "gap {gap}");
             assert!(r.mutations().is_empty(), "gap {gap} tidak boleh menulis");

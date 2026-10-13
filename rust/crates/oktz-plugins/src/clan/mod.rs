@@ -6,3 +6,4 @@ pub mod clankick;
 pub mod clanleaderboard;
 pub mod clanleave;
 pub mod clanmembers;
+pub mod clanwar;
