@@ -20,7 +20,7 @@
 | Data user | 24 file / 874KB byte-identik | `verify-db` |
 | **`oktz-router`** | ✅ permission + mode + parsing + gate + group + serializer | — |
 | **Plugin** | 🔄 **342 plugin** (dari 828) — **BELUM semua** | `{"plugins":342}` |
-| Test + clippy | **3648 hijau**, clippy **0 warning** | `cargo test --release` |
+| Test + clippy | **3651 hijau**, clippy **0 warning** | `cargo test --release` |
 
 ## 2. Decisions yang sudah dikunci (jangan diubah tanpa Oktz)
 
@@ -167,8 +167,12 @@ Pakai yang sudah ada: `Ctx.roster`, `Ctx.user_data`/`group_data`,
    (`oktz-wa/src/pipeline_gate.rs`), group protection (`oktz-router/src/group.rs`,
    `default_gate_chain`), serializer (`oktz-router/src/serialize.rs`). Semua
    sudah terpasang di `Pipeline` dan dipanggil dari inbound pesan sungguhan
-   (`pipeline.rs` — `Router::route`, `group::default_gate_chain`). Yang BELUM
-   ada adalah kapabilitas `sock.*` yang dibutuhkan plugin, bukan router.
+   (`pipeline.rs` — `Router::route`, `group::default_gate_chain`). Bukti
+  lintasan itu ada di `oktz-bin/tests/live_route.rs`: `Pipeline` asli +
+   registry plugin asli, `.benefitpartner` dibalas teks `BOT_NAME` yang hanya
+   ada di `info/benefitpartner.rs`, dan `antilink` menghentikan pesan
+   sebelum plugin jalan. Yang BELUM ada adalah kapabilitas `sock.*` yang
+   dibutuhkan plugin, bukan router.
 3. **Tutup sisanya: BadMac / decrypt kontak lama.** Address sudah benar (§3), import terbukti byte-faithful. Yang belum: bukti plaintext nyata dari kontak lama. Semua 27 pesan gagal datang dari **satu grup** (`120363@g.us`) — jalur sender-key. Dan `48400707903630` (tidak ada di fixture) menerima pesan dengan counter 4→5→6, padahal kontak baru harus mulai session baru: itu defect berbeda, arahkan ke `process_prekey`/prekey lookup.
 4. H3: pasang reconnect/logout handler sesuai `pairing-state.js` (grace 60s×2) — supaya 401 palsu tak mematikan.
 5. H4: generikkan `build_card(body, footer, buttons)` + `build_list(sections)` jadi API berparameter.

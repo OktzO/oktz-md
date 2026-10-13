@@ -30,13 +30,13 @@ BadMac / decrypt kontak lama masih terbuka.**
 | **Spike S3 (tombol)** | ✅ **muncul + bisa diklik** |
 | **Spike S4 (list)** | ✅ terkirim, render menunggu verifikasi Oktz |
 | **Spike S2 (RSS)** | ✅ **26.6 MB** saat connect (target 60) |
-| Test suite / clippy | ✅ **3648 test**, clippy 0 warning (`cargo test --release`) |
+| Test suite / clippy | ✅ **3651 test**, clippy 0 warning (`cargo test --release`) |
 | Fase 1 (oktz-core/store/plugin-api) | ✅ **GATE 1 LOLOS** (reviewer independen: LAYAK) |
 | Fase 2 (oktz-wa) | 🔄 Task 1+2 **selesai** — smoke nyata: 514 sesi + authenticated, RSS **16.8 MB** |
 | Fase 2 Task 3 (kirim text/card/list) | ✅ 3/3 terkirim ke owner, RSS ~13 MB |
 | Fase 2 Task 4 (pairing logic) | ✅ **12 test**, port 1:1 pairing-state.js |
 | **Fix address sesi ratchet** | ✅ `47402d6` — 5 → **515** address terbaca wacore |
-| **oktz-router** | ✅ parsing + permission + mode + gate berstate + **group protection** + **serializer** — semua terpasang di `Pipeline` |
+| **oktz-router** | ✅ parsing + permission + mode + gate berstate + **group protection** + **serializer** — semua terpasang di `Pipeline`, dibuktikan `oktz-bin/tests/live_route.rs` (Pipeline asli + registry asli) |
 | **Kapabilitas Ctx** | ✅ `quoted`, `Participant.data` (store per peserta), `sessions`, `http`, `mentioned` (fix bug) |
 | **Plugin** | 🔄 **342 plugin** terdaftar dari 828 (293 entri manifest ter-port) — `{"plugins":342}` |
 | **on_purge** | ✅ terpasang (`pairing_run::connect_device_guarded_with_purge`) |

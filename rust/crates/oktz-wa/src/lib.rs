@@ -18,14 +18,17 @@ pub use cards::{biz_node, build_card, build_list};
 pub use creds::{DeviceMapping, inspect_creds};
 pub use load::{LoadReport, load_into_store};
 pub use pipeline::{
-    ClientSender, Dedup, Identity, MessageSender, Outcome, Pipeline, PipelineError, StoreContext,
-    normalize_user_key,
+    ClientSender, Dedup, Identity, MessageSender, Outcome, PendingMedia, Pipeline, PipelineError,
+    RosterSource, SendBox, SendBoxRoster, StoreContext, normalize_user_key,
 };
 pub use pipeline_gate::GateState;
 pub use session::{ImportStats, import_session_record};
 pub use whatsapp_rust::bot::BotHandle;
 
 // Re-export untuk konsumen (oktz-bin) supaya tidak perlu depend ke whatsapp-rust langsung.
+pub use whatsapp_rust::prelude::{InboundMessage, MessageInfo};
+pub use whatsapp_rust::types::message::MessageSource;
 pub use whatsapp_rust::wacore::proto_helpers::MessageBuilderExt;
-pub use whatsapp_rust::waproto::whatsapp::Message;
+pub use whatsapp_rust::wacore_binary::Node;
+pub use whatsapp_rust::waproto::whatsapp::{Message, MessageKey};
 pub use whatsapp_rust::{Jid, SendOptions};
