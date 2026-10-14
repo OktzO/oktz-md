@@ -238,7 +238,7 @@ mod tests {
         let http = Stub::ok("");
         let __balasan = run(http.clone(), "");
         let t = body(&__balasan);
-        assert!(t.contains("`FeelBetterBot`"), "{t}");
+        assert!(t.contains("*FeelBetterBot*"), "{t}");
         assert!(t.contains("*.feelbetter <curhatan>*"), "{t}");
         assert!(http.seen.lock().unwrap().is_empty());
     }

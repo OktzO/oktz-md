@@ -38,7 +38,7 @@ BadMac / decrypt kontak lama masih terbuka.**
 | **Fix address sesi ratchet** | ✅ `47402d6` — 5 → **515** address terbaca wacore |
 | **oktz-router** | ✅ parsing + permission + mode + gate berstate + **group protection** + **serializer** — semua terpasang di `Pipeline`, dibuktikan `oktz-bin/tests/live_route.rs` (Pipeline asli + registry asli) |
 | **Kapabilitas Ctx** | ✅ `quoted`, `Participant.data` (store per peserta), `sessions`, `http`, `mentioned` (fix bug) |
-| **Plugin** | 🔄 **343 plugin** terdaftar dari 828 = **41%** manifest ter-port — `{"plugins":343}` |
+| **Plugin** | 🔄 **352 plugin** terdaftar dari 828 = **42%** manifest ter-port — `{"plugins":352}` |
 | **on_purge** | ✅ terpasang (`pairing_run::connect_device_guarded_with_purge`) |
 | Fase 2 Task 4 (alur pairing ke WA) | ⏳ butuh device baru + interaksi Oktz |
 | **BadMac / decrypt kontak lama** | ❌ **BELUM terbukti** — investigasi selesai, root cause eksternal |
@@ -304,6 +304,17 @@ source /tmp/opencode/build_env.sh
 cd rust-spike
 nix-shell -p stdenv.cc pkg-config -I nixpkgs=/tmp/opencode/nixpkgs-25.05 --run 'cargo build --release'
 ```
+
+## Migrasi plugin massal (2026-10-14)
+
+Alur sekarang: file JS di `plugins/` dipor ke `rust/crates/oktz-plugins/src/<kategori>/<nama>.rs` oleh subagent, satu batch 15 file per agent, dengan brief di `AGENT-BRIEF.md`. Orkestrator yang menjalankan cargo, menyinkronkan `*/mod.rs` dan `lib.rs`, serta memperbaiki error integrasi.
+
+Skrip orkestrator (wajib, agent tidak boleh menyentuh):
+- `scripts/sync-plugin-mods.mjs` — daftar modul per kategori; blok `//!` harus tetap di paling atas.
+- `/tmp/opencode/sync-lib.mjs` — daftar modul crate, termasuk file tunggal seperti `common.rs`.
+- `/tmp/opencode/cek-nama.mjs` — bandingkan `name` di `#[plugin]` dengan `name:` di JS, dicetak sebagai nomor kode (tampilan terminal tidak boleh jadi sumber kebenaran).
+
+Pemicu utama test agent yang gagal: assertion memakai delimiter markdown yang berbeda dari JS (backtick vs asterisk), dan penulisan ulang nama plugin dari ingatan. Keduanya dicek ulang ke file JS sebelum menyatakan lulus.
 
 ## Perintah penting
 

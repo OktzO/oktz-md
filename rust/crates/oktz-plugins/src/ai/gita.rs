@@ -194,7 +194,7 @@ mod tests {
         let __balasan = run(http.clone(), "");
         let t = body(&__balasan);
         assert!(t.contains("📿 *ɢɪᴛᴀ ɢᴘᴛ*"), "{t}");
-        assert!(t.contains("*.gita What is dharma?*"), "{t}");
+        assert!(t.contains("`.gita What is dharma?`"), "{t}");
         assert!(http.seen.lock().unwrap().is_empty());
     }
 

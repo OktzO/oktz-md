@@ -247,7 +247,7 @@ mod tests {
         let http = Stub::ok("");
         let __balasan = run(http.clone(), "");
         let t = body(&__balasan);
-        assert!(t.contains("`Claude Haiku 4.5`"), "{t}");
+        assert!(t.contains("*Claude Haiku 4.5*"), "{t}");
         assert!(t.contains("*.claudehaiku <pertanyaan>*"), "{t}");
         assert!(http.seen.lock().unwrap().is_empty());
     }

@@ -266,7 +266,7 @@ mod tests {
         let http = Stub::ok("");
         let __balasan = run(http.clone(), "");
         let t = body(&__balasan);
-        assert!(t.contains("`DeepSeek V4`"), "{t}");
+        assert!(t.contains("*DeepSeek V4*"), "{t}");
         assert!(t.contains("*.deepseek <pertanyaan>*"), "{t}");
         assert!(http.seen.lock().unwrap().is_empty());
     }
@@ -303,7 +303,9 @@ mod tests {
         let t = body(&run(http.clone(), "Jelaskan black hole")).to_string();
         assert_eq!(
             t,
-            "💭 *Proses Berpikir:*\n> langkah 1\n> langkah 2\n\nJawaban"
+            // `replace(/\n/g, "\n> ")` hanya menyisipkan `> ` SETELAH newline,
+            // jadi baris pertama tidak dapat `> `.
+            "💭 *Proses Berpikir:*\nlangkah 1\n> langkah 2\n\nJawaban"
         );
         assert!(matches!(
             run(Stub::ok("data: {\"text\":\"x\"}\n"), "x").without_mutations(),

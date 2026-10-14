@@ -180,7 +180,7 @@ mod tests {
         let http = Stub::ok("");
         let __balasan = run(http.clone(), "   ");
         let t = body(&__balasan);
-        assert!(t.contains("`GPT-4.1 Nano`"), "{t}");
+        assert!(t.contains("*GPT-4.1 Nano*"), "{t}");
         assert!(t.contains("*.gpt5 <pertanyaan>*"), "{t}");
         assert!(http.seen.lock().unwrap().is_empty());
     }

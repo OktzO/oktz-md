@@ -248,7 +248,8 @@ mod tests {
         for name in TEMPLATES {
             assert!(t.contains(&format!("`{name}`")), "{name} hilang: {t}");
         }
-        assert!(t.contains("*.dolphin --creative buat puisi*"), "{t}");
+        // `dolphin.js:63-64` tidak memakai `*` di sekitar contoh perintah.
+        assert!(t.contains("> .dolphin --creative buat puisi"), "{t}");
         assert!(http.seen.lock().unwrap().is_empty());
     }
 
@@ -274,11 +275,19 @@ mod tests {
     }
 
     #[test]
-    fn a_template_without_a_question_is_rejected_before_any_request() {
-        let http = Stub::ok("");
+    fn a_bare_template_never_matches_because_serialize_trims_first() {
+        // `serialize.js:407` sudah `.trim()` sebelum handler jalan, dan
+        // `/^--(\S+)\s+/` butuh spasi setelah nama. Jadi `.dolphin --creative`
+        // tidak pernah kena cabang `❌ Masukkan pertanyaan!` (`dolphin.js:79-81`)
+        // — teks utuh justru dikirim ke API.
+        let http = Stub::ok(&format!("{}\n\n", chunk("Tekscreative")));
         let r = run(http.clone(), "--creative   ");
-        assert_eq!(body(&r), "❌ Masukkan pertanyaan!");
-        assert!(http.seen.lock().unwrap().is_empty());
+        assert_eq!(body(&r), "Tekscreative");
+        let seen = http.seen.lock().unwrap().clone();
+        assert_eq!(seen.len(), 1);
+        let sent: Value = serde_json::from_str(&seen[0].1).unwrap();
+        assert_eq!(sent["messages"][0]["content"], "--creative");
+        assert_eq!(sent["template"], "logical");
     }
 
     #[test]

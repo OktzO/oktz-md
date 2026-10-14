@@ -191,7 +191,7 @@ mod tests {
         let __balasan = run(http.clone(), "");
         let t = body(&__balasan);
         assert!(t.contains("🍌 *BANANA GEN 2*"), "{t}");
-        assert!(t.contains("*.bananagen2 make a cat*"), "{t}");
+        assert!(t.contains("`.bananagen2 make a cat`"), "{t}");
         assert!(http.seen.lock().unwrap().is_empty());
     }
 
