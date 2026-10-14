@@ -121,10 +121,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return smoke(&creds, &fixture, hold, &db).await;
     }
 
-    // `oktz run [creds] [settings.json] [hold_secs]` — jalur produksi: connect
-    // dengan pipeline router terpasang, jadi command masuk benar-benar mencapai
-    // plugin. smoke/send sengaja lewat pairing_run langsung dan tidak memakai
-    // pipeline.
+    // `oktz run [creds] [settings.json] [hold_secs] [fixture_sesi.json]` — jalur
+    // produksi: connect dengan pipeline router terpasang, jadi command masuk
+    // benar-benar mencapai plugin. smoke/send sengaja lewat pairing_run langsung
+    // dan tidak memakai pipeline. Fixture sesi opsional: tanpa itu semua pesan
+    // dari kontak lama gagal decrypt, karena device baru tidak punya ratchet.
     if mode == "run" {
         let creds = args
             .get(2)
@@ -132,7 +133,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or_else(|| "../storage/session/creds.json".into());
         let settings = args.get(3).cloned();
         let hold: u64 = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(3600);
-        return run(&creds, settings.as_deref(), hold).await;
+        let fixture = args.get(5).map(|s| s.trim()).filter(|s| !s.is_empty());
+        return run(&creds, settings.as_deref(), hold, fixture).await;
     }
 
     // `oktz pair-code <nomor> [db] [hold]` / `oktz pair-qr [db] [hold]`
@@ -294,17 +296,20 @@ fn creds_for_guard(path: &str) -> serde_json::Value {
 ///
 /// `settings.json` dibaca pipeline sebagai store. Kalau tidak ada, pipeline
 /// jalan dengan default (semua mode public, semua group `all`) — bot tetap
-/// merespons, hanya gating per-grup yang tidak berlaku.
+/// merespons, hanya gating per-grup yang tidak berlaku. Lokasi db mengikuti
+/// `OKTZ_DB_DIR` supaya run lokal tidak butuh `/var/lib/oktz`.
 async fn run(
     creds: &str,
     settings: Option<&str>,
     hold_secs: u64,
+    fixture: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let db = db_arg(resolve_db(
         None,
-        data_dir(Some("/var/lib/oktz")).join("oktz-run.db"),
+        data_dir(oktz_core::env::Env::get(DB_DIR_ENV).as_deref())
+            .join("oktz-run.db"),
     ))?;
-    let store = oktz_wa::prepare_store(creds, &db, None).await?;
+    let store = oktz_wa::prepare_store(creds, &db, fixture).await?;
 
     // Pipeline membaca lokasi settings lewat env saat connect. Argumen harus
     // dipasang SEBELUM connect_device, makanya di sini bukan di dalam closure.

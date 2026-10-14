@@ -2731,17 +2731,29 @@ impl Pipeline {
     /// task ini dijatuhkan.
     pub async fn run(self: Arc<Self>, rx: IngestRx) {
         while let Ok(m) = rx.recv().await {
-            if let Err(e) = self.process(&m, now_ms()).await {
-                // Task ini satu-satunya pemroses pesan. Kegagalan diam-diam
-                // akan menghentikan bot tanpa jejak, jadi selalu log dengan
-                // konteks yang cukup untuk dicari balik.
-                tracing::error!(
+            let preview: String = extract_body(&m.message)
+                .unwrap_or_default()
+                .chars()
+                .filter(|c| !c.is_control())
+                .take(120)
+                .collect();
+            match self.process(&m, now_ms()).await {
+                Ok(o) => tracing::info!(
+                    id = %m.info.id,
+                    chat = %m.info.source.chat,
+                    sender = %m.info.source.sender,
+                    body = %preview,
+                    outcome = ?o,
+                    "pesan inbound diproses"
+                ),
+                Err(e) => tracing::error!(
                     error = %e,
                     id = %m.info.id,
                     chat = %m.info.source.chat,
                     sender = %m.info.source.sender,
+                    body = %preview,
                     "pipeline gagal memproses pesan"
-                );
+                ),
             }
         }
         tracing::debug!("antrean pesan ditutup; loop pipeline berhenti");
