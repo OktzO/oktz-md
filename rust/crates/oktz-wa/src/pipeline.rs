@@ -226,6 +226,17 @@ fn only_this_group_jid(settings: Option<&Value>) -> Option<String> {
     }
 }
 
+/// `onlyThisGroup.name` / `.link` (`middleware.js:183,185`). String biasa tidak
+/// punya keduanya, jadi kosong — sama seperti JS yang memakai `*undefined*`.
+fn only_this_group_field(settings: Option<&Value>, key: &str) -> String {
+    settings
+        .and_then(|s| s.get("onlyThisGroup"))
+        .and_then(|v| v.get(key))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string()
+}
+
 fn str_list(settings: Option<&Value>, key: &str) -> Vec<String> {
     settings
         .and_then(|s| s.get(key))
@@ -262,6 +273,19 @@ pub fn mode_settings_from(settings: Option<&Value>) -> ModeSettings {
             .and_then(|v| v.get("active"))
             .and_then(Value::as_bool)
             .unwrap_or(false),
+        afk_reason: settings
+            .and_then(|s| s.get("botAfk"))
+            .and_then(|v| v.get("reason"))
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        afk_since_ms: settings
+            .and_then(|s| s.get("botAfk"))
+            .and_then(|v| v.get("since"))
+            .and_then(Value::as_i64)
+            .unwrap_or(0),
+        only_this_group_name: only_this_group_field(settings, "name"),
+        only_this_group_link: only_this_group_field(settings, "link"),
         only_gc: flag(settings, "onlyGc"),
         only_pc: flag(settings, "onlyPc"),
         only_this_group: only_this_group_jid(settings),
@@ -1360,9 +1384,11 @@ fn context_info(mentions: &[String], quote: Option<&QuoteSource>) -> wa::Context
 /// bertipe.
 ///
 /// Per-varian:
-/// - `Text` tanpa mention → `conversation` polos; dengan mention →
-///   `extendedTextMessage` + `context_info.mentioned_jid`
+/// - `Text` → mengutip pemicu dan menyebut pengirim secara default
+///   (`serialize.js:983-1010`). Tanpa pemicu dan tanpa mention → `conversation`
+///   polos; kalau ada → `extendedTextMessage` + `context_info.mentioned_jid`
 ///   (`waproto-0.7.0/src/whatsapp.proto:1629`).
+/// - `NoQuote` → `quoted: false`, `TextNoMention` → `mentions: []`.
 /// - `TextQuoted` → sama, ditambah `context_info.quoted_message`. Tanpa
 ///   `quote`, teks tetap terkirim tapi quote hilang.
 /// - `Interactive` → `Card::new(body).to_message()` + node `biz`
@@ -1371,10 +1397,45 @@ fn context_info(mentions: &[String], quote: Option<&QuoteSource>) -> wa::Context
 ///   kosong: byte-nya harus di-upload dulu sebelum ada pesan yang bisa dikirim.
 ///   `media: None` → `Err(MediaSourceMissing)`, bukan `Ok(None)` — drop
 ///   senyap akan membuat plugin terlihat sukses padahal tidak mengirim apa pun.
+#[derive(Debug, Clone, Default)]
+pub struct ReplyTarget {
+    pub quote: Option<QuoteSource>,
+    pub sender: String,
+}
+
+/// `m` versi pipeline: pemicu (untuk kutipan) + pengirim (untuk mention
+/// default). Satu-satunya cara membuat target supaya tidak ada tempat yang
+/// lupa mengirim `sender`.
+pub fn reply_target(m: &InboundMessage, sender: &str) -> ReplyTarget {
+    ReplyTarget {
+        quote: QuoteSource::from_inbound(m),
+        sender: sender.to_string(),
+    }
+}
+
 pub fn render_reply(
     reply: &Reply,
-    quote: Option<&QuoteSource>,
+    target: &ReplyTarget,
 ) -> Result<Option<Rendered>, PipelineError> {
+    let quote = target.quote.as_ref();
+    // `serialize.js:994` — `[]` di JS berarti TIDAK ada mention, jadi daftar
+    // kosong tidak bisa berarti "pakai default".
+    // Sender kosong = tidak ada pemicu nyata (test/kode non-WA), jadi tidak ada
+    // mention. Kalau diisi, JS menulis `[m.sender]`.
+    let default_mention = || {
+        if target.sender.is_empty() {
+            Vec::new()
+        } else {
+            vec![target.sender.clone()]
+        }
+    };
+    let mentions_of = |m: &[String]| {
+        if m.is_empty() {
+            default_mention()
+        } else {
+            m.to_vec()
+        }
+    };
     let pending = |kind: MediaKind,
                    variant: &'static str,
                    src: &Option<MediaSource>,
@@ -1387,7 +1448,7 @@ pub fn render_reply(
                 .clone()
                 .ok_or(PipelineError::MediaSourceMissing { variant })?,
             caption: caption.to_string(),
-            mentions: mentions.to_vec(),
+            mentions: mentions_of(mentions),
             quote: quote.cloned(),
         })
     };
@@ -1407,12 +1468,22 @@ pub fn render_reply(
             extra_nodes: Vec::new(),
             media: Some(pending(MediaKind::Image, "Image", src, caption, mentions)?),
         })),
+        // `quotedMsg = options.quoted !== false ? msg : undefined` — jadi
+        // yang TANPA kutipan harus opt-out eksplisit.
         Reply::Text { text, mentions } => Ok(Some(Rendered::wire(
-            text_message(text, mentions, None),
+            text_message(text, &mentions_of(mentions), quote),
             Vec::new(),
         ))),
         Reply::TextQuoted { text, mentions } => Ok(Some(Rendered::wire(
-            text_message(text, mentions, quote),
+            text_message(text, &mentions_of(mentions), quote),
+            Vec::new(),
+        ))),
+        Reply::NoQuote { text, mentions } => Ok(Some(Rendered::wire(
+            text_message(text, &mentions_of(mentions), None),
+            Vec::new(),
+        ))),
+        Reply::TextNoMention { text } => Ok(Some(Rendered::wire(
+            text_message(text, &[], quote),
             Vec::new(),
         ))),
         Reply::Interactive { body } => Ok(Some(Rendered::wire(
@@ -1441,17 +1512,43 @@ fn text_message(text: &str, mentions: &[String], quote: Option<&QuoteSource>) ->
     }
 }
 
+/// `middleware.js:167-171`. Alasan dan durasi datang dari `DenyMode::Afk`
+/// — teks tanpa keduanya bukan kalimat yang sama dengan yang produksi.
+pub fn afk_text(reason: &str, elapsed_ms: i64) -> String {
+    format!(
+        "💤 *ʙᴏᴛ sᴇᴅᴀɴɢ ᴀꜰᴋ*\n\n\
+╭┈┈⬡「 📋 *ɪɴꜰᴏ* 」\n\
+┃ 📝 ᴀʟᴀsᴀɴ: `{reason}`\n\
+┃ ⏱️ sᴇᴊᴀᴋ: `{}` yang lalu\n\
+╰┈┈⬡\n\n\
+> Bot tidak bisa menerima perintah saat ini\n\
+> Mohon tunggu sampai owner mengaktifkan kembali",
+        oktz_router::mode::format_afk_duration(elapsed_ms)
+    )
+}
+
+/// `middleware.js:182-186`.
+pub fn only_this_group_text(name: &str, link: &str) -> String {
+    format!(
+        "🔒 *Akses Ditolak*\n\n\
+Maaf, saat ini bot kami hanya bisa diakses dan digunakan secara eksklusif di Grup Utama (*{name}*).\n\n\
+Silakan bergabung ke grup utama kami melalui tautan berikut:\n\
+🔗 {link}\n\n\
+Setelah bergabung, Anda bebas menggunakan semua fitur bot. Terima kasih!"
+    )
+}
+
 /// `Decision` → balasan yang dikirim.
 pub fn decision_to_reply(d: &Decision) -> Reply {
     match d {
         Decision::Handled(r) => r.clone(),
         Decision::DeniedPermission(msg) | Decision::DeniedGroupMode(msg) => Reply::text(msg),
-        Decision::DeniedMode(DenyMode::Afk) => Reply::text(
-            "💤 *ʙᴏᴛ sᴇᴅᴀɴɢ ᴀꜰᴋ*\n\n> Bot tidak bisa menerima perintah saat ini\n> Mohon tunggu sampai owner mengaktifkan kembali",
-        ),
-        Decision::DeniedMode(DenyMode::OnlyThisGroup) => Reply::text(
-            "🔒 *Akses Ditolak*\n\n> Bot hanya bisa diakses di grup utama.",
-        ),
+        Decision::DeniedMode(DenyMode::Afk { reason, elapsed_ms }) => {
+            Reply::text(afk_text(reason, *elapsed_ms))
+        }
+        Decision::DeniedMode(DenyMode::OnlyThisGroup { name, link }) => {
+            Reply::text(only_this_group_text(name, link))
+        }
         // `middleware.js:200-202` self-group dan `middleware.js:177-178` onlyGc/
         // onlyPc menolak tanpa pesan; `DenyMode::Silent` juga tidak membawa teks.
         Decision::DeniedMode(DenyMode::Silent | DenyMode::SelfGroup) => Reply::None,
@@ -2336,7 +2433,7 @@ impl Pipeline {
         } else {
             None
         };
-        mode::check_mode(caller, &self.ctx.mode_settings(), overrides).ok()?;
+        mode::check_mode(caller, &self.ctx.mode_settings(), overrides, now_ms).ok()?;
 
         let entry = lookup(&parsed.command)?;
 
@@ -2423,8 +2520,8 @@ impl Pipeline {
         match decision.reply_text() {
             Some(text) => {
                 let reply = Reply::text(text);
-                let quote = QuoteSource::from_inbound(m);
-                if let Some(rendered) = render_reply(&reply, quote.as_ref())? {
+                let target = reply_target(m, &caller.sender);
+                if let Some(rendered) = render_reply(&reply, &target)? {
                     self.deliver(&caller.chat, rendered).await?;
                 }
                 Ok(Outcome::Sent)
@@ -2620,8 +2717,8 @@ impl Pipeline {
                     .charge_energi(&caller, meta, &energi, &self.cap_energi_overrides());
             if !energy.allowed {
                 let reply = Reply::text(ENERGI_EXCEEDED);
-                let quote = QuoteSource::from_inbound(m);
-                if let Some(rendered) = render_reply(&reply, quote.as_ref())? {
+                let target = reply_target(m, &caller.sender);
+                if let Some(rendered) = render_reply(&reply, &target)? {
                     self.deliver(&caller.chat, rendered).await?;
                 }
                 return Ok(Outcome::EnergiDenied);
@@ -2667,7 +2764,7 @@ impl Pipeline {
                 }
             }
 
-            let quote = QuoteSource::from_inbound(m);
+            let target = reply_target(m, &caller.sender);
             // `Reply::Reaction` (JS `m.react('✅')`) bukan message — dikirim
             // lewat jalur reaksi. Seperti cooldown, kegagalan bereaksi tidak
             // boleh menggagalkan sisa pipeline.
@@ -2676,13 +2773,13 @@ impl Pipeline {
                     tracing::warn!(error = %e, emoji = %emoji, "gagal bereaksi");
                 }
                 // Teks balasan (kalau ada) tetap dikirim setelah reaksi.
-                if let Some(rendered) = render_reply(inner, quote.as_ref())? {
+                if let Some(rendered) = render_reply(inner, &target)? {
                     self.deliver(&caller.chat, rendered).await?;
                 }
                 return Ok(Outcome::Sent);
             }
 
-            let Some(rendered) = render_reply(&reply, quote.as_ref())? else {
+            let Some(rendered) = render_reply(&reply, &target)? else {
                 // `Reply::None`: `DeniedMode::Silent`, `SelfGroup`, `NoPlugin`,
                 // `NotACommand`, atau `Reply::None` dari plugin — semua sengaja diam.
                 return Ok(if matches!(decision, Decision::Handled(_)) {
@@ -3254,7 +3351,7 @@ fn group_number_and_long_number_are_rejected() {
 
     #[test]
     fn text_without_mentions_is_plain_conversation() {
-        let r = render_reply(&Reply::text("pong"), None).unwrap().unwrap();
+        let r = render_reply(&Reply::text("pong"), &ReplyTarget::default()).unwrap().unwrap();
         assert_eq!(r.message.conversation.as_deref(), Some("pong"));
         assert!(r.extra_nodes.is_empty());
     }
@@ -3262,7 +3359,7 @@ fn group_number_and_long_number_are_rejected() {
     #[test]
     fn text_mentions_go_into_context_info_not_body() {
         let reply = Reply::text_mention("hai @1", "6281@s.whatsapp.net");
-        let r = render_reply(&reply, None).unwrap().unwrap();
+        let r = render_reply(&reply, &ReplyTarget::default()).unwrap().unwrap();
         assert!(r.message.conversation.is_none(), "harus extendedTextMessage");
         let c = ctx_of(&r.message).expect("context_info");
         assert_eq!(c.mentioned_jid, vec!["6281@s.whatsapp.net".to_string()]);
@@ -3280,7 +3377,7 @@ fn group_number_and_long_number_are_rejected() {
             text: "tanggapan".into(),
             mentions: vec!["6282@s.whatsapp.net".into()],
         };
-        let r = render_reply(&reply, Some(&quote)).unwrap().unwrap();
+        let r = render_reply(&reply, &ReplyTarget { quote: Some(quote.clone()), sender: String::new() }).unwrap().unwrap();
         let c = ctx_of(&r.message).expect("context_info");
         assert_eq!(c.stanza_id.as_deref(), Some("STANZA1"));
         assert_eq!(c.participant.as_deref(), Some("6281@s.whatsapp.net"));
@@ -3294,13 +3391,76 @@ fn group_number_and_long_number_are_rejected() {
             text: "tanpa quote".into(),
             mentions: vec![],
         };
-        let r = render_reply(&reply, None).unwrap().unwrap();
+        let r = render_reply(&reply, &ReplyTarget::default()).unwrap().unwrap();
         assert_eq!(body_of(&r.message), Some("tanpa quote"));
+    }
+
+    // ---------------------------------------------------------------
+    // Default quote + mention (`serialize.js:983-1010`). Tanpa test ini,
+    // `Reply::text` bisa kembali jadi "tidak mengutip, tidak mention" tanpa
+    // ada yang gagal.
+    // ---------------------------------------------------------------
+
+    fn pemicu() -> QuoteSource {
+        QuoteSource {
+            stanza_id: "STANZA9".into(),
+            participant: Some("6281@s.whatsapp.net".into()),
+            message: Box::new(wa::Message::text("pesan pemicu")),
+        }
+    }
+
+    fn target() -> ReplyTarget {
+        ReplyTarget {
+            quote: Some(pemicu()),
+            sender: "6289@s.whatsapp.net".into(),
+        }
+    }
+
+    #[test]
+    fn plain_text_quotes_the_trigger_and_mentions_the_sender_by_default() {
+        // `quotedMsg = options.quoted !== false ? msg : undefined` dan
+        // `mentionedJid = options?.mentions || [m.sender] || []`.
+        let r = render_reply(&Reply::text("pong"), &target()).unwrap().unwrap();
+        let c = ctx_of(&r.message).expect("context_info");
+        assert!(c.quoted_message.as_option().is_some(), "harus mengutip pemicu");
+        assert_eq!(c.stanza_id.as_deref(), Some("STANZA9"));
+        assert_eq!(c.mentioned_jid, vec!["6289@s.whatsapp.net".to_string()]);
+    }
+
+    #[test]
+    fn explicit_mentions_replace_the_default_sender() {
+        let reply = Reply::text_mention("hai", "6287@s.whatsapp.net");
+        let r = render_reply(&reply, &target()).unwrap().unwrap();
+        let c = ctx_of(&r.message).expect("context_info");
+        assert_eq!(c.mentioned_jid, vec!["6287@s.whatsapp.net".to_string()]);
+        assert!(c.quoted_message.as_option().is_some());
+    }
+
+    #[test]
+    fn no_quote_drops_the_quoted_message_but_keeps_the_default_mention() {
+        // `quoted: false` — hanya kutipan yang hilang, mention tetap default.
+        let r = render_reply(&Reply::text_quoted("tanpa kutip"), &target())
+            .unwrap()
+            .unwrap();
+        let c = ctx_of(&r.message).expect("context_info");
+        assert!(c.quoted_message.as_option().is_none());
+        assert_eq!(c.mentioned_jid, vec!["6289@s.whatsapp.net".to_string()]);
+    }
+
+    #[test]
+    fn no_mention_quotes_but_lists_nobody() {
+        // `mentions: []` di JS = daftar kosong, bukan "pakai default".
+        let r = render_reply(&Reply::text_no_mention("diam"), &target())
+            .unwrap()
+            .unwrap();
+        let c = ctx_of(&r.message).expect("context_info");
+        assert!(c.quoted_message.as_option().is_some());
+        assert!(c.mentioned_jid.is_empty());
     }
 
     #[test]
     fn interactive_reuses_card_and_adds_biz_node() {
-        let r = render_reply(&Reply::Interactive { body: "pilih".into() }, None)
+        let r = render_reply(&Reply::Interactive { body: "pilih".into() }, &ReplyTarget::default())
             .unwrap()
             .unwrap();
         assert_eq!(r.extra_nodes.len(), 1, "node biz wajib untuk native-flow");
@@ -3324,7 +3484,7 @@ fn group_number_and_long_number_are_rejected() {
             caption: "c".into(),
             mentions: vec![],
         };
-        let err = render_reply(&reply, None).unwrap_err();
+        let err = render_reply(&reply, &ReplyTarget::default()).unwrap_err();
         assert_eq!(
             err,
             PipelineError::MediaSourceMissing { variant: "Image" }
@@ -3336,7 +3496,7 @@ fn group_number_and_long_number_are_rejected() {
 
     #[test]
     fn sticker_reply_without_a_source_is_a_typed_error() {
-        let err = render_reply(&Reply::Sticker { media: None }, None).unwrap_err();
+        let err = render_reply(&Reply::Sticker { media: None }, &ReplyTarget::default()).unwrap_err();
         assert_eq!(
             err,
             PipelineError::MediaSourceMissing {
@@ -3348,7 +3508,7 @@ fn group_number_and_long_number_are_rejected() {
     #[test]
     fn image_reply_with_a_source_is_pending_media_not_a_wire_message() {
         let reply = Reply::image(MediaSource::url("https://x/y.png"), "halo");
-        let r = render_reply(&reply, None).unwrap().unwrap();
+        let r = render_reply(&reply, &ReplyTarget::default()).unwrap().unwrap();
         assert!(r.needs_media(), "harus lewat jalur upload");
         let p = r.media.expect("pending media");
         assert_eq!(p.kind, MediaKind::Image);
@@ -3368,7 +3528,7 @@ fn group_number_and_long_number_are_rejected() {
             caption: "capt".into(),
             mentions: vec!["6281@s.whatsapp.net".into()],
         };
-        let p = render_reply(&reply, None).unwrap().unwrap().media.unwrap();
+        let p = render_reply(&reply, &ReplyTarget::default()).unwrap().unwrap().media.unwrap();
         assert_eq!(p.caption, "capt");
         assert_eq!(p.mentions, vec!["6281@s.whatsapp.net".to_string()]);
         assert_eq!(p.source.mimetype(), None);
@@ -3377,7 +3537,7 @@ fn group_number_and_long_number_are_rejected() {
     #[test]
     fn sticker_reply_maps_to_sticker_pending_media() {
         let src = MediaSource::path("/tmp/a.webp").with_mimetype("image/webp");
-        let r = render_reply(&Reply::sticker(src.clone()), None)
+        let r = render_reply(&Reply::sticker(src.clone()), &ReplyTarget::default())
             .unwrap()
             .unwrap();
         let p = r.media.expect("pending media");
@@ -3408,7 +3568,7 @@ fn group_number_and_long_number_are_rejected() {
             ),
         ] {
             let s = RecordingSender::default();
-            let pending = render_reply(&reply, None).unwrap().unwrap().media.unwrap();
+            let pending = render_reply(&reply, &ReplyTarget::default()).unwrap().unwrap().media.unwrap();
             s.send_media("6281@s.whatsapp.net", pending.clone())
                 .await
                 .expect("harus terkirim");
@@ -3454,7 +3614,7 @@ fn group_number_and_long_number_are_rejected() {
             },
         ];
         for c in cases {
-            let Some(r) = render_reply(&c, None).unwrap() else {
+            let Some(r) = render_reply(&c, &ReplyTarget::default()).unwrap() else {
                 continue;
             };
             if r.needs_media() {
@@ -3530,7 +3690,7 @@ fn group_number_and_long_number_are_rejected() {
 
     #[test]
     fn reply_none_renders_to_nothing() {
-        assert!(render_reply(&Reply::None, None).unwrap().is_none());
+        assert!(render_reply(&Reply::None, &ReplyTarget::default()).unwrap().is_none());
     }
 
     // ---------- 5. Decision -> Reply ----------
@@ -3563,12 +3723,37 @@ fn group_number_and_long_number_are_rejected() {
             decision_to_reply(&Decision::DeniedMode(DenyMode::SelfGroup)),
             Reply::None
         );
-        for m in [DenyMode::Afk, DenyMode::OnlyThisGroup] {
+        for m in [
+            DenyMode::Afk {
+                reason: "libur".into(),
+                elapsed_ms: 3_600_000,
+            },
+            DenyMode::OnlyThisGroup {
+                name: "Grup Utama".into(),
+                link: "https://chat.whatsapp.com/abc".into(),
+            },
+        ] {
             let label = format!("{m:?}");
             let r = decision_to_reply(&Decision::DeniedMode(m.clone()));
             assert!(!r.is_none(), "{label} harus membalas");
             assert!(r.text_body().is_some_and(|t| !t.is_empty()));
         }
+    }
+
+    #[test]
+    fn afk_text_carries_the_reason_and_the_duration() {
+        // `middleware.js:169` menyisipkan `botAfk.reason`; tanpa itu teksnya
+        // bukan kalimat yang sama dengan produksi.
+        let t = afk_text("libur", 3_600_000);
+        assert!(t.contains("libur"));
+        assert!(t.contains("1 jam 0 menit"));
+    }
+
+    #[test]
+    fn only_this_group_text_carries_name_and_link() {
+        let t = only_this_group_text("Grup Utama", "https://chat.whatsapp.com/abc");
+        assert!(t.contains("Grup Utama"));
+        assert!(t.contains("https://chat.whatsapp.com/abc"));
     }
 
     #[test]
@@ -3990,7 +4175,7 @@ fn group_number_and_long_number_are_rejected() {
             },
             Reply::Sticker { media: None },
         ] {
-            let err = render_reply(&reply, None).unwrap_err();
+            let err = render_reply(&reply, &ReplyTarget::default()).unwrap_err();
             assert!(matches!(err, PipelineError::MediaSourceMissing { .. }));
             assert!(err.to_string().contains("sumber media"));
         }
@@ -5116,7 +5301,7 @@ impl TestPlugin {
             jid: "628111@s.whatsapp.net".into(),
             data: serde_json::json!({"koin": 1}),
         });
-        match render_reply(&r, None) {
+        match render_reply(&r, &ReplyTarget::default()) {
             Err(PipelineError::UnappliedMutation { count }) => assert_eq!(count, 1),
             other => panic!("harus error UnappliedMutation, dapat {other:?}"),
         }

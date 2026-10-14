@@ -3,6 +3,7 @@ pub mod cjstoesm;
 pub mod delpp;
 pub mod esmtocjs;
 pub mod kalkulatormbg;
+pub mod phisingataubukan;
 pub mod ptv;
 pub mod readmore;
 pub mod rvo;

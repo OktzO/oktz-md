@@ -1091,6 +1091,7 @@ name = "oktz-router"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "oktz-core",
  "oktz-plugin-api",
  "serde",
  "serde_json",

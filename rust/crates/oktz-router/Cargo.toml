@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+oktz-core = { path = "../oktz-core" }
 oktz-plugin-api = { path = "../oktz-plugin-api" }
 serde.workspace = true
 serde_json.workspace = true

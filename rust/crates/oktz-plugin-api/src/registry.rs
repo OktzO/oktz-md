@@ -147,6 +147,18 @@ pub enum Reply {
         text: String,
         mentions: Vec<String>,
     },
+    /// `quoted: false` (`serialize.js:1000`) — balasan TIDAK mengutip pesan
+    /// pemicu. Mention tetap mengikuti aturan default.
+    NoQuote {
+        text: String,
+        mentions: Vec<String>,
+    },
+    /// `mentions: []` (`serialize.js:994`) — mengutip tapi TIDAK menyebut
+    /// pengirim. Plugin yang menulis `mentions: []` di JS/No, tapi JS tetap
+    /// mengutip; jadi ini bukan "tanpa quote".
+    TextNoMention {
+        text: String,
+    },
     /// Image dengan caption, dari sumber media nyata.
     ///
     /// `media: None` = plugin tidak punya sumber yang bisa dikirim. Itu
@@ -188,6 +200,11 @@ pub enum Reply {
 
 impl Reply {
     /// Konstruktor yang paling sering dipakai — teks polos tanpa mention.
+    ///
+    /// Mention dan kutipan TIDAK ditentukan di sini: `serialize.js` menambah
+    /// keduanya di sisi pengiriman (`mentionedJid: options?.mentions ||
+    /// [m.sender] || []` dan `quotedMsg = options.quoted !== false ? msg :
+    /// undefined`), jadi `render_reply` yang memutuskan.
     pub fn text(text: impl Into<String>) -> Self {
         Self::Text {
             text: text.into(),
@@ -199,6 +216,21 @@ impl Reply {
         Self::Text {
             text: text.into(),
             mentions: vec![mention.into()],
+        }
+    }
+
+    /// `quoted: false` — plugin ini memang tidak mau mengutip pemicunya.
+    pub fn text_quoted(text: impl Into<String>) -> Self {
+        Self::NoQuote {
+            text: text.into(),
+            mentions: Vec::new(),
+        }
+    }
+
+    /// `mentions: []` — mengutip pemicu tapi tidak menyebut siapa pun.
+    pub fn text_no_mention(text: impl Into<String>) -> Self {
+        Self::TextNoMention {
+            text: text.into(),
         }
     }
 
@@ -330,7 +362,10 @@ impl Reply {
     /// Teks balasan kalau ada (router butuh ini untuk log/permission reply).
     pub fn text_body(&self) -> Option<&str> {
         match self.without_mutations() {
-            Self::Text { text, .. } | Self::TextQuoted { text, .. } => Some(text),
+            Self::Text { text, .. }
+            | Self::TextQuoted { text, .. }
+            | Self::NoQuote { text, .. }
+            | Self::TextNoMention { text } => Some(text),
             Self::Image { caption, .. } => Some(caption),
             Self::Interactive { body } => Some(body),
             Self::Reaction { reply, .. } => reply.text_body(),

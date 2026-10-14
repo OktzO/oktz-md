@@ -38,6 +38,7 @@ pub mod listtoxic;
 pub mod listwarn;
 pub mod mulaiabsen;
 pub mod mute;
+pub mod mutegc;
 pub mod mutemember;
 pub mod notifclosegroup;
 pub mod notifdemote;

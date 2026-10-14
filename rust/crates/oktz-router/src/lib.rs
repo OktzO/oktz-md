@@ -97,7 +97,7 @@ impl<'a, C: RouterContext> Router<'a, C> {
         } else {
             None
         };
-        if let Err(reason) = mode::check_mode(caller, &self.ctx.mode_settings(), overrides) {
+        if let Err(reason) = mode::check_mode(caller, &self.ctx.mode_settings(), overrides, self.now_ms) {
             return Decision::DeniedMode(reason);
         }
 
@@ -287,7 +287,11 @@ mod tests {
             }))
         };
         let d = r.route(&mut c, ".secret", |_| Some(owner_only));
-        assert!(matches!(d, Decision::DeniedPermission(msg) if msg.contains("Owner only")));
+        // `config.js:198`, bukan fallback `"🚫 Owner only!"` dari
+        // `middleware.js:57` — fallback cuma aktif kalau config kosong.
+        assert!(
+            matches!(&d, Decision::DeniedPermission(msg) if msg == "*Akses Ditolak!* Fitur ini khusus untuk Owner bot.")
+        );
     }
 
     #[test]

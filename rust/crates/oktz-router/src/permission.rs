@@ -8,6 +8,7 @@
 //! - `hasAccess` di JS menulis ke DB (prune grant expired). Di sini murni
 //!   terhadap `&UserState`; prune jadi urusan caller.
 
+use oktz_core::config::Messages;
 use oktz_plugin_api::{PluginMeta, QuotedMessage};
 
 /// Identitas caller — cerminan flag `m.*` yang dipakai checkPermission.
@@ -78,21 +79,29 @@ pub enum DenyReason {
 }
 
 impl DenyReason {
-    /// Balasan yang router kirim. String persis seperti JS supaya output
-    /// tidak berubah bagi user. Tidak ada placeholder — pesan permission JS
-    /// juga statis.
-    pub fn message(&self) -> &'static str {
+    /// Balasan dari `config.js` (`middleware.js:50-137`).
+    ///
+    /// Fallback `||` di JS hanya aktif kalau `config.messages` kosong; di
+    /// produksi tidak pernah kosong, jadi teks fallback tidak boleh dipakai
+    /// sebagai sumber utama.
+    pub fn message_with(&self, m: &Messages) -> String {
         match self {
-            Self::OwnerOnly => "🚫 Owner only!",
-            Self::PartnerOnly => "🤝 Partner only!",
-            Self::PremiumOnly => "💎 Premium only!",
-            Self::GroupOnly => "👥 Group only!",
-            Self::PrivateOnly => "📱 Private chat only!",
-            Self::AdminOnly => "👮 Admin grup only!",
-            Self::BotAdminOnly => "🤖 Bot harus menjadi admin grup!",
-            Self::GameDisabled => "🎮 Fitur Game sedang dinonaktifkan di grup ini oleh Admin!",
-            Self::RpgDisabled => "⚔️ Fitur RPG sedang dinonaktifkan di grup ini oleh Admin!",
+            Self::OwnerOnly => m.owner_only.clone(),
+            Self::PartnerOnly => m.partner_only.clone(),
+            Self::PremiumOnly => m.premium_only.clone(),
+            Self::GroupOnly => m.group_only.clone(),
+            Self::PrivateOnly => m.private_only.clone(),
+            Self::AdminOnly => m.admin_only.clone(),
+            Self::BotAdminOnly => m.bot_admin_only.clone(),
+            Self::GameDisabled => m.game_disabled.clone(),
+            Self::RpgDisabled => m.rpg_disabled.clone(),
         }
+    }
+
+    /// Bungkus dengan `Messages::default()` supaya pemanggil yang tidak punya
+    /// config tetap bisa menulis pesan.
+    pub fn message(&self) -> String {
+        self.message_with(&Messages::default())
     }
 }
 

@@ -39,8 +39,16 @@ pub struct ModeSettings {
     pub only_gc: bool,
     pub only_pc: bool,
     /// `Some(jid)` = hanya grup ini. String di JS; object di-normalkan ke jid
-    /// di sisi caller (nama/pesan butuh data object, tidak ada di sini).
+    /// di sisi caller.
     pub only_this_group: Option<String>,
+    /// `botAfk.reason` — disisipkan ke balasan AFK (`middleware.js:169`).
+    pub afk_reason: String,
+    /// `botAfk.since` dalam ms — durasi dihitung dari sini (`middleware.js:162`).
+    pub afk_since_ms: i64,
+    /// `onlyThisGroup.name` dan `.link` — keduanya disisipkan ke balasan
+    /// (`middleware.js:183-185`). Kosong kalau setting-nya string biasa.
+    pub only_this_group_name: String,
+    pub only_this_group_link: String,
     pub self_groups: Vec<String>,
     pub public_groups: Vec<String>,
     pub self_admin: bool,
@@ -59,9 +67,31 @@ pub struct GroupOverrides {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DenyMode {
     Silent,
-    Afk,
-    OnlyThisGroup,
+    /// `middleware.js:158-172`. Membawa `botAfk.reason` dan durasi, karena
+    /// keduanya ditulis ke teks balasan — enum tanpa payload berarti
+    /// menampilkan kalimat yang tidak sama dengan yang produksi.
+    Afk { reason: String, elapsed_ms: i64 },
+    /// `middleware.js:178-187`. Membawa nama dan link grup utama.
+    OnlyThisGroup { name: String, link: String },
     SelfGroup,
+}
+
+/// `middleware.js:22-32`. Satu-satunya tempat durasi diformat.
+pub fn format_afk_duration(ms: i64) -> String {
+    let seconds = ms / 1000;
+    let minutes = seconds / 60;
+    let hours = minutes / 60;
+    let days = hours / 24;
+    if days > 0 {
+        return format!("{} hari {} jam", days, hours % 24);
+    }
+    if hours > 0 {
+        return format!("{} jam {} menit", hours, minutes % 60);
+    }
+    if minutes > 0 {
+        return format!("{minutes} menit");
+    }
+    format!("{seconds} detik")
 }
 
 /// Aturan 1-10 `checkMode`, urutan preservasi.
@@ -69,6 +99,7 @@ pub fn check_mode(
     caller: &Caller,
     settings: &ModeSettings,
     group_overrides: Option<GroupOverrides>,
+    now_ms: i64,
 ) -> Result<(), DenyMode> {
     let mode = BotMode::parse(if settings.mode.is_empty() {
         "public"
@@ -93,7 +124,15 @@ pub fn check_mode(
 
     // 1. AFK — hanya owner lolos.
     if settings.afk_active && !caller.is_owner {
-        return Err(DenyMode::Afk);
+        let reason = if settings.afk_reason.is_empty() {
+            "AFK".to_string()
+        } else {
+            settings.afk_reason.clone()
+        };
+        return Err(DenyMode::Afk {
+            reason,
+            elapsed_ms: now_ms.saturating_sub(settings.afk_since_ms),
+        });
     }
 
     // 2/3. onlyGc / onlyPc.
@@ -110,7 +149,10 @@ pub fn check_mode(
         && !caller.is_owner
         && &caller.chat != only
     {
-        return Err(DenyMode::OnlyThisGroup);
+        return Err(DenyMode::OnlyThisGroup {
+            name: settings.only_this_group_name.clone(),
+            link: settings.only_this_group_link.clone(),
+        });
     }
 
     // 5. selfGroups: owner lolos, selain itu tolok diam.
@@ -321,7 +363,7 @@ mod tests {
             mode: "public".into(),
             ..Default::default()
         };
-        assert_eq!(check_mode(&caller(), &s, None), Ok(()));
+        assert_eq!(check_mode(&caller(), &s, None, 0), Ok(()));
     }
 
     #[test]
@@ -331,7 +373,7 @@ mod tests {
             afk_active: true,
             ..Default::default()
         };
-        assert_eq!(check_mode(&caller(), &s, None), Err(DenyMode::Afk));
+        assert_eq!(check_mode(&caller(), &s, None, 0), Err(DenyMode::Afk { reason: "AFK".into(), elapsed_ms: 0 }));
     }
 
     #[test]
@@ -343,7 +385,7 @@ mod tests {
         };
         let mut c = caller();
         c.is_owner = true;
-        assert_eq!(check_mode(&c, &s, None), Ok(()));
+        assert_eq!(check_mode(&c, &s, None, 0), Ok(()));
     }
 
     #[test]
@@ -353,8 +395,8 @@ mod tests {
             only_gc: true,
             ..Default::default()
         };
-        assert_eq!(check_mode(&caller(), &s, None), Err(DenyMode::Silent));
-        assert_eq!(check_mode(&group_caller(), &s, None), Ok(()));
+        assert_eq!(check_mode(&caller(), &s, None, 0), Err(DenyMode::Silent));
+        assert_eq!(check_mode(&group_caller(), &s, None, 0), Ok(()));
     }
 
     #[test]
@@ -364,8 +406,8 @@ mod tests {
             only_pc: true,
             ..Default::default()
         };
-        assert_eq!(check_mode(&group_caller(), &s, None), Err(DenyMode::Silent));
-        assert_eq!(check_mode(&caller(), &s, None), Ok(()));
+        assert_eq!(check_mode(&group_caller(), &s, None, 0), Err(DenyMode::Silent));
+        assert_eq!(check_mode(&caller(), &s, None, 0), Ok(()));
     }
 
     #[test]
@@ -376,7 +418,7 @@ mod tests {
             public_groups: vec!["120363@g.us".into()],
             ..Default::default()
         };
-        assert_eq!(check_mode(&group_caller(), &s, None), Ok(()));
+        assert_eq!(check_mode(&group_caller(), &s, None, 0), Ok(()));
     }
 
     #[test]
@@ -385,7 +427,7 @@ mod tests {
             mode: "self".into(),
             ..Default::default()
         };
-        assert_eq!(check_mode(&caller(), &s, None), Err(DenyMode::Silent));
+        assert_eq!(check_mode(&caller(), &s, None, 0), Err(DenyMode::Silent));
     }
 
     #[test]
@@ -395,9 +437,9 @@ mod tests {
             only_admin: true,
             ..Default::default()
         };
-        assert_eq!(check_mode(&group_caller(), &s, None), Err(DenyMode::Silent));
+        assert_eq!(check_mode(&group_caller(), &s, None, 0), Err(DenyMode::Silent));
         // Private tetap lolos walau onlyAdmin.
-        assert_eq!(check_mode(&caller(), &s, None), Ok(()));
+        assert_eq!(check_mode(&caller(), &s, None, 0), Ok(()));
     }
 
     #[test]
@@ -408,7 +450,7 @@ mod tests {
             ..Default::default()
         };
         // selfAdmin: private DITOLAK (berbeda dari publicAdmin).
-        assert_eq!(check_mode(&caller(), &s, None), Err(DenyMode::Silent));
+        assert_eq!(check_mode(&caller(), &s, None, 0), Err(DenyMode::Silent));
     }
 
     #[test]
@@ -424,7 +466,7 @@ mod tests {
             ..Default::default()
         };
         // Override false -> only_admin efektif false -> grup non-admin lolos.
-        assert_eq!(check_mode(&group_caller(), &s, Some(g)), Ok(()));
+        assert_eq!(check_mode(&group_caller(), &s, Some(g), 0), Ok(()));
     }
 
     #[test]
@@ -433,7 +475,7 @@ mod tests {
             mode: "entah".into(),
             ..Default::default()
         };
-        assert_eq!(check_mode(&caller(), &s, None), Ok(()));
+        assert_eq!(check_mode(&caller(), &s, None, 0), Ok(()));
     }
 
     #[test]
@@ -444,7 +486,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            check_mode(&group_caller(), &s, None),
+            check_mode(&group_caller(), &s, None, 0),
             Err(DenyMode::SelfGroup)
         );
     }
