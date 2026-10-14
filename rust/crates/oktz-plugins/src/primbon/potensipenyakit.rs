@@ -148,7 +148,11 @@ mod tests {
             Arc::new(Stub(json!({ "status": true, "data": { "catatan": "-" } }))),
             &["-1", "😀", "abc"],
         );
-        assert!(reply_text(&r).contains("> Tanggal: *-1-😀-abc*"), "{}", reply_text(&r));
+        assert!(
+            reply_text(&r).contains("> Tanggal: *-1-😀-abc*"),
+            "{}",
+            reply_text(&r)
+        );
     }
 
     #[test]

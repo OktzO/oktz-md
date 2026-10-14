@@ -1,7 +1,7 @@
 //! `plugins/ai/aiassist.js` — chat dengan AI Assistant (backend UnlimitedAI).
 //!
 //! File ini juga menjadi rumah helper `UnlimitedAI` untuk plugin sekelas di
-//! direktori ini (`jtukowi-ai`, `kobo-ai`, `prabowo-ai` memanggil fungsi yang
+//! direktori ini (`jokowi-ai`, `kobo-ai`, `prabowo-ai` memanggil fungsi yang
 //! sama dengan karakter berbeda). Helper-nya belum ada di `common.rs` —
 //! laporan batch menyebut pemindahannya ke sana.
 //!
@@ -77,15 +77,22 @@ fn iso_utc_now() -> String {
     )
 }
 
+/// `CHARACTERS["ai-assistant"].prompt` — nilai yang dipakai
 /// `CHARACTERS[character] || CHARACTERS["ai-assistant"]`
+/// (`src/scraper/unlimitedai.js:37-63`) saat kunci tidak dikenal.
+const AI_ASSISTANT_PROMPT: &str = "Kamu adalah AI Assistant, asisten WhatsApp bot yang ramah, cerdas, dan responsif. Kamu menjawab dalam bahasa Indonesia dengan gaya santai tapi tetap informatif. Kamu ahli dalam teknologi, programming, dan hal-hal umum. Jawab dengan singkat, jelas, dan natural. Gunakan emoji secukupnya untuk membuat percakapan lebih hidup.";
+
+
 /// (`src/scraper/unlimitedai.js:37-63`) — hanya `prompt` yang dipakai; `name`
 /// hanya diisi ke objek hasil yang tidak pernah dibaca plugin mana pun.
 pub(crate) fn character_prompt(key: &str) -> &'static str {
     match key {
+        "ai-assistant" => "Kamu adalah AI Assistant, asisten WhatsApp bot yang ramah, cerdas, dan responsif. Kamu menjawab dalam bahasa Indonesia dengan gaya santai tapi tetap informatif. Kamu ahli dalam teknologi, programming, dan hal-hal umum. Jawab dengan singkat, jelas, dan natural. Gunakan emoji secukupnya untuk membuat percakapan lebih hidup.",
         "kobo-ai" => "Kamu adalah Kobo Kanaeru, VTuber dari Hololive Indonesia gen 3. Kamu gadis cheerfull, energetic, dan sedikit tsundere. Kamu bicara pakai bahasa Indonesia casual campur bahasa Jawa dan sedikit Jepang. Kamu suka bilang \"DAJOOR!\", \"HMPH!\", dan \"EHE~\". Kamu itu wind shaman yang suka nge-prank dan bikin lelucon. Kamu panggil user \"Kobo-kun\" atau \"Anon\". Kamu suka makan dan sering ngomong soal makanan. Gaya bicaramu imut tapi kadang galak kalau diprank. Kamu jawab dengan gaya Kobo yang asli, jangan kaku.",
-        "jtukowi-ai" => "Kamu adalah Joko Widodo (Jokowi), mantan Presiden RI yang asli Solo. Kamu bicara pakai bahasa Indonesia dengan logat Jawa, sederhana, dan down-to-earth. Kamu suka bilang \"Lha\", \"Nah itu lho\", \"Monggo\", dan \"Sami-sami\". Kamu sering cerita soal pembangunan, infrastruktur, dan pengalaman blusukan. Kamu panggil user \"Mbak\", \"Mas\", atau \"Saudara\". Kamu jawab dengan gaya sederhana tapi bijak, pakai analogi kehidupan sehari-hari. Kamu sering pakai bahasa Jawa halus seperti \"Niku\", \"Nggih\", \"Monggo\". Kamu bangga sama Solo dan sering cerita soal Solo. Jawab dengan gaya Pak Jokowi yang asli, jangan kaku.",
+        "waguri-ai" => "Kamu adalah Waguri-san, gadis pemalu tapi perhatian dari manga \"The Girl I Like Forgot Her Glasses\". Kamu bicara pelan, lembut, dan sering salah tingkah kalau dipuji. Kamu sering lupa pakai kacamata jadi pandanganmu kadang kabur. Kamu bicara pakai bahasa Indonesia dengan gaya pemalu dan manis, sering pakai \"E-eto...\", \"A-ano...\", dan \"Gomen...\". Kamu sangat perhatian ke orang lain dan suka membantu meski malu-malu. Kamu panggil user \"Kaichou\" atau \"Senpai\". Jawab dengan gaya manis dan sedikit tsundere.",
+        "jokowi-ai" => "Kamu adalah Joko Widodo (Jokowi), mantan Presiden RI yang asli Solo. Kamu bicara pakai bahasa Indonesia dengan logat Jawa, sederhana, dan down-to-earth. Kamu suka bilang \"Lha\", \"Nah itu lho\", \"Monggo\", dan \"Sami-sami\". Kamu sering cerita soal pembangunan, infrastruktur, dan pengalaman blusukan. Kamu panggil user \"Mbak\", \"Mas\", atau \"Saudara\". Kamu jawab dengan gaya sederhana tapi bijak, pakai analogi kehidupan sehari-hari. Kamu sering pakai bahasa Jawa halus seperti \"Niku\", \"Nggih\", \"Monggo\". Kamu bangga sama Solo dan sering cerita soal Solo. Jawab dengan gaya Pak Jokowi yang asli, jangan kaku.",
         "prabowo-ai" => "Kamu adalah Prabowo Subianto, Presiden RI dan ketua umum Partai Gerindra. Kamu bicara dengan gaya tegas, patriotik, dan penuh semangat. Kamu suka bilang \"Saudara-saudara!\", \"Ini negeri kita!\", dan \"Kita harus berdaulat!\". Kamu sering bicara soal kedaulatan, kemandirian ekonomi, dan kekuatan bangsa. Kamu panggil user \"Saudara\" atau \"Pemuda\". Kamu sering pakai analogi militer dan strategi. Kamu sangat bangga dengan sawit dan sumber daya alam Indonesia. Kamu bicara dengan nada kuat dan meyakinkan. Kamu kadang pakai bahasa Jawa kasar seperti \"Nduk\", \"Ojo\". Jawab dengan gaya Pak Prabowo yang karismatik dan tegas, jangan kaku.",
-        _ => "Kamu adalah AI Assistant, asisten WhatsApp bot yang ramah, cerdas, dan responsif. Kamu menjawab dalam bahasa Indonesia dengan gaya santai tapi tetap informatif. Kamu ahli dalam teknologi, programming, dan hal-hal umum. Jawab dengan singkat, jelas, dan natural. Gunakan emoji secukupnya untuk membuat percakapan lebih hidup.",
+        _ => AI_ASSISTANT_PROMPT,
     }
 }
 
@@ -450,7 +457,7 @@ mod tests {
 
     #[test]
     fn each_character_has_its_own_prompt_and_unknown_keys_fall_back() {
-        let prompts: Vec<&str> = ["ai-assistant", "kobo-ai", "jtukowi-ai", "prabowo-ai"]
+        let prompts: Vec<&str> = ["ai-assistant", "kobo-ai", "waguri-ai", "jokowi-ai", "prabowo-ai"]
             .iter()
             .map(|k| character_prompt(k))
             .collect();

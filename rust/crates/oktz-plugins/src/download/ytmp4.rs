@@ -89,7 +89,8 @@ pub(crate) fn normalize(isi: &Value) -> Result<String, ()> {
 /// bentuk aggregator diletakkan di sini juga karena `izuka` tidak butuh key.
 fn unduh_video(ctx: &Ctx, url: &str) -> Result<String, ()> {
     let target = format!("{ENDPOINT}?url={}", query_encode(url));
-    let body = ctx.http.get(&target).map_err(|_| ())?.json().ok_or(())?;
+    let respons = ctx.http.get(&target).map_err(|_| ())?;
+    let body = respons.json().ok_or(())?;
     if body.get("status").and_then(Value::as_bool) != Some(true) {
         return Err(());
     }
@@ -172,9 +173,7 @@ mod tests {
             let text = self
                 .body
                 .clone()
-                .map_err(|()| HttpError {
-                    message: "offline".into(),
-                })?
+                .map_err(|()| HttpError { message: "offline".into() })?
                 .to_string();
             Ok(HttpResponse {
                 status: 200,

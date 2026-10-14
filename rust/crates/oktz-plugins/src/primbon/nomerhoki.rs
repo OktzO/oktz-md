@@ -263,7 +263,10 @@ mod tests {
     fn a_falsy_analysis_status_prints_tidak_hoki() {
         for status in [json!(false), json!(0), json!(""), json!(null)] {
             let r = run_with(Arc::new(Stub(payload_with_status(status))), &["628123"]);
-            assert!(reply_text(&r).ends_with("> Status: ❌ TIDAK HOKI"), "{status}");
+            assert!(
+                reply_text(&r).ends_with("> Status: ❌ TIDAK HOKI"),
+                "{status}"
+            );
         }
         // `status` bernilai objek kosong: `{}` falsy di JS, jadi bukan HOKI.
         let r = run_with(Arc::new(Stub(payload_with_status(json!({})))), &["628123"]);
@@ -279,8 +282,9 @@ mod tests {
     /// balasan berisi `undefined`.
     #[test]
     fn a_missing_parent_object_falls_into_the_error_template() {
+        // `data` non-kosong supaya lolos `!data?.data` dulu.
         for data in [
-            json!({}),
+            json!({ "nomor": "628123" }),
             json!({ "energi_positif": { "total": 1, "details": {} } }),
             json!({ "energi_positif": null }),
         ] {

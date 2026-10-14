@@ -417,15 +417,15 @@ mod tests {
         );
         assert_eq!(reaction_of(&r), Some("🎮"));
         // `safeReact` lalu `safeReply` dipetakan ke `Reply::Reaction` yang
-        // membungkus balasan teksnya.
-        let Reply::Reaction { reply, .. } = r.without_mutations() else {
-            panic!("harus Reaction, dapat {:?}", r.without_mutations());
-        };
-        match reply.as_ref() {
-            Reply::Text { mentions, .. } => {
-                assert_eq!(mentions, &[SENDER.to_string(), OTHER.to_string()])
-            }
-            other => panic!("isi Reaction harus Text, dapat {other:?}"),
+        // membungkus balasan teksnya — mention ada di balasan dalam.
+        match r.without_mutations() {
+            Reply::Reaction { reply, .. } => match reply.as_ref() {
+                Reply::Text { mentions, .. } => {
+                    assert_eq!(mentions, &[SENDER.to_string(), OTHER.to_string()])
+                }
+                other => panic!("isi Reaction harus Text, dapat {other:?}"),
+            },
+            other => panic!("harus Reaction, dapat {other:?}"),
         }
 
         let list = rooms(&s);
@@ -553,19 +553,49 @@ mod tests {
         let s = new_session_store();
         run(SENDER, "", &s);
         run(OTHER, "", &s);
-        // Setelah join, `createdAt` sudah tua tapi state PLAYING — JS tidak
+        // Setelah join, `createdAt` dipaksa tua tapi state PLAYING — JS tidak
         // pernah menghapus room ini lewat setTimeout.
+        let id = rooms(&s)[0].0.clone();
+        s.lock()
+            .unwrap()
+            .get_mut(GAMES_KEY)
+            .and_then(Value::as_object_mut)
+            .and_then(|o| o.get_mut(&id))
+            .and_then(Value::as_object_mut)
+            .expect("room hasil join")
+            .insert("createdAt".into(), json!(0));
         let r = run(SENDER, "", &s);
-        assert_eq!(text_of(&r), BUSY);
+        assert_eq!(text_of(&r), BUSY, "PLAYING tidak boleh kadaluarsa");
         assert_eq!(rooms(&s).len(), 1);
     }
 
-    #[test]
-    fn a_room_whose_id_has_no_prefix_never_locks_anybody_out() {
+    /// Awalan `ttt_` hanya mengecek "masih dalam game" (`tictactoe.js:158-162`).
+/// Pencarian room yang menunggu (`tictactoe.js:173-178`) tidak memfilter
+/// awalan sama sekali, jadi room waiting milik plugin lain di chat yang sama
+/// tetap di-join.
+#[test]
+    fn a_waiting_room_without_the_prefix_is_still_joinable() {
         let s = new_session_store();
         s.lock().unwrap().insert(
             GAMES_KEY.into(),
-            json!({"lain": {"id": "lain", "chat": CHAT, "playerX": SENDER, "playerO": Value::Null, "state": "WAITING", "createdAt": now_ms()}}),
+            json!({"lain": {"id": "lain", "chat": CHAT, "playerX": OTHER, "playerO": Value::Null, "state": "WAITING", "createdAt": now_ms()}}),
+        );
+        let r = run(SENDER, "", &s);
+        assert!(
+            text_of(&r).contains("Partner ditemukan!"),
+            "id tanpa `ttt_` tetap boleh di-join: {}",
+            text_of(&r)
+        );
+        assert_eq!(rooms(&s).len(), 1, "tidak boleh membuat room kedua");
+        assert_eq!(rooms(&s)[0].1["playerO"], json!(SENDER));
+    }
+
+    #[test]
+    fn a_room_without_the_prefix_never_counts_as_an_active_game() {
+        let s = new_session_store();
+        s.lock().unwrap().insert(
+            GAMES_KEY.into(),
+            json!({"lain": {"id": "lain", "chat": "lain@g.us", "playerX": SENDER, "playerO": Value::Null, "state": "WAITING", "createdAt": now_ms()}}),
         );
         let r = run(SENDER, "", &s);
         assert!(
@@ -573,6 +603,7 @@ mod tests {
             "id tanpa `ttt_` bukan milik plugin ini: {}",
             text_of(&r)
         );
+        assert_eq!(rooms(&s).len(), 2, "room lama milik chat lain tetap ada");
     }
 
     #[test]
@@ -596,7 +627,8 @@ mod tests {
                 "sel {i} hilang: {board}"
             );
         }
-        assert_eq!(board.matches('│').count(), 18, "6 sel per baris × 3 baris");
+        // `│ c0 │ c1 │ c2 │` = 4 garis tegak per baris sel, 3 baris sel.
+        assert_eq!(board.matches('│').count(), 12, "4 garis tegak per baris × 3 baris");
     }
 
     #[test]
@@ -624,7 +656,7 @@ mod tests {
         let name = "a".repeat(500);
         let r = run(SENDER, &name, &s);
         assert!(
-            text_of(&r).contains(&format!(".tictactoe {name}`. untuk join")),
+            text_of(&r).contains(&format!(".tictactoe {name}` untuk join")),
             "nama panjang harus utuh"
         );
         assert_eq!(rooms(&s)[0].1["name"], json!(name));

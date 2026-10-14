@@ -160,15 +160,21 @@ mod tests {
         assert_eq!(stored(&r), &json!(true));
         let r = run(".", "\tOff\t", Value::Null);
         assert_eq!(stored(&r), &json!(false));
+        // `m.text?.toLowerCase()?.trim()` — newline di ujung ikut hilang,
+        // jadi "on\n" tetap option sah, bukan input tak dikenal.
+        let r = run(".", "on\n", Value::Null);
+        assert_eq!(stored(&r), &json!(true));
     }
 
     #[test]
     fn anything_else_falls_to_the_invalid_option_branch() {
+        // JS membandingkan `m.text` utuh tanpa parsing per kata, jadi
+        // "on off" bukan "on" — ia jatuh ke cabang invalid dan tidak menulis.
         for text in ["on off", "enable", "1", "on.", "-", "😔"] {
             let r = run("!", text, Value::Null);
             assert_eq!(
                 text_of(&r),
-                "❌ *Opsi Tidak Valid*\n\n> Gunakan *.anticall on* atau *.anticall off*",
+                "❌ *Opsi Tidak Valid*\n\n> Gunakan *!anticall on* atau *!anticall off*",
                 "input {text:?}"
             );
             assert!(r.mutations().is_empty(), "{text:?} tidak boleh menulis");
@@ -223,7 +229,8 @@ mod tests {
     fn the_branch_selector_is_exactly_on_and_off() {
         // Tanpa guard `includes`, `text_keyword` sudah trim + lowercase; yang
         // tersisa adalah memastikan tidak ada nilai lain yang dianggap sah.
-        for text in ["anti call", "aktif", "true", "on\n", "o n"] {
+        // Spasi di DALAM teks tidak dihapus trim, jadi "o n" ≠ "on".
+        for text in ["anti call", "aktif", "true", "o n", "on on"] {
             let r = run(".", text, Value::Null);
             assert!(r.mutations().is_empty(), "{text:?} tidak boleh menulis");
         }

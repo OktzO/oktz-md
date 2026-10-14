@@ -157,15 +157,20 @@ mod tests {
         assert_eq!(stored(&r), &json!(true));
         let r = run(".", "\tOff\t", Value::Null);
         assert_eq!(stored(&r), &json!(false));
+        // `m.text?.toLowerCase()?.trim()` — newline di ujung ikut hilang.
+        let r = run(".", "on\n", Value::Null);
+        assert_eq!(stored(&r), &json!(true));
     }
 
     #[test]
     fn anything_else_falls_to_the_invalid_option_branch() {
+        // JS membandingkan `m.text` utuh tanpa parsing per kata, jadi
+        // "on off" bukan "on" — ia jatuh ke cabang invalid dan tidak menulis.
         for text in ["on off", "enable", "1", "on.", "-", "😔"] {
             let r = run("!", text, Value::Null);
             assert_eq!(
                 text_of(&r),
-                "❌ *Opsi Tidak Valid*\n\n> Gunakan *.autoread on* atau *.autoread off*",
+                "❌ *Opsi Tidak Valid*\n\n> Gunakan *!autoread on* atau *!autoread off*",
                 "input {text:?}"
             );
             assert!(r.mutations().is_empty(), "{text:?} tidak boleh menulis");

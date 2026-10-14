@@ -295,7 +295,13 @@ mod tests {
     fn the_filter_matches_league_home_away_or_date() {
         let all = sample();
         // "sample" punya dua laga Liga Inggris, jadi "inggris" memang dua.
-        for (f, expect) in [("inggris", 2), ("italia", 1), ("arsenal", 1), ("everton", 1), ("2026-05-02", 1)] {
+        for (f, expect) in [
+            ("inggris", 2),
+            ("italia", 1),
+            ("arsenal", 1),
+            ("everton", 1),
+            ("2026-05-02", 1),
+        ] {
             assert_eq!(filter_matches(&all, f).len(), expect, "filter {f:?} gagal");
         }
         assert_eq!(filter_matches(&all, "liga").len(), 3);
@@ -387,7 +393,11 @@ mod tests {
         // `key.includes(lower)` — arah `includes` yang terbalik: "champ" bukan
         // substring dari "liga champions", tapi sebaliknya benar.
         assert_eq!(league_emoji("Champ"), "🏆");
-        assert_eq!(league_emoji("Liga"), "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "string pendek → kunci pertama");
+        assert_eq!(
+            league_emoji("Liga"),
+            "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
+            "string pendek → kunci pertama"
+        );
         assert_eq!(league_emoji("Liga nowhere"), "⚽", "tidak ada yang cocok");
     }
 }

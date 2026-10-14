@@ -33,8 +33,12 @@ fn target_of(ctx: &Ctx) -> Option<String> {
         .cloned()
 }
 
-/// `Math.floor(Math.random() * n) + 1000`. `n` bisa 0 (korban miskin) — `roll(0)`
-/// akan panic, jadi nol ditangani eksplisit seperti `Math.random() * 0` di JS.
+/// `maxSteal = Math.floor(koin * 0.3)`, `stolen = Math.floor(Math.random() * maxSteal) + 1000`.
+///
+/// `Math.random()` ada di `[0, 1)`, jadi bagian acaknya di `0..maxSteal` dan
+/// jumlah curian di `1000 ..= maxSteal + 999` — bukan sampai `maxSteal`.
+/// `maxSteal` bisa 0 (korban miskin) — `roll(0)` akan panic, jadi nol
+/// ditangani eksplisit seperti `Math.random() * 0` di JS.
 fn stolen_of(victim_koin: i64) -> i64 {
     let max_steal = victim_koin * 3 / 10;
     let hasil = if max_steal > 0 {
@@ -324,12 +328,14 @@ mod tests {
         }
     }
 
-    /// `Math.floor(Math.random() * victim.koin * 0.3) + 1000`.
+    /// `Math.floor(Math.random() * Math.floor(koin * 0.3)) + 1000` — curian di
+    /// `1000 ..= floor(koin * 0.3) + 999`, jadi bisa sedikit di atas 30% dompet.
     #[test]
     fn a_successful_rob_moves_between_1000_and_thirty_percent_of_the_purse() {
+        let koin = 500_000;
+        let max_steal = koin * 3 / 10;
         let mut seen = 0;
         for _ in 0..4000 {
-            let koin = 500_000;
             let r = run(
                 json!({ "koin": 0, "exp": 0, "rpg": { "health": 100 } }),
                 vec![TARGET.into()],
@@ -339,7 +345,11 @@ mod tests {
             let gained = user_of(&r, SENDER)["koin"].as_i64().unwrap();
             if t.starts_with("MANTAP!") {
                 seen += 1;
-                assert!((1_000..=150_000).contains(&gained), "curian {gained}");
+                assert!(
+                    (1_000..=max_steal + 999).contains(&gained),
+                    "curian {gained} di luar 1000..={}",
+                    max_steal + 999
+                );
                 assert_eq!(user_of(&r, TARGET)["koin"], json!(koin - gained));
                 assert_eq!(user_of(&r, SENDER)["exp"], json!(EXP_GAIN));
                 assert_eq!(user_of(&r, SENDER)["rpg"]["health"], json!(100));

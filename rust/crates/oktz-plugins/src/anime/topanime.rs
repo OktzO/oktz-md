@@ -14,7 +14,7 @@ use crate::common::js_truthy;
 /// Endpoint tunggal (`topanime.js:22`).
 const ENDPOINT: &str = "https://my.izuka-api.xyz/api/anime/top-anime";
 
-/// `Math.min(list.length, 10)` (`topanime.js:35`).
+/// Batas `Math.min(list.length, 10)` (`topanime.js:35`).
 const MAX_ITEMS: usize = 10;
 
 /// Kalimat saat data tidak lengkap (`topanime.js:27`).
@@ -65,8 +65,8 @@ fn render_list(list: &Value) -> String {
     let mut txt = String::from("🏆 *TOP ANIME CHARACTERS (WAIFU LIST)* 🏆\n\n");
     txt.push_str("Berikut adalah daftar karakter terpopuler dan paling dicintai saat ini:\n\n");
 
-    let max_items = max_items(list);
-    for character in js_items(list, max_items.unwrap_or(0)) {
+    let max = max_items(list);
+    for character in js_items(list, max.unwrap_or(0)) {
         txt.push_str(&format!(
             "*{} - {}*\n",
             interp(character.get("rank")),
@@ -88,7 +88,7 @@ fn render_list(list: &Value) -> String {
     }
 
     // `NaN` masuk ke template literal apa adanya.
-    let tampil = max_items.map_or("NaN", |n| n.to_string());
+    let tampil = max.map_or("NaN", |n| n.to_string());
     txt.push_str(&format!("_Menampilkan {tampil} karakter teratas._"));
     txt
 }
@@ -131,12 +131,10 @@ pub fn topanime(ctx: Ctx) -> Reply {
     if !js_truthy(data.get("status")) {
         return Reply::text(NO_DATA).with_reaction("❌");
     }
-    let Some(list) = data
-        .get("result")
-        .filter(|v| js_truthy(Some(*v)))
-        .and_then(|r| r.get("result"))
-        .filter(|v| js_truthy(Some(*v)))
-    else {
+    let Some(result) = data.get("result").filter(|v| js_truthy(Some(*v))) else {
+        return Reply::text(NO_DATA).with_reaction("❌");
+    };
+    let Some(list) = result.get("result").filter(|v| js_truthy(Some(*v))) else {
         return Reply::text(NO_DATA).with_reaction("❌");
     };
 
@@ -365,15 +363,17 @@ mod tests {
     #[test]
     fn a_truthy_non_array_list_renders_the_nan_frame_instead_of_throwing() {
         let r = run(Stub::ok(r#"{"status":true,"result":{"result":{"a":1}}}"#));
-        assert!(!r.has_media(), "list[0] undefined → tidak ada gambar");
-        assert!(body(&r).ends_with("_Menampilkan NaN karakter teratas._"), "{:?}", body(&r));
+        assert!(!r.has_media(), "list[0] undefined jadi tidak ada gambar");
+        let t = body(&r);
+        assert!(t.ends_with("_Menampilkan NaN karakter teratas._"), "{t}");
         assert_eq!(emoji(&r), "✅");
 
         // String punya `.length`, jadi `Math.min(3, 10)` = 3 dan `list[0]`
         // adalah karakter — bukan objek, jadi field-nya semua `undefined`.
         let r = run(Stub::ok(r#"{"status":true,"result":{"result":"abc"}}"#));
-        assert!(body(&r).contains("*undefined - undefined*"), "{:?}", body(&r));
-        assert!(body(&r).ends_with("_Menampilkan 3 karakter teratas._"), "{:?}", body(&r));
+        let t = body(&r);
+        assert!(t.contains("*undefined - undefined*"), "{t}");
+        assert!(t.ends_with("_Menampilkan 3 karakter teratas._"), "{t}");
         assert!(!r.has_media());
     }
 

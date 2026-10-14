@@ -264,7 +264,8 @@ pub(crate) fn file_name(audio: &AudioDownload) -> String {
 /// bentuk aggregator diletakkan di sini juga karena `izuka` tidak butuh key.
 fn unduh_audio(ctx: &Ctx, url: &str) -> Result<AudioDownload, ()> {
     let target = format!("{ENDPOINT}?url={}", query_encode(url));
-    let body = ctx.http.get(&target).map_err(|_| ())?.json().ok_or(())?;
+    let respons = ctx.http.get(&target).map_err(|_| ())?;
+    let body = respons.json().ok_or(())?;
     if body.get("status").and_then(Value::as_bool) != Some(true) {
         return Err(());
     }
@@ -322,6 +323,9 @@ fn is_word_byte(b: u8) -> bool {
 fn tautan_lengkap(mentah: &str) -> Option<String> {
     let bytes = mentah.as_bytes();
     for i in 0..bytes.len() {
+        if !mentah.is_char_boundary(i) {
+            continue;
+        }
         if i > 0 && is_word_byte(bytes[i - 1]) {
             continue;
         }
@@ -449,9 +453,7 @@ mod tests {
             let text = self
                 .body
                 .clone()
-                .map_err(|()| HttpError {
-                    message: "offline".into(),
-                })?
+                .map_err(|()| HttpError { message: "offline".into() })?
                 .to_string();
             Ok(HttpResponse {
                 status: 200,
@@ -468,7 +470,11 @@ mod tests {
         fn post_form(&self, _: &str, _: &str) -> Result<HttpResponse, HttpError> {
             unimplemented!("cuma GET")
         }
-        fn post_multipart(&self, _: &str, _: &[(&str, HttpBody)]) -> Result<HttpResponse, HttpError> {
+        fn post_multipart(
+            &self,
+            _: &str,
+            _: &[(&str, HttpBody)],
+        ) -> Result<HttpResponse, HttpError> {
             unimplemented!("cuma GET")
         }
     }

@@ -119,7 +119,25 @@ untuk `messageSecret`.
 `uploadTo0x0`, `live3d`. `HttpGet` tidak punya PUT dan `HttpBody` tidak punya
 nama file untuk multipart.
 
-## 14. Sinkron `mod.rs` dan `lib.rs`
+## 15. `saluranCtx()` — badge newsletter
+
+`_saluranCtx()` (`src/lib/context.js:50-62`) menempelkan
+`forwardingScore: 9`, `isForwarded: true`, dan
+`forwardedNewsletterMessageInfo` ke `contextInfo` tiap balasan. Di WhatsApp
+ini tampil sebagai badge "Newsletter" — jadi bedanya terlihat user, bukan
+internal. `Reply` sekarang tidak punya jalur context sama sekali.
+
+Butuh dua kapabilitas sekaligus, bukan salah satu:
+1. `Reply` baru (atau field contextInfo) yang bisa membawa data forwarding.
+2. `Ctx::bot_number` — `m.botNumber` dipakai `fun/tolak.js:53` dan
+   `fun/terima.js:53` untuk menolak "pacaran" dengan bot sendiri. Router
+   sudah punya `Env::bot_number`, tapi tidak diteruskan ke plugin.
+
+Contoh plugin yang paling dekat bisa di-port begitu dua hal ini ada:
+`fun/terima.js`, `fun/tolak.js` (keduanya cuma tersisih `global.tembakSessions`
+dan `saluranCtx`), lalu `fun/tembak.js` (masih butuh `answerHandler`).
+
+## 16. Sinkron `mod.rs` dan `lib.rs`
 
 `mod.rs` tiap kategori dan `lib.rs` crate `oktz-plugins` adalah milik
 orkestrator. Agent porting tidak boleh menyentuhnya; daftar modul dibangun
