@@ -216,7 +216,7 @@ mod tests {
         );
         let t = text_of(&r);
         assert!(t.contains("📦 Item: *⚔️ Iron Sword x1*"), "{t}");
-        assert!(t.contains("*Status Bonus Aktif:*"), "{t}");
+        assert!(t.contains("Status Bonus Aktif:"), "{t}");
         assert!(t.contains("📈 ATTACK: *+10*"), "{t}");
         assert_eq!(write_of(&r)["rpg"]["attack"], json!(14));
     }

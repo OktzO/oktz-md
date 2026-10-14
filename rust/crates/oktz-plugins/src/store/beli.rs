@@ -311,7 +311,7 @@ mod tests {
     #[test]
     fn a_missing_or_out_of_range_number_shows_the_picker() {
         for input in ["", "0", "3", "abc", "-1"] {
-            let r = run(input, sample());
+            let r = run(input.clone(), sample());
             let t = text_of(&r);
             assert!(t.starts_with("🛒 *Pilih Produk*"), "input {input:?}: {t}");
             assert!(t.contains("🔑 *1.* Netflix — Rp 25.000 ✅"), "{t}");
@@ -348,7 +348,8 @@ mod tests {
         let s = json!({"storeProducts": [
             {"id": "p1", "name": "Kaos", "type": "fisik", "price": 1000, "stock": -1}
         ]});
-        let t = text_of(&run("", s));
+        let __balasan = run("", s);
+        let t = text_of(&__balasan);
         assert!(t.contains("📦 *1.* Kaos — Rp 1.000 ✅"), "{t}");
         assert!(!text_of(&run("1", json!({"storeProducts": [
             {"id": "p1", "name": "Kaos", "type": "fisik", "price": 1000, "stock": -1}

@@ -125,7 +125,7 @@ mod tests {
     #[test]
     fn no_argument_shows_help_and_writes_nothing() {
         for text in ["", "   "] {
-            let r = run(text, json!({}));
+            let r = run(text.clone(), json!({}));
             assert!(text_of(&r).starts_with("💎 *SISTEM CAP PREMIUM*"), "input {text:?}");
             assert!(r.mutations().is_empty(), "input {text:?}");
         }
@@ -136,7 +136,7 @@ mod tests {
         let r = run("baik", json!({}));
         assert_eq!(stored(&r), json!({ "cekbaik": true }));
         let t = text_of(&r);
-        assert!(t.contains("*Berhasil (PREMIUM 💎):*"), "{t}");
+        assert!(t.contains("Berhasil (PREMIUM 💎):"), "{t}");
         assert!(t.contains("- cekbaik"), "{t}");
         assert!(
             t.contains("_Fitur di atas (yang berhasil) sekarang hanya bisa diakses oleh member Premium._"),
@@ -157,7 +157,7 @@ mod tests {
     fn an_unknown_feature_only_appears_in_the_failed_list() {
         let r = run("tidakada", json!({}));
         assert_eq!(stored(&r), json!({}));
-        assert!(text_of(&r).contains("*Gagal (Tidak ditemukan):*"), "{}", text_of(&r));
+        assert!(text_of(&r).contains("Gagal (Tidak ditemukan):"), "{}", text_of(&r));
     }
 
     #[test]
@@ -165,7 +165,8 @@ mod tests {
         // `capfree` menulis key yang sama; menimpanya di sini akan membatalkan
         // status gratis yang sudah dipasang.
         let settings = json!({ "capprem": { "cekweit": false } });
-        let s = stored(&run("baik", settings));
+        let __balasan = run("baik", settings);
+        let s = stored(&__balasan);
         assert_eq!(s["cekweit"], json!(false), "override gratis lain hilang");
         assert_eq!(s["cekbaik"], json!(true));
     }

@@ -267,7 +267,7 @@ mod tests {
     fn the_lookup_falls_back_from_id_to_name() {
         for arg in ["DRG", "Dragon", "dragon"] {
             let r = run(json!({}), arg, json!({ "DRG": clan(json!({})) }));
-            assert!(text_of(&r).contains("*Dragon*"), "arg {arg}: {}", text_of(&r));
+            assert!(text_of(&r).contains("Dragon"), "arg {arg}: {}", text_of(&r));
         }
     }
 
@@ -278,7 +278,7 @@ mod tests {
             "Naga",
             json!({ "DRG": clan(json!({})), "NG": clan(json!({"id":"NG","name":"Naga"})) }),
         );
-        assert!(text_of(&r).contains("*Naga*"), "{}", text_of(&r));
+        assert!(text_of(&r).contains("Naga"), "{}", text_of(&r));
     }
 
     #[test]

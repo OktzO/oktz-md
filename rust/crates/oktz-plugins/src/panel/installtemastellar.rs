@@ -87,7 +87,8 @@ mod tests {
     #[test]
     fn an_empty_argument_shows_the_stellar_usage_with_the_live_prefix() {
         for empty in ["", " "] {
-            let t = text_of(&run(empty));
+            let __balasan = run(empty.clone());
+            let t = text_of(&__balasan);
             assert!(t.starts_with("╭┈┈⬡「 🎨 *ɪɴsᴛᴀʟʟ ᴛᴇᴍᴀ sᴛᴇʟʟᴀʀ* 」"), "{t}");
             assert!(t.contains("`.installtemastellar <ip>|<password>`"), "{t}");
         }

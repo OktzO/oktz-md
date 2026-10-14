@@ -245,7 +245,8 @@ mod tests {
     #[test]
     fn a_missing_user_row_reads_zero_koin() {
         for user in [json!(null), json!({}), json!({"koin": null})] {
-            let out = text_of(&run(&[], user.clone(), false));
+            let __balasan = run(&[], user.clone(), false);
+            let out = text_of(&__balasan);
             assert!(out.contains("┃ 💰 ᴋᴏɪɴ ᴋᴀᴍᴜ: *0*\n"), "{user}");
         }
     }

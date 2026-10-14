@@ -180,7 +180,8 @@ mod tests {
     #[test]
     fn no_argument_shows_the_help_without_the_active_card() {
         for s in [json!({}), json!({"stickerCommands": {}})] {
-            let t = body(&run(&[], s.clone(), None));
+            let __balasan = run(&[], s.clone(), None);
+            let t = body(&__balasan);
             assert!(t.starts_with("🖼️ *sᴛɪᴄᴋᴇʀ ᴛᴏ ᴄᴏᴍᴍᴀɴᴅ*"), "{s}: {t}");
             assert!(t.contains("> Reply sticker, lalu ketik:\n> `.addcmdsticker menu`"), "{t}");
             assert!(!t.contains("ᴀᴋᴛɪꜰ"), "kartu hanya muncul kalau ada entri: {t}");
@@ -190,7 +191,8 @@ mod tests {
 
     #[test]
     fn the_active_card_lists_commands_in_store_order() {
-        let t = body(&run(&[], full(), None));
+        let __balasan = run(&[], full(), None);
+        let t = body(&__balasan);
         assert!(t.contains("╭┈┈⬡「 📋 *ᴀᴋᴛɪꜰ」\n"), "{t}");
         assert!(t.contains("┃ 🖼️ → `menu`\n┃ 🖼️ → `promo`\n"), "{t}");
         assert!(t.ends_with("╰┈┈┈┈┈┈┈┈⬡"), "{t}");
@@ -206,7 +208,8 @@ mod tests {
             );
         }
         let s = json!({"stickerCommands": map});
-        let t = body(&run(&[], s.clone(), None));
+        let __balasan = run(&[], s.clone(), None);
+        let t = body(&__balasan);
         assert!(t.contains("┃ 🖼️ → `cmd09`\n"), "10 terakhir yang tampil: {t}");
         assert!(!t.contains("`cmd10`"), "potong di 10: {t}");
         assert!(t.contains("┃ ... dan 3 lainnya\n"), "13 - 10 = 3: {t}");
@@ -216,7 +219,8 @@ mod tests {
         for i in 0..10 {
             map10.insert(format!("h{i}"), json!({"command": format!("c{i}")}));
         }
-        let t = body(&run(&[], json!({ "stickerCommands": map10 }), None));
+        let __balasan = run(&[], json!({ "stickerCommands": map10 }), None);
+        let t = body(&__balasan);
         assert!(!t.contains("lainnya"), "tepat 10 tidak overflow: {t}");
     }
 

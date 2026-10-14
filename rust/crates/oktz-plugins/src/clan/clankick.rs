@@ -234,7 +234,7 @@ mod tests {
                 json!({ "DRG": clan(SENDER, json!([SENDER, "628999@s.whatsapp.net"])) }),
             )
         };
-        let r = run(ctx);
+        let r = run(ctx.clone());
         assert_eq!(kept_of(&r), json!([SENDER]));
         let (jid, cleared) = cleared_of(&r);
         assert_eq!(jid, "628999@s.whatsapp.net");

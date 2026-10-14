@@ -1519,7 +1519,7 @@ mod tests_cek2 {
     /// yang menang duluan —alias hilang tanpa error. Test ini yang menangkapnya.
     ///
     /// Pengecualian: key yang memang bentrok di JS (lihat `JS_COLLISIONS`). Di
-    /// sana duplikasi memang terjadi juga di JS, jadi yang diuji只剩
+    /// sana duplikasi memang terjadi juga di JS, jadi yang diuji hanya
     /// "plugin pemilik batch ini masih ikut tercantum", bukan keunikannya.
     #[test]
     fn every_alias_of_this_batch_is_claimed_by_exactly_one_plugin() {

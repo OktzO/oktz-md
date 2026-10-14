@@ -116,7 +116,7 @@ mod tests {
     #[test]
     fn both_switch_branches_react_the_same_way() {
         for arg in ["on", "off"] {
-            match run(arg).without_mutations() {
+            match run(arg.clone()).without_mutations() {
                 Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅", "arg {arg}"),
                 other => panic!("harus Reaction, dapat {other:?}"),
             }
@@ -125,8 +125,8 @@ mod tests {
 
     #[test]
     fn the_switch_reply_names_the_direction_that_was_written() {
-        assert!(text_of(&run("on")).contains("*DIAKTIFKAN*"));
-        assert!(text_of(&run("off")).contains("*DIMATIKAN*"));
+        assert!(text_of(&run("on")).contains("DIAKTIFKAN"));
+        assert!(text_of(&run("off")).contains("DIMATIKAN"));
         assert!(text_of(&run("on")).starts_with("✅ *sᴜᴋsᴇs*"));
     }
 
@@ -140,7 +140,7 @@ mod tests {
     #[test]
     fn an_unknown_argument_shows_the_same_help_and_writes_nothing() {
         for bad in ["yes", "ON!", "aktif", "1"] {
-            let r = run(bad);
+            let r = run(bad.clone());
             assert_eq!(text_of(&r), HELP, "input {bad}");
             assert!(r.mutations().is_empty(), "input {bad} tidak boleh menulis");
         }

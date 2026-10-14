@@ -236,7 +236,7 @@ mod tests {
     #[test]
     fn is_bot_admin_does_not_affect_the_listing() {
         let ps = vec![p("628222@s.whatsapp.net", true, false)];
-        assert_eq!(text_of(&run(ps.clone(), true)), text_of(&run(ps, false)));
+        assert_eq!(text_of(&run(ps.clone(), true)), text_of(&run(ps.clone(), false)));
     }
 
     #[test]

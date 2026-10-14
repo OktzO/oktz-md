@@ -230,7 +230,7 @@ impl FalseLogoutGuard {
 //    ada — kalau ur dibalik, satu-satunya salinan ikut hilang.
 // 3. **Cooldown tidak boleh ikut terhapus.** `storageRoot` holding
 //    `.pairing-cooldown` sengaja DI LUAR `sessionPath`
-//    (`src/connection.js:624-627`), supaya purge tidak jadi cara绕过 cooldown.
+//    (`src/connection.js:624-627`), supaya purge tidak jadi cara untuk melewati cooldown.
 
 /// Env yang menimpa lokasi db sesi untuk [`PurgePlan`].
 ///
@@ -1293,7 +1293,7 @@ mod tests {
     #[test]
     fn a_cooldown_marker_is_never_inside_the_purge_scope() {
         // src/connection.js:624-627 — cooldown sengaja di luar `sessionPath`
-        // supaya purge tidak jadi cara绕过 cooldown.
+        // supaya purge tidak jadi cara untuk melewati cooldown.
         let dir = scratch("cooldown");
         seed(&dir);
         std::fs::write(dir.join(".pairing-cooldown"), r#"{"until":123}"#).unwrap();

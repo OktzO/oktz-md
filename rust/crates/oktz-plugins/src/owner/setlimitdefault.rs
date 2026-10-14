@@ -135,20 +135,20 @@ mod tests {
     #[test]
     fn out_of_range_numbers_are_rejected_without_writing() {
         for bad in ["0", "-1", "1001"] {
-            let r = run(bad, json!({}));
+            let r = run(bad.clone(), json!({}));
             assert_eq!(text_of(&r), RANGE_ERR, "arg {bad}");
             assert!(r.mutations().is_empty(), "arg {bad}");
         }
         // batas inklusif
         for good in ["1", "1000"] {
-            assert!(written(&run(good, json!({}))).is_some(), "arg {good}");
+            assert!(written(&run(good.clone(), json!({}))).is_some(), "arg {good}");
         }
     }
 
     #[test]
     fn a_missing_or_unparsable_argument_shows_usage_and_writes_nothing() {
         for bad in ["", "abc", "abc def"] {
-            let r = run(bad, json!({}));
+            let r = run(bad.clone(), json!({}));
             assert!(text_of(&r).starts_with("📊 *sᴇᴛ ᴅᴇғᴀᴜʟᴛ ʟɪᴍɪᴛ*"), "arg {bad:?}");
             assert!(r.mutations().is_empty(), "arg {bad:?}");
         }

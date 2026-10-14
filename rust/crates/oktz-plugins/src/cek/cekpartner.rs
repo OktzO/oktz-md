@@ -196,7 +196,7 @@ mod tests {
                 settings: settings.clone(),
                 ..base()
             };
-            let (text, mentions) = text_of(&run(ctx));
+            let (text, mentions) = text_of(&run(ctx.clone()));
             assert_eq!(text, "❌ @628111 bukan partner", "{settings}");
             assert_eq!(mentions, vec![ME.to_string()], "{settings}");
         }
@@ -212,7 +212,7 @@ mod tests {
             }),
             ..base()
         };
-        let (text, mentions) = text_of(&run(ctx));
+        let (text, mentions) = text_of(&run(ctx.clone()));
         assert!(text.starts_with("🤝 *DETAIL PARTNER*\n\n"), "{text}");
         assert!(text.contains("👤 User: @628111"), "{text}");
         assert!(text.contains("📛 Nama: *Zann*"), "{text}");
@@ -231,7 +231,7 @@ mod tests {
             }),
             ..base()
         };
-        let (text, _) = text_of(&run(ctx));
+        let (text, _) = text_of(&run(ctx.clone()));
         assert!(text.contains("📊 Sisa: *⚠️ Expired*"), "{text}");
     }
 
@@ -241,7 +241,7 @@ mod tests {
             settings: json!({"partner": [{"id": "628111"}]}),
             ..base()
         };
-        let (text, _) = text_of(&run(ctx));
+        let (text, _) = text_of(&run(ctx.clone()));
         assert!(text.contains("📛 Nama: *Unknown*"), "{text}");
         assert!(text.contains("📅 Mulai: *Unknown*"), "{text}");
         assert!(text.contains("⏳ Expired: *Invalid Date*"), "{text}");
@@ -255,7 +255,7 @@ mod tests {
             user_data: json!({"energi": -1, "koin": 2500}),
             ..base()
         };
-        let (text, _) = text_of(&run(ctx));
+        let (text, _) = text_of(&run(ctx.clone()));
         assert!(text.contains("⚡ Energi: *∞*"), "{text}");
         assert!(text.contains("💰 Koin: *2.500*"), "{text}");
     }
@@ -276,7 +276,7 @@ mod tests {
             settings: json!({"partner": [{"id": "628111", "addedAt": 0, "expired": 0}]}),
             ..base()
         };
-        assert!(run(ctx).mutations().is_empty());
+        assert!(run(ctx.clone()).mutations().is_empty());
     }
 
     #[test]
@@ -286,7 +286,7 @@ mod tests {
             settings: json!({"partner": [{"id": "62811", "addedAt": 0, "expired": 0}]}),
             ..base()
         };
-        let (text, mentions) = text_of(&run(ctx));
+        let (text, mentions) = text_of(&run(ctx.clone()));
         assert!(text.contains("👤 User: @62811"), "{text}");
         assert_eq!(mentions, vec!["62811@s.whatsapp.net".to_string()]);
     }

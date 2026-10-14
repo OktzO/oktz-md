@@ -194,7 +194,7 @@ mod tests {
     #[test]
     fn a_non_string_entry_does_not_match_and_is_preserved_on_write() {
         let g = json!({"antilinkList": [1, null, "x.com"]});
-        let r = run(g, "x.com");
+        let r = run(g.clone(), "x.com");
         assert!(text_of(&r).starts_with("⚠️"), "string ke-3 tetap duplikat");
 
         let r2 = run(json!({"antilinkList": [1, null]}), "x.com");

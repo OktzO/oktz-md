@@ -361,7 +361,7 @@ mod tests {
         // Perbandingan JS terjadi SETELAH `;;`→`\n` dan `trim()`, jadi hanya
         // detail yang benar-benar sama string-nya yang dianggap duplikat.
         for input in ["1|lama@mail", "1|  lama@mail  ", "1| lain@mail"] {
-            let r = run(input, sample(), false);
+            let r = run(input.clone(), sample(), false);
             let t = text_of(&r);
             assert!(t.starts_with("⚠️ *Data stok sudah ada.*"), "input {input}: {t}");
             assert!(t.contains("produk *Netflix*"), "input {input}: {t}");
@@ -372,7 +372,7 @@ mod tests {
     #[test]
     fn a_detail_shorter_than_three_characters_is_refused() {
         for input in ["1|ab", "1|a", "1|  "] {
-            let r = run(input, sample(), false);
+            let r = run(input.clone(), sample(), false);
             assert!(
                 text_of(&r).starts_with("❌ *Detail stok terlalu pendek.*"),
                 "input {input:?}: {}",
@@ -401,7 +401,7 @@ mod tests {
     #[test]
     fn an_out_of_range_product_number_is_refused() {
         for input in ["0|abc", "3|abc", "9|abc", "x|abc"] {
-            let r = run(input, sample(), false);
+            let r = run(input.clone(), sample(), false);
             assert!(
                 text_of(&r).starts_with("❌ *Nomor produk tidak valid.*"),
                 "input {input}: {}",
@@ -435,7 +435,7 @@ mod tests {
     #[test]
     fn a_zero_or_negative_physical_count_is_refused() {
         for input in ["2|0", "2|-5"] {
-            let r = run(input, sample(), false);
+            let r = run(input.clone(), sample(), false);
             assert!(text_of(&r).starts_with("📦 *Produk ini bertipe Fisik*"), "input {input}");
             assert!(r.mutations().is_empty(), "input {input}");
         }
@@ -498,7 +498,7 @@ mod tests {
     #[test]
     fn input_without_a_pipe_on_a_digital_product_falls_back_to_the_help_card() {
         for input in ["", "1", "1 5", "abc", "9 3"] {
-            let r = run(input, sample(), false);
+            let r = run(input.clone(), sample(), false);
             assert!(
                 text_of(&r).starts_with("📦 *TAMBAH STOK*"),
                 "input {input:?}: {}",

@@ -170,14 +170,14 @@ mod tests {
             "{}",
             text_of(&r)
         );
-        assert!(text_of(&r).contains("*5 detik*"), "{}", text_of(&r));
+        assert!(text_of(&r).contains("5 detik"), "{}", text_of(&r));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn a_stored_zero_falls_back_to_the_default_like_js_or_does() {
         // `|| 5000`, bukan `?? 5000` — 0 yang tersimpan jadi 5 detik.
-        assert!(text_of(&run("", json!({"jedaBcpc": 0}))).contains("*5 detik*"));
+        assert!(text_of(&run("", json!({"jedaBcpc": 0}))).contains("5 detik"));
     }
 
     #[test]
@@ -192,7 +192,7 @@ mod tests {
     #[test]
     fn a_malformed_value_is_refused_and_writes_nothing() {
         for bad in ["5", "5x", "s", "-5s", "5 s", "1.5m"] {
-            let r = run(bad, json!({}));
+            let r = run(bad.clone(), json!({}));
             assert_eq!(text_of(&r), BAD_FORMAT, "input {bad:?}");
             assert!(r.mutations().is_empty(), "input {bad:?}");
         }

@@ -186,7 +186,7 @@ mod tests {
     #[test]
     fn no_text_and_no_reply_prints_the_help() {
         for t in ["", "everyone", "everyone |"] {
-            let r = run(t, None);
+            let r = run(t.clone(), None);
             assert_eq!(
                 body(&r),
                 "📢 *HIDETAG PREMIUM*\n\n• Reply pesan lalu ketik `.ht`\n• Atau ketik `.ht <custom tag> | <pesan>`\n\n• Contoh: `.ht everyone | hai semua`\n\nSupport: teks, gambar, video, sticker, audio, dokumen",

@@ -66,4 +66,5 @@ pub mod tagall;
 pub mod topchat;
 pub mod totag;
 pub mod unmute;
+pub mod unmutegc;
 pub mod unmutemember;

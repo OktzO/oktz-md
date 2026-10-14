@@ -226,7 +226,7 @@ mod tests {
     #[test]
     fn deleting_the_only_product_leaves_an_empty_array() {
         let s = json!({"storeProducts": [{"name": "A", "type": "digital", "price": 1, "stockItems": []}]});
-        let r = run(s, "1");
+        let r = run(s.clone(), "1");
         assert!(products_write(&r).is_empty());
         assert!(text_of(&r).contains("0 akun"));
     }
@@ -241,7 +241,7 @@ mod tests {
     fn a_missing_stock_field_shows_the_javascript_stringification() {
         // `deleted.stock + ' pcs'` dengan `stock` undefined -> "undefined".
         let s = json!({"storeProducts": [{"name": "X", "type": "fisik", "price": 10}]});
-        let r = run(s, "1");
+        let r = run(s.clone(), "1");
         assert!(
             text_of(&r).contains("undefined pcs"),
             "{}",

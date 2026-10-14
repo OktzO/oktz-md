@@ -205,7 +205,7 @@ mod tests {
     }
 
     fn plain(group: Value, args: &[&str], mentioned: &[&str]) -> Reply {
-        run(group, args, mentioned, None, GroupRoster::default())
+        run(group.clone(), args, mentioned, None, GroupRoster::default())
     }
 
     fn text_of(r: &Reply) -> &str {

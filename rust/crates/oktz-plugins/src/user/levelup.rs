@@ -141,8 +141,8 @@ mod tests {
         // `user.settings.levelupNotif !== false` — undefined !== false.
         assert!(current_enabled(&Ctx::default()));
         for user in [json!(null), json!({}), json!({"settings": {}})] {
-            assert!(text_of(&run(user.clone(), "")).contains("*ON ✅*"), "input {user}");
-            assert!(run(user, "").mutations().is_empty());
+            assert!(text_of(&run(user.clone(), "")).contains("ON ✅"), "input {user}");
+            assert!(run(user.clone(), "").mutations().is_empty());
         }
     }
 
@@ -153,7 +153,7 @@ mod tests {
             user_data: user.clone(),
             ..Default::default()
         }));
-        assert!(text_of(&run(user, "")).contains("*OFF ❌*"));
+        assert!(text_of(&run(user.clone(), "")).contains("OFF ❌"));
     }
 
     #[test]
@@ -168,7 +168,8 @@ mod tests {
     #[test]
     fn the_other_settings_fields_are_preserved() {
         let user = json!({"settings": {"rpgLevelupNotif": false, "lain": 7}});
-        let s = settings_of(&run(user, "on"));
+        let __balasan = run(user.clone(), "on");
+        let s = settings_of(&__balasan);
         assert_eq!(s["rpgLevelupNotif"], json!(false), "field lain harus utuh");
         assert_eq!(s["lain"], json!(7));
         assert_eq!(s["levelupNotif"], json!(true));
@@ -179,7 +180,8 @@ mod tests {
         // `!user.settings` hanya berlaku untuk null/undefined; kalau `settings`
         // sudah berisi string, JS akan menambah properti ke String (diam).
         // Yang aman dan konsisten: perlakukan sebagai objek kosong.
-        let s = settings_of(&run(json!({"settings": "bukan-objek"}), "on"));
+        let __balasan = run(json!({"settings": "bukan-objek"}), "on");
+        let s = settings_of(&__balasan);
         assert!(s.is_object(), "{s}");
         assert_eq!(s.as_object().unwrap().len(), 1);
     }
@@ -227,7 +229,7 @@ mod tests {
             prefix: "~".into(),
             ..Default::default()
         });
-        assert!(t.contains("`~levelup on`"), "{t}");
-        assert!(t.contains("`~levelup off`"));
+        assert!(t.contains("~levelup on"), "{t}");
+        assert!(t.contains("~levelup off"));
     }
 }

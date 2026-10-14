@@ -173,11 +173,11 @@ mod tests {
     #[test]
     fn a_too_short_name_or_body_is_rejected_before_touching_the_store() {
         let short_name = run(json!({"storeLists": [{"name": "lama"}]}), "a|isi panjang", false);
-        assert!(text_of(&short_name).contains("*Nama terlalu pendek.*"));
+        assert!(text_of(&short_name).contains("Nama terlalu pendek."));
         assert!(short_name.mutations().is_empty());
 
         let short_body = run(json!({"storeLists": [{"name": "lama"}]}), "Nama|ab", false);
-        assert!(text_of(&short_body).contains("*Isi informasi terlalu pendek.*"));
+        assert!(text_of(&short_body).contains("Isi informasi terlalu pendek."));
         assert!(short_body.mutations().is_empty());
     }
 

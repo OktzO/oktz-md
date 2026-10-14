@@ -395,7 +395,7 @@ mod tests {
     }
 
     fn text_of(c: Ctx) -> String {
-        run(c).text_body().expect("harus ada teks").to_string()
+        run(c.clone()).text_body().expect("harus ada teks").to_string()
     }
 
     fn saved_clans(r: &Reply) -> Map<String, Value> {
@@ -615,7 +615,7 @@ mod tests {
             }],
             is_bot_admin: false,
         };
-        let r = run(ctx);
+        let r = run(ctx.clone());
         let set_users: Vec<_> = r
             .mutations()
             .iter()

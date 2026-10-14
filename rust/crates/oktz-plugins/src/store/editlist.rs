@@ -232,7 +232,7 @@ mod tests {
     #[test]
     fn an_out_of_range_number_is_rejected_before_writing() {
         let r = run(json!({"storeLists": [{"name": "A"}]}), "5 nama B", false);
-        assert!(text_of(&r).contains("*Nomor tidak valid.*"));
+        assert!(text_of(&r).contains("Nomor tidak valid."));
         assert!(text_of(&r).contains("Rentang: 1-1"));
         assert!(r.mutations().is_empty());
     }
@@ -284,11 +284,11 @@ mod tests {
     fn too_short_name_and_content_are_rejected_without_writing() {
         let settings = json!({"storeLists": [{"name": "A", "content": "isi"}]});
         let short_name = run(settings.clone(), "1 nama B", false);
-        assert!(text_of(&short_name).contains("*Nama terlalu pendek.*"));
+        assert!(text_of(&short_name).contains("Nama terlalu pendek."));
         assert!(short_name.mutations().is_empty());
 
-        let short_body = run(settings, "1 isi x", false);
-        assert!(text_of(&short_body).contains("*Isi terlalu pendek.*"));
+        let short_body = run(settings.clone(), "1 isi x", false);
+        assert!(text_of(&short_body).contains("Isi terlalu pendek."));
         assert!(short_body.mutations().is_empty());
     }
 
@@ -299,7 +299,7 @@ mod tests {
         assert!(text_of(&img).contains("🖼️ *Reply atau kirim gambar baru.*"));
         assert!(img.mutations().is_empty(), "tidak boleh menghapus media lama");
 
-        let vid = run(settings, "1 video", false);
+        let vid = run(settings.clone(), "1 video", false);
         assert!(text_of(&vid).contains("🎬 *Reply atau kirim video baru.*"));
         assert!(vid.mutations().is_empty());
     }

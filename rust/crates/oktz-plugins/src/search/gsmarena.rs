@@ -499,7 +499,8 @@ mod tests {
     #[test]
     fn two_hits_produce_a_numbered_list_and_no_detail_request() {
         let http = Stub::new(&[("https://www.gsmarena.com/results.php3", TWO_RESULTS)]);
-        let t = text_of(&run(http.clone(), "infinix hot"));
+        let __balasan = run(http.clone(), "infinix hot");
+        let t = text_of(&__balasan);
         assert!(
             t.starts_with("📱 *ʜᴀsɪʟ ᴘᴇɴᴄᴀʀɪᴀɴ*\n> *infinix hot*"),
             "{t}"
@@ -558,7 +559,8 @@ mod tests {
                 DETAIL,
             ),
         ]);
-        let t = text_of(&run(http.clone(), "infinix hot 50"));
+        let __balasan = run(http.clone(), "infinix hot 50");
+        let t = text_of(&__balasan);
         assert!(t.starts_with("📱 *Infinix Hot 50*\n\n"), "{t}");
         assert!(t.contains("📋 *ʀɪɴɢᴋᴀsᴀɴ:*"), "{t}");
         assert!(t.contains("> 🔹 *Display size:* 6.78 inch"), "{t}");

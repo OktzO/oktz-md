@@ -187,7 +187,8 @@ mod tests {
 
     #[test]
     fn a_missing_setting_falls_back_to_the_five_minute_default() {
-        let t = text_of(&run(Value::Null, true));
+        let __balasan = run(Value::Null, true);
+        let t = text_of(&__balasan);
         assert!(t.contains("┃ ◦ Jeda: *5 menit 0 detik*"), "{t}");
         assert!(t.contains("┃ ✅ *READY*"), "{t}");
         assert!(t.contains("Bisa create panel sekarang!"), "{t}");
@@ -196,7 +197,8 @@ mod tests {
 
     #[test]
     fn a_zero_jeda_shows_no_jeda_and_hides_the_remaining_line() {
-        let t = text_of(&run(serde_json::json!({ JEDA_KEY: 0 }), true));
+        let __balasan = run(serde_json::json!({ JEDA_KEY: 0 }), true);
+        let t = text_of(&__balasan);
         assert!(t.contains("┃ ⚡ *NO JEDA*"), "{t}");
         assert!(t.contains("Jeda dinonaktifkan, bebas create!"), "{t}");
         assert!(t.contains("┃ ◦ Jeda: *OFF*"), "{t}");

@@ -317,7 +317,7 @@ mod tests {
     fn the_deleted_item_preview_is_flattened_and_capped_at_fifty() {
         let s = json!({"storeProducts": [{"name": "X", "type": "digital", "price": 1,
             "stockItems": [{"detail": "a\nb\nc"}], "stock": 1}]});
-        let r = run(s, "1 1");
+        let r = run(s.clone(), "1 1");
         assert!(text_of(&r).contains("🔑 Item: `a b c`"), "{}", text_of(&r));
     }
 
@@ -349,7 +349,7 @@ mod tests {
     #[test]
     fn an_unlimited_physical_product_cannot_be_reduced() {
         let s = json!({"storeProducts": [{"name": "Kaos", "type": "fisik", "price": 1, "stock": -1}]});
-        let r = run(s, "1 3");
+        let r = run(s.clone(), "1 3");
         assert!(text_of(&r).starts_with("♾️ *Stok unlimited tidak bisa dikurangi.*"));
         assert!(r.mutations().is_empty());
     }

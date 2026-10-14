@@ -109,7 +109,7 @@ mod tests {
     #[test]
     fn without_an_image_quote_it_shows_the_usage_card() {
         // JS hanya mengunduh kalau `m.quoted?.isImage`; sisanya → `!buffer`.
-        assert_eq!(run(None), usage("."));
+        assert_eq!(run(None.clone()), usage("."));
         for kind in [
             QuotedKind::Text,
             QuotedKind::Video,

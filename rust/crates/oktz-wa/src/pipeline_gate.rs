@@ -158,7 +158,7 @@ fn seed_energi(store: &mut InMemoryEnergi, caller: &Caller, settings: &EnergiSet
         settings.default
     };
     // Tier `-1` (tak terbatas) juga ditulis apa adanya: `charge_energi`
-    //短路 di `-1` dan tidak akan pernah mengarang angka.
+    // hubung pendek di `-1` dan tidak akan pernah mengarang angka.
     store.set_energy(&caller.sender, tier);
 }
 

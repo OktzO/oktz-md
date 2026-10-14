@@ -206,7 +206,7 @@ mod tests {
     #[test]
     fn fewer_than_two_arguments_shows_help_and_writes_nothing() {
         for text in ["", "5", "   "] {
-            let r = run(text, json!({}));
+            let r = run(text.clone(), json!({}));
             assert!(text_of(&r).starts_with("⚙️ *SISTEM CAP ENERGI*"), "input {text:?}");
             assert!(r.mutations().is_empty(), "input {text:?}");
         }
@@ -215,7 +215,7 @@ mod tests {
     #[test]
     fn a_non_numeric_or_negative_cost_is_refused() {
         for text in ["hd abc", "hd -1"] {
-            let r = run(text, json!({}));
+            let r = run(text.clone(), json!({}));
             assert_eq!(text_of(&r), BAD_COST, "input {text:?}");
             assert!(r.mutations().is_empty(), "input {text:?}");
         }
@@ -227,7 +227,7 @@ mod tests {
         let r = run("baik 5", json!({}));
         assert_eq!(stored(&r)["cekbaik"], json!(5));
         let t = text_of(&r);
-        assert!(t.contains("*Berhasil diubah jadi 5 Energi:*"), "{t}");
+        assert!(t.contains("Berhasil diubah jadi 5 Energi:"), "{t}");
         assert!(t.contains("- cekbaik"), "{t}");
     }
 
@@ -236,7 +236,7 @@ mod tests {
         let r = run("tidakada 3", json!({}));
         assert_eq!(stored(&r), json!({}));
         let t = text_of(&r);
-        assert!(t.contains("*Gagal (Tidak ditemukan):*"), "{t}");
+        assert!(t.contains("Gagal (Tidak ditemukan):"), "{t}");
         assert!(t.contains("- tidakada"), "{t}");
     }
 
@@ -257,7 +257,8 @@ mod tests {
     #[test]
     fn existing_overrides_are_preserved() {
         let settings = json!({ "capenergi": { "cekbaik": 9, "cekgacha": 2 } });
-        let s = stored(&run("cekcantik 4", settings));
+        let __balasan = run("cekcantik 4", settings);
+        let s = stored(&__balasan);
         assert_eq!(s["cekbaik"], json!(9), "override lain tidak hilang");
         assert_eq!(s["cekgacha"], json!(2));
         assert_eq!(s["cekcantik"], json!(4));

@@ -175,7 +175,7 @@ mod tests {
     #[test]
     fn no_level_count_shows_help_and_writes_nothing() {
         for msg in ["", "@628999", "abc", "0"] {
-            let r = run(msg, json!({}), Some(OTHER));
+            let r = run(msg.clone(), json!({}), Some(OTHER));
             assert!(text_of(&r).starts_with("📊 *ADD LEVEL*"), "input {msg:?}");
             assert!(r.mutations().is_empty(), "input {msg:?}");
         }

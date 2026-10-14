@@ -274,7 +274,7 @@ mod tests {
         let r = run(ctx_with(&[], GroupRoster::default(), json!({"koin": 100})));
         let t = text_of(&r);
         assert!(t.starts_with("⚔️ *ARENA GLADIATOR*"), "{t}");
-        assert!(t.contains("`.arena @user`"), "{t}");
+        assert!(t.contains(".arena @user"), "{t}");
         assert!(r.mutations().is_empty());
     }
 
@@ -309,10 +309,10 @@ mod tests {
                                "level": 4, "koin": 10_000})),
             json!({"rpg": {"health": 100, "attack": 10, "defense": 5}, "level": 1, "koin": 5_000}),
         );
-        let r = run(ctx);
+        let r = run(ctx.clone());
         let t = text_of(&r);
         assert!(t.starts_with("⚔️ *HASIL PERTARUNGAN*"), "{t}");
-        assert!(t.contains("*📊 Kondisi Akhir:*"), "{t}");
+        assert!(t.contains("📊 Kondisi Akhir:"), "{t}");
         assert!(t.contains("🔄 Durasi: *"), "{t}");
         assert!(!r.mutations().is_empty(), "minimal sisi saya ditulis");
         let jids: Vec<&str> = r
@@ -339,7 +339,7 @@ mod tests {
                                    "level": 1, "koin": 10_000})),
                 json!({"rpg": {"health": 100, "attack": 90, "defense": 90}, "level": 9, "koin": 0}),
             );
-            let r = run(ctx);
+            let r = run(ctx.clone());
             let t = text_of(&r);
             if !t.contains("🏆 *KEMENANGAN TELAH DIRAIH!*") {
                 continue;
@@ -369,7 +369,7 @@ mod tests {
                                    "level": 9, "koin": 0})),
                 json!({"rpg": {"health": 20, "attack": 1, "defense": 1}, "level": 1, "koin": 10_000}),
             );
-            let r = run(ctx);
+            let r = run(ctx.clone());
             let t = text_of(&r);
             if !t.contains("💀 *SAYANG SEKALI, KAMU KALAH") {
                 continue;

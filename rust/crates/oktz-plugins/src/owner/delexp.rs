@@ -199,7 +199,7 @@ mod tests {
     #[test]
     fn no_amount_shows_help_and_writes_nothing() {
         for text in ["", "@628999", "abc"] {
-            let r = run(text, json!({}), Some(OTHER));
+            let r = run(text.clone(), json!({}), Some(OTHER));
             assert!(text_of(&r).starts_with("⭐ *ᴅᴇʟ ᴇxᴘ*"), "input {text:?}");
             assert!(r.mutations().is_empty(), "input {text:?}");
         }

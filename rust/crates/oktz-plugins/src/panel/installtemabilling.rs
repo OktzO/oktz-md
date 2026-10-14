@@ -4,7 +4,7 @@
 //! `ponytail:` hanya guard + validasinya yang dipindah. Langkah JS setelah
 //! `m.react('🕕')` — `new ssh2.Client()`, `.connect()`, tiga `execSSH` — butuh
 //! soket TCP yang tidak ada di `Ctx`, jadi tidak bisa di-port; balasannya
-//! 대신 memberi tahu host mana yang tidak bisa disentuh. `parse_input` dipakai
+//! gantinya memberi tahu host mana yang tidak bisa disentuh. `parse_input` dipakai
 //! juga oleh `uninstalltema.rs` (lihat laporan batch).
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
@@ -115,7 +115,8 @@ mod tests {
     #[test]
     fn an_empty_argument_shows_the_usage_with_the_live_prefix() {
         for empty in ["", "   "] {
-            let t = text_of(&run(empty));
+            let __balasan = run(empty.clone());
+            let t = text_of(&__balasan);
             assert!(t.starts_with("╭┈┈⬡「 🎨 *ɪɴsᴛᴀʟʟ ᴛᴇᴍᴀ ʙɪʟʟɪɴɢ* 」"), "{t}");
             assert!(t.contains("`.installtemabilling <ip>|<password>`"), "{t}");
             assert!(t.contains("Contoh: .installtemabilling 192.168.1.1|secretpass"), "{t}");
@@ -125,7 +126,7 @@ mod tests {
     #[test]
     fn a_single_field_is_rejected_before_anything_else_happens() {
         for bad in ["192.168.1.1", "  1.2.3.4  "] {
-            assert_eq!(text_of(&run(bad)), BAD_FORMAT, "input {bad:?}");
+            assert_eq!(text_of(&run(bad.clone())), BAD_FORMAT, "input {bad:?}");
         }
     }
 
@@ -145,7 +146,8 @@ mod tests {
 
     #[test]
     fn a_valid_pair_names_the_host_that_cannot_be_reached() {
-        let t = text_of(&run("192.168.1.1|secretpass"));
+        let __balasan = run("192.168.1.1|secretpass");
+        let t = text_of(&__balasan);
         assert!(t.contains("tidak tersedia di port Rust"), "{t}");
         assert!(t.contains("`ssh2` tidak ada di `Ctx`"), "{t}");
         assert!(t.contains("192.168.1.1"), "IP harus tampil: {t}");

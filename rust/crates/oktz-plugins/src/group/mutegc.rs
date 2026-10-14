@@ -1,58 +1,43 @@
 //! `plugins/group/mutegc.js` — `groups[chat].mutegc = true`.
 //!
-//! Efeknya dibaca router lewat `isMutegc` (function diekspor JS, bukan
-//! perintah), jadi yang ditulis di sini hanya flag-nya.
+//! Efeknya dibaca `handler.js:829` lewat `isMutegc`, jadi yang ditulis di sini
+//! hanya flag-nya.
 //!
-//! `ponytail:` `m.groupMetadata.subject` diambil dari `groups[chat].name`, yang
-//! `handler.js:327` isi dari `meta.subject` — sama seperti `group/mute.rs`.
-//! Kalau store belum pernah menyimpan nama, teksnya jatuh ke nilai cadangan JS
-//! `"grup ini"`.
-//!
-//! `ponytail:` `saluranCtx()` menempelkan `contextInfo` ber-forwarding saluran
-//! pada dua dari empat balasan. `Reply` tidak punya field contextInfo, jadi
-//! empat balasan di sini teksnya sama persis dan forwarding-nya hilang.
+//! `ponytail:` `m.groupMetadata.subject` diambil dari `groups[chat].name`
+//! (pola yang sama dengan `mute.rs`). `Ctx` tidak membawa subject langsung.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
+use serde_json::Value;
 
-use crate::common::js_truthy;
+use crate::common::js_truthy_value;
 
-/// Nilai cadangan `m.groupMetadata?.subject || 'grup ini'`.
+/// `m.groupMetadata?.subject || "grup ini"` — nilai cadangan dari JS.
 pub(crate) const NO_GROUP_NAME: &str = "grup ini";
 
-/// `isMutegc(groupJid, db)` (`mutegc.js:41`) — dibaca router sebelum
-/// menjalankan command member. Parameter JS-nya `(groupJid, db)`; di sini
-/// `Ctx` sudah membawa baris grup untuk `chat`, jadi cukup blok datanya.
-pub(crate) fn is_mutegc(group_data: &serde_json::Value) -> bool {
-    js_truthy(group_data.get("mutegc"))
-}
+/// `mutegc.js:33` — sudah aktif.
+pub(crate) const ALREADY_ON: &str = "🔇 *Mute GC Sudah Aktif*\n\n\
+    > Member tidak bisa menggunakan command bot di grup ini\n\
+    > Hanya admin grup dan owner bot yang bisa akses\n\n\
+    _Ketik *{prefix}unmutegc* untuk membuka_";
 
-/// `m.groupMetadata?.subject || 'grup ini'` → `groups[chat].name`.
-fn subject(ctx: &Ctx) -> &str {
-    ctx.group_field("name")
-        .and_then(serde_json::Value::as_str)
-        .filter(|s| !s.is_empty())
-        .unwrap_or(NO_GROUP_NAME)
-}
-
-/// Cabang `if (groupData.mutegc)` (`mutegc.js:24-32`).
 pub(crate) fn already_on(prefix: &str) -> String {
-    format!(
-        "🔇 *Mute GC Sudah Aktif*\n\n\
-         > Member tidak bisa menggunakan command bot di grup ini\n\
-         > Hanya admin grup dan owner bot yang bisa akses\n\n\
-         _Ketik *{prefix}unmutegc* untuk membuka_"
-    )
+    ALREADY_ON.replace("{prefix}", prefix)
 }
 
-/// Cabang setelah `db.setGroup` (`mutegc.js:34-44`).
-pub(crate) fn applied(prefix: &str, group: &str) -> String {
+pub(crate) fn now_on(prefix: &str, group_name: &str) -> String {
     format!(
         "🔇 *Mute GC Aktif*\n\n\
-         > Grup: *{group}*\n\
+         > Grup: *{group_name}*\n\
          > Member tidak bisa menggunakan command bot\n\
          > Admin grup dan owner bot tetap bisa akses\n\n\
          _Ketik *{prefix}unmutegc* untuk membuka_"
     )
+}
+
+/// `isMutegc(groupJid, db)` (`mutegc.js:52`) — middleware cuma butuh
+/// kebenaran flag grup, jadi cukup menerima objek grup dari store.
+pub(crate) fn is_mutegc(group_data: &Value) -> bool {
+    group_data.get("mutegc").is_some_and(js_truthy_value)
 }
 
 #[plugin(
@@ -66,8 +51,6 @@ pub(crate) fn applied(prefix: &str, group: &str) -> String {
     energi = 0,
     is_group = true,
     is_private = false,
-    is_owner = false,
-    is_premium = false,
     is_admin = true,
     is_bot_admin = false
 )]
@@ -75,8 +58,12 @@ pub fn mutegc(ctx: Ctx) -> Reply {
     if is_mutegc(&ctx.group_data) {
         return Reply::text(already_on(&ctx.prefix));
     }
-
-    Reply::text(applied(&ctx.prefix, subject(&ctx))).with_mutation(Mutation::SetGroup {
+    let group_name = ctx
+        .group_field("name")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(NO_GROUP_NAME);
+    Reply::text(now_on(&ctx.prefix, group_name)).with_mutation(Mutation::SetGroup {
         jid: ctx.chat.clone(),
         data: serde_json::json!({ "mutegc": true }),
     })
@@ -85,7 +72,8 @@ pub fn mutegc(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+
+    use serde_json::json;
 
     fn run(group: Value) -> Reply {
         let ctx = Ctx {
@@ -130,12 +118,12 @@ mod tests {
         assert_eq!(p.meta.cooldown, 5);
         assert_eq!(p.meta.energi, 0);
         assert!(p.meta.is_group && p.meta.is_admin && !p.meta.is_private);
-        assert!(!p.meta.is_owner && !p.meta.is_premium);
         assert!(!p.meta.is_bot_admin, "isBotAdmin: false di JS");
+        assert!(!p.meta.is_owner && !p.meta.is_premium);
     }
 
     #[test]
-    fn every_alias_resolves_to_this_plugin() {
+    fn every_alias_resolves_here() {
         for a in ["mutegrup", "mutebot", "blockbot", "lockbot"] {
             assert_eq!(oktz_plugin_api::find(a).unwrap().meta.name, "mutegc");
         }
@@ -143,7 +131,7 @@ mod tests {
 
     #[test]
     fn muting_writes_the_flag_and_names_the_group() {
-        let r = run(json!({ "name": "Grup Diskusi" }));
+        let r = run(json!({"name": "Grup Diskusi"}));
         assert_eq!(
             text_of(&r),
             "🔇 *Mute GC Aktif*\n\n\
@@ -152,65 +140,66 @@ mod tests {
              > Admin grup dan owner bot tetap bisa akses\n\n\
              _Ketik *.unmutegc* untuk membuka_"
         );
-        assert_eq!(group_write(&r), &json!({ "mutegc": true }));
+        assert_eq!(group_write(&r), &json!({"mutegc": true}));
     }
 
     #[test]
-    fn a_group_that_is_already_muted_is_left_alone() {
-        // `if (groupData.mutegc)` di JS = `!m0`: objek kosong pun truthy.
+    fn a_group_already_muted_is_left_alone() {
+        // `if (groupData.mutegc)` = `!m0`, jadi `1`/`"ya"`/`{}` ikut truthy.
         for truthy in [json!(true), json!(1), json!("ya"), json!({})] {
-            let r = run(json!({ "mutegc": truthy.clone(), "name": "G" }));
+            let r = run(json!({"mutegc": truthy.clone(), "name": "G"}));
             assert_eq!(text_of(&r), already_on("."), "input mutegc={truthy}");
-            assert!(r.mutations().is_empty(), "tidak boleh menulis ulang: {truthy}");
+            assert!(
+                r.mutations().is_empty(),
+                "tidak boleh menulis ulang: {truthy}"
+            );
         }
     }
 
     #[test]
-    fn a_falsy_stored_flag_still_lets_the_mute_through() {
+    fn a_falsy_stored_flag_still_lets_the_write_through() {
         for falsy in [json!(false), json!(0), json!(""), json!(null)] {
-            let r = run(json!({ "mutegc": falsy.clone(), "name": "G" }));
-            assert_eq!(group_write(&r), &json!({ "mutegc": true }), "input {falsy}");
+            let r = run(json!({"mutegc": falsy.clone()}));
+            assert_eq!(group_write(&r), &json!({"mutegc": true}), "mutegc={falsy}");
         }
     }
 
     #[test]
     fn a_group_row_without_a_name_falls_back_instead_of_printing_undefined() {
-        let r = run(json!({}));
-        assert_eq!(
-            text_of(&r),
-            applied(".", NO_GROUP_NAME),
-            "nama kosong harus jatuh ke fallback JS"
-        );
-        assert_eq!(text_of(&r), applied("~", NO_GROUP_NAME).replace('~', "."));
+        for row in [json!({}), json!({"name": ""}), json!({"name": 5})] {
+            let r = run(row.clone());
+            assert!(
+                text_of(&r).contains(&format!("> Grup: *{NO_GROUP_NAME}*")),
+                "{}",
+                text_of(&r)
+            );
+        }
     }
 
     #[test]
-    fn the_live_prefix_is_used_in_both_branches() {
+    fn the_prefix_comes_from_the_context_not_the_default() {
         let ctx = Ctx {
             prefix: "!".into(),
-            command: "mutegc".into(),
-            sender: "628111@s.whatsapp.net".into(),
             chat: "120363@g.us".into(),
-            is_group: true,
-            group_data: json!({ "name": "G" }),
+            group_data: json!({}),
             ..Default::default()
-        };
-        let r = (oktz_plugin_api::find("mutegc").unwrap().handler)(ctx.clone());
-        assert!(text_of(&r).contains("!unmutegc"), "{}", text_of(&r));
-
-        let ctx = Ctx {
-            group_data: json!({ "mutegc": true }),
-            ..ctx
         };
         let r = (oktz_plugin_api::find("mutegc").unwrap().handler)(ctx);
         assert!(text_of(&r).contains("!unmutegc"), "{}", text_of(&r));
     }
 
     #[test]
-    fn the_router_helper_reads_the_same_flag_the_handler_writes() {
-        assert!(is_mutegc(&json!({ "mutegc": true })));
-        assert!(!is_mutegc(&json!({ "mutegc": false })));
-        assert!(!is_mutegc(&json!({})), "grup tanpa field = belum dimute");
-        assert!(!is_mutegc(&Value::Null), "grup yang belum pernah ada");
+    fn the_exported_helper_matches_the_truthiness_the_handler_uses() {
+        for truthy in [json!(true), json!(1), json!("ya"), json!({})] {
+            assert!(is_mutegc(&json!({ "mutegc": truthy.clone() })), "{truthy}");
+        }
+        for falsy in [json!(false), json!(0), json!(""), json!(null)] {
+            assert!(!is_mutegc(&json!({ "mutegc": falsy.clone() })), "{falsy}");
+        }
+        assert!(!is_mutegc(&json!({})), "grup tanpa field = tidak aktif");
+        assert!(
+            !is_mutegc(&Value::Null),
+            "grup belum pernah ada = tidak aktif"
+        );
     }
 }

@@ -257,7 +257,7 @@ mod tests {
             }),
             ..base()
         };
-        let (text, mentions) = text_of(&run(ctx));
+        let (text, mentions) = text_of(&run(ctx.clone()));
         assert!(text.starts_with("📋 *CEK USER INFO*\n\n"), "{text}");
         assert!(text.contains("👤 User: @628111"), "{text}");
         assert!(
@@ -282,7 +282,7 @@ mod tests {
             user_data: json!({"energi": -1, "koin": -1, "level": 12}),
             ..base()
         };
-        let (text, _) = text_of(&run(ctx));
+        let (text, _) = text_of(&run(ctx.clone()));
         assert!(text.contains("⚡ Energi: *∞*"), "{text}");
         assert!(text.contains("💰 Koin: *∞*"), "{text}");
         assert!(text.contains("⭐ Level: *12*"), "{text}");
@@ -294,7 +294,7 @@ mod tests {
             user_data: json!({"koin": 12500}),
             ..base()
         };
-        let (text, _) = text_of(&run(ctx));
+        let (text, _) = text_of(&run(ctx.clone()));
         assert!(text.contains("⚡ Energi: *0*"), "energi null -> 0: {text}");
         assert!(text.contains("💰 Koin: *12.500*"), "{text}");
         assert!(text.contains("⭐ Level: *1*"), "level null -> 1: {text}");
@@ -316,7 +316,7 @@ mod tests {
             user_data: json!({"level": 3}),
             ..base()
         };
-        assert!(run(ctx).mutations().is_empty());
+        assert!(run(ctx.clone()).mutations().is_empty());
     }
 
     #[test]

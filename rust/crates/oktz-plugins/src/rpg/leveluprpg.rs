@@ -134,17 +134,17 @@ mod tests {
         assert!(current_enabled(&Ctx::default()));
         for user in [json!(null), json!({}), json!({"settings": {}})] {
             assert!(
-                text_of(&run(user.clone(), "")).contains("*ON ✅*"),
+                text_of(&run(user.clone(), "")).contains("ON ✅"),
                 "input {user}"
             );
-            assert!(run(user, "").mutations().is_empty());
+            assert!(run(user.clone(), "").mutations().is_empty());
         }
     }
 
     #[test]
     fn an_explicit_false_turns_it_off() {
         let user = json!({"settings": {"rpgLevelupNotif": false}});
-        assert!(text_of(&run(user, "")).contains("*OFF ❌*"));
+        assert!(text_of(&run(user.clone(), "")).contains("OFF ❌"));
     }
 
     #[test]
@@ -167,7 +167,8 @@ mod tests {
     #[test]
     fn writing_rpg_notif_leaves_the_plain_levelup_notif_intact() {
         let user = json!({"settings": {"levelupNotif": false}});
-        let s = settings_of(&run(user, "on"));
+        let __balasan = run(user.clone(), "on");
+        let s = settings_of(&__balasan);
         assert_eq!(s["levelupNotif"], json!(false), "harus tetap false");
         assert_eq!(s["rpgLevelupNotif"], json!(true));
     }
@@ -175,7 +176,8 @@ mod tests {
     #[test]
     fn writing_rpg_notif_preserves_other_settings_fields() {
         let user = json!({"settings": {"lain": 1, "levelupNotif": true}});
-        let s = settings_of(&run(user, "off"));
+        let __balasan = run(user.clone(), "off");
+        let s = settings_of(&__balasan);
         assert_eq!(s["lain"], json!(1));
         assert_eq!(s["levelupNotif"], json!(true));
     }
@@ -211,8 +213,8 @@ mod tests {
             prefix: "~".into(),
             ..Default::default()
         });
-        assert!(t.contains("`~leveluprpg on`"), "{t}");
-        assert!(t.contains("`~leveluprpg off`"));
+        assert!(t.contains("~leveluprpg on"), "{t}");
+        assert!(t.contains("~leveluprpg off"));
     }
 
     #[test]

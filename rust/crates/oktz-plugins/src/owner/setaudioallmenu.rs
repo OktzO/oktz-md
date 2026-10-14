@@ -146,7 +146,8 @@ mod tests {
 
     #[test]
     fn an_empty_argument_shows_the_legend_with_the_stored_style() {
-        let t = body(&run("", json!({"allmenuAudioStyle": 3})));
+        let __balasan = run("", json!({"allmenuAudioStyle": 3}));
+        let t = body(&__balasan);
         assert!(t.starts_with("⚠️ *PENGATURAN AUDIO ALL MENU*"), "{t}");
         assert!(t.contains("Saat ini All Menu menggunakan varian: *3*"), "{t}");
         assert!(run("", json!({})).mutations().is_empty());
@@ -178,7 +179,7 @@ mod tests {
     #[test]
     fn a_style_out_of_range_is_rejected_without_writing() {
         for input in ["0", "5", "-1", "99"] {
-            let r = run(input, json!({}));
+            let r = run(input.clone(), json!({}));
             assert!(body(&r).starts_with("❌ *GAGAL*"), "input {input}: {}", body(&r));
             assert!(
                 body(&r).contains("harus berupa angka 1 sampai 4"),
@@ -193,7 +194,7 @@ mod tests {
         // `parseInt` JS: hanya yang benar-benar bukan angka yang ditolak —
         // `"1-4"` bukan salah satunya, dia mulai dari `1`.
         for input in ["abc", "x2", "--3", "e4", "+"] {
-            let r = run(input, json!({}));
+            let r = run(input.clone(), json!({}));
             assert!(body(&r).starts_with("❌ *GAGAL*"), "input {input}: {}", body(&r));
             assert!(r.mutations().is_empty(), "input {input}");
         }
@@ -212,7 +213,7 @@ mod tests {
         // `parseInt("1-4")` = 1 dan `parseInt("3px")` = 3 — keduanya sah,
         // meski kelihatannya bukan angka bulat utuh.
         for (input, style) in [("1-4", 1), ("3px", 3), ("  4  ", 4)] {
-            let r = run(input, json!({}));
+            let r = run(input.clone(), json!({}));
             assert!(
                 body(&r).contains(&format!("*Varian {style}*")),
                 "input {input:?}: {}",

@@ -46,6 +46,7 @@ pub mod parkir;
 pub mod pet;
 pub mod petshop;
 pub mod quest;
+pub mod rob;
 pub mod sellall;
 pub mod shop;
 pub mod steal;

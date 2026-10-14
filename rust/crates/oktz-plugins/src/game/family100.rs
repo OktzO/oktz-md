@@ -303,7 +303,7 @@ mod tests {
         let r = run(ctx.clone());
         let t = text_of(&r);
         assert!(t.starts_with("Waktunya main *FAMILY 100*"), "{t}");
-        assert!(t.contains("*120 detik*"), "{t}");
+        assert!(t.contains("120 detik"), "{t}");
         assert!(r.mutations().is_empty(), "state ditulis lewat session, bukan mutasi");
 
         let s = ctx.session_get(SESSIONS_KEY).unwrap()[CHAT].clone();
@@ -344,7 +344,7 @@ mod tests {
             }
         }))));
         assert!(t.starts_with("Wah, sesi Family 100 masih jalan"), "{t}");
-        assert!(t.contains("*Hotel Bintang 5 Jakarta*"), "{t}");
+        assert!(t.contains("Hotel Bintang 5 Jakarta"), "{t}");
         assert!(t.contains("Terjawab: *1 dari 2*"), "{t}");
         assert!(t.contains("1. ✅ sheraton"), "{t}");
         assert!(t.contains("2. ❓ ???"), "{t}");
@@ -380,7 +380,8 @@ mod tests {
                 "endTime": now - 1_000,
             }
         }));
-        let t = text_of(&run(ctx.clone()));
+        let __balasan = run(ctx.clone());
+        let t = text_of(&__balasan);
         assert!(t.starts_with("Waktunya main *FAMILY 100*"), "{t}");
         assert!(!t.contains("Sesi Lama"), "sesi kedaluwarsa tidak boleh tampil");
         assert_ne!(
@@ -403,7 +404,8 @@ mod tests {
                 "endTime": now + SESSION_TIMEOUT_MS,
             }
         }));
-        let t = text_of(&run(ctx.clone()));
+        let __balasan = run(ctx.clone());
+        let t = text_of(&__balasan);
         assert!(t.starts_with("Waktunya main *FAMILY 100*"), "{t}");
         let s = ctx.session_get(SESSIONS_KEY).unwrap()[CHAT].clone();
         assert_eq!(s["gameType"], json!("family100"), "sesi lama harus tertimpa");

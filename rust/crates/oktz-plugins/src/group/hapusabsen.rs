@@ -183,7 +183,7 @@ mod tests {
     #[test]
     fn a_session_without_keterangan_prints_the_js_undefined() {
         let s = with_session(json!({"peserta": []}));
-        let r = run(s);
+        let r = run(s.clone());
         assert!(text_of(&r).contains("📝 undefined"), "{}", text_of(&r));
     }
 }

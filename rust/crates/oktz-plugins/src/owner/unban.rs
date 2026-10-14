@@ -252,7 +252,7 @@ mod tests {
     #[test]
     fn a_number_outside_the_length_bounds_is_rejected_before_any_lookup() {
         for bad in ["", "628", "628123456789012345678"] {
-            let r = run(bad, &[], None, json!({"bannedUsers": ["6281234567890"]}));
+            let r = run(bad.clone(), &[], None, json!({"bannedUsers": ["6281234567890"]}));
             assert!(text_of(&r).starts_with(NO_TARGET), "arg {bad:?}");
             assert!(r.mutations().is_empty(), "arg {bad:?}");
         }

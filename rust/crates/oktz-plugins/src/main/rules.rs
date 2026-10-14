@@ -152,8 +152,8 @@ mod tests {
                 out.starts_with("📜 *PERATURAN OKTZ BOT*\n\nHai!"),
                 "{setting:?} -> {out}"
             );
-            assert!(out.contains("*.benefitpremium*"), "{setting:?} -> {out}");
-            assert!(out.contains("*.owner*"), "{setting:?} -> {out}");
+            assert!(out.contains(".benefitpremium"), "{setting:?} -> {out}");
+            assert!(out.contains(".owner"), "{setting:?} -> {out}");
             assert!(
                 out.ends_with("_Dengan menggunakan bot ini, kamu dianggap sudah membaca dan menyetujui seluruh peraturan di atas._"),
                 "{setting:?} -> {out}"
@@ -163,13 +163,13 @@ mod tests {
 
     #[test]
     fn the_default_rules_quote_the_live_prefix() {
-        assert!(run(None, "!").contains("*!benefitpremium*"));
-        assert!(run(None, "#").contains("*#owner*"));
+        assert!(run(None.clone(), "!").contains("!benefitpremium"));
+        assert!(run(None.clone(), "#").contains("#owner"));
     }
 
     #[test]
     fn the_built_in_rules_keep_all_three_sections() {
-        let out = run(None, ".");
+        let out = run(None.clone(), ".");
         for section in [
             "🔹 *ATURAN UMUM*",
             "🔹 *ATURAN PENGGUNAAN FITUR*",

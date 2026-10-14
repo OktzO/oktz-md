@@ -118,7 +118,7 @@ mod tests {
     #[test]
     fn a_bare_command_shows_the_usage_card() {
         for input in ["", "   "] {
-            let t = run(input);
+            let t = run(input.clone());
             assert!(t.starts_with("⚠️ *ᴄᴀʀᴀ ᴘᴀᴋᴀɪ*"), "input {input:?}: {t}");
             assert!(t.contains("> `.setbio Bio bot baru`"), "{t}");
             assert!(t.contains("> `.setbio clear` - Hapus bio"), "{t}");
@@ -156,7 +156,7 @@ mod tests {
     #[test]
     fn the_action_never_claims_the_bio_was_changed() {
         for input in ["halo", "clear", "a", &"x".repeat(200)] {
-            let t = run(input);
+            let t = run(input.clone());
             assert!(
                 !t.contains("Bio bot sekarang") && !t.contains("berhasil dihapus"),
                 "input {input:?}: teks sukses JS tidak boleh dipakai — {t}"

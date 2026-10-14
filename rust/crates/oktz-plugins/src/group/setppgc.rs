@@ -101,7 +101,7 @@ mod tests {
 
     #[test]
     fn without_a_reply_it_prints_the_prefixed_usage() {
-        let r = run(None);
+        let r = run(None.clone());
         assert_eq!(
             body(&r),
             "⚠️ *ᴄᴀʀᴀ ᴘᴀᴋᴀɪ*\n\n\

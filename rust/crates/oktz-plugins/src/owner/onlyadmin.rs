@@ -162,7 +162,7 @@ mod tests {
     }
 
     fn private(command: &str, args: &str, settings: Value) -> Reply {
-        run(command, args, false, Value::Null, settings)
+        run(command.clone(), args, false, Value::Null, settings)
     }
 
     fn text_of(r: &Reply) -> &str {

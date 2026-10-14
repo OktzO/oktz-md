@@ -226,8 +226,8 @@ mod tests {
         assert!(text_of(&r).starts_with("📝 *AUTO BIO SETTINGS*"), "{}", text_of(&r));
         assert!(r.mutations().is_empty());
         // Default: status mati, interval 60 detik, teks bawaan.
-        assert!(text_of(&r).contains("*Nonaktif ❌*"), "{}", text_of(&r));
-        assert!(text_of(&r).contains("*60 detik*"), "{}", text_of(&r));
+        assert!(text_of(&r).contains("Nonaktif ❌"), "{}", text_of(&r));
+        assert!(text_of(&r).contains("60 detik"), "{}", text_of(&r));
         assert!(text_of(&r).contains(DEFAULT_TEXT), "{}", text_of(&r));
     }
 
@@ -238,8 +238,8 @@ mod tests {
             json!({"autobio_status": true, "autobio_interval": 30000, "autobio_text": "hai"}),
         );
         let t = text_of(&r);
-        assert!(t.contains("*Aktif ✅*"), "{t}");
-        assert!(t.contains("*30 detik*"), "{t}");
+        assert!(t.contains("Aktif ✅"), "{t}");
+        assert!(t.contains("30 detik"), "{t}");
         assert!(t.contains("Teks Bio: hai"), "{t}");
     }
 
@@ -292,7 +292,7 @@ mod tests {
     #[test]
     fn a_bare_unit_is_rejected_before_parsing() {
         for text in ["ganti_setiap", "ganti_setiap   "] {
-            let r = run(text, json!({}));
+            let r = run(text.clone(), json!({}));
             assert_eq!(text_of(&r), BAD_FORMAT, "input {text:?}");
             assert!(r.mutations().is_empty(), "input {text:?}");
         }

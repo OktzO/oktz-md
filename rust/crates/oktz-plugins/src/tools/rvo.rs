@@ -110,7 +110,7 @@ mod tests {
 
     #[test]
     fn without_a_quote_it_asks_for_one() {
-        assert_eq!(body(&run(None)), no_quote("."));
+        assert_eq!(body(&run(None.clone())), no_quote("."));
     }
 
     #[test]

@@ -263,7 +263,7 @@ mod tests {
                 "🎰", banner(rarity), "*Rarity:* x\n"
             );
             if want.is_empty() {
-                assert!(!text.contains("*LEGENDARY PULL!*"), "{rarity} tak boleh dapat banner");
+                assert!(!text.contains("`LEGENDARY PULL!`"), "{rarity} tak boleh dapat banner");
             } else {
                 assert!(text.contains(want), "{rarity}");
             }

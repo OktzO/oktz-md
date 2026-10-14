@@ -278,7 +278,7 @@ mod tests {
     #[test]
     fn the_group_branch_sends_the_same_text() {
         let s = json!({"storeProducts": [{"name": "A", "price": 1000, "stock": 1}]});
-        assert_eq!(text_of(&run(s.clone(), "", true)), text_of(&run(s, "", false)));
+        assert_eq!(text_of(&run(s.clone(), "", true)), text_of(&run(s.clone(), "", false)));
     }
 
     #[test]

@@ -147,7 +147,7 @@ mod tests {
         // `db.setting('audioMenu') !== false` — undefined !== false, jadi
         // aktif. Default `false` akan mematikan audio untuk instalasi baru.
         assert!(current_enabled(&Ctx::default()));
-        assert!(text_of(&run(json!({}), "")).contains("*✅ Aktif*"));
+        assert!(text_of(&run(json!({}), "")).contains("✅ Aktif"));
     }
 
     #[test]

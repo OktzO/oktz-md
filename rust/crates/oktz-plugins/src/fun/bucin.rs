@@ -469,7 +469,8 @@ mod tests {
 
     #[test]
     fn an_argument_is_ignored_just_like_in_js() {
-        let t = text_of(&run("dong"));
+        let __balasan = run("dong");
+        let t = text_of(&__balasan);
         assert!(t.starts_with("```\""), "{t}");
     }
 

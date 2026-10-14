@@ -200,7 +200,7 @@ mod tests {
 
     #[test]
     fn the_header_keeps_the_js_whitespace_between_the_title_and_the_list() {
-        // `\n        \n` di JS — spasi ikut ke 사용자.
+        // `\n        \n` di JS — spasi ikut ke pengguna.
         let out = run();
         let idx = out.find("\n        \n").expect("jarak kosong JS hilang");
         assert!(out[idx + 10..].starts_with("*1. *hyuuOkkotsuX*"), "{out}");

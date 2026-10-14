@@ -141,7 +141,7 @@ mod tests {
 
     #[test]
     fn without_a_session_the_reply_is_the_same_as_absen() {
-        let r = run(None);
+        let r = run(None.clone());
         assert_eq!(text_of(&r), NO_SESSION);
         assert!(mentions_of(&r).is_empty());
     }

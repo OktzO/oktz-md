@@ -236,7 +236,7 @@ mod tests {
         // Guard lolos, tapi langkah media belum bisa di-port (lihat
         // `ponytail:` modul) — cabang `catch` JS yang dipakai.
         for text in ["Foto-AI", "Foto-AI|LuckyArchz", "  Foto-AI  |  Lucky  "] {
-            let r = run(text, quoted(QuotedKind::Sticker));
+            let r = run(text.clone(), quoted(QuotedKind::Sticker));
             assert_eq!(text_of(&r), error_reply(".", "swm"), "input {text:?}");
             assert!(
                 matches!(r.without_mutations(), Reply::Reaction { emoji, .. } if emoji == "☢"),

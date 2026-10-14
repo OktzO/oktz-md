@@ -1,22 +1,23 @@
-pub mod common;
-
-pub mod download;
-pub mod sticker;
-
+pub mod ai;
+pub mod anime;
+pub mod canvas;
 pub mod cek;
 pub mod clan;
+pub mod common;
+pub mod download;
 pub mod fun;
 pub mod game;
 pub mod group;
 pub mod info;
-#[path = "main/mod.rs"]
 pub mod main;
 pub mod owner;
 pub mod panel;
+pub mod primbon;
 pub mod random;
 pub mod religi;
 pub mod rpg;
 pub mod search;
+pub mod sticker;
 pub mod store;
 pub mod tools;
 pub mod user;

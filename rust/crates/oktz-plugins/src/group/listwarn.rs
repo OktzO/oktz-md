@@ -209,7 +209,7 @@ mod tests {
             "warnings": {"628111@s.whatsapp.net": [{"reason": "x", "time": 0}]}
         });
         assert!(text_of(&run(group.clone(), vec![])).contains("*1/5* warning"));
-        assert!(text_of(&run(group, vec!["628111@s.whatsapp.net"])).contains("> Total: *1/5*"));
+        assert!(text_of(&run(group.clone(), vec!["628111@s.whatsapp.net"])).contains("> Total: *1/5*"));
     }
 
     // -- cabang "@user" ----------------------------------------------------

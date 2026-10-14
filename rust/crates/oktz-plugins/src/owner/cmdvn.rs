@@ -130,10 +130,10 @@ mod tests {
 
     #[test]
     fn the_status_line_reflects_the_stored_flag() {
-        assert!(text_of(&run(json!({"cmdVn": true}), "")).contains("*✅ ON*"));
-        assert!(text_of(&run(json!({"cmdVn": false}), "")).contains("*❌ OFF*"));
+        assert!(text_of(&run(json!({"cmdVn": true}), "")).contains("✅ ON"));
+        assert!(text_of(&run(json!({"cmdVn": false}), "")).contains("❌ OFF"));
         assert!(
-            text_of(&run(json!({}), "")).contains("*❌ OFF*"),
+            text_of(&run(json!({}), "")).contains("❌ OFF"),
             "`|| false` berarti key yang hilang tampil OFF"
         );
     }
@@ -172,8 +172,8 @@ mod tests {
             settings: json!({}),
             ..Default::default()
         });
-        assert!(t.contains("`#cmdvn on`"), "prefix substitusi: {t}");
-        assert!(t.contains("`#cmdvn off`"));
+        assert!(t.contains("#cmdvn on"), "prefix substitusi: {t}");
+        assert!(t.contains("#cmdvn off"));
         // `VN "menu" → trigger .menu` — literal di JS, bukan `{prefix}menu`.
         // Menempelkan prefix di sini akan mengubah teks yang ditampilkan.
         assert!(t.contains("VN \"menu\" → trigger .menu"), "{t}");

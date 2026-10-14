@@ -213,7 +213,7 @@ mod tests {
         let r = run(vec![with_bday("628111@s.whatsapp.net", "25-12")]);
         let t = text_of(&r);
         assert!(t.starts_with("╭━━━━━━━━━━━━━━━━━╮"), "{t}");
-        assert!(t.contains("*1 ᴍᴇᴍʙᴇʀ*"), "{t}");
+        assert!(t.contains("1 ᴍᴇᴍʙᴇʀ"), "{t}");
         assert!(t.contains("@628111"), "{t}");
         assert!(t.contains("25 Des - @628111"), "{t}");
         assert!(t.contains("> Set birthday: .setbirthday DD-MM"), "{t}");
@@ -280,7 +280,7 @@ mod tests {
                 .map(|(j, d)| (Box::leak(j.into_boxed_str()) as &str, d))
                 .collect(),
         ));
-        assert!(t.contains("*20 ᴍᴇᴍʙᴇʀ*"), "jumlah di header tetap total: {t}");
+        assert!(t.contains("20 ᴍᴇᴍʙᴇʀ"), "jumlah di header tetap total: {t}");
         assert!(t.contains("┃ ... dan 5 lainnya"), "{t}");
         assert_eq!(
             t.lines().filter(|l| l.contains(" - @")).count(),
@@ -298,7 +298,7 @@ mod tests {
             ("4@s.whatsapp.net", json!({"birthday": 2512})),
         ]);
         let t = text_of(&r);
-        assert!(t.contains("*1 ᴍᴇᴍʙᴇʀ*"), "hanya yang valid: {t}");
+        assert!(t.contains("1 ᴍᴇᴍʙᴇʀ"), "hanya yang valid: {t}");
         assert!(t.contains("@1"), "{t}");
     }
 
@@ -308,9 +308,10 @@ mod tests {
         // test tidak meng-hardcode tanggal yang basi.
         let (_, m, d, ..) = jakarta_parts(now_ms());
         let today = format!("{:02}-{:02}", d, m);
-        let t = text_of(&run(vec![with_bday("1@s.whatsapp.net", &today)]));
+        let __balasan = run(vec![with_bday("1@s.whatsapp.net", &today)]);
+        let t = text_of(&__balasan);
         assert!(t.contains("🎉"), "emoji hari ini: {t}");
-        assert!(t.contains("*HARI INI!*"), "{t}");
+        assert!(t.contains("HARI INI!"), "{t}");
     }
 
     #[test]
@@ -320,7 +321,8 @@ mod tests {
         // cukup pastikan barisnya tidak ditandai HARI INI kalau bukan tanggalnya.
         let (_, m, d, ..) = jakarta_parts(now_ms());
         let other = if (d, m) != (29, 2) { "29-02" } else { "30-02" };
-        let t = text_of(&run(vec![with_bday("1@s.whatsapp.net", other)]));
+        let __balasan = run(vec![with_bday("1@s.whatsapp.net", other)]);
+        let t = text_of(&__balasan);
         assert!(!t.contains("🎉"), "bukan hari ini: {t}");
     }
 

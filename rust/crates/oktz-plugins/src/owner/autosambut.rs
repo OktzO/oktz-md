@@ -388,7 +388,8 @@ mod tests {
 
     #[test]
     fn a_group_without_auto_sambut_is_seeded_then_toggled() {
-        let w = writes(&run(json!({}), &["on"]));
+        let __balasan = run(json!({}), &["on"]);
+        let w = writes(&__balasan);
         assert_eq!(w.len(), 2, "seed lalu aksi, seperti dua setGroup di JS");
         assert_eq!(w[0]["delayMs"], json!(DEFAULT_DELAY_MS));
         assert_eq!(w[0]["pesanList"], json!([DEFAULT_PESAN]));
@@ -416,7 +417,7 @@ mod tests {
 
         let mut base = with_pesan(&["a"]);
         base["autoSambut"]["enabled"] = json!(true);
-        let r = run(base, &["off"]);
+        let r = run(base.clone(), &["off"]);
         assert_eq!(text_of(&r), "❌ *Fitur Auto Sambut Dinonaktifkan.*");
         assert_eq!(final_write(&r)["enabled"], json!(false));
     }
@@ -431,7 +432,8 @@ mod tests {
     #[test]
     fn the_legacy_single_pesan_key_is_migrated_into_the_list() {
         let g = json!({"autoSambut": {"enabled": true, "delayMs": 1000, "pesan": "halo"}});
-        let w = writes(&run(g, &[]));
+        let __balasan = run(g.clone(), &[]);
+        let w = writes(&__balasan);
         assert_eq!(w.len(), 1);
         assert_eq!(w[0]["pesanList"], json!(["halo"]));
         assert!(w[0].get("pesan").is_none(), "key lama harus dibuang: {w:?}");
@@ -440,7 +442,8 @@ mod tests {
     #[test]
     fn an_legacy_pesan_does_not_overwrite_an_existing_list() {
         let g = json!({"autoSambut": {"delayMs": 1, "pesan": "lama", "pesanList": ["baru"]}});
-        let w = writes(&run(g, &[]));
+        let __balasan = run(g.clone(), &[]);
+        let w = writes(&__balasan);
         assert_eq!(w[0]["pesanList"], json!(["baru"]));
         assert!(w[0].get("pesan").is_none());
     }
@@ -616,7 +619,7 @@ mod tests {
     #[test]
     fn a_group_that_already_has_an_empty_pesan_list_is_not_written_at_all() {
         let g = json!({"autoSambut": {"delayMs": 1, "pesanList": []}});
-        let r = run(g, &["list"]);
+        let r = run(g.clone(), &["list"]);
         assert!(text_of(&r).contains("*1.* Halo {user}!"), "{}", text_of(&r));
         assert!(writes(&r).is_empty(), "fallback JS tidak menulis apa pun");
     }
@@ -624,12 +627,12 @@ mod tests {
     #[test]
     fn a_missing_delay_falls_back_to_two_hours() {
         let g = json!({"autoSambut": {"delayMs": 0, "pesanList": ["a"]}});
-        assert!(text_of(&run(g, &[])).contains("Batas Waktu Idle: *2 jam*"));
+        assert!(text_of(&run(g.clone(), &[])).contains("Batas Waktu Idle: *2 jam*"));
     }
 
     #[test]
     fn the_written_payload_always_carries_a_fresh_last_chats_map() {
         let g = json!({"autoSambut": {"delayMs": 1, "lastChats": {"x": 1}, "pesanList": ["a"]}});
-        assert_eq!(final_write(&run(g, &["on"]))["lastChats"], json!({}));
+        assert_eq!(final_write(&run(g.clone(), &["on"]))["lastChats"], json!({}));
     }
 }

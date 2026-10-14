@@ -122,7 +122,8 @@ mod tests {
     #[test]
     fn an_empty_argument_shows_the_five_parameter_usage() {
         for empty in ["", "  "] {
-            let t = text_of(&run(empty));
+            let __balasan = run(empty.clone());
+            let t = text_of(&__balasan);
             assert!(t.starts_with("╭┈┈⬡「 🎨 *ɪɴsᴛᴀʟʟ ᴛᴇᴍᴀ ᴇɴɪɢᴍᴀ* 」"), "{t}");
             assert!(t.contains("`.installtemaenigma <ip>|<password>|<link_wa>|<link_group>|<link_channel>`"), "{t}");
             assert!(t.contains("> Contoh:"), "{t}");
@@ -134,7 +135,7 @@ mod tests {
         assert_eq!(text_of(&run("ip|pw")), BAD_FORMAT);
         assert_eq!(text_of(&run("ip|pw|wa|group")), BAD_FORMAT);
         assert_eq!(text_of(&run("ip")), BAD_FORMAT);
-        assert!(!text_of(&run(FIVE)).contains("Format salah"));
+        assert!(!text_of(&run(FIVE.clone())).contains("Format salah"));
     }
 
     #[test]
@@ -146,7 +147,7 @@ mod tests {
 
     #[test]
     fn a_valid_input_reports_the_unreachable_host_and_writes_nothing() {
-        let r = run(FIVE);
+        let r = run(FIVE.clone());
         let t = text_of(&r);
         assert!(t.contains("tidak tersedia di port Rust"), "{t}");
         assert!(t.contains("10.0.0.1"), "IP harus tampil: {t}");

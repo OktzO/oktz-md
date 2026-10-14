@@ -182,7 +182,8 @@ mod tests {
             participants: vec![member("628111@s.whatsapp.net", json!({ "exp": 0, "koin": 0 }))],
             is_bot_admin: false,
         };
-        let w = writes(&run(roster));
+        let __balasan = run(roster.clone());
+        let w = writes(&__balasan);
         assert_eq!(w.len(), 1);
         assert_eq!(w[0].0, "628111@s.whatsapp.net");
         assert_eq!(w[0].1["energi"], json!(100));
@@ -200,7 +201,8 @@ mod tests {
             )],
             is_bot_admin: false,
         };
-        let w = writes(&run(roster));
+        let __balasan = run(roster.clone());
+        let w = writes(&__balasan);
         assert_eq!(w[0].1["exp"], json!(201_000));
         assert_eq!(w[0].1["koin"], json!(20_500));
     }
@@ -214,7 +216,7 @@ mod tests {
             ],
             is_bot_admin: false,
         };
-        let r = run(roster);
+        let r = run(roster.clone());
         assert_eq!(writes(&r).len(), 1);
         assert!(text_of(&r).contains("┃ ⏭️ sᴜᴅᴀʜ ᴘʀᴇᴍɪᴜᴍ: `1`"), "{}", text_of(&r));
         assert!(text_of(&r).contains("┃ ✅ ᴅɪᴛᴀᴍʙᴀʜᴋᴀɴ: `1`"), "{}", text_of(&r));
@@ -226,7 +228,7 @@ mod tests {
             participants: vec![member("@lid", json!({}))],
             is_bot_admin: false,
         };
-        let r = run(roster);
+        let r = run(roster.clone());
         assert!(r.mutations().is_empty());
         assert!(text_of(&r).contains("┃ ✅ ᴅɪᴛᴀᴍʙᴀʜᴋᴀɴ: `0`"), "{}", text_of(&r));
     }
@@ -237,7 +239,7 @@ mod tests {
             participants: vec![member("1@s.whatsapp.net", json!({}))],
             is_bot_admin: false,
         };
-        assert!(text_of(&run(roster)).contains("> Grup: Grup Uji"));
+        assert!(text_of(&run(roster.clone())).contains("> Grup: Grup Uji"));
     }
 
     #[test]
@@ -246,7 +248,7 @@ mod tests {
             participants: vec![member("1@s.whatsapp.net", json!({}))],
             is_bot_admin: false,
         };
-        match run(roster).without_mutations() {
+        match run(roster.clone()).without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "💎"),
             other => panic!("harus Reaction, dapat {other:?}"),
         }

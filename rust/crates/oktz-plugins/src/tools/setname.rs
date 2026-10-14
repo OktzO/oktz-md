@@ -97,7 +97,7 @@ mod tests {
     #[test]
     fn a_bare_command_shows_the_usage_card() {
         for input in ["", "   "] {
-            assert_eq!(run(input), usage("."));
+            assert_eq!(run(input.clone()), usage("."));
         }
     }
 

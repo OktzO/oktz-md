@@ -522,7 +522,7 @@ mod tests {
             (edit_base.clone(), vec!["edit", "24.00"]),
             (edit_base.clone(), vec!["edit", "abc"]),
         ] {
-            let r = run(settings, &args);
+            let r = run(settings.clone(), &args);
             let expected = if args.len() == 1 {
                 "❌ *Masukkan jadwal makan!*\n\n> Contoh: `.notifmakan on 07.00,12.00,19.00`"
             } else {
@@ -539,7 +539,8 @@ mod tests {
             "628222@s.whatsapp.net_120363@g.us": {"jadwal": ["09:00"], "enabled": true},
             KEY: {"jadwal": ["07:00"], "enabled": true, "menu": ""}
         }});
-        let written = setting_of(&run(s, &["on", "10.00"]));
+        let __balasan = run(s.clone(), &["on", "10.00"]);
+        let written = setting_of(&__balasan);
         let map = written.as_object().unwrap();
         assert_eq!(map.len(), 2, "entri milik chat lain tidak boleh hilang");
         assert_eq!(map["628222@s.whatsapp.net_120363@g.us"]["jadwal"], json!(["09:00"]));

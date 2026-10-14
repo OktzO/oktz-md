@@ -122,7 +122,7 @@ mod tests {
     fn the_success_reply_is_always_paired_with_the_write() {
         for g in [json!({}), json!({"groupRules": "x"})] {
             let label = g.to_string();
-            let r = run(g);
+            let r = run(g.clone());
             assert!(text_of(&r).contains("berhasil direset ke default"));
             assert_eq!(r.mutations().len(), 1, "input {label}");
         }

@@ -449,7 +449,8 @@ mod tests {
             "uncommon_downloads": false,
             "last_modified": "2026-10-14T03:30:45Z",
         } }));
-        let t = body(&run(http, "https://evil.test"));
+        let __balasan = run(http.clone(), "https://evil.test");
+        let t = body(&__balasan);
         assert!(t.contains("- Phising: 🚨 Ya"), "{t}");
         assert!(t.contains("- Membawa ke Situs Berbahaya: 🚨 Ya"), "{t}");
         assert!(t.contains("- Mengandung Malware: ✅ Tidak"), "{t}");
@@ -469,14 +470,14 @@ mod tests {
         ];
         for body_json in cases {
             let http = Stub::body(body_json.clone());
-            let r = run(http, "https://google.com");
+            let r = run(http.clone(), "https://google.com");
             assert_eq!(body(&r), SCAN_FAILED, "body {body_json}");
             assert_eq!(reaction(&r), Some("❌".to_string()), "body {body_json}");
         }
 
         let http = Stub::body(json!({ "status": true, "result": {} }));
         assert!(
-            !body(&run(http, "x")).is_empty(),
+            !body(&run(http.clone(), "x")).is_empty(),
             "result kosong = objek truthy, bukan kegagalan scan"
         );
     }

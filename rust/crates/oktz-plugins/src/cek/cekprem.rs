@@ -205,7 +205,7 @@ mod tests {
     fn a_plain_number_is_not_premium() {
         for settings in [json!({}), json!({"premium": []}), json!({"premium": ["628999"]})] {
             let ctx = ctx_with(settings.clone(), json!({}));
-            let (text, mentions) = text_of(&run(ctx));
+            let (text, mentions) = text_of(&run(ctx.clone()));
             assert_eq!(text, "❌ @628111 bukan premium", "{settings}");
             assert_eq!(mentions, vec![ME.to_string()], "{settings}");
         }
@@ -214,7 +214,7 @@ mod tests {
     #[test]
     fn a_bare_string_entry_is_reported_as_permanent() {
         let ctx = ctx_with(json!({ "premium": ["628111"] }), json!({}));
-        let (text, _) = text_of(&run(ctx));
+        let (text, _) = text_of(&run(ctx.clone()));
         assert!(text.starts_with("💎 *DETAIL PREMIUM*\n\n"), "{text}");
         assert!(text.contains("👤 User: @628111"), "{text}");
         assert!(text.contains("🏷️ Role: *💎 Premium (Permanent)*"), "{text}");
@@ -225,7 +225,7 @@ mod tests {
     fn an_entry_without_an_expiry_is_also_permanent() {
         for entry in [json!({"id": "628111"}), json!({"id": "628111", "expired": null})] {
             let ctx = ctx_with(json!({ "premium": [entry.clone()] }), json!({}));
-            let (text, _) = text_of(&run(ctx));
+            let (text, _) = text_of(&run(ctx.clone()));
             assert!(
                 text.contains("🏷️ Role: *💎 Premium (Permanent)*"),
                 "{entry} -> {text}"
@@ -241,7 +241,7 @@ mod tests {
             json!({"premium": [{"id": "628111", "name": "Lyoraaa", "addedAt": added, "expired": expired}]}),
             json!({}),
         );
-        let (text, _) = text_of(&run(ctx));
+        let (text, _) = text_of(&run(ctx.clone()));
         assert!(text.contains("📛 Nama: *Lyoraaa*"), "{text}");
         assert!(text.contains("🗓️ Durasi: *30 hari*"), "{text}");
         assert!(text.contains("📊 Sisa: *20 hari*"), "{text}");
@@ -253,7 +253,7 @@ mod tests {
         // `isConfigOwner` diperiksa sebelum `premData`, dan owner selalu
         // lolos guard walau tidak ada di daftar premium.
         let ctx = ctx_with(json!({ "owner": ["628111"] }), json!({}));
-        let (text, _) = text_of(&run(ctx));
+        let (text, _) = text_of(&run(ctx.clone()));
         assert!(text.contains("🏷️ Role: *👑 Owner (Permanent)*"), "{text}");
         assert!(!text.contains("💎 Premium (Permanent)"), "{text}");
     }
@@ -261,7 +261,7 @@ mod tests {
     #[test]
     fn a_partner_is_premium_without_being_in_the_premium_list() {
         let ctx = ctx_with(json!({ "partner": ["628111"] }), json!({}));
-        let (text, _) = text_of(&run(ctx));
+        let (text, _) = text_of(&run(ctx.clone()));
         assert!(text.contains("🏷️ Role: *💎 Premium (Permanent)*"), "{text}");
     }
 
@@ -271,7 +271,7 @@ mod tests {
             json!({ "premium": ["628111"] }),
             json!({"energi": -1, "koin": -1, "exp": 25000, "level": 7}),
         );
-        let (text, _) = text_of(&run(ctx));
+        let (text, _) = text_of(&run(ctx.clone()));
         assert!(text.contains("⚡ Energi: *∞*"), "{text}");
         assert!(text.contains("💰 Koin: *∞*"), "{text}");
         assert!(text.contains("⭐ Exp: *25.000*"), "{text}");
@@ -281,7 +281,7 @@ mod tests {
     #[test]
     fn missing_store_fields_use_the_js_defaults() {
         let ctx = ctx_with(json!({ "premium": ["628111"] }), json!({}));
-        let (text, _) = text_of(&run(ctx));
+        let (text, _) = text_of(&run(ctx.clone()));
         assert!(text.contains("⚡ Energi: *0*"), "{text}");
         assert!(text.contains("💰 Koin: *0*"), "{text}");
         assert!(text.contains("⭐ Exp: *0*"), "{text}");
@@ -291,7 +291,7 @@ mod tests {
     #[test]
     fn the_plugin_only_reads() {
         let ctx = ctx_with(json!({ "premium": ["628111"] }), json!({}));
-        assert!(run(ctx).mutations().is_empty());
+        assert!(run(ctx.clone()).mutations().is_empty());
     }
 
     #[test]

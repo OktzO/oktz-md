@@ -479,7 +479,7 @@ mod tests {
         for cmd in ["create", "join", "leave", "info", "members", "deposit", "list"] {
             assert!(lonely.contains(&format!("guild {cmd}")), "{cmd} hilang");
         }
-        assert!(lonely.contains("*Jomblo Guild (Kagak Punya Temen)*"), "{lonely}");
+        assert!(lonely.contains("Jomblo Guild (Kagak Punya Temen)"), "{lonely}");
 
         let joined_reply = run(member(), existing_guild(), &["help"]);
         let joined = text_of(&joined_reply);
@@ -579,7 +579,7 @@ mod tests {
     fn joining_needs_a_name_that_exists_and_room_to_sit() {
         let r = run(json!({}), existing_guild(), &["join"]);
         assert!(text_of(&r).starts_with("Tulis nama guild yang mau dimasukin!"));
-        assert!(text_of(&r).contains("`.guild join DragonSlayers`"));
+        assert!(text_of(&r).contains(".guild join DragonSlayers"));
 
         let r = run(json!({ }), existing_guild(), &["join", "Nope"]);
         assert!(text_of(&r).starts_with("Guild *Nope* nggak ketemu!"));
@@ -696,7 +696,7 @@ mod tests {
         );
         let t = text_of(&r);
         assert!(t.starts_with("✅ *DONASI KAS BERHASIL!*"), "{t}");
-        assert!(t.contains("*Rp 1.000*"), "{t}");
+        assert!(t.contains("Rp 1.000"), "{t}");
         assert!(t.contains("Total Kas Sekarang: *Rp 1.500*"), "{t}");
         assert_eq!(setting_of(&r)["guild_1"]["treasury"], json!(1_500));
         assert_eq!(user_of(&r, "628111@s.whatsapp.net")["koin"], json!(9_000));

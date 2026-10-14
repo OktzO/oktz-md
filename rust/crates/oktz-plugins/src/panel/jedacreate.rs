@@ -243,7 +243,7 @@ mod tests {
             ("10M", 600_000),
             ("2H", 7_200_000),
         ] {
-            let r = run(input, Value::Null);
+            let r = run(input.clone(), Value::Null);
             let w = settings_written(&r);
             assert_eq!(w.len(), 2, "input {input}");
             assert_eq!(w[0], (JEDA_KEY.to_string(), serde_json::json!(expected)), "input {input}");
@@ -274,7 +274,7 @@ mod tests {
     #[test]
     fn a_malformed_duration_is_refused_and_writes_nothing() {
         for bad in ["5x", "m", "-5m", "5 m", "1.5h", "abc"] {
-            let r = run(bad, Value::Null);
+            let r = run(bad.clone(), Value::Null);
             assert_eq!(text_of(&r), INVALID, "input {bad:?}");
             assert!(r.mutations().is_empty(), "input {bad:?}");
         }

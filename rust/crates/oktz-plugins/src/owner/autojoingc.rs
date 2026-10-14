@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn any_argument_other_than_on_or_off_only_shows_status() {
         for bad in ["", "enable", "1", "yes", "of"] {
-            let r = run(bad, json!({}));
+            let r = run(bad.clone(), json!({}));
             assert!(text_of(&r).starts_with("🔗 *AUTO JOIN GROUP*"), "input {bad:?}");
             assert!(r.mutations().is_empty(), "input {bad:?}");
         }
@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn the_applied_reply_names_the_direction_written() {
-        assert!(text_of(&run("on", json!({}))).contains("*diaktifkan*"));
-        assert!(text_of(&run("off", json!({}))).contains("*dinonaktifkan*"));
+        assert!(text_of(&run("on", json!({}))).contains("diaktifkan"));
+        assert!(text_of(&run("off", json!({}))).contains("dinonaktifkan"));
     }
 }

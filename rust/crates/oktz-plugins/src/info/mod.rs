@@ -1,4 +1,9 @@
 pub mod benefitpartner;
 pub mod fiturpremium;
+pub mod gag;
+pub mod gagwatch;
+pub mod harilibur;
 pub mod howmuchenergy;
+pub mod jadwalbola;
+pub mod livescore;
 pub mod whatrolethis;

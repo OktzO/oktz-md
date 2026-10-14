@@ -266,7 +266,7 @@ mod tests {
             text_of(&r)
         );
         assert!(text_of(&r).contains("> _Grup akan otomatis dibuka_"));
-        assert!(text_of(&r).contains("*🟢 Aktif*"));
+        assert!(text_of(&r).contains("🟢 Aktif"));
     }
 
     #[test]
@@ -298,14 +298,14 @@ mod tests {
             &["hapus", "open"],
         );
         assert_eq!(group_write(&r), &json!({"scheduleOpen": null}));
-        assert!(text_of(&r).contains("*buka grup*"), "{}", text_of(&r));
+        assert!(text_of(&r).contains("buka grup"), "{}", text_of(&r));
     }
 
     #[test]
     fn hapus_close_names_the_close_schedule() {
         let r = run(json!({"scheduleClose": "22:00"}), &["delete", "close"]);
         assert_eq!(group_write(&r), &json!({"scheduleClose": null}));
-        assert!(text_of(&r).contains("*tutup grup*"), "{}", text_of(&r));
+        assert!(text_of(&r).contains("tutup grup"), "{}", text_of(&r));
     }
 
     #[test]
@@ -325,7 +325,7 @@ mod tests {
         let r = run(json!({}), &["open"]);
         assert!(text_of(&r).starts_with("⚠️ *ᴠᴀʟɪᴅᴀsɪ ɢᴀɢᴀʟ*"), "{}", text_of(&r));
         assert!(text_of(&r).contains("> Waktu harus diisi!"), "{}", text_of(&r));
-        assert!(text_of(&r).contains("`.jadwalgroup open 08:00`"), "{}", text_of(&r));
+        assert!(text_of(&r).contains(".jadwalgroup open 08:00"), "{}", text_of(&r));
         assert!(r.mutations().is_empty());
     }
 

@@ -197,10 +197,11 @@ mod tests {
     #[test]
     fn only_the_nine_positive_words_get_the_praise_label() {
         for c in POSITIVE {
-            assert!(body(&run(c, &["628111@s.whatsapp.net"])).contains("*Yang paling "));
+            assert!(body(&run(c.clone(), &["628111@s.whatsapp.net"])).contains("*Yang paling "));
         }
         for c in ["bego", "ngentod", "jelek", "siapa"] {
-            let t = body(&run(c, &["628111@s.whatsapp.net"]));
+            let __balasan = run(c.clone(), &["628111@s.whatsapp.net"]);
+            let t = body(&__balasan);
             assert!(t.contains(&format!("*Anak {c} di sini adalah*")), "{c}: {t}");
         }
     }

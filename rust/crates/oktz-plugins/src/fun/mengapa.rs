@@ -82,7 +82,7 @@ mod tests {
     #[test]
     fn an_empty_or_whitespace_question_returns_the_help_text() {
         for empty in ["", "\t\t"] {
-            assert_eq!(text_of(&run(empty)), HELP_MENGAPA, "input {empty:?}");
+            assert_eq!(text_of(&run(empty.clone())), HELP_MENGAPA, "input {empty:?}");
         }
     }
 
@@ -100,7 +100,8 @@ mod tests {
     fn the_question_mark_is_appended_even_when_the_input_already_has_one() {
         // JS: `${m.body.slice(1)}?` — `?` ditambahkan tanpa syarat, jadi
         // input yang sudah berakhir `?` jadi `??`. Bukan salah port.
-        let t = text_of(&run("langit biru?"));
+        let __balasan = run("langit biru?");
+        let t = text_of(&__balasan);
         assert!(t.starts_with("mengapa langit biru??\n*"), "{t}");
     }
 

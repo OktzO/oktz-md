@@ -133,7 +133,8 @@ mod tests {
 
     #[test]
     fn an_argument_does_not_change_the_shape_of_the_reply() {
-        let t = text_of(&run("teman"));
+        let __balasan = run("teman");
+        let t = text_of(&__balasan);
         assert!(t.starts_with("```") && t.ends_with("```"), "{t}");
     }
 

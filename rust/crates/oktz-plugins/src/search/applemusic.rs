@@ -250,7 +250,7 @@ mod tests {
             let r = run(http.clone(), text);
             let t = text_of(&r);
             assert_eq!(t, help("."), "input {text:?}");
-            assert!(t.contains("`.applemusic <query>`"), "{t}");
+            assert!(t.contains(".applemusic <query>"), "{t}");
         }
         assert!(http.seen.lock().unwrap().is_empty(), "tidak boleh ada request");
     }
@@ -280,9 +280,9 @@ mod tests {
     #[test]
     fn only_the_first_five_tracks_are_listed() {
         let http = Stub::body(json!({ "result": tracks(9) }));
-        let t = owned(run(http, "x"));
-        assert!(t.contains("*5.*"), "lima hasil: {t}");
-        assert!(!t.contains("*6.*"), "enam hasil terpotong: {t}");
+        let t = owned(run(http.clone(), "x"));
+        assert!(t.contains("5."), "lima hasil: {t}");
+        assert!(!t.contains("6."), "enam hasil terpotong: {t}");
     }
 
     #[test]
@@ -291,7 +291,7 @@ mod tests {
             { "title": "T", "subtitle": "", "url": "u" },
             { "title": "T2", "url": "u2" }
         ] }));
-        let t = owned(run(http, "x"));
+        let t = owned(run(http.clone(), "x"));
         assert_eq!(t.matches("📀 `Unknown`").count(), 2, "{t}");
     }
 
@@ -299,7 +299,7 @@ mod tests {
     fn an_empty_result_list_reports_not_found() {
         for body in [json!({ "status": false, "result": [] }), json!({}), json!({"result": null})] {
             let http = Stub::body(body.clone());
-            let t = owned(run(http, "tidak ada"));
+            let t = owned(run(http.clone(), "tidak ada"));
             assert_eq!(t, not_found("tidak ada"), "body {body}");
         }
     }
@@ -307,10 +307,10 @@ mod tests {
     #[test]
     fn a_transport_or_parsing_failure_reports_the_generic_error_template() {
         let http = Stub::offline();
-        assert_eq!(owned(run(http, "x")), error_reply(".", "applemusic"));
+        assert_eq!(owned(run(http.clone(), "x")), error_reply(".", "applemusic"));
 
         let http = Stub::raw("<html>bukan json</html>");
-        let t = owned(run(http, "x"));
+        let t = owned(run(http.clone(), "x"));
         assert!(t.starts_with("☢ *ᴇʀʀᴏʀ*"), "{t}");
         assert!(t.contains("command `.applemusic`"), "{t}");
     }

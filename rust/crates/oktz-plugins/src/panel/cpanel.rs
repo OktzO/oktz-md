@@ -169,7 +169,8 @@ mod tests {
 
     #[test]
     fn the_menu_lists_every_command_for_every_server_version() {
-        let t = text_of(&run(".", false));
+        let __balasan = run(".", false);
+        let t = text_of(&__balasan);
         for ver in VALID_SERVERS {
             for cmd in [
                 format!("1gb{ver}"),
@@ -192,26 +193,31 @@ mod tests {
 
     #[test]
     fn the_live_prefix_is_used_instead_of_a_hardcoded_dot() {
-        let t = text_of(&run("!", false));
+        let __balasan = run("!", false);
+        let t = text_of(&__balasan);
         assert!(t.contains("`!1gbv1`"), "{t}");
         assert!(!t.contains("`.1gbv1`"), "prefix lama masih bocor: {t}");
         // `m.prefix || '.'` — prefix kosong berarti noprefix, tetap pakai titik.
-        let t = text_of(&run("", false));
+        let __balasan = run("", false);
+        let t = text_of(&__balasan);
         assert!(t.contains("`.vps1g1c`"), "{t}");
     }
 
     #[test]
     fn the_owner_sees_its_role_and_everyone_else_sees_the_empty_list() {
-        let owner = text_of(&run(".", true));
+        let __balasan = run(".", true);
+        let owner = text_of(&__balasan);
         assert!(owner.contains("> Role kamu: *Bot Owner*"), "{owner}");
-        let user = text_of(&run(".", false));
+        let __balasan = run(".", false);
+        let user = text_of(&__balasan);
         assert!(user.contains("> Role kamu: *Tidak ada*"), "{user}");
     }
 
     #[test]
     fn the_config_backed_status_marks_are_reported_per_server() {
         // `config.js` masih kosong untuk kelima server dan token DigitalOcean.
-        let t = text_of(&run(".", false));
+        let __balasan = run(".", false);
+        let t = text_of(&__balasan);
         assert!(
             t.contains("> V1: ❌ | V2: ❌ | V3: ❌ | V4: ❌ | V5: ❌"),
             "{t}"

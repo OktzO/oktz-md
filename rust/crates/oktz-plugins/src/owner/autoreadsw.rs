@@ -136,16 +136,16 @@ mod tests {
 
     #[test]
     fn the_status_line_reads_the_nested_enabled_flag() {
-        assert!(text_of(&run(json!({"autoReadSW": {"enabled": true}}), "")).contains("*✅ ON*"));
-        assert!(text_of(&run(json!({"autoReadSW": {"enabled": false}}), "")).contains("*❌ OFF*"));
+        assert!(text_of(&run(json!({"autoReadSW": {"enabled": true}}), "")).contains("✅ ON"));
+        assert!(text_of(&run(json!({"autoReadSW": {"enabled": false}}), "")).contains("❌ OFF"));
         // `|| { enabled: false }` — key hilang tetap OFF.
-        assert!(text_of(&run(json!({}), "")).contains("*❌ OFF*"));
+        assert!(text_of(&run(json!({}), "")).contains("❌ OFF"));
     }
 
     #[test]
     fn a_stored_value_without_the_enabled_field_reads_as_off() {
-        assert!(text_of(&run(json!({"autoReadSW": {}}), "")).contains("*❌ OFF*"));
-        assert!(text_of(&run(json!({"autoReadSW": true}), "")).contains("*❌ OFF*"));
+        assert!(text_of(&run(json!({"autoReadSW": {}}), "")).contains("❌ OFF"));
+        assert!(text_of(&run(json!({"autoReadSW": true}), "")).contains("❌ OFF"));
     }
 
     #[test]

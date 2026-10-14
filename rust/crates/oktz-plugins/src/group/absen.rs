@@ -231,7 +231,7 @@ mod tests {
 
     #[test]
     fn without_a_session_the_reply_points_at_mulaiabsen() {
-        let r = run(None, SENDER);
+        let r = run(None.clone(), SENDER);
         assert_eq!(text_of(&r), NO_SESSION);
         assert!(mentions_of(&r).is_empty(), "tidak ada yang di-mention");
     }

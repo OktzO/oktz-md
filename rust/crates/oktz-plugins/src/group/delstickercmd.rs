@@ -194,7 +194,8 @@ mod tests {
 
     #[test]
     fn no_argument_lists_the_registered_commands_in_store_order() {
-        let t = body(&run(&[], full()));
+        let __balasan = run(&[], full());
+        let t = body(&__balasan);
         assert!(t.starts_with("🖼️ *sᴛɪᴄᴋᴇʀ ᴄᴏᴍᴍᴀɴᴅs*"), "{t}");
         assert!(t.contains("┃ 🖼️ → `.menu`\n"), "{t}");
         assert!(t.contains("┃ 🖼️ → `.promo`\n"), "{t}");
@@ -209,7 +210,8 @@ mod tests {
     #[test]
     fn an_absent_store_lists_nothing_registered() {
         for s in [json!({}), json!({"stickerCommands": {}})] {
-            let t = body(&run(&[], s.clone()));
+            let __balasan = run(&[], s.clone());
+            let t = body(&__balasan);
             assert!(t.starts_with("🖼️ *sᴛɪᴄᴋᴇʀ ᴄᴏᴍᴍᴀɴᴅs*"), "{s}: {t}");
             assert!(t.contains("> Tidak ada sticker command yang terdaftar."), "{t}");
             assert!(t.contains("`.addcmdsticker`"), "{t}");

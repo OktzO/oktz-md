@@ -155,7 +155,7 @@ mod tests {
         for bot_admin in [true, false] {
             let mut c = ctx(Vec::new());
             c.roster.is_bot_admin = bot_admin;
-            let r = run(c);
+            let r = run(c.clone());
             assert_eq!(text_of(&r), NO_MEMBER);
             assert!(mentions_of(&r).is_empty(), "tidak ada yang bisa di-tag");
         }
@@ -189,7 +189,7 @@ mod tests {
             p("628111@s.whatsapp.net", false, false),
             p("628222@s.whatsapp.net", false, false),
         ]);
-        let member = run(base);
+        let member = run(base.clone());
         let admin = run(ctx(vec![
             p("628111@s.whatsapp.net", false, false),
             p("628222@s.whatsapp.net", true, true),
@@ -207,7 +207,7 @@ mod tests {
             p("628222@s.whatsapp.net", false, false),
         ]);
         c.roster.is_bot_admin = false;
-        let r = run(c);
+        let r = run(c.clone());
         assert!(text_of(&r).contains("1 MEMBER TOTAL"));
         assert_eq!(mentions_of(&r), &["628222@s.whatsapp.net"]);
     }
@@ -221,7 +221,7 @@ mod tests {
             p("628222@s.whatsapp.net", false, false),
         ]);
         c.text = String::new();
-        assert!(text_of(&run(c)).starts_with("*Pesan:* Tag All Members\n\n"));
+        assert!(text_of(&run(c.clone())).starts_with("*Pesan:* Tag All Members\n\n"));
         assert_eq!(DEFAULT_TEXT, "Tag All Members");
     }
 
@@ -232,7 +232,7 @@ mod tests {
             p("628222@s.whatsapp.net", false, false),
         ]);
         c.text = "mulai rapat *sekarang*".into();
-        assert!(text_of(&run(c))
+        assert!(text_of(&run(c.clone()))
             .starts_with("*Pesan:* mulai rapat *sekarang*\n\n```━━━ 1 MEMBER TOTAL"));
     }
 

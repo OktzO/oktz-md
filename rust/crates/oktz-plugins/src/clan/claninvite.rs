@@ -282,7 +282,7 @@ mod tests {
             Some("628777@s.whatsapp.net"),
             json!({ "DRG": clan(json!(["628111@s.whatsapp.net"])) }),
         );
-        let (list, target, clan_id) = written(&run(c));
+        let (list, target, clan_id) = written(&run(c.clone()));
         assert_eq!(list, json!(["628111@s.whatsapp.net", "628999@s.whatsapp.net"]));
         assert_eq!(target, "628999@s.whatsapp.net");
         assert_eq!(clan_id, "DRG");

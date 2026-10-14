@@ -259,7 +259,7 @@ mod tests {
             roster: roster(&[(THEM, json!({ "fun": { "pasangan": "999@s.whatsapp.net" } }))]),
             ..base()
         };
-        let (emoji, text) = text_and_reaction(&run(ctx));
+        let (emoji, text) = text_and_reaction(&run(ctx.clone()));
         assert_eq!(emoji, "💭");
         assert!(text.contains("*Kamu* lagi pdkt sama @628222"), "{text}");
         assert!(text.contains("Status: *Digantung* 😅"), "{text}");
@@ -280,7 +280,7 @@ mod tests {
                 "{data} -> {text}"
             );
             assert!(text.contains("TIP: Cari pasangan dulu dengan `.tembak @tag`"), "{text}");
-            match run(ctx).without_mutations() {
+            match run(ctx.clone()).without_mutations() {
                 Reply::Reaction { reply, .. } => match reply.as_ref() {
                     Reply::Text { mentions, .. } => assert!(mentions.is_empty(), "diri sendiri tidak di-mention"),
                     other => panic!("harus Text, dapat {other:?}"),
@@ -300,7 +300,7 @@ mod tests {
         };
         let (_, text) = text_and_reaction(&run(ctx.clone()));
         assert!(text.contains("*@628222* sedang pacaran dengan @628111! 🥳"), "{text}");
-        match run(ctx).without_mutations() {
+        match run(ctx.clone()).without_mutations() {
             Reply::Reaction { reply, .. } => match reply.as_ref() {
                 Reply::Text { mentions, .. } => {
                     assert_eq!(mentions, &[THEM.to_string(), ME.to_string()])
@@ -317,7 +317,7 @@ mod tests {
             prefix: "!".into(),
             ..base()
         };
-        assert!(text_and_reaction(&run(ctx)).1.contains("`!tembak @tag`"));
+        assert!(text_and_reaction(&run(ctx.clone())).1.contains("`!tembak @tag`"));
     }
 
     #[test]
@@ -327,6 +327,6 @@ mod tests {
             roster: roster(&[(THEM, json!({ "fun": { "pasangan": ME } }))]),
             ..base()
         };
-        assert!(run(ctx).mutations().is_empty());
+        assert!(run(ctx.clone()).mutations().is_empty());
     }
 }

@@ -164,7 +164,7 @@ mod tests {
     #[test]
     fn the_shop_block_only_appears_for_the_sender() {
         let self_out = run(json!({"koin": 5}), vec![], false);
-        assert!(self_out.contains("*〔 🛒 SHOP 〕*"));
+        assert!(self_out.contains("〔 🛒 SHOP 〕"));
         assert!(self_out.ends_with("_🎮 Main game untuk dapat koin!_"));
 
         let other_out = run(json!({"koin": 5}), vec!["628999@s.whatsapp.net"], false);

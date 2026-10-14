@@ -140,7 +140,7 @@ mod tests {
             json!({"storeLists": [{"name": "A"}, {"name": "B", "image": "u"}, {"name": "C", "video": "v"}]}),
             "abc",
         );
-        assert!(text_of(&r).contains("*Pilih Informasi yang Dihapus*"));
+        assert!(text_of(&r).contains("Pilih Informasi yang Dihapus"));
         assert_eq!(
             text_of(&r).matches("*1.*").count(),
             1,

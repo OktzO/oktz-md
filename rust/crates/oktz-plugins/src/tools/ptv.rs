@@ -103,7 +103,7 @@ mod tests {
 
     #[test]
     fn without_a_video_quote_it_shows_the_usage_card() {
-        assert_eq!(body(&run(None)), usage("."));
+        assert_eq!(body(&run(None.clone())), usage("."));
         for kind in [
             QuotedKind::Text,
             QuotedKind::Image,

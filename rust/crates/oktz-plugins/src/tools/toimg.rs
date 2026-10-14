@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn without_a_sticker_quote_it_explains_both_ways() {
-        assert_eq!(body(&run(None)), no_sticker("."));
+        assert_eq!(body(&run(None.clone())), no_sticker("."));
         for kind in [
             QuotedKind::Text,
             QuotedKind::Image,
@@ -114,7 +114,7 @@ mod tests {
         ] {
             assert_eq!(body(&run(Some(quoted(kind.clone())))), no_sticker("."), "{kind:?}");
         }
-        assert!(body(&run(None)).contains("> 1. Kirim sticker + caption `.toimg`"));
+        assert!(body(&run(None.clone())).contains("> 1. Kirim sticker + caption `.toimg`"));
     }
 
     #[test]

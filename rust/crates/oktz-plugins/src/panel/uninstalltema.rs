@@ -108,7 +108,8 @@ mod tests {
     #[test]
     fn an_empty_argument_shows_the_uninstall_usage() {
         for empty in ["", "   "] {
-            let t = text_of(&run(empty));
+            let __balasan = run(empty.clone());
+            let t = text_of(&__balasan);
             assert!(t.starts_with("╭┈┈⬡「 🗑️ *ᴜɴɪɴsᴛᴀʟʟ ᴛᴇᴍᴀ* 」"), "{t}");
             assert!(t.contains("`.uinstalltema <ip>|<password>`"), "{t}");
             assert!(t.contains("Contoh: .uinstalltema 192.168.1.1|secretpass"), "{t}");

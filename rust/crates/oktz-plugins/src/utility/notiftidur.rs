@@ -378,7 +378,7 @@ mod tests {
             (existing(&["22:00"], false), vec!["edit"]),
             (existing(&["22:00"], false), vec!["edit", "22:99"]),
         ] {
-            let r = run(settings, &args);
+            let r = run(settings.clone(), &args);
             let expected = if args.len() == 1 {
                 "❌ *Masukkan jadwal tidur!*\n\n> Contoh: `.notiftidur on 22.00`"
             } else {
