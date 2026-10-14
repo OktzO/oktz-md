@@ -22,6 +22,7 @@ pub use pipeline::{
     ClientSender, Dedup, Identity, MessageSender, Outcome, PendingMedia, Pipeline, PipelineError,
     RosterSource, SendBox, SendBoxRoster, StoreContext, normalize_user_key,
 };
+pub use pipeline::ReplyTarget;
 pub use pipeline_gate::GateState;
 pub use session::{ImportStats, import_session_record};
 pub use whatsapp_rust::bot::BotHandle;

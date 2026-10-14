@@ -410,6 +410,19 @@ async fn send(
                         oktz_wa::build_card("Kartu dari produksi Rust", Some("footer produksi"))
                     }
                     "list" => oktz_wa::build_list(),
+                    // replyVariant 9 — bentuk balasan yang aktif di produksi.
+                    // Tanpa pemicu, jadi tidak ada kutipan/mention; yang
+                    // diuji di sini adalah bubble orderMessage-nya.
+                    "order9" => oktz_wa::reply_variant::render_variant_9(
+                        "Balasan produksi Rust (replyVariant 9)",
+                        &oktz_wa::ReplyTarget::default(),
+                        oktz_wa::reply_variant::thumbnail_bytes(
+                            &std::env::current_dir().unwrap_or_default(),
+                            false,
+                        )
+                        .as_deref(),
+                    )
+                    .message,
                     _ => oktz_wa::Message::text("Halo dari produksi Rust"),
                 };
 
