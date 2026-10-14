@@ -529,7 +529,7 @@ impl QuotedMessage {
 /// Konteks yang diterima handler.
 ///
 /// Cerminan subset yang dipakai plugin class A. Field JS lain (`sock`, `db`,
-/// `config`) sengaja tidak ada di sini: plugin yang butuh I/O、网络 atau media
+/// `config`) sengaja tidak ada di sini: plugin yang butuh I/O, jaringan, atau media
 /// belong ke class B/C/D dan akan dapat API sendiri nanti. Jangan diam-diam
 /// menambah field — kalau port plugin butuh,itu keputusan sadar.
 #[derive(Debug, Clone)]
