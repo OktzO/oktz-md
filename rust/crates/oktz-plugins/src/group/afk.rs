@@ -123,7 +123,7 @@ mod tests {
 
     #[test]
     fn the_sender_is_mentioned_in_the_reply() {
-        match run(SENDER.clone(), "lagi makan").without_mutations() {
+        match run(SENDER, "lagi makan").without_mutations() {
             Reply::Text { mentions, text } => {
                 assert_eq!(mentions, &vec![SENDER.to_string()]);
                 assert!(text.contains("@6281234567890 sekarang AFK"), "{text}");
@@ -135,7 +135,7 @@ mod tests {
 
     #[test]
     fn an_empty_reason_falls_back_to_the_default_wording() {
-        let r = run(SENDER.clone(), "");
+        let r = run(SENDER, "");
         assert!(
             text_of(&r).contains("🍀 `Alasan:` *Tidak ada alasan*"),
             "{}",
@@ -146,14 +146,14 @@ mod tests {
 
     #[test]
     fn the_reason_keeps_its_inner_spacing_and_case() {
-        let r = run(SENDER.clone(), "  Makan  Nasi  ");
+        let r = run(SENDER, "  Makan  Nasi  ");
         assert_eq!(written_afk(&r)["reason"], json!("  Makan  Nasi  "));
     }
 
     #[test]
     fn a_persistable_jid_is_written_to_the_store_with_a_timestamp() {
         let before = crate::common::now_ms();
-        let r = run(SENDER.clone(), "jalan");
+        let r = run(SENDER, "jalan");
         let afk = written_afk(&r);
         assert_eq!(afk["reason"], json!("jalan"));
         let since = afk["since"].as_i64().expect("since harus angka");
@@ -167,7 +167,7 @@ mod tests {
     fn a_lid_jid_is_not_written_but_still_gets_a_reply() {
         // Key `lid` >15 digit tidak bisa jadi key store.
         let lid = "12345678901234567@lid";
-        let r = run(lid.clone(), "sibuk");
+        let r = run(lid, "sibuk");
         assert!(r.mutations().is_empty(), "tidak boleh menulis ke store");
         assert!(text_of(&r).contains("sibuk"), "{}", text_of(&r));
     }

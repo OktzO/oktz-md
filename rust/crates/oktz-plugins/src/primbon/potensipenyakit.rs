@@ -145,7 +145,7 @@ mod tests {
 
         // Angka negatif pun tidak divalidasi — tetap diteruskan mentah.
         let r = run_with(
-            Arc::new(Stub(json!({ "status": true, "data": {} }))),
+            Arc::new(Stub(json!({ "status": true, "data": { "catatan": "-" } }))),
             &["-1", "😀", "abc"],
         );
         assert!(reply_text(&r).contains("> Tanggal: *-1-😀-abc*"), "{}", reply_text(&r));
@@ -153,12 +153,20 @@ mod tests {
 
     #[test]
     fn fewer_than_three_arguments_prints_the_format_and_skips_http() {
-        for args in [Vec::new(), vec!["12"], vec!["12", "05"], vec!["a", "b", "c", "d"]] {
+        for args in [Vec::new(), vec!["12"], vec!["12", "05"]] {
             let r = run_with(Arc::new(NoHttp), &args);
             let t = reply_text(&r);
             assert!(t.starts_with("🏥 *ᴘᴏᴛᴇɴsɪ ᴘᴇɴʏᴀᴋɪᴛ*"), "{args:?}: {t}");
             assert!(t.contains("Format: tgl bln thn"), "{args:?}: {t}");
         }
+        // Argumen keempat TIDAK memicu kartu format: `m.args.length < 3` sudah
+        // terpenuhi, jadi request tetap dikirim (dan di sini gagal).
+        let r = run_with(Arc::new(NoHttp), &["a", "b", "c", "d"]);
+        assert!(
+            reply_text(&r).starts_with("☢ *ᴇʀʀᴏʀ*"),
+            "{}",
+            reply_text(&r)
+        );
     }
 
     #[test]

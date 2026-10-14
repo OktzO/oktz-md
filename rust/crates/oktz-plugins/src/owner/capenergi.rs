@@ -206,7 +206,7 @@ mod tests {
     #[test]
     fn fewer_than_two_arguments_shows_help_and_writes_nothing() {
         for text in ["", "5", "   "] {
-            let r = run(text.clone(), json!({}));
+            let r = run(text, json!({}));
             assert!(text_of(&r).starts_with("⚙️ *SISTEM CAP ENERGI*"), "input {text:?}");
             assert!(r.mutations().is_empty(), "input {text:?}");
         }
@@ -215,7 +215,7 @@ mod tests {
     #[test]
     fn a_non_numeric_or_negative_cost_is_refused() {
         for text in ["hd abc", "hd -1"] {
-            let r = run(text.clone(), json!({}));
+            let r = run(text, json!({}));
             assert_eq!(text_of(&r), BAD_COST, "input {text:?}");
             assert!(r.mutations().is_empty(), "input {text:?}");
         }

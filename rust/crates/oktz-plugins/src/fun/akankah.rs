@@ -82,7 +82,7 @@ mod tests {
     #[test]
     fn an_empty_or_whitespace_question_returns_the_help_text() {
         for empty in ["", "   ", "\t"] {
-            assert_eq!(text_of(&run(empty.clone())), HELP_AKANKAH, "input {empty:?}");
+            assert_eq!(text_of(&run(empty)), HELP_AKANKAH, "input {empty:?}");
         }
     }
 

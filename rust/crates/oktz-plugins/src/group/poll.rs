@@ -155,7 +155,7 @@ mod tests {
     #[test]
     fn empty_text_prints_the_full_usage() {
         for t in ["", "   ", "\t"] {
-            let r = run(t.clone());
+            let r = run(t);
             assert!(body(&r).starts_with("⚠️ *ᴠᴀʟɪᴅᴀsɪ ɢᴀɢᴀʟ*\n\n> Format tidak valid!"), "{t:?}");
             assert!(body(&r).contains("> `.poll multi | pertanyaan | opsi1, opsi2, opsi3, dst`"), "{t:?}");
         }
@@ -166,7 +166,7 @@ mod tests {
         // Hanya `parts.length < 2` yang kena BAD_FORMAT; satu opsi selalu TOO_FEW.
         assert_eq!(body(&run("makan apa")), BAD_FORMAT);
         for t in ["makan|apa", "a|b|c"] {
-            assert_eq!(body(&run(t.clone())), TOO_FEW, "input {t:?}");
+            assert_eq!(body(&run(t)), TOO_FEW, "input {t:?}");
         }
         assert!(run("makan apa").mutations().is_empty());
     }
@@ -202,7 +202,7 @@ mod tests {
     fn the_option_bounds_are_two_and_twelve_inclusive() {
         let two = "a | x, y";
         assert_eq!(parse(two).unwrap().options.len(), 2);
-        assert!(run(two.clone()).is_none(), "tepat 2 lolos validasi");
+        assert!(run(two).is_none(), "tepat 2 lolos validasi");
 
         let twelve = format!("a | {}", (1..=12).map(|i| format!("o{i}")).collect::<Vec<_>>().join(", "));
         let p = parse(&twelve).unwrap();

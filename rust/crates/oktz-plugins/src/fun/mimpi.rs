@@ -235,6 +235,14 @@ mod tests {
                 .filter(|e| e.meta.matches(key))
                 .map(|e| e.meta.name.as_str())
                 .collect();
+            // `mimpi` bukan punya kita saja: `plugins/primbon/tafsirmimpi.js`
+            // mendaftarkan `mimpi` sebagai alias (baris 5) padahal file ini
+            // memakai nama itu sebagai `name`. Warisan JS, bukan bug port —
+            // sudah dicatat di `common::tests_roster_state::JS_COLLISIONS`.
+            if key == "mimpi" {
+                assert_eq!(owners, ["mimpi", "tafsirmimpi"], "tabrakan JS hilang");
+                continue;
+            }
             assert_eq!(owners, ["mimpi"], "key {key} diklaim oleh {owners:?}");
         }
     }

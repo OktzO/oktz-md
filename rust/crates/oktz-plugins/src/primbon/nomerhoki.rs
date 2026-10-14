@@ -17,15 +17,25 @@ fn only_digits(ctx: &Ctx) -> String {
         .collect()
 }
 
-fn render(r: &Value) -> String {
-    let ep = r.get("energi_positif").and_then(|v| v.get("details"));
-    let en = r.get("energi_negatif").and_then(|v| v.get("details"));
-    let status = r
-        .get("analisis")
-        .and_then(|v| v.get("status"))
-        .is_some_and(truthy);
+/// Pembacaan `a.b` di JS (`nomerhoki.js:37-53`): kalau `a` `undefined`/
+/// `null`, Property Access-nya melempar TypeError yang ditangkap `catch` —
+/// itu sebabnya `Err(())`. Kalau `a` primitif, hasilnya `undefined` tanpa
+/// melempar.
+fn js_prop<'a>(a: Option<&'a Value>, key: &str) -> Result<Option<&'a Value>, ()> {
+    match a {
+        None | Some(Value::Null) => Err(()),
+        Some(Value::Object(o)) => Ok(o.get(key)),
+        Some(_) => Ok(None),
+    }
+}
 
-    format!(
+fn render(r: &Value) -> Result<String, ()> {
+    // `const ep = r.energi_positif.details` lalu `en = r.energi_negatif.details`.
+    let ep = js_prop(r.get("energi_positif"), "details")?;
+    let en = js_prop(r.get("energi_negatif"), "details")?;
+    let status = js_prop(r.get("analisis"), "status")?.is_some_and(truthy);
+
+    Ok(format!(
         "🍀 *ɴᴏᴍᴏʀ ʜᴏᴋɪ*\n\n\
          > Nomor: *{}*\n\n\
          📊 *ᴀɴɢᴋᴀ ʙᴀɢᴜᴀ:* {}%\n\n\
@@ -41,19 +51,19 @@ fn render(r: &Value) -> String {
          └ Kehancuran: {}\n\n\
          > Status: {}",
         display(r.get("nomor")),
-        display(r.get("angka_bagua_shuzi").and_then(|v| v.get("value"))),
-        display(r.get("energi_positif").and_then(|v| v.get("total"))),
-        display(ep.and_then(|v| v.get("kekayaan"))),
-        display(ep.and_then(|v| v.get("kesehatan"))),
-        display(ep.and_then(|v| v.get("cinta"))),
-        display(ep.and_then(|v| v.get("kestabilan"))),
-        display(r.get("energi_negatif").and_then(|v| v.get("total"))),
-        display(en.and_then(|v| v.get("perselisihan"))),
-        display(en.and_then(|v| v.get("kehilangan"))),
-        display(en.and_then(|v| v.get("malapetaka"))),
-        display(en.and_then(|v| v.get("kehancuran"))),
+        display(js_prop(r.get("angka_bagua_shuzi"), "value")?),
+        display(js_prop(r.get("energi_positif"), "total")?),
+        display(js_prop(ep, "kekayaan")?),
+        display(js_prop(ep, "kesehatan")?),
+        display(js_prop(ep, "cinta")?),
+        display(js_prop(ep, "kestabilan")?),
+        display(js_prop(r.get("energi_negatif"), "total")?),
+        display(js_prop(en, "perselisihan")?),
+        display(js_prop(en, "kehilangan")?),
+        display(js_prop(en, "malapetaka")?),
+        display(js_prop(en, "kehancuran")?),
         if status { "✅ HOKI" } else { "❌ TIDAK HOKI" },
-    )
+    ))
 }
 
 #[plugin(
@@ -92,7 +102,12 @@ pub fn nomerhoki(ctx: Ctx) -> Reply {
         return gagal;
     };
 
-    Reply::text(render(r)).with_reaction("✅")
+    // `r.energi_positif.details` dan seterusnya melempar TypeError kalau
+    // rantai property-nya melewati `undefined`/`null` → sama seperti `catch` JS.
+    match render(r) {
+        Ok(text) => Reply::text(text).with_reaction("✅"),
+        Err(()) => Reply::text(error_reply(&ctx.prefix, &ctx.command)).with_reaction("☢"),
+    }
 }
 
 #[cfg(test)]
@@ -149,6 +164,21 @@ mod tests {
         r.without_mutations().text_body().expect("harus ada teks")
     }
 
+    /// `data` harus TRUTHY supaya lolos `!data?.data` — objek kosong `{}` di JS
+    /// falsy, jadi tidak bisa dipakai di sini.
+    fn payload_with_status(status: Value) -> Value {
+        json!({
+            "status": true,
+            "data": {
+                "nomor": "628123",
+                "angka_bagua_shuzi": { "value": 8 },
+                "energi_positif": { "total": 75, "details": {} },
+                "energi_negatif": { "total": 25, "details": {} },
+                "analisis": { "status": status }
+            }
+        })
+    }
+
     #[test]
     fn registers_with_the_js_plugin_config() {
         let p = oktz_plugin_api::find("nomerhoki").unwrap();
@@ -166,12 +196,19 @@ mod tests {
     /// Argumen tanpa digit apa pun — termasuk yang cuma simbol — kembali ke help.
     #[test]
     fn input_without_any_digit_prints_the_help_and_skips_http() {
-        for args in [Vec::new(), vec!["abc"], vec!["😀", "!!!"], vec!["+62-81"]] {
+        for args in [Vec::new(), vec!["abc"], vec!["😀", "!!!"], vec!["+ +"]] {
             let r = run_with(Arc::new(NoHttp), &args);
             let t = reply_text(&r);
             assert!(t.starts_with("🍀 *ɴᴏᴍᴏʀ ʜᴏᴋɪ*"), "{args:?}: {t}");
             assert!(t.contains("Masukkan nomor HP"), "{args:?}: {t}");
         }
+    }
+
+    /// `+62-81` masih menyisakan `6281`, jadi lolos ke HTTP — bukan help.
+    #[test]
+    fn an_input_with_at_least_one_digit_goes_to_http() {
+        let r = run_with(Arc::new(NoHttp), &["+62-81"]);
+        assert!(reply_text(&r).starts_with("☢ *ᴇʀʀᴏʀ*"), "{}", reply_text(&r));
     }
 
     /// Argumen digabung tanpa spasi, lalu semua non-digit dibuang.
@@ -225,17 +262,38 @@ mod tests {
     #[test]
     fn a_falsy_analysis_status_prints_tidak_hoki() {
         for status in [json!(false), json!(0), json!(""), json!(null)] {
-            let r = run_with(
-                Arc::new(Stub(json!({ "status": true, "data": { "analisis": { "status": status } } }))),
-                &["628123"],
-            );
+            let r = run_with(Arc::new(Stub(payload_with_status(status))), &["628123"]);
             assert!(reply_text(&r).ends_with("> Status: ❌ TIDAK HOKI"), "{status}");
         }
-        let r = run_with(
-            Arc::new(Stub(json!({ "status": true, "data": {} }))),
-            &["628123"],
+        // `status` bernilai objek kosong: `{}` falsy di JS, jadi bukan HOKI.
+        let r = run_with(Arc::new(Stub(payload_with_status(json!({})))), &["628123"]);
+        let t = reply_text(&r);
+        assert!(
+            t.ends_with("> Status: ❌ TIDAK HOKI"),
+            "`analisis.status` = `{{}}`: {t}"
         );
-        assert!(reply_text(&r).ends_with("> Status: ❌ TIDAK HOKI"));
+    }
+
+    /// Rantai property yang melewati `undefined`/`null` melempar TypeError di
+    /// JS (`r.energi_positif.details`), jadi jawabannya template error, bukan
+    /// balasan berisi `undefined`.
+    #[test]
+    fn a_missing_parent_object_falls_into_the_error_template() {
+        for data in [
+            json!({}),
+            json!({ "energi_positif": { "total": 1, "details": {} } }),
+            json!({ "energi_positif": null }),
+        ] {
+            let r = run_with(
+                Arc::new(Stub(json!({ "status": true, "data": data }))),
+                &["628123"],
+            );
+            assert!(
+                reply_text(&r).starts_with("☢ *ᴇʀʀᴏʀ*"),
+                "{data}: {}",
+                reply_text(&r)
+            );
+        }
     }
 
     #[test]

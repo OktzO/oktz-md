@@ -203,15 +203,18 @@ mod tests {
         let __balasan = run(http.clone(), "");
         let t = body(&__balasan);
         assert!(t.contains("☪️ *ᴍᴜsʟɪᴍ ᴀɪ*"), "{t}");
-        assert!(t.contains("*.muslimai Apa itu sholat?*"), "{t}");
+        assert!(t.contains("`.muslimai Apa itu sholat?`"), "{t}");
         assert!(http.seen.lock().unwrap().is_empty());
     }
 
     #[test]
     fn text_chunks_are_concatenated_in_order() {
+        // `res.split("\n")` (`muslimai.js:45`) — tiap baris harus JSON utuh,
+        // jadi antar chunk wajib ada newline.
         let raw = concat!(
-            r#"{"type":"text","data":"Sholat adalah "#,
-            r#"{"type":"tool","data":"diabaikan"},"#,
+            r#"{"type":"text","data":"Sholat adalah "}"#,
+            "\n",
+            r#"{"type":"tool","data":"diabaikan"}"#,
             "\n",
             r#"{"type":"text","data":"tiang lima waktu."}"#,
             "\n"

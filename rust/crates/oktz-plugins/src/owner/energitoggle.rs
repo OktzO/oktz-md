@@ -106,13 +106,13 @@ mod tests {
     #[test]
     fn the_enable_names_write_true_and_the_rest_write_false() {
         for cmd in ["enableenergi", "onenergi"] {
-            let r = run(cmd.clone());
+            let r = run(cmd);
             assert_eq!(stored_energi(&r), json!(true), "cmd {cmd}");
             assert_eq!(text_of(&r), ON_MSG);
             assert_eq!(reaction_of(&r), "⚡");
         }
         for cmd in ["disableenergi", "offenergi"] {
-            let r = run(cmd.clone());
+            let r = run(cmd);
             assert_eq!(stored_energi(&r), json!(false), "cmd {cmd}");
             assert_eq!(text_of(&r), OFF_MSG);
             assert_eq!(reaction_of(&r), "🔌");

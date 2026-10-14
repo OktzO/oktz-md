@@ -75,7 +75,7 @@ mod tests {
     }
 
     fn text_of(args: &[&str]) -> String {
-        run(args.clone()).text_body().expect("harus ada teks").to_string()
+        run(args).text_body().expect("harus ada teks").to_string()
     }
 
     #[test]

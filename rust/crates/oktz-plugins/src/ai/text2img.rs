@@ -108,10 +108,11 @@ mod tests {
     fn an_empty_prompt_shows_the_usage_card_without_a_reaction() {
         // `text2img.js:22-27` return sebelum `m.react('🕕')` di `:29`.
         for args in ["", "   "] {
-            let r = run(args.clone());
+            let r = run(args);
             assert!(body(&r).contains("📿 *ᴛᴇxᴛ ᴛᴏ ɪᴍᴀɢᴇ*"), "args={args:?}");
             assert!(
-                body(&r).contains("*.text2img Buat gambar dari teks*"),
+                // `text2img.js:25` memakai backtick, bukan `*`.
+                body(&r).contains("`.text2img Buat gambar dari teks`"),
                 "args={args:?}"
             );
             assert!(r.mutations().is_empty());

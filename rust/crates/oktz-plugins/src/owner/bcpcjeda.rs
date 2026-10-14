@@ -192,7 +192,7 @@ mod tests {
     #[test]
     fn a_malformed_value_is_refused_and_writes_nothing() {
         for bad in ["5", "5x", "s", "-5s", "5 s", "1.5m"] {
-            let r = run(bad.clone(), json!({}));
+            let r = run(bad, json!({}));
             assert_eq!(text_of(&r), BAD_FORMAT, "input {bad:?}");
             assert!(r.mutations().is_empty(), "input {bad:?}");
         }

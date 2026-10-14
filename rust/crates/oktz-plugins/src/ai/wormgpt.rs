@@ -188,7 +188,7 @@ mod tests {
         let __balasan = run(http.clone(), "");
         let t = body(&__balasan);
         assert!(t.contains("🐛 *ᴡᴏʀᴍ ɢᴘᴛ*"), "{t}");
-        assert!(t.contains("*.wormgpt perkenalkan dirimu*"), "{t}");
+        assert!(t.contains("`.wormgpt perkenalkan dirimu`"), "{t}");
         assert!(http.seen.lock().unwrap().is_empty());
     }
 
@@ -203,7 +203,8 @@ mod tests {
         assert_eq!(seen.len(), 1, "cuki tidak boleh dipanggil");
         assert_eq!(
             seen[0],
-            format!("{ENDPOINT}?text=perkenalkan%20diri%20mu")
+            // `encodeURIComponent` mengubah tiap spasi jadi `%20` (`stalker-fallback.js:298`).
+        format!("{ENDPOINT}?text=perkenalkan%20dirimu")
         );
         assert!(!seen[0].starts_with("https://api.cuki.biz.id"));
     }

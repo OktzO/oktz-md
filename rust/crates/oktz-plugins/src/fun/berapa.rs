@@ -78,7 +78,7 @@ mod tests {
     #[test]
     fn an_empty_question_shows_the_help_card() {
         for text in ["", "   ", "\t "] {
-            assert_eq!(run(text.clone()).text_body(), Some(HELP_BERAPA), "input {text:?}");
+            assert_eq!(run(text).text_body(), Some(HELP_BERAPA), "input {text:?}");
         }
     }
 

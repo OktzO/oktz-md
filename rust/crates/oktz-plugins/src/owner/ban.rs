@@ -175,7 +175,7 @@ mod tests {
     #[test]
     fn a_number_shorter_than_ten_or_longer_than_fifteen_is_refused() {
         for text in ["", "123", "6281234567890123456"] {
-            let r = run(text.clone(), None, json!({}));
+            let r = run(text, None, json!({}));
             assert!(text_of(&r).starts_with("🚫 *ʙᴀɴ ᴅsᴇʀ*"), "input {text:?}");
             assert!(r.mutations().is_empty(), "input {text:?}");
         }
@@ -184,7 +184,7 @@ mod tests {
     #[test]
     fn exactly_ten_and_exactly_fifteen_digits_are_accepted() {
         for text in ["1234567890", "123456789012345"] {
-            assert_eq!(stored(&run(text.clone(), None, json!({}))).len(), 1, "input {text:?}");
+            assert_eq!(stored(&run(text, None, json!({}))).len(), 1, "input {text:?}");
         }
     }
 

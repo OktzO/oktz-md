@@ -130,7 +130,7 @@ mod tests {
 
     #[test]
     fn fewer_than_three_arguments_prints_the_format_and_skips_http() {
-        for args in [Vec::new(), vec!["1"], vec!["1", "1"], vec!["x", "y", "z", "w"]] {
+        for args in [Vec::new(), vec!["1"], vec!["1", "1"]] {
             let r = run_with(Arc::new(NoHttp), &args);
             let t = reply_text(&r);
             assert!(
@@ -139,6 +139,14 @@ mod tests {
             );
             assert!(t.contains("Format: tgl bln thn"), "{args:?}: {t}");
         }
+        // Argumen keempat TIDAK memicu kartu format: `m.args.length < 3` sudah
+        // terpenuhi, jadi request tetap dikirim (dan di sini gagal).
+        let r = run_with(Arc::new(NoHttp), &["x", "y", "z", "w"]);
+        assert!(
+            reply_text(&r).starts_with("☢ *ᴇʀʀᴏʀ*"),
+            "{}",
+            reply_text(&r)
+        );
     }
 
     #[test]
@@ -163,10 +171,12 @@ mod tests {
 
     /// Field hilang tidak boleh menjatuhkan balasan — `${undefined}` di JS
     /// dicetak apa adanya, jadi `display` mengembalikan teks itu juga.
+    /// `data` harus non-kosong: `{}` falsy di JS dan lebih dulu kena cabang
+    /// `❌ *ɢᴀɢᴀʟ*`.
     #[test]
     fn a_payload_missing_every_field_still_renders_the_frame() {
         let r = run_with(
-            Arc::new(Stub(json!({ "status": true, "data": {} }))),
+            Arc::new(Stub(json!({ "status": true, "data": { "placeholder": 1 } }))),
             &["1", "1", "2000"],
         );
         let t = reply_text(&r);

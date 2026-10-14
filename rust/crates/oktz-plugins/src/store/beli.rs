@@ -311,7 +311,7 @@ mod tests {
     #[test]
     fn a_missing_or_out_of_range_number_shows_the_picker() {
         for input in ["", "0", "3", "abc", "-1"] {
-            let r = run(input.clone(), sample());
+            let r = run(input, sample());
             let t = text_of(&r);
             assert!(t.starts_with("🛒 *Pilih Produk*"), "input {input:?}: {t}");
             assert!(t.contains("🔑 *1.* Netflix — Rp 25.000 ✅"), "{t}");

@@ -38,13 +38,13 @@ fn or_dash(v: Option<&Value>) -> String {
 }
 
 /// `*TITLE:*\n` + `- {name}: {quantity}\n` per item, lalu baris kosong.
-/// `gagwatch.js:47-60`. `Err` kalau `arr` bukan array — di JS `.forEach`
+/// `gagwatch.js:45-60`. `Err` kalau `arr` bukan array — di JS `.forEach`
 /// melempar TypeError yang ditangkap `catch`.
 fn item_list(arr: Option<&Value>, title: &str) -> Result<String, String> {
     let items = arr
         .and_then(Value::as_array)
         .ok_or_else(|| FAILED.to_string())?;
-    let mut txt = format!("*{title}*\n");
+    let mut txt = format!("*{title}:*\n");
     for item in items {
         txt.push_str(&format!(
             "- {}: {}\n",
@@ -87,8 +87,7 @@ pub(crate) fn render(stock: &Value) -> Result<String, String> {
 
     txt.push_str(&item_list(stock.get("seeds"), "SEEDS")?);
     txt.push_str(&item_list(stock.get("gear"), "GEAR")?);
-    let crates = item_list(stock.get("crates"), "CRATES")?;
-    // Blok terakhir JS tidak menambah baris kosong sebelum `reply(txt)`.
+    let crates = item_list(stock.get("crates"), "CRATES")?;    // Blok terakhir JS tidak menambah baris kosong sebelum `reply(txt)`.
     txt.push_str(crates.trim_end_matches('\n'));
     Ok(txt)
 }

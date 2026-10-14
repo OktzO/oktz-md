@@ -80,7 +80,7 @@ mod tests {
     #[test]
     fn an_empty_or_whitespace_argument_returns_the_help_text() {
         for empty in ["", "  "] {
-            assert_eq!(text_of(&run(empty.clone())), HELP_COBA, "input {empty:?}");
+            assert_eq!(text_of(&run(empty)), HELP_COBA, "input {empty:?}");
         }
     }
 

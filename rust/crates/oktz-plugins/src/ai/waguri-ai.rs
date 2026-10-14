@@ -196,7 +196,7 @@ mod tests {
             let __balasan = run(http.clone(), text);
             let t = body(&__balasan);
             assert!(t.contains("👓 *Waguri-san*"), "{text:?}");
-            assert!(t.contains("`.waguri-ai <pertanyaan>*"), "{text:?}");
+            assert!(t.contains("*.waguri-ai <pertanyaan>*"), "{text:?}");
         }
         assert!(http.seen.lock().unwrap().is_empty());
     }

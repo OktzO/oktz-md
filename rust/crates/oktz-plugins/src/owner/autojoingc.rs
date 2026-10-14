@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn any_argument_other_than_on_or_off_only_shows_status() {
         for bad in ["", "enable", "1", "yes", "of"] {
-            let r = run(bad.clone(), json!({}));
+            let r = run(bad, json!({}));
             assert!(text_of(&r).starts_with("🔗 *AUTO JOIN GROUP*"), "input {bad:?}");
             assert!(r.mutations().is_empty(), "input {bad:?}");
         }

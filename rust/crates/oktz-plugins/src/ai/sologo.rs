@@ -56,10 +56,13 @@ pub fn sologo(ctx: Ctx) -> Reply {
     }
 
     let url = format!("{ENDPOINT}?prompt={}", encode_uri_component(&prompt));
-    let Some(data) = ctx.http.get(&url).ok().and_then(|r| r.json()) else {
+    let Ok(res) = ctx.http.get(&url) else {
         return Reply::text("😔 Terjadi kesalahan saat memproses permintaan ke AI.")
             .with_reaction("☢");
     };
+    // `axios` `silentJSONParsing` default: body non-JSON dipakai apa adanya,
+    // jadi `data.status` undefined → cabang "⚠️ AI gagal" di bawah.
+    let data = res.json().unwrap_or(Value::Null);
 
     // `sologo.js:38` — `!data.status || !data.result || data.result.length === 0`.
     let first = data

@@ -164,7 +164,7 @@ mod tests {
     #[test]
     fn no_text_and_no_reply_prints_the_help() {
         for t in ["", "   "] {
-            let r = run(t.clone(), None);
+            let r = run(t, None);
             assert_eq!(
                 body(&r),
                 "📢 *HIDETAG*\n\n• Reply pesan lalu ketik `.ht`\n• Atau ketik `.ht <pesan>`\n\nSupport: teks, gambar, video, sticker, audio, dokumen",

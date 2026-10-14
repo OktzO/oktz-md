@@ -139,7 +139,7 @@ mod tests {
     #[test]
     fn an_empty_text_shows_the_panel_and_writes_nothing() {
         for text in ["", "   "] {
-            let r = run(text.clone(), json!({}));
+            let r = run(text, json!({}));
             assert!(
                 text_of(&r).starts_with("📝 *CUSTOM PAYMENT TEXT*"),
                 "input {text:?}"
@@ -164,7 +164,7 @@ mod tests {
     #[test]
     fn reset_clears_the_text_regardless_of_case() {
         for text in ["reset", "RESET", " Reset "] {
-            let r = run(text.clone(), json!({ "customPaymentText": "lama" }));
+            let r = run(text, json!({ "customPaymentText": "lama" }));
             assert_eq!(text_of(&r), RESET_MSG, "input {text:?}");
             assert_eq!(stored(&r), json!(""), "input {text:?}");
         }

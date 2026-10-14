@@ -79,11 +79,11 @@ mod tests {
 
     #[test]
     fn the_owner_gets_the_shutdown_notice() {
-        assert_eq!(run(true.clone()).text_body(), Some(STOPPING));
+        assert_eq!(run(true).text_body(), Some(STOPPING));
     }
 
     #[test]
     fn a_non_owner_is_turned_away_before_any_shutdown_text() {
-        assert_eq!(run(false.clone()).text_body(), Some(NOT_OWNER));
+        assert_eq!(run(false).text_body(), Some(NOT_OWNER));
     }
 }

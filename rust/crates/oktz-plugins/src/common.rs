@@ -2195,8 +2195,8 @@ mod tests_batch_g {
         const KNOWN: &[&str] = &[
             "addenergi", "addenergiall", "addexp", "addkoin", "addlevel",
             "addlist", "addpartner", "addpremall", "addstok", "aktifaudiomenu",
-            "autobackup", "autobio", "autojoingc", "autoreactsw", "autoreadsw",
-            "autosambut", "backupdb", "ban", "banchat", "bcpcjeda",
+            "anticall", "autobackup", "autobio", "autojoingc", "autoreactsw",
+            "autoreadsw", "autosambut", "backupdb", "ban", "banchat", "bcpcjeda",
             "block", "botafk", "botmode", "capenergi", "capfree",
             "capprem", "checkban", "cmdvn", "cpuprofile", "custompayment",
             "delenergi", "delexp", "delkoin", "dellevel", "delpp",
@@ -4055,13 +4055,21 @@ mod tests_roster_state {
     /// bawah disalin apa adanya dari `plugins/**.js`, dan map plugin JS
     /// menimpa diam-diam saat dua file punya alias yang sama.
     ///
-    /// Sembilan dari enam belas muncul karena `plugins/fun/siapa.js`
+    /// Sembilan dari dua puluh dua muncul karena `plugins/fun/siapa.js`
     /// mendeklarasikan `name` sebagai array 48 kata; kata-kata itu diklaim
     /// plugin `cek*` juga sebagai alias. `beli`, `block`, `unblock`, dan
     /// `heapsnap` sudah bentrok di JS tanpa lewat `siapa`.
-    pub(crate) const JS_COLLISIONS: [&str; 16] = [
-        "beli", "berburu", "block", "bucin", "cantik", "cupu", "exp", "ganteng", "heapsnap",
-        "kaya", "ngemis", "noob", "pintar", "pro", "unblock", "wibu",
+    ///
+    /// Enam sisanya pola lain, semuanya salah satu file JS yang menabrak
+    /// dirinya sendiri: `religi/islami.js` punya alias `asmaulhusna`
+    /// milik `religi/asmaulhusna.js`; `primbon/tafsirmimpi.js` alias `mimpi`
+    /// milik `fun/mimpi.js`; `primbon/ramalanjodoh.js` alias `cekjodoh`
+    /// milik `cek/cekjodoh.js`; dan `canvas/fakedana.js`, `fakegopay.js`,
+    /// `fakeovo.js` menaruh nama sendiri di dalam daftar alias-nya.
+    pub(crate) const JS_COLLISIONS: [&str; 22] = [
+        "asmaulhusna", "beli", "berburu", "block", "bucin", "cantik", "cekjodoh", "cupu",
+        "exp", "fakedana", "fakegopay", "fakeovo", "ganteng", "heapsnap", "kaya", "mimpi",
+        "ngemis", "noob", "pintar", "pro", "unblock", "wibu",
     ];
 
     #[test]
@@ -4384,8 +4392,14 @@ mod tests_batch_fun {
         }
     }
 
+    /// Kunci yang JS-nya memang tabrakan harus dicatat, bukan hanya lolos
+    /// karena plugin pasangannya kebetulan belum diport. Kalau suatu saat
+    /// `cek/cekkaya.js` ikut diport, test ini yang akan menjatuhkan.
     #[test]
     fn every_key_of_this_batch_has_exactly_one_owner_in_the_rust_registry() {
+        // `mimpi` sudah bentrok di JS: `primbon/tafsirmimpi.js` mendaftarkan
+        // `mimpi` sebagai alias padahal `fun/mimpi.js` sudah memakai nama itu.
+        let collisions = super::tests_roster_state::JS_COLLISIONS;
         for name in NEW_PLUGINS {
             let entry = oktz_plugin_api::find(name).unwrap();
             for key in std::iter::once(&entry.meta.name).chain(entry.meta.alias.iter()) {
@@ -4394,14 +4408,14 @@ mod tests_batch_fun {
                     .filter(|e| e.meta.matches(key))
                     .map(|e| e.meta.name.as_str())
                     .collect();
+                if collisions.contains(&key.as_str()) {
+                    assert!(owners.contains(&name), "key {key} hilang: {owners:?}");
+                    continue;
+                }
                 assert_eq!(owners, vec![name], "key {key} diklaim oleh {owners:?}");
             }
         }
     }
-
-    /// Kunci yang JS-nya memang tabrakan harus dicatat, bukan hanya lolos
-    /// karena plugin pasangannya kebetulan belum diport. Kalau suatu saat
-    /// `cek/cekkaya.js` ikut diport, test ini yang akan menjatuhkan.
 
     #[test]
     fn the_batch_answers_through_the_registry() {

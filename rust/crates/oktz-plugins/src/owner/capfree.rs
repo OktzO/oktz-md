@@ -127,7 +127,7 @@ mod tests {
     #[test]
     fn no_argument_shows_help_and_writes_nothing() {
         for text in ["", "   "] {
-            let r = run(text.clone(), json!({}));
+            let r = run(text, json!({}));
             assert!(text_of(&r).starts_with("🆓 *SISTEM CAP FREE*"), "input {text:?}");
             assert!(r.mutations().is_empty(), "input {text:?}");
         }

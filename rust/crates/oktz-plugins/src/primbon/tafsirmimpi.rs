@@ -68,7 +68,7 @@ pub fn tafsirmimpi(ctx: Ctx) -> Reply {
     }
 
     let url = format!("{ENDPOINT}?mimpi={}", encode_uri_component(&keyword));
-    let gagal = format!("❌ *ɢɐɢɐʟ*\n\n> Tidak ditemukan tafsir untuk: {keyword}");
+    let gagal = format!("❌ *ɢᴀɢᴀʟ*\n\n> Tidak ditemukan tafsir untuk: {keyword}");
 
     let Ok(resp) = ctx.http.get(&url) else {
         return Reply::text(error_reply(&ctx.prefix, &ctx.command)).with_reaction("☢");
@@ -197,7 +197,7 @@ mod tests {
         assert!(t.starts_with("🌙 *ᴛᴀꜰsɪʀ ᴍɪᴍᴘɪ*"), "{t}");
         assert!(t.contains("> Kata kunci: *bertemu*"), "{t}");
         assert!(t.contains("> Ditemukan: *3 hasil*"), "{t}");
-        assert!(t.contains("*. 1. mimpi 1*\n> tafsir 1\n\n"), "{t}");
+        assert!(t.contains("*1. mimpi 1*\n> tafsir 1\n\n"), "{t}");
         assert!(t.contains("*3. mimpi 3*\n> tafsir 3\n\n"), "{t}");
         assert!(!t.contains("hasil lainnya"), "total <= 10 tidak ada ekor: {t}");
     }

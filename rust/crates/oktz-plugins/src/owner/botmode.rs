@@ -251,7 +251,7 @@ mod tests {
     #[test]
     fn an_unknown_mode_is_refused_and_writes_nothing() {
         for bad in ["nope", "1", "stor"] {
-            let r = run(bad.clone(), false, json!({}), json!({}));
+            let r = run(bad, false, json!({}), json!({}));
             assert!(text_of(&r).starts_with("❌ *ᴍᴏᴅᴇ ᴛɪᴅᴀᴋ ᴠᴀʟɪᴅ*"), "input {bad:?}");
             assert!(text_of(&r).contains("md, cpanel, store, pushkontak, otp, all"));
             assert!(r.mutations().is_empty(), "input {bad:?}");

@@ -177,7 +177,7 @@ mod tests {
             is_bot_admin: false,
         };
         for msg in ["", "0", "-5", "abc"] {
-            let r = run(msg.clone(), roster.clone());
+            let r = run(msg, roster);
             assert!(text_of(&r).starts_with("⚠️ *ᴄᴀʀᴀ ᴘᴀᴋᴀɪ*"), "input {msg:?}");
             assert!(r.mutations().is_empty(), "input {msg:?}");
         }

@@ -144,7 +144,8 @@ mod tests {
             Vec::new(),
             vec!["putu"],
             vec![panjang.as_str()],
-            vec!["😀", "😀😀"],
+            // Emoji tidak menambah argumen: `m.args` sudah token whitespace.
+            vec!["😀😀"],
         ] {
             let r = run_with(Arc::new(NoHttp), &args);
             let t = reply_text(&r);

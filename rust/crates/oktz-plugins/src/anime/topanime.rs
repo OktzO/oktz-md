@@ -32,13 +32,41 @@ fn interp(value: Option<&Value>) -> String {
     }
 }
 
+/// `Math.min(list.length, 10)` (`topanime.js:35`).
+///
+/// `ponytail:` hanya array dan string yang punya `.length`; objek, angka, dan
+/// boolean mengembalikan `undefined`, jadi `Math.min(undefined, 10)` = `NaN`
+/// dan loop `i < NaN` tidak pernah jalan. `None` di sini berarti `NaN` itu.
+fn max_items(list: &Value) -> Option<usize> {
+    let n = match list {
+        Value::Array(a) => a.len(),
+        Value::String(s) => s.chars().count(),
+        _ => return None,
+    };
+    Some(n.min(MAX_ITEMS))
+}
+
+/// `list[i]` di JS. String terindeks jadi karakter satu huruf — bukan objek —
+/// jadi semua `.field`-nya `undefined`.
+fn js_items(list: &Value, max: usize) -> Vec<Value> {
+    match list {
+        Value::Array(a) => a.iter().take(max).cloned().collect(),
+        Value::String(s) => s
+            .chars()
+            .take(max)
+            .map(|c| Value::String(c.to_string()))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
 /// `topanime.js:32-45`.
-fn render_list(list: &[Value]) -> String {
+fn render_list(list: &Value) -> String {
     let mut txt = String::from("🏆 *TOP ANIME CHARACTERS (WAIFU LIST)* 🏆\n\n");
     txt.push_str("Berikut adalah daftar karakter terpopuler dan paling dicintai saat ini:\n\n");
 
-    let max_items = list.len().min(MAX_ITEMS);
-    for character in list.iter().take(max_items) {
+    let max_items = max_items(list);
+    for character in js_items(list, max_items.unwrap_or(0)) {
         txt.push_str(&format!(
             "*{} - {}*\n",
             interp(character.get("rank")),
@@ -59,8 +87,20 @@ fn render_list(list: &[Value]) -> String {
         ));
     }
 
-    txt.push_str(&format!("_Menampilkan {max_items} karakter teratas._"));
+    // `NaN` masuk ke template literal apa adanya.
+    let tampil = max_items.map_or("NaN", |n| n.to_string());
+    txt.push_str(&format!("_Menampilkan {tampil} karakter teratas._"));
     txt
+}
+
+/// `list.length > 0 && list[0].image` (`topanime.js:49`) — `&&` ter-short
+/// circuit, jadi `list[0]` tidak pernah dibaca saat `.length` bukan positif.
+fn first_image(list: &Value) -> Option<&str> {
+    let first = js_items(list, 1).into_iter().next()?;
+    first
+        .get("image")
+        .filter(|v| js_truthy(Some(*v)))
+        .and_then(Value::as_str)
 }
 
 #[plugin(
@@ -87,27 +127,25 @@ pub fn topanime(ctx: Ctx) -> Reply {
         return Reply::text(SERVER_ERROR).with_reaction("❌");
     };
 
-    // `!data.result.result` harus ada DAN berupa array; kalau bukan array,
-    // `list[0].image` di JS melempar TypeError dan jatuh ke `catch`.
-    if !js_truthy(data.get("status")) || !js_truthy(data.get("result")) {
+    // `!data.status || !data.result || !data.result.result` → kartu "gagal".
+    if !js_truthy(data.get("status")) {
         return Reply::text(NO_DATA).with_reaction("❌");
     }
     let Some(list) = data
         .get("result")
+        .filter(|v| js_truthy(Some(*v)))
         .and_then(|r| r.get("result"))
-        .and_then(Value::as_array)
+        .filter(|v| js_truthy(Some(*v)))
     else {
-        return Reply::text(SERVER_ERROR).with_reaction("❌");
+        return Reply::text(NO_DATA).with_reaction("❌");
     };
 
+    // `list` yang truthy tapi bukan array TIDAK melempar di JS: `.length` dan
+    // `[0]` cuma `undefined`, jadi yang terjadi frame kosong berisi `NaN`.
     let txt = render_list(list);
-    // `list[0].image` truthy -> kirim gambar; selain itu teks polos.
-    let image = list
-        .first()
-        .and_then(|c| c.get("image"))
-        .filter(|v| js_truthy(Some(*v)))
-        .and_then(Value::as_str);
-    match image {
+    // `list.length > 0 && list[0].image` truthy -> kirim gambar; selain itu
+    // teks polos.
+    match first_image(list) {
         Some(url) => Reply::image(MediaSource::url(url), txt).with_reaction("✅"),
         None => Reply::text(txt).with_reaction("✅"),
     }
@@ -270,7 +308,7 @@ mod tests {
         let list: Vec<Value> = (1..=15)
             .map(|i| entry(i, &format!("C{i}"), None))
             .collect();
-        let txt = render_list(&list);
+        let txt = render_list(&Value::Array(list));
         assert!(txt.contains("*10 - C10*"), "entri ke-10 ikut");
         assert!(!txt.contains("*11 - C11*"), "entri ke-11 harus terpotong");
         assert!(txt.ends_with("_Menampilkan 10 karakter teratas._"), "{txt}");
@@ -311,22 +349,37 @@ mod tests {
     }
 
     #[test]
-    fn an_unusable_shape_or_a_dead_server_reports_the_server_error() {
-        // `result.result` bukan array: di JS `list[0].image` melempar.
-        let r = run(Stub::ok(r#"{"status":true,"result":{"result":{"a":1}}}"#));
-        assert_eq!(body(&r), SERVER_ERROR);
-        assert_eq!(emoji(&r), "❌");
-
+    fn a_dead_server_or_a_non_json_body_reports_the_server_error() {
+        // `catch` di `topanime.js:55-59` hanya tersentuh kegagalan request
+        // atau JSON yang tidak bisa dibaca axios.
         let r = run(Stub::offline());
         assert_eq!(body(&r), SERVER_ERROR);
+        assert_eq!(emoji(&r), "❌");
 
         let r = run(Stub::ok("bukan json"));
         assert_eq!(body(&r), SERVER_ERROR);
     }
 
+    /// `list` truthy tapi bukan array tidak melempar di JS: `list.length` dan
+    /// `list[0]` sama-sama `undefined`, jadi yang dicetak frame `NaN` polos.
+    #[test]
+    fn a_truthy_non_array_list_renders_the_nan_frame_instead_of_throwing() {
+        let r = run(Stub::ok(r#"{"status":true,"result":{"result":{"a":1}}}"#));
+        assert!(!r.has_media(), "list[0] undefined → tidak ada gambar");
+        assert!(body(&r).ends_with("_Menampilkan NaN karakter teratas._"), "{:?}", body(&r));
+        assert_eq!(emoji(&r), "✅");
+
+        // String punya `.length`, jadi `Math.min(3, 10)` = 3 dan `list[0]`
+        // adalah karakter — bukan objek, jadi field-nya semua `undefined`.
+        let r = run(Stub::ok(r#"{"status":true,"result":{"result":"abc"}}"#));
+        assert!(body(&r).contains("*undefined - undefined*"), "{:?}", body(&r));
+        assert!(body(&r).ends_with("_Menampilkan 3 karakter teratas._"), "{:?}", body(&r));
+        assert!(!r.has_media());
+    }
+
     #[test]
     fn missing_fields_render_as_undefined_like_template_literal() {
-        let txt = render_list(&[json!({})]);
+        let txt = render_list(&json!([{}]));
         assert!(txt.contains("*undefined - undefined*"), "{txt}");
     }
 }

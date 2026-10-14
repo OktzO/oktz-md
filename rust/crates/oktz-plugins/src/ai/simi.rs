@@ -43,9 +43,13 @@ pub fn simi(ctx: Ctx) -> Reply {
     }
 
     let url = format!("{ENDPOINT}?text={}", encode_uri_component(&text));
-    let Some(data) = ctx.http.get(&url).ok().and_then(|r| r.json()) else {
+    let Ok(res) = ctx.http.get(&url) else {
         return Reply::text("😔 Simi gagal membalas pesanmu.").with_reaction("☢");
     };
+    // `axios` `silentJSONParsing` aktif secara default: body non-JSON tidak
+    // melempar, tapi dipakai apa adanya sebagai string. Jadi `data.status`
+    // tetap `undefined` dan jatuh ke cabang "ngambek" di bawah.
+    let data = res.json().unwrap_or(Value::Null);
 
     // `simi.js:38` — `!data.status || !data.result`.
     if !js_truthy(data.get("status")) || !js_truthy(data.get("result")) {
@@ -185,16 +189,17 @@ mod tests {
     fn args_win_and_the_trimmed_text_is_the_fallback() {
         let http = Stub::ok(r#"{"status":true,"result":"hai"}"#);
         let _ = run(http.clone(), "teks mentah", "Halo Simi!");
+        // `encodeURIComponent` tidak menyentuh `!'()*~`, jadi `!` tetap apa adanya.
         assert_eq!(
             http.seen.lock().unwrap()[0],
-            format!("{ENDPOINT}?text=Halo%20Simi%21")
+            format!("{ENDPOINT}?text=Halo%20Simi!")
         );
 
         let http = Stub::ok(r#"{"status":true,"result":"hai"}"#);
         let _ = run(http.clone(), "  Halo Simi!  ", "");
         assert_eq!(
             http.seen.lock().unwrap()[0],
-            format!("{ENDPOINT}?text=Halo%20Simi%21")
+            format!("{ENDPOINT}?text=Halo%20Simi!")
         );
     }
 

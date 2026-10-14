@@ -223,8 +223,8 @@ mod tests {
 
     #[test]
     fn no_text_and_no_quote_shows_the_help_without_reacting() {
-        for (text, quoted) in [("", None), ("", Some("")), ("   ", Some(""))] {
-            let r = run(text.clone(), quoted);
+        for (text, quoted) in [("", None), ("", Some(""))] {
+            let r = run(text, quoted);
             assert_eq!(
                 text_of(&r),
                 help("Unknown"),
@@ -233,6 +233,15 @@ mod tests {
             assert!(!r.has_media());
             assert_eq!(reaction_of(&r), None, "guard ini sebelum `m.react`");
         }
+    }
+
+    /// `serialize.js:407` sudah mem-trim `m.text`, jadi teks spasi-tifu tidak
+    /// pernah sampai ke handler. Kalau tetap dipaksakan, `text || ...` di JS
+    /// memakai string spasi itu apa adanya (truthy) — bukan help.
+    #[test]
+    fn a_whitespace_only_text_is_truthy_in_js_and_still_builds_the_url() {
+        let u = url_of(&run("   ", None));
+        assert!(u.contains("text=%20%20%20&"), "{u}");
     }
 
     #[test]

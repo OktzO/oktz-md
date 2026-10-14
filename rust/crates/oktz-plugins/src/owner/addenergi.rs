@@ -298,7 +298,7 @@ mod tests {
     #[test]
     fn amount_and_target_both_missing_show_help_and_write_nothing() {
         for msg in ["", "   ", "abc", "@628999"] {
-            let r = run(msg.clone(), json!({}));
+            let r = run(msg, json!({}));
             assert!(text_of(&r).starts_with("⚡ *ᴀᴅᴅ ᴇɴᴇʀɢɪ*"), "input {msg:?}");
             assert!(r.mutations().is_empty(), "input {msg:?}");
         }
@@ -385,7 +385,7 @@ mod tests {
     #[test]
     fn unlimited_writes_minus_one_for_either_spelling() {
         for flag in ["--unlimited", "--unli", "--UNLIMITED"] {
-            let r = run(flag.clone(), json!({ "energi": 12 }));
+            let r = run(flag, json!({ "energi": 12 }));
             assert_eq!(written_energi(&r), (SENDER.to_string(), UNLIMITED), "flag {flag}");
             assert!(text_of(&r).contains("unlimited / tidak terbatas"), "flag {flag}");
         }

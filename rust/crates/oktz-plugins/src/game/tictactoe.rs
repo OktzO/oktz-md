@@ -26,13 +26,14 @@ use crate::common::{jid_number, now_ms};
 /// supaya whoever mem-port router tic-tac-toe tidak perlu tahu.
 pub(crate) const GAMES_KEY: &str = "tictactoeGames";
 
-/// Awalan `roomId` (`tictactoe.js:186`) dan penentu "masih dalam game".
+/// Awalan `roomId` (`tictactoe.js:160`, `tictactoe.js:203`) dan penentu
+/// "masih dalam game".
 pub(crate) const ROOM_PREFIX: &str = "ttt_";
 
-/// `setTimeout(..., 300000)` (`tictactoe.js:196`) — 5 menit.
+/// `setTimeout(..., 300000)` (`tictactoe.js:224`) — 5 menit.
 pub(crate) const ROOM_TTL_MS: i64 = 300_000;
 
-/// `tictactoe.js:151` — sender sudah punya room.
+/// `tictactoe.js:165` — sender sudah punya room.
 pub(crate) const BUSY: &str = "❌ Kamu masih dalam game!\n\n> \
     Selesaikan game kamu atau ketik *nyerah* untuk menyerah.";
 
@@ -86,14 +87,19 @@ pub(crate) fn fresh_board() -> String {
 }
 
 /// Room `WAITING` yang lewat TTL — diperlakukan sama seperti sudah dihapus
-/// `setTimeout`.
+/// `setTimeout`. Berlaku untuk SEMUA pencarian room, bukan cuma yang mencari
+/// room kosong: di JS room basi sudah hilang dari map, jadi tidak lagi
+/// menahan pemanggil di cabang "masih dalam game" maupun bisa di-join.
 fn is_expired(room: &Value, now: i64) -> bool {
     room.get("state").and_then(Value::as_str) == Some("WAITING")
         && now - room.get("createdAt").and_then(Value::as_i64).unwrap_or(0) > ROOM_TTL_MS
 }
 
 /// `room.id.startsWith("ttt_") && [playerX, playerO].filter(Boolean).includes(sender)`.
-fn is_active_for(room: &Value, sender: &str) -> bool {
+///
+/// Room `PLAYING` tidak pernah dihapus `setTimeout`, jadi tidak ada cek TTL
+/// di sini — hanya `WAITING` basi yang dianggap sudah hilang.
+fn is_active_for(room: &Value, sender: &str, now: i64) -> bool {
     room.get("id")
         .and_then(Value::as_str)
         .is_some_and(|id| id.starts_with(ROOM_PREFIX))
@@ -102,14 +108,36 @@ fn is_active_for(room: &Value, sender: &str) -> bool {
             .flatten()
             .filter_map(Value::as_str)
             .any(|p| p == sender)
+        && !is_expired(room, now)
 }
 
 /// `r.state === "WAITING" && r.chat === chat && (roomName ? r.name === roomName : true)`.
+///
+/// Tidak ada cek awalan `ttt_` di sini — JS juga tidak punya, jadi room
+/// waiting milik plugin lain di chat yang sama tetap bisa di-join.
 fn is_waiting(room: &Value, chat: &str, room_name: &str, now: i64) -> bool {
     room.get("state").and_then(Value::as_str) == Some("WAITING")
         && room.get("chat").and_then(Value::as_str) == Some(chat)
         && (room_name.is_empty() || room.get("name").and_then(Value::as_str) == Some(room_name))
         && !is_expired(room, now)
+}
+
+/// `const roomId = "ttt_" + Date.now()` (`tictactoe.js:203`).
+///
+/// `Date.now()` Resolution milidetik: di JS dua room tidak mungkin dibuat pada
+/// milidetik yang sama (setiap panggilan lewat jaringan), tapi handler di sini
+/// sinkon dan dua perintah berurutan bisa jatuh di milideki yang sama — key
+/// yang sama menimpa room sebelumnya. Suffix hanya dipakai kalau key-nya sudah
+/// diambil supaya room pertama tidak hilang.
+fn new_room_id(rooms: &Map<String, Value>, now: i64) -> String {
+    let base = format!("{ROOM_PREFIX}{now}");
+    let mut id = base.clone();
+    let mut suffix = 1;
+    while rooms.contains_key(&id) {
+        id = format!("{base}-{suffix}");
+        suffix += 1;
+    }
+    id
 }
 
 /// Keputusan handler terhadap room yang ada. Tidak ada yang dikirim ke user
@@ -130,7 +158,7 @@ fn decide(
     chat: &str,
     now: i64,
 ) -> Decision {
-    if rooms.values().any(|r| is_active_for(r, sender)) {
+    if rooms.values().any(|r| is_active_for(r, sender, now)) {
         return Decision::Busy;
     }
 
@@ -158,10 +186,11 @@ fn decide(
             }
         }
         None => {
+            let room_id = new_room_id(rooms, now);
             rooms.insert(
-                format!("{ROOM_PREFIX}{now}"),
+                room_id.clone(),
                 json!({
-                    "id": format!("{ROOM_PREFIX}{now}"),
+                    "id": room_id,
                     "chat": chat,
                     "name": if room_name.is_empty() { Value::Null } else { json!(room_name) },
                     "playerX": sender,
@@ -249,7 +278,7 @@ mod tests {
     const SENDER: &str = "628111@s.whatsapp.net";
     const OTHER: &str = "628999@s.whatsapp.net";
 
-    fn ctx(sender: &str, args: &str, sessions: SessionStore) -> Ctx {
+    fn ctx(sender: &str, args: &str, sessions: &SessionStore) -> Ctx {
         Ctx {
             prefix: ".".into(),
             command: "tictactoe".into(),
@@ -258,12 +287,13 @@ mod tests {
             sender: sender.into(),
             chat: CHAT.into(),
             is_group: true,
-            sessions,
+            // `Arc` di-clone supaya test boleh inspect store setelah handler.
+            sessions: sessions.clone(),
             ..Default::default()
         }
     }
 
-    fn run(sender: &str, args: &str, sessions: SessionStore) -> Reply {
+    fn run(sender: &str, args: &str, sessions: &SessionStore) -> Reply {
         let c = ctx(sender, args, sessions);
         (oktz_plugin_api::find("tictactoe").unwrap().handler)(c)
     }
@@ -339,7 +369,7 @@ mod tests {
     #[test]
     fn the_first_command_creates_a_waiting_room() {
         let s = new_session_store();
-        let r = run(SENDER.clone(), "", s.clone());
+        let r = run(SENDER, "", &s);
         assert_eq!(
             text_of(&r),
             "🎮 *ᴛɪᴄ ᴛᴀᴄ ᴛᴏᴇ*\n\n\
@@ -365,7 +395,7 @@ mod tests {
     #[test]
     fn a_named_room_echoes_the_name_in_the_join_hint() {
         let s = new_session_store();
-        let r = run(SENDER.clone(), " opardu   ultimate ", s.clone());
+        let r = run(SENDER, " opardu   ultimate ", &s);
         assert!(
             text_of(&r).contains("> Ketik `.tictactoe opardu ultimate` untuk join"),
             "{}",
@@ -377,8 +407,8 @@ mod tests {
     #[test]
     fn the_second_player_joins_the_waiting_room_of_the_same_chat() {
         let s = new_session_store();
-        run(SENDER.clone(), "ruang 1", s.clone());
-        let r = run(OTHER.clone(), "ruang 1", s.clone());
+        run(SENDER, "ruang 1", &s);
+        let r = run(OTHER, "ruang 1", &s);
 
         assert!(
             text_of(&r).starts_with("🎮 *ᴛɪᴄ ᴛᴀᴄ ᴛᴏᴇ*\n\nPartner ditemukan!\n\n"),
@@ -386,11 +416,16 @@ mod tests {
             text_of(&r)
         );
         assert_eq!(reaction_of(&r), Some("🎮"));
-        match r.without_mutations() {
+        // `safeReact` lalu `safeReply` dipetakan ke `Reply::Reaction` yang
+        // membungkus balasan teksnya.
+        let Reply::Reaction { reply, .. } = r.without_mutations() else {
+            panic!("harus Reaction, dapat {:?}", r.without_mutations());
+        };
+        match reply.as_ref() {
             Reply::Text { mentions, .. } => {
                 assert_eq!(mentions, &[SENDER.to_string(), OTHER.to_string()])
             }
-            other => panic!("harus Text, dapat {other:?}"),
+            other => panic!("isi Reaction harus Text, dapat {other:?}"),
         }
 
         let list = rooms(&s);
@@ -403,8 +438,8 @@ mod tests {
     #[test]
     fn the_joined_message_shows_the_empty_board_and_the_first_players_turn() {
         let s = new_session_store();
-        run(SENDER.clone(), "", s.clone());
-        let r = run(OTHER.clone(), "", s.clone());
+        run(SENDER, "", &s);
+        let r = run(OTHER, "", &s);
         assert!(
             text_of(&r).contains("❌ @628111\n⭕ @628999"),
             "{}",
@@ -421,9 +456,9 @@ mod tests {
     #[test]
     fn a_player_who_is_already_in_a_game_is_turned_away() {
         let s = new_session_store();
-        run(SENDER.clone(), "", s.clone());
+        run(SENDER, "", &s);
         let before = rooms(&s);
-        let r = run(SENDER.clone(), "nama lain", s.clone());
+        let r = run(SENDER, "nama lain", &s);
         assert_eq!(text_of(&r), BUSY);
         assert_eq!(reaction_of(&r), None, "JS tidak bereaksi di cabang ini");
         assert_eq!(rooms(&s), before, "tidak boleh ada perubahan state");
@@ -432,9 +467,9 @@ mod tests {
     #[test]
     fn the_player_o_is_also_locked_out_of_creating_a_new_room() {
         let s = new_session_store();
-        run(SENDER.clone(), "", s.clone());
-        run(OTHER.clone(), "", s.clone());
-        let r = run(OTHER.clone(), "", s.clone());
+        run(SENDER, "", &s);
+        run(OTHER, "", &s);
+        let r = run(OTHER, "", &s);
         assert_eq!(text_of(&r), BUSY);
         assert_eq!(rooms(&s).len(), 1);
     }
@@ -442,19 +477,28 @@ mod tests {
     #[test]
     fn a_different_room_name_does_not_join_the_waiting_one() {
         let s = new_session_store();
-        run(SENDER.clone(), "ruang 1", s.clone());
-        run(OTHER.clone(), "ruang 2", s.clone());
+        run(SENDER, "ruang 1", &s);
+        run(OTHER, "ruang 2", &s);
         let list = rooms(&s);
         assert_eq!(list.len(), 2, "nama room berbeda → dua room terpisah");
         assert!(list.iter().all(|(_, r)| r["state"] == json!("WAITING")));
+        // Dua perintah berurutan bisa jatuh di milidetik yang sama; kalau key
+        // room tidak dibedakan, room pertama tertimpa dan hanya tersisa satu.
+        for (id, room) in &list {
+            assert!(id.starts_with(ROOM_PREFIX), "{id}");
+            assert_eq!(room["id"], json!(id.as_str()));
+        }
+        let names: Vec<&Value> = list.iter().map(|(_, r)| &r["name"]).collect();
+        assert!(names.contains(&&json!("ruang 1")), "{names:?}");
+        assert!(names.contains(&&json!("ruang 2")), "{names:?}");
     }
 
     #[test]
     fn an_empty_name_matches_any_waiting_room_but_named_join_does_not() {
         let s = new_session_store();
-        run(SENDER.clone(), "ruang 1", s.clone());
+        run(SENDER, "ruang 1", &s);
         // Tanpa nama, filter dilewati (`roomName ? ... : true`).
-        let r = run(OTHER.clone(), "", s.clone());
+        let r = run(OTHER, "", &s);
         assert!(
             text_of(&r).contains("Partner ditemukan!"),
             "{}",
@@ -462,8 +506,8 @@ mod tests {
         );
         // Dengan nama yang tidak cocok, tidak ada yang di-join.
         let s2 = new_session_store();
-        run(SENDER.clone(), "ruang 1", s2.clone());
-        let r = run(OTHER.clone(), "ruang 9", s2.clone());
+        run(SENDER, "ruang 1", &s2);
+        let r = run(OTHER, "ruang 9", &s2);
         assert!(text_of(&r).contains("Room dibuat!"), "{}", text_of(&r));
     }
 
@@ -472,7 +516,7 @@ mod tests {
         let s = new_session_store();
         // `createdAt` 0 berarti sudah lewat 5 menit untuk `now_ms()` sekarang.
         seed(&s, waiting_room("ttt_1", SENDER, None, 0));
-        let r = run(OTHER.clone(), "", s.clone());
+        let r = run(OTHER, "", &s);
         assert!(text_of(&r).contains("Room dibuat!"), "{}", text_of(&r));
         assert_eq!(
             rooms(&s).len(),
@@ -485,7 +529,7 @@ mod tests {
     fn the_owner_of_an_expired_waiting_room_is_no_longer_locked_out() {
         let s = new_session_store();
         seed(&s, waiting_room("ttt_1", SENDER, None, 0));
-        let r = run(SENDER.clone(), "", s.clone());
+        let r = run(SENDER, "", &s);
         assert!(text_of(&r).contains("Room dibuat!"), "{}", text_of(&r));
     }
 
@@ -496,7 +540,7 @@ mod tests {
             &s,
             waiting_room("ttt_1", SENDER, None, now_ms() - ROOM_TTL_MS),
         );
-        let r = run(OTHER.clone(), "", s.clone());
+        let r = run(OTHER, "", &s);
         assert!(
             text_of(&r).contains("Partner ditemukan!"),
             "tepat di batas: {}",
@@ -507,11 +551,11 @@ mod tests {
     #[test]
     fn a_playing_room_never_expires_on_its_own() {
         let s = new_session_store();
-        run(SENDER.clone(), "", s.clone());
-        run(OTHER.clone(), "", s.clone());
+        run(SENDER, "", &s);
+        run(OTHER, "", &s);
         // Setelah join, `createdAt` sudah tua tapi state PLAYING — JS tidak
         // pernah menghapus room ini lewat setTimeout.
-        let r = run(SENDER.clone(), "", s.clone());
+        let r = run(SENDER, "", &s);
         assert_eq!(text_of(&r), BUSY);
         assert_eq!(rooms(&s).len(), 1);
     }
@@ -523,7 +567,7 @@ mod tests {
             GAMES_KEY.into(),
             json!({"lain": {"id": "lain", "chat": CHAT, "playerX": SENDER, "playerO": Value::Null, "state": "WAITING", "createdAt": now_ms()}}),
         );
-        let r = run(SENDER.clone(), "", s.clone());
+        let r = run(SENDER, "", &s);
         assert!(
             text_of(&r).contains("Room dibuat!"),
             "id tanpa `ttt_` bukan milik plugin ini: {}",
@@ -569,7 +613,7 @@ mod tests {
         s.lock()
             .unwrap()
             .insert(GAMES_KEY.into(), json!("bukan objek"));
-        let r = run(SENDER.clone(), "", s.clone());
+        let r = run(SENDER, "", &s);
         assert!(text_of(&r).contains("Room dibuat!"), "{}", text_of(&r));
         assert_eq!(rooms(&s).len(), 1);
     }
@@ -578,7 +622,7 @@ mod tests {
     fn a_very_long_room_name_is_echoed_whole_without_being_truncated() {
         let s = new_session_store();
         let name = "a".repeat(500);
-        let r = run(SENDER.clone(), &name, s.clone());
+        let r = run(SENDER, &name, &s);
         assert!(
             text_of(&r).contains(&format!(".tictactoe {name}`. untuk join")),
             "nama panjang harus utuh"

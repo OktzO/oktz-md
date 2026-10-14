@@ -294,8 +294,9 @@ mod tests {
     #[test]
     fn the_filter_matches_league_home_away_or_date() {
         let all = sample();
-        for f in ["inggris", "arsenal", "everton", "2026-05-02"] {
-            assert_eq!(filter_matches(&all, f).len(), 1, "filter {f:?} gagal");
+        // "sample" punya dua laga Liga Inggris, jadi "inggris" memang dua.
+        for (f, expect) in [("inggris", 2), ("italia", 1), ("arsenal", 1), ("everton", 1), ("2026-05-02", 1)] {
+            assert_eq!(filter_matches(&all, f).len(), expect, "filter {f:?} gagal");
         }
         assert_eq!(filter_matches(&all, "liga").len(), 3);
         assert!(filter_matches(&all, "tidak ada").is_empty());
@@ -375,13 +376,18 @@ mod tests {
     fn the_league_emoji_matches_the_js_first_hit_order() {
         assert_eq!(league_emoji("Liga Inggris"), "🏴󠁧󠁢󠁥󠁮󠁧󠁿");
         assert_eq!(league_emoji("BRI SUPER LEAGUE"), "🇮🇩");
-        assert_eq!(league_emoji("Champions League"), "🏆");
+        // Kuncinya "liga champions", sedangkan inputnya "champions league":
+        // `"champions league".includes("liga champions")` dan
+        // `"liga champions".includes("champions league")` sama-sama false,
+        // jadi JS jatuh ke `⚽`.
+        assert_eq!(league_emoji("Champions League"), "⚽", "urut kata tidak sama");
         // `lower.includes(key)` menang lebih dulu: "Liga Italia" memuat
         // "liga italia", dan urutan peta menempatkan Italia sebelum Spanyol.
         assert_eq!(league_emoji("Liga Italia"), "🇮🇹");
-        // `key.includes(lower)` — arah `includes` yang terbalik.
+        // `key.includes(lower)` — arah `includes` yang terbalik: "champ" bukan
+        // substring dari "liga champions", tapi sebaliknya benar.
         assert_eq!(league_emoji("Champ"), "🏆");
-        assert_eq!(league_emoji("Liga"), "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "string kosong → kunci pertama");
+        assert_eq!(league_emoji("Liga"), "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "string pendek → kunci pertama");
         assert_eq!(league_emoji("Liga nowhere"), "⚽", "tidak ada yang cocok");
     }
 }

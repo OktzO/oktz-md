@@ -43,9 +43,10 @@ fn plain_run_end(text: &str, from: usize) -> usize {
         .map_or(text.len(), |i| from + i)
 }
 
-/// `/tmp/gradio/[^"'\\\s]+?\.(webp|png|jpg|jpeg)` — `+?` lazy, jadiAMBANG
-/// ekstensi yang paling awal yang menang; seri pada posisi yang sama mengikuti
-/// urutan alternasi regex (jpg lebih dulu dari jpeg).
+/// `/tmp/gradio/[^"'\\\s]+?\.(webp|png|jpg|jpeg)` — `+?` lazy, jadi ambang
+/// ekstensi yang paling awal yang menang. Urutan alternasi hanya berpengaruh
+/// kalau dua ekstensi cocok di posisi sama; `jpg` tidak pernah mengalahkan
+/// `jpeg` karena "jpe" ≠ "jpg".
 fn tmp_gradio_url(run: &str) -> Option<String> {
     let mut best: Option<(usize, usize)> = None;
     for ext in [".webp", ".png", ".jpg", ".jpeg"] {
@@ -72,14 +73,17 @@ fn tmp_gradio_url(run: &str) -> Option<String> {
 fn extract_url(output: &Value) -> String {
     let text = serde_json::to_string(output).unwrap_or_default();
 
-    // Regex 1: URL penuh. Butuh minimal satu karakter setelah `file=`, kalau
-    // tidak ada regex akan coba occurrence berikutnya.
+    // Regex 1: URL penuh, hasil `fullUrl[0]` INCLUDING prefix-nya. Butuh
+    // minimal satu karakter setelah `file=`, kalau tidak ada regex akan coba
+    // occurrence berikutnya.
     let mut from = 0usize;
     while let Some(rel) = text[from..].find(FULL_URL_PREFIX) {
         let start = from + rel + FULL_URL_PREFIX.len();
         let end = plain_run_end(&text, start);
         if end > start {
-            return text[start..end].replace("\\u0026", "&").replace("\\/", "/");
+            return text[from + rel..end]
+                .replace("\\u0026", "&")
+                .replace("\\/", "/");
         }
         from = start;
     }
@@ -358,7 +362,7 @@ mod tests {
         let http = stub_ok("data: [DONE]\n\n");
         let r = run(http.clone(), "");
         assert!(body(&r).contains("🎨 *Text to Image (Flux)*"));
-        assert!(body(&r).contains("`.txt2img2 <deskripsi>*"));
+        assert!(body(&r).contains("*.txt2img2 <deskripsi>*"));
         assert_eq!(emoji(&r), "❌");
         assert!(http.seen.lock().unwrap().is_empty(), "tidak boleh request");
     }
@@ -505,10 +509,11 @@ mod tests {
             tmp_gradio_url("gen/img.png.webp").as_deref(),
             Some(&*format!("{SPACE_URL}/gradio_api/file=/tmp/gradio/gen/img.png"))
         );
-        // `.jpg` dicoba sebelum `.jpeg` pada posisi yang sama.
+        // Setelah `.` tinggal "jpeg": `jpg` tidak bisa cocok ("jpe"), jadi
+        // alternatif `.jpeg` yang menang meski tertulis belakangan.
         assert_eq!(
             tmp_gradio_url("f.jpeg").as_deref(),
-            Some(&*format!("{SPACE_URL}/gradio_api/file=/tmp/gradio/f.jpg"))
+            Some(&*format!("{SPACE_URL}/gradio_api/file=/tmp/gradio/f.jpeg"))
         );
         assert_eq!(tmp_gradio_url("tanpa-ekstensi"), None);
     }

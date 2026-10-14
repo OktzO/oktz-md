@@ -404,7 +404,7 @@ mod tests {
     #[test]
     fn outside_a_night_game_every_action_is_refused() {
         for cmd in ["wwkill", "wwprotect", "wwsee", "wwsorcerer"] {
-            assert_eq!(owned(run(cmd.clone(), None, "1")), NOT_IN_GAME, "cmd {cmd}");
+            assert_eq!(owned(run(cmd, None, "1")), NOT_IN_GAME, "cmd {cmd}");
         }
         let day = game_fixture("day", json!([player(WOLF, 1, "werewolf", true, false)]));
         assert_eq!(owned(run("wwkill", Some(day), "1")), NOT_IN_GAME);
@@ -453,15 +453,15 @@ mod tests {
     fn a_missing_or_unparsable_target_number_shows_the_usage_hint() {
         for cmd in ["wwkill", "wwprotect", "wwsee", "wwsorcerer"] {
             assert_eq!(
-                owned(run(cmd.clone(), Some(night_game()), "")),
+                owned(run(cmd, Some(night_game()), "")),
                 format!("❌ Masukkan nomor target! Contoh: `.{cmd} 2`"),
                 "cmd {cmd}"
             );
             assert!(
-                owned(run(cmd.clone(), Some(night_game()), "abc"))
+                owned(run(cmd, Some(night_game()), "abc"))
                     .starts_with("❌ Masukkan nomor target!"),
                 "cmd {cmd}: {}",
-                owned(run(cmd.clone(), Some(night_game()), "abc"))
+                owned(run(cmd, Some(night_game()), "abc"))
             );
         }
     }

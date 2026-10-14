@@ -166,7 +166,7 @@ mod tests {
     #[test]
     fn no_text_and_no_reply_prints_the_help() {
         for t in ["", "   "] {
-            let r = run(t.clone(), None);
+            let r = run(t, None);
             assert_eq!(
                 body(&r),
                 "📢 *HIDETAG 2*\n\n• `.h2 <text>`\n• Reply pesan + `.h2`",

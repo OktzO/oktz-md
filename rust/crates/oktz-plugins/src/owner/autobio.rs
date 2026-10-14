@@ -292,7 +292,7 @@ mod tests {
     #[test]
     fn a_bare_unit_is_rejected_before_parsing() {
         for text in ["ganti_setiap", "ganti_setiap   "] {
-            let r = run(text.clone(), json!({}));
+            let r = run(text, json!({}));
             assert_eq!(text_of(&r), BAD_FORMAT, "input {text:?}");
             assert!(r.mutations().is_empty(), "input {text:?}");
         }

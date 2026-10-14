@@ -234,7 +234,7 @@ mod tests {
     #[test]
     fn an_empty_argument_shows_the_usage_card() {
         for text in ["", "  "] {
-            assert_eq!(text_of(&run(text.clone())), help("."));
+            assert_eq!(text_of(&run(text)), help("."));
         }
     }
 

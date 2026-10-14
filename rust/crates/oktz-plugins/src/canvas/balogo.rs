@@ -115,10 +115,13 @@ mod tests {
     fn two_columns_produce_the_maker_url_without_a_caption() {
         let r = run("Blue & Archive");
         assert!(r.has_media());
+        // `balogo.js:33` menyisipkan spasi LITERAL di antara dua hasil
+        // `encodeURIComponent`, jadi kolom yang tanpa spasi tetap terpisah
+        // oleh spasi kosong: `Blue` + " " + `Archive`.
         assert_eq!(
             r.media_source(),
             Some(&MediaSource::url(
-                "https://api.nexray.web.id/maker/balogo?text=Blue%20Archive"
+                "https://api.nexray.web.id/maker/balogo?text=Blue Archive"
             ))
         );
         assert_eq!(body(&r), "", "caption `null` berarti kosong");
@@ -134,7 +137,7 @@ mod tests {
         assert_eq!(
             r.media_source(),
             Some(&MediaSource::url(
-                "https://api.nexray.web.id/maker/balogo?text=Blue%20Archive"
+                "https://api.nexray.web.id/maker/balogo?text=Blue Archive"
             ))
         );
     }
@@ -146,7 +149,7 @@ mod tests {
         assert_eq!(
             r.media_source(),
             Some(&MediaSource::url(
-                "https://api.nexray.web.id/maker/balogo?text=A%20B"
+                "https://api.nexray.web.id/maker/balogo?text=A B"
             ))
         );
     }
@@ -154,7 +157,7 @@ mod tests {
     #[test]
     fn empty_or_single_column_input_shows_the_help_card() {
         for text in ["", "   ", "Blue", " & ", ",,,"] {
-            let r = run(text.clone());
+            let r = run(text);
             assert!(!r.has_media(), "{text:?} tidak boleh kirim gambar");
             assert_eq!(
                 body(&r),
@@ -170,9 +173,11 @@ mod tests {
         let Some(MediaSource::Url { url, .. }) = r.media_source() else {
             panic!("harus media URL");
         };
+        // Tiap kolom di-encode utuh (`%20`), tapi spasi pemisah keduanya tetap
+        // spasi mentah — itulah yang dilihat maker.
         assert_eq!(
             url,
-            "https://api.nexray.web.id/maker/balogo?text=Blue%20Archive%20Blue%20Archive%20School"
+            "https://api.nexray.web.id/maker/balogo?text=Blue%20Archive Blue%20Archive%20School"
         );
     }
 }

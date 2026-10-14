@@ -115,7 +115,7 @@ mod tests {
     #[test]
     fn an_empty_argument_shows_the_usage_with_the_live_prefix() {
         for empty in ["", "   "] {
-            let __balasan = run(empty.clone());
+            let __balasan = run(empty);
             let t = text_of(&__balasan);
             assert!(t.starts_with("╭┈┈⬡「 🎨 *ɪɴsᴛᴀʟʟ ᴛᴇᴍᴀ ʙɪʟʟɪɴɢ* 」"), "{t}");
             assert!(t.contains("`.installtemabilling <ip>|<password>`"), "{t}");
@@ -126,7 +126,7 @@ mod tests {
     #[test]
     fn a_single_field_is_rejected_before_anything_else_happens() {
         for bad in ["192.168.1.1", "  1.2.3.4  "] {
-            assert_eq!(text_of(&run(bad.clone())), BAD_FORMAT, "input {bad:?}");
+            assert_eq!(text_of(&run(bad)), BAD_FORMAT, "input {bad:?}");
         }
     }
 
