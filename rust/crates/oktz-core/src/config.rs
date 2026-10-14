@@ -85,6 +85,106 @@ impl Default for Turso {
     }
 }
 
+/// `config.js` `messages`. Field `snake_case`, nilai verbatim dari JS.
+///
+/// `private_only` dan `admin_only` sengaja dimulai U+FFFD: itulah yang ada
+/// di `config.js` (emoji rusak), dan parity berarti menyalinnya apa adanya.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Messages {
+    pub success: String,
+    pub error: String,
+    pub owner_only: String,
+    pub premium_only: String,
+    pub group_only: String,
+    pub private_only: String,
+    pub admin_only: String,
+    pub bot_admin_only: String,
+    pub cooldown: String,
+    pub energi_exceeded: String,
+    pub limit_deducted: String,
+    pub banned: String,
+    pub reject_call: String,
+    /// Tidak ada di `config.js` — `middleware.js:123,131` menulisnya langsung.
+    pub game_disabled: String,
+    pub rpg_disabled: String,
+    /// `middleware.js:62` juga menulis langsung, bukan lewat `config.messages`.
+    pub partner_only: String,
+}
+
+impl Default for Messages {
+    fn default() -> Self {
+        Self {
+            success: d("✅ *Berhasil!* Permintaan kamu sudah selesai."),
+            error: d("❌ *Error!* Ada masalah pada sistem, coba lagi nanti."),
+            owner_only: d("*Akses Ditolak!* Fitur ini khusus untuk Owner bot."),
+            premium_only: d(
+                "💎 *Premium Only!* Fitur ini khusus member Premium. Ketik *.benefitpremium* untuk info upgrade.",
+            ),
+            group_only: d("👥 *Group Only!* Fitur ini hanya bisa digunakan di dalam grup."),
+            private_only: d(
+                "\u{fffd} *Private Only!* Fitur ini hanya bisa digunakan di chat pribadi bot.",
+            ),
+            admin_only: d(
+                "\u{fffd}\u{fe0f} *Admin Only!* Kamu harus jadi Admin grup untuk pakai fitur ini.",
+            ),
+            bot_admin_only: d(
+                "🤖 *Bot Bukan Admin!* Jadikan bot sebagai Admin grup dulu biar bisa kerja.",
+            ),
+            cooldown: d(
+                "🕕 *Tunggu Dulu!* Kamu masih dalam cooldown. Tunggu %time% detik lagi ya.",
+            ),
+            energi_exceeded: d(
+                "⚡ *Energi Habis!* Energi kamu sudah habis. Tunggu reset besok atau beli Premium.",
+            ),
+            limit_deducted: d("🔋 Limit kau berkurang sebanyak {amount}. Sisa limit: {sisa}"),
+            banned: d(
+                "🚫 *Kamu Dibanned!* Kamu tidak bisa menggunakan bot ini karena telah melanggar aturan.",
+            ),
+            reject_call: d("🚫 JANGAN TELPON NOMOR INI WEH"),
+            game_disabled: d(
+                "🎮 Fitur Game sedang dinonaktifkan di grup ini oleh Admin!",
+            ),
+            rpg_disabled: d(
+                "⚔️ Fitur RPG sedang dinonaktifkan di grup ini oleh Admin!",
+            ),
+            partner_only: d("🤝 Partner only!"),
+        }
+    }
+}
+
+impl Messages {
+    pub fn cooldown_text(&self, secs: u64) -> String {
+        self.cooldown.replace("%time%", &secs.to_string())
+    }
+}
+
+/// `config.js` `bot` + `info.website`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BotInfo {
+    pub name: String,
+    pub version: String,
+    pub developer: String,
+    pub website: String,
+}
+
+impl Default for BotInfo {
+    fn default() -> Self {
+        Self {
+            name: d("Oktz Bot"),
+            version: d("3.3.1"),
+            developer: d("Zann"),
+            website: d("https://oktzz.xyz"),
+        }
+    }
+}
+
+/// `config.js` `saluran`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Saluran {
+    pub id: String,
+    pub name: String,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Config {
     pub owner_numbers: Vec<String>,
@@ -92,6 +192,9 @@ pub struct Config {
     pub database: Database,
     pub energi: Energi,
     pub turso: Turso,
+    pub messages: Messages,
+    pub bot: BotInfo,
+    pub saluran: Saluran,
 }
 
 impl Config {
@@ -126,6 +229,9 @@ impl Config {
                 sync_interval: 5000,
                 enabled: Env::get("TURSO_URL").is_some(),
             },
+            messages: Messages::default(),
+            bot: BotInfo::default(),
+            saluran: Saluran::default(),
         }
     }
 }
@@ -160,5 +266,33 @@ mod tests {
     fn turso_disabled_without_url() {
         let c = Config::default();
         assert!(!c.turso.enabled);
+    }
+
+    #[test]
+    fn denial_texts_match_config_js_not_the_middleware_fallback() {
+        let m = Messages::default();
+        // `middleware.js:57` memakai fallback hanya kalau `config.messages`
+        // kosong; di produksi nilainya selalu ada, jadi yang tampil ke user
+        // adalah string dari `config.js`.
+        assert_eq!(m.owner_only, "*Akses Ditolak!* Fitur ini khusus untuk Owner bot.");
+        assert_ne!(m.owner_only, "🚫 Owner only!");
+        assert_eq!(
+            m.energi_exceeded,
+            "⚡ *Energi Habis!* Energi kamu sudah habis. Tunggu reset besok atau beli Premium."
+        );
+    }
+
+    #[test]
+    fn cooldown_replaces_the_time_placeholder() {
+        let m = Messages::default();
+        assert!(m.cooldown_text(30).contains("30"));
+        assert!(!m.cooldown_text(30).contains("%time%"));
+    }
+
+    #[test]
+    fn bot_info_website_matches_config_js() {
+        assert_eq!(BotInfo::default().website, "https://oktzz.xyz");
+        assert_eq!(BotInfo::default().name, "Oktz Bot");
+        assert_eq!(BotInfo::default().version, "3.3.1");
     }
 }
