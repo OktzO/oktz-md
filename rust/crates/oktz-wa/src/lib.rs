@@ -10,6 +10,7 @@ pub mod pairing;
 pub mod pairing_run;
 pub mod pipeline;
 pub mod pipeline_gate;
+pub mod reply_variant;
 pub mod rss;
 pub mod session;
 

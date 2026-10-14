@@ -48,6 +48,7 @@ use oktz_router::{
 };
 use oktz_store::json_store::JsonStore;
 use serde_json::Value;
+use crate::reply_variant;
 use whatsapp_rust::RevokeType;
 use whatsapp_rust::http::{HttpClient, HttpRequest, UreqHttpClient};
 use whatsapp_rust::media::{ImageOptions, image_message};
@@ -1260,7 +1261,7 @@ pub struct Rendered {
 }
 
 impl Rendered {
-    fn wire(message: wa::Message, extra_nodes: Vec<Node>) -> Self {
+    pub(crate) fn wire(message: wa::Message, extra_nodes: Vec<Node>) -> Self {
         Self {
             message,
             extra_nodes,
@@ -1358,7 +1359,7 @@ fn build_media_message(kind: MediaKind, up: UploadResponse, media: &PendingMedia
     }
 }
 
-fn context_info(mentions: &[String], quote: Option<&QuoteSource>) -> wa::ContextInfo {
+pub(crate) fn context_info(mentions: &[String], quote: Option<&QuoteSource>) -> wa::ContextInfo {
     wa::ContextInfo {
         mentioned_jid: mentions.to_vec(),
         quoted_message: quote
@@ -2462,6 +2463,41 @@ impl Pipeline {
         Some(entry)
     }
 
+    /// Render balasan sesuai `db.setting("replyVariant")`.
+    ///
+    /// Varian yang sudah ada ([]) selalu menang kalau reply-nya teks; kalau
+    /// tidak ada varian yang cocok, jatuh ke [`render_reply`] persis seperti
+    /// sebelumnya. Varian aktif di produksi = 9 (`orderMessage`).
+    ///
+    /// Akar aset diambil dari direktori kerja, sama seperti 
+    /// di JS.
+    fn render_with_reply_variant(
+        &self,
+        reply: &Reply,
+        target: &ReplyTarget,
+    ) -> Result<Option<Rendered>, PipelineError> {
+        let settings = self.ctx.settings_entry();
+        let variant = reply_variant::variant_from(Some(&settings));
+        if !reply_variant::needs_custom_render(variant) || reply.has_media() {
+            return render_reply(reply, target);
+        }
+        let Some(text) = reply.text_body() else {
+            return render_reply(reply, target);
+        };
+        // `if (!text && text !== 0) return null` (`serialize.js:966`) — teks
+        // kosong tidak dikirim sama sekali.
+        if text.is_empty() {
+            return Ok(None);
+        }
+        let root = std::env::current_dir().unwrap_or_default();
+        let thumbnail = reply_variant::thumbnail_bytes(&root, flag(Some(&settings), "srtEnabled"));
+        Ok(Some(reply_variant::render_variant_9(
+            text,
+            target,
+            thumbnail.as_deref(),
+        )))
+    }
+
     /// Kirim hasil render: media lewat jalur upload, teks lewat `send`.
     async fn deliver(&self, chat: &str, rendered: Rendered) -> Result<(), PipelineError> {
         // `Rendered` untuk media sengaja punya `message` kosong, jadi TIDAK
@@ -2779,7 +2815,16 @@ impl Pipeline {
                 return Ok(Outcome::Sent);
             }
 
-            let Some(rendered) = render_reply(&reply, &target)? else {
+            // `replyVariant` = 9 (setting produksi aktif) mengirim
+            // `orderMessage`, bukan teks biasa (`serialize.js:1231-1259`).
+            // Varian lain belum diimplementasikan dan tetap teks.
+            //
+            // `ponytail:` reply BERMEDIA tidak ikut varian — di JS `serialize`
+            // menerima teks terpisah dari media, jadi perlu Arcade
+            // `src/lib/socket.js` untuk memastikan apa yang terjadi pada
+            // `m.reply({image}, {text})`. Sampai itu dicek, jalur lama
+            // dipertahankan: user tetap dapat gambar, cuma bukan bubble pesanan.
+            let Some(rendered) = self.render_with_reply_variant(&reply, &target)? else {
                 // `Reply::None`: `DeniedMode::Silent`, `SelfGroup`, `NoPlugin`,
                 // `NotACommand`, atau `Reply::None` dari plugin — semua sengaja diam.
                 return Ok(if matches!(decision, Decision::Handled(_)) {
