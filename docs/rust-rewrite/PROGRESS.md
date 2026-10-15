@@ -157,6 +157,43 @@ Source `/tmp/opencode/build_env.sh` (RUSTUP_HOME/CARGO_HOME/CARGO_TARGET_DIR/PAT
 helper nix-shell). Untuk iterasi cepat pakai **`cargo check`** — bukan `build`
 (build penuh wacore ~25 menit di 2-core).
 
+### Insiden kedua — 2026-10-15
+
+`/tmp` **direset lagi** (sama seperti 2026-10-10): toolchain, `CARGO_TARGET_DIR`,
+dan seluruh skrip bantu di `/tmp/opencode/` hilang. Repo + commit utuh. Recovery
+kali ini lebih pendek: nix store sudah punya gcc-wrapper dan binutils-wrapper,
+jadi tidak perlu unduh nixpkgs.
+
+```bash
+mkdir -p /tmp/opencode
+curl -sSf https://sh.rustup.rs -o /tmp/rustup-init.sh
+RUSTUP_HOME=/tmp/opencode/rustup CARGO_HOME=/tmp/opencode/cargo \
+  sh /tmp/rustup-init.sh -y --default-toolchain stable --profile minimal --no-modify-path
+```
+
+`build_env.sh` sekarang menunjuk `RUSTUP_HOME=/tmp/opencode/rustup`,
+`CARGO_HOME=/tmp/opencode/cargo`, `CARGO_TARGET_DIR=/tmp/opencode/target`, dan
+menambah `gcc-wrapper-14.3.0` + `binutils-wrapper-2.43.1` dari nix store ke `PATH`
+(`ring` dan `libsqlite3-sys` butuh `cc`/`ld`). Rust 1.99.0 stable terpasang.
+
+**Jebakan yang terulang:** `~/.cargo` + `~/.rustup` kehabisan ruang — partisi `/home`
+hanya sisa ~600 MB. Selalu pasang ke `/tmp`.
+
+Skrip bantu yang harus dibuat ulang setelah reset:
+- `/tmp/opencode/build_env.sh` — env + helper `NS`
+- `/tmp/opencode/sync-lib.mjs` — daftar modul `lib.rs`
+- `/tmp/opencode/cek-nama.mjs` — paritas metadata plugin Rust↔JS
+- `/tmp/opencode/daftar-belum.mjs` + `bikin-batch.mjs` — daftar & batch plugin
+- `/tmp/opencode/scan-nonlatin.mjs` — deteksi kebocoran huruf non-Latin
+
+**Dua bug sinkron yang baru ditemukan (keduanya diam-diam merusak build):**
+1. `scripts/sync-plugin-mods.mjs` melempar `#[allow(...)]` ke ekor `mod.rs`, sehingga
+   `ephoto/mod.rs` jadi `expected item after attributes` — **doctest gagal**.
+   Atribut kini dipetakan ke modul tuannya, bukan jadi "baris lain".
+2. Lint `special_module_name` pada `pub mod main;` **tidak bisa ditekan** dengan
+   `#[allow]` di level item (dibuktikan dengan crate uji terpisah); harus `#![allow]`
+   di puncak `lib.rs`.
+
 ## Fase 1 — DONE (GATE 1)
 
 Commit: `c67dfb4` (core) · `d28dc04` (store) · `256aa97` (plugin-api) · `53dc2e6` (bin) · `9a43724` (fix blocker) · `ad032bf` (fix re-review).

@@ -27,6 +27,8 @@ buat foldernya.
 ## File yang TIDAK boleh kamu sentuh
 
 - `crates/oktz-plugins/src/mod.rs` (memang tidak ada, tapi kalau ada: jangan)
+- `crates/oktz-plugins/src/<kategori>/mod.rs` — daftar modulnya orkestrator yang
+  sinkron. Kamu hanya menambah file `.rs` baru di folder kategori itu.
 - `crates/oktz-plugins/src/lib.rs` — milik orkestrator
 - `crates/oktz-plugins/src/common.rs` — milik orkestrator
 - File milik batch agent lain
@@ -59,11 +61,14 @@ pub fn namaplagin(ctx: Ctx) -> Reply {
 ```
 
 Nilai `description`, `usage`, `example`, `cooldown`, `energi`, `is_private`,
-`is_owner`, `is_premium`, `is_group`, `is_admin` diambil dari file JS, bukan
-ditebak. Kalau manifest punya entry untuk plugin itu, pakai
+`is_owner`, `is_premium`, `is_group`, `is_admin`, `alias` diambil dari file JS,
+bukan ditebak. Kalau manifest punya entry untuk plugin itu, pakai
 `docs/rust-rewrite/plugin-manifest.json` sebagai cek silang.
 
-`category` = nama folder JS-nya.
+`category` juga disalin dari `pluginConfig.category` JS — **bukan** dari nama
+folder. `plugins/owner/q.js` menulis `category: 'tools'`, jadi `owner/q.rs`
+harus `category = "tools"`. Nilai JS menang walau beda dengan lokasinya.
+Field yang tidak ada di JS berarti `false` (atau kosong untuk teks), bukan `true`.
 
 ## Balasan
 
@@ -105,6 +110,17 @@ fungsi murni yang sudah dipisah.
 `export RUSTUP_HOME=/tmp/opencode/rust/rustup CARGO_HOME=/tmp/opencode/rust/cargo`
 `export PATH="/tmp/opencode/rust/cargo/bin:$PATH"`
 `export CARGO_TARGET_DIR=/tmp/opencode/rust/target`
+
+Toolchain di `/tmp` hilang saat lingkungan di-reset 2026-10-15 dan dipasang
+ulang dengan path baru:
+
+```bash
+export RUSTUP_HOME=/tmp/opencode/rustup CARGO_HOME=/tmp/opencode/cargo
+export PATH="/tmp/opencode/cargo/bin:$PATH"
+export CARGO_TARGET_DIR=/tmp/opencode/target
+```
+
+Kalau `cargo` tidak ada di sana, sebut saja di laporan — jangan pasang sendiri.
 
 Jangan jalankan cargo build/test (lihat di atas). Reader `grep`/ Read cukup.
 
