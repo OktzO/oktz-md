@@ -17,6 +17,7 @@ pub mod game;
 pub mod group;
 pub mod info;
 pub mod main;
+pub mod nsfw;
 pub mod owner;
 pub mod panel;
 pub mod primbon;

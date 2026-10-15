@@ -14,6 +14,8 @@ pub mod autoreactsw;
 pub mod autoread;
 pub mod autoreadsw;
 pub mod autosambut;
+pub mod autosholat;
+pub mod autotyping;
 pub mod backupdb;
 pub mod ban;
 pub mod bcpcjeda;

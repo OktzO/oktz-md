@@ -2239,7 +2239,7 @@ mod tests_batch_g {
         const KNOWN: &[&str] = &[
             "addenergi", "addenergiall", "addexp", "addkoin", "addlevel",
             "addlist", "addpartner", "addpremall", "addstok", "aktifaudiomenu",
-            "anticall", "autobackup", "autobio", "autojoingc", "autoreactsw", "autoread", "autoreadsw", "autosambut", "backupdb", "ban",
+            "anticall", "anticulik", "autobackup", "autobio", "autojoingc", "autoreactsw", "autoread", "autoreadsw", "autosambut", "autosholat", "autotyping", "backupdb", "ban",
             "banchat", "bcpcjeda",
             "block", "botafk", "botmode", "capenergi", "capfree",
             "capprem", "checkban", "cmdvn", "cpuprofile", "custompayment",
@@ -4110,12 +4110,12 @@ mod tests_roster_state {
     /// milik `fun/mimpi.js`; `primbon/ramalanjodoh.js` alias `cekjodoh`
     /// milik `cek/cekjodoh.js`; `download/capcutdl.js` alias `cc` milik
     /// array `name` di `group/clearchat.js`; dan `canvas/fakedana.js`,
-    /// `fakegopay.js`, `fakeovo.js` menaruh nama sendiri di dalam daftar
-    /// alias-nya.
-    pub(crate) const JS_COLLISIONS: [&str; 23] = [
+    /// `fakegopay.js`, `fakeovo.js`, `nsfw/paptt.js` menaruh nama sendiri di
+    /// dalam daftar alias-nya.
+    pub(crate) const JS_COLLISIONS: [&str; 24] = [
         "asmaulhusna", "beli", "berburu", "block", "bucin", "cantik", "cc", "cekjodoh",
         "cupu", "exp", "fakedana", "fakegopay", "fakeovo", "ganteng", "heapsnap", "kaya",
-        "mimpi", "ngemis", "noob", "pintar", "pro", "unblock", "wibu",
+        "mimpi", "ngemis", "noob", "paptt", "pintar", "pro", "unblock", "wibu",
     ];
 
     #[test]
