@@ -80,7 +80,7 @@ pub fn gift(ctx: Ctx) -> Reply {
     }
 
     inv.insert(item.clone(), json!(owned - amount));
-    let love = (or_default(rpg.get("love").and_then(Value::as_i64), 0) + amount * 10) as i64;
+    let love = or_default(rpg.get("love").and_then(Value::as_i64), 0) + amount * 10;
     rpg.insert("love".into(), json!(love));
 
     // Sisi pasangan hanya ditulis kalau barisnya terbaca lewat roster.

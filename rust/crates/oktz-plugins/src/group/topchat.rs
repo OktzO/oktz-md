@@ -27,7 +27,7 @@ pub(crate) fn sorted_stats(stats: Option<&Value>) -> Vec<(String, i64)> {
                 .collect()
         })
         .unwrap_or_default();
-    out.sort_by(|a, b| b.1.cmp(&a.1));
+    out.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
     out
 }
 

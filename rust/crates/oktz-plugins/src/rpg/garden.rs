@@ -71,7 +71,7 @@ fn max_plots(rpg: &Map<String, Value>) -> usize {
     rpg.get("garden")
         .and_then(|g| g.get("maxPlots"))
         .and_then(Value::as_u64)
-        .map_or(MAX_PLOTS as u64, |v| v) as usize
+        .unwrap_or(MAX_PLOTS as u64) as usize
 }
 
 #[plugin(
