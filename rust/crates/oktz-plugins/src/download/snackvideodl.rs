@@ -36,7 +36,7 @@ pub(crate) const NO_VIDEO: &str = "❌ Gagal mengambil video. Coba link lain.";
 
 /// `snackvideodl.js:40` — `data?.status && data?.result?.videoUrl`.
 pub(crate) fn accepted(data: &Value) -> bool {
-    data.get("status").is_some_and(Value::as_bool == Some(true))
+    data.get("status").and_then(Value::as_bool) == Some(true)
         && data
             .get("result")
             .and_then(|r| r.get("videoUrl"))
@@ -44,8 +44,12 @@ pub(crate) fn accepted(data: &Value) -> bool {
             .is_some_and(|s| !s.is_empty())
 }
 
-/// `snackvideodl.js:46` — `result.videoUrl`.
+/// `snackvideodl.js:46` — `result.videoUrl`, tapi hanya dibaca setelah guard
+/// `status`/`videoUrl` lulus; di luar itu plugin tidak pernah menyentuh URL.
 pub(crate) fn video_url(data: &Value) -> String {
+    if !accepted(data) {
+        return String::new();
+    }
     data.get("result")
         .and_then(|r| r.get("videoUrl"))
         .and_then(Value::as_str)

@@ -39,7 +39,7 @@ pub(crate) const NO_VIDEO: &str = "❌ Video tidak ditemukan.";
 
 /// `cocofundl.js:40` — `data?.status` harus `true` dan `data?.result` harus ada.
 pub(crate) fn accepted(data: &Value) -> bool {
-    data.get("status").is_some_and(Value::as_bool == Some(true))
+    data.get("status").and_then(Value::as_bool) == Some(true)
         && data.get("result").is_some_and(|r| !r.is_null())
 }
 

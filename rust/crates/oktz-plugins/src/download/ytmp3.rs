@@ -27,6 +27,7 @@ pub(crate) const ENDPOINT: &str = "https://my.izuka-api.xyz/api/downloader/ytmp3
 pub(crate) const FORMAT_DEFAULT: &str = "mp3";
 
 /// `MIMETYPE_DARI_FORMAT` (`src/lib/media-format.js:33`).
+#[allow(dead_code)] // dipakai `ytmp4.rs` lewat `super::`
 const MIMETYPE_DARI_FORMAT: [(&str, &str); 14] = [
     ("mp3", "audio/mpeg"),
     ("m4a", "audio/mp4"),
@@ -72,8 +73,9 @@ const FORMAT_DARI_MIME: [(&str, &str); 23] = [
 ];
 
 /// `TOKEN_FORMAT` — gabungan kunci `MIMETYPE_DARI_FORMAT` dan nilai
-/// `FORMAT_DARI_MIME` (`media-format.js:84`), bukan daftar terpisah: daftar
-/// ketiganya yang berbeda adalah tempat bug "format yang berbohong" kembali.
+/// `FORMAT_DARI_MIME` (`media-format.js:84`), bukan daftar terpisah: kalau
+/// daftar ini melenceng dari dua tabel itu, bug "format yang berbohong" bisa
+/// muncul lagi hanya di satu sisi.
 const TOKEN_FORMAT: [&str; 17] = [
     "mp3", "m4a", "mp4", "m4v", "aac", "ogg", "oga", "opus", "webm", "wav", "flac", "amr", "mkv",
     "3gp", "mov", "flv", "avi",
@@ -112,6 +114,7 @@ pub(crate) fn format_from_mime(v: Option<&Value>) -> Option<String> {
 }
 
 /// `mimetypeFor` (`media-format.js:130`).
+#[allow(dead_code)] // dipakai `ytmp4.rs` lewat `super::`
 pub(crate) fn mimetype_for(format: &str) -> String {
     let token = format_from_token(Some(&Value::String(format.to_string()))).unwrap_or_default();
     let key = if token.is_empty() { format } else { token.as_str() };
@@ -272,7 +275,7 @@ fn unduh_audio(ctx: &Ctx, url: &str) -> Result<AudioDownload, ()> {
     let result = body.get("result").filter(|r| r.is_object()).ok_or(())?;
     let punya = result
         .get("download_url")
-        .map(|v| crate::common::js_truthy_value(v))
+        .map(crate::common::js_truthy_value)
         .unwrap_or(false);
     if !punya {
         return Err(());

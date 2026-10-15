@@ -16,7 +16,6 @@ use oktz_plugin_api::{Ctx, HttpGet, MediaSource, Reply, plugin};
 use serde_json::Value;
 
 use crate::common::js_truthy_value;
-use crate::fun::tod::error_template;
 
 /// `rednote.js:10` — endpoint scraper.
 pub(crate) const ENDPOINT: &str = "https://rednote.savevideodown.com/api/download";
@@ -115,8 +114,12 @@ pub(crate) fn more_note(count: usize) -> String {
 /// `RedNoteDL(url)` — `Err` = lempar (transport atau body bukan JSON).
 pub(crate) fn fetch_rednote(url: &str, http: &dyn HttpGet) -> Result<Result<Rednote, String>, ()> {
     let payload = serde_json::json!({ "url": url });
-    let body = http.post_json(ENDPOINT, &payload).ok().and_then(|r| r.json()).ok_or(())?;
-    normalize(&body)
+    let body = http
+        .post_json(ENDPOINT, &payload)
+        .map_err(|_| ())?
+        .json()
+        .ok_or(())?;
+    Ok(normalize(&body))
 }
 
 #[plugin(

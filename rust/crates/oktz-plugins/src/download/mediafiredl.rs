@@ -72,8 +72,8 @@ pub(crate) fn decode_uri_component(raw: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-/// `mediafiredl.js:20-29` — `getFileName`. `now_ms`replace `Date.now()` supaya
-/// cabang cadangan bisa diuji.
+/// `mediafiredl.js:20-29` — `getFileName`. Argumen `now_ms` menggantikan
+/// `Date.now()` supaya cabang cadangan bisa diuji.
 pub(crate) fn get_file_name(result: &MediafireFile, now_ms: i64) -> String {
     let direct_name = result.title.trim();
     let url_name = decode_uri_component(

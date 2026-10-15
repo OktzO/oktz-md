@@ -15,7 +15,7 @@
 //! banyak media hanya mengirim teks caption-nya; satu video juga hanya teks
 //! caption; satu foto masih terkirim sebagai gambar.
 
-use oktz_plugin_api::{Ctx, HttpGet, MediaSource, Reply, plugin};
+use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 use serde_json::Value;
 
 use super::facebookdl::axios_query;
@@ -40,79 +40,100 @@ pub(crate) fn failed(reason: &str) -> String {
 /// `threaddl.js:129` — cabang `catch`.
 pub(crate) const SYSTEM_FAILED: &str = "😔 *Sepertinya ada gangguan di sistemku.* \n\nTerjadi kesalahan fatal saat mencoba memproses link Threads tersebut. Silakan coba lagi nanti ya!";
 
-/// Entitas bernama yang dipakai teks Threads. Sisanya dibiarkan apa adanya.
+/// Entitas bernama yang dipakai teks Threads, ditulis tanpa `&` dan `;`.
+/// Sisanya dibiarkan apa adanya.
 const ENTITIES: [(&str, char); 28] = [
-    ("&amp;", '&'),
-    ("&lt;", '<'),
-    ("&gt;", '>'),
-    ("&quot;", '"'),
-    ("&apos;", '\''),
-    ("&nbsp;", ' '),
-    ("&hellip;", '…'),
-    ("&mdash;", '—'),
-    ("&ndash;", '–'),
-    ("&lsquo;", '‘'),
-    ("&rsquo;", '’'),
-    ("&ldquo;", '“'),
-    ("&rdquo;", '”'),
-    ("&middot;", '·'),
-    ("&bull;", '•'),
-    ("&copy;", '©'),
-    ("&reg;", '®'),
-    ("&trade;", '™'),
-    ("&deg;", '°'),
-    ("&laquo;", '«'),
-    ("&raquo;", '»'),
-    ("&eacute;", 'é'),
-    ("&egrave;", 'è'),
-    ("&agrave;", 'à'),
-    ("&ccedil;", 'ç'),
-    ("&uuml;", 'ü'),
-    ("&ouml;", 'ö'),
-    ("&auml;", 'ä'),
+    ("amp", '&'),
+    ("lt", '<'),
+    ("gt", '>'),
+    ("quot", '"'),
+    ("apos", '\''),
+    ("nbsp", ' '),
+    ("hellip", '…'),
+    ("mdash", '—'),
+    ("ndash", '–'),
+    ("lsquo", '‘'),
+    ("rsquo", '’'),
+    ("ldquo", '“'),
+    ("rdquo", '”'),
+    ("middot", '·'),
+    ("bull", '•'),
+    ("copy", '©'),
+    ("reg", '®'),
+    ("trade", '™'),
+    ("deg", '°'),
+    ("laquo", '«'),
+    ("raquo", '»'),
+    ("eacute", 'é'),
+    ("egrave", 'è'),
+    ("agrave", 'à'),
+    ("ccedil", 'ç'),
+    ("uuml", 'ü'),
+    ("ouml", 'ö'),
+    ("auml", 'ä'),
 ];
 
 /// `he.decode` — subset, lihat catatan modul.
 pub(crate) fn he_decode(raw: &str) -> String {
-    let bytes = raw.as_bytes();
     let mut out = String::with_capacity(raw.len());
-    let mut i = 0usize;
-    while i < bytes.len() {
-        if bytes[i] != b'&' {
-            let next = raw[i..]
-                .find('&')
-                .map_or(bytes.len(), |p| i + p);
-            out.push_str(&raw[i..next]);
-            i = next;
-            continue;
-        }
-        let semi = match raw[i..].find(';') {
-            Some(p) => i + p,
-            None => {
-                out.push('&');
-                i += 1;
-                continue;
-            }
-        };
-        let entity = &raw[i..semi];
-        // `&#39;` dan `&#x27;` — `entity` dipotong sebelum `;`.
-        let numeric = entity.strip_prefix('#').and_then(|rest| {
-            let (digits, radix) = match rest.strip_prefix(['x', 'X']) {
-                Some(hex) => (hex, 16),
-                None => (rest, 10),
-            };
-            u32::from_str_radix(digits, radix).ok().and_then(char::from_u32)
-        });
-        if let Some(c) = numeric {
-            out.push(c);
-        } else if let Some((_, c)) = ENTITIES.iter().find(|(name, _)| *name == entity) {
-            out.push(*c);
-        } else {
-            out.push_str(entity);
-        }
-        i = semi + 1;
+    let mut rest = raw;
+    while let Some(start) = rest.find('&') {
+        out.push_str(&rest[..start]);
+        rest = &rest[start..];
+        let eaten = decode_entity(rest, &mut out);
+        rest = &rest[eaten..];
     }
+    out.push_str(rest);
     out
+}
+
+/// Satu entitas di depan `raw` (`he.js:232-297`): tulis hasil ke `out`, lalu
+/// kembalikan berapa byte yang termakan. `regexDecode` (`he.js:54`) membaca
+/// entitas bernama lama TANPA titik dua juga — `he.decode('&amp b')` =
+/// `'& b'` — jadi nama entitas dicari lebih dulu, baru angka.
+fn decode_entity(raw: &str, out: &mut String) -> usize {
+    let tail = &raw[1..];
+
+    // `&#([0-9]+)(;?)` lalu `&#[xX]([a-fA-F0-9]+)(;?)` — titik dua opsional.
+    if let Some(number) = tail.strip_prefix('#') {
+        let (digits, radix) = match number.strip_prefix(['x', 'X']) {
+            Some(hex) => (hex, 16),
+            None => (number, 10),
+        };
+        let end = digits
+            .find(|c: char| !(c.is_ascii_digit() || (radix == 16 && c.is_ascii_hexdigit())))
+            .unwrap_or(digits.len());
+        if let Some(c) = u32::from_str_radix(&digits[..end], radix)
+            .ok()
+            .and_then(char::from_u32)
+        {
+            out.push(c);
+            // `&` + `#` + awalan `x`/`X` + digitnya.
+            let eaten = 2 + number.len() - digits.len() + end;
+            return eaten + usize::from(raw[eaten..].starts_with(';'));
+        }
+    }
+
+    // `&(Aacute|...|amp|...)(?!;)([=a-zA-Z0-9]?)` dan `&([0-9a-zA-Z]+)`:
+    // nama dibaca sampai karakter non-alnum, lalu titik dua (kalau ada)
+    // ikut dimakan.
+    for (name, c) in ENTITIES {
+        if tail.starts_with(name) {
+            out.push(c);
+            let eaten = 1 + name.len();
+            return eaten + usize::from(raw[eaten..].starts_with(';'));
+        }
+    }
+    // `&` telanjang atau nama yang tidak dikenal → apa adanya.
+    let name_len = tail
+        .find(|c: char| !c.is_ascii_alphanumeric())
+        .unwrap_or(tail.len());
+    if name_len == 0 {
+        out.push('&');
+        return 1;
+    }
+    out.push_str(&raw[..1 + name_len]);
+    1 + name_len
 }
 
 /// `threaddl.js:6-8` — `cleanText`.
@@ -165,20 +186,24 @@ pub(crate) fn clean_text(raw: Option<&Value>) -> String {
 }
 
 /// Satu media hasil `normalizeResult`.
+///
+/// `normalizeResult` juga mengisi `Quality`, tapi `threaddl.js:107-113` hanya
+/// membaca `Type` dan `Result_url`, jadi field yang tak pernah dipakai tidak
+/// ikut dipindah.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Item {
-    Video { quality: Option<String>, url: String },
+    Video { url: String },
     Image { url: String },
 }
 
 /// `threaddl.js:10-19` — `uniqueByUrl`.
-fn unique_by_url(list: Option<&Vec<Value>>) -> Vec<&Value> {
-    let Some(list) = list else {
+fn unique_by_url(list: Option<&Value>) -> Vec<&Value> {
+    let Some(items) = list.and_then(Value::as_array) else {
         return Vec::new();
     };
     let mut seen: Vec<&str> = Vec::new();
     let mut out = Vec::new();
-    for item in list {
+    for item in items {
         let Some(url) = item.get("url").filter(|u| js_truthy_value(u)).and_then(Value::as_str)
         else {
             continue;
@@ -197,11 +222,6 @@ pub(crate) fn normalize_result(data: &Value) -> Vec<Item> {
     let mut out = Vec::new();
     for item in unique_by_url(data.get("video").and_then(|v| v.get("qualities"))) {
         out.push(Item::Video {
-            quality: item
-                .get("quality")
-                .filter(|q| js_truthy_value(q))
-                .and_then(Value::as_str)
-                .map(str::to_string),
             url: item
                 .get("url")
                 .and_then(Value::as_str)
@@ -281,8 +301,13 @@ pub fn threaddl(ctx: Ctx) -> Reply {
         return Reply::text(SYSTEM_FAILED).with_reaction("☢");
     };
 
-    let info = data.get("data").unwrap_or(&Value::Null);
-    let result = normalize_result(info);
+    // `const info = data.data || {}`
+    let info = data
+        .get("data")
+        .filter(|v| js_truthy_value(v))
+        .cloned()
+        .unwrap_or_default();
+    let result = normalize_result(&info);
 
     let success_ok = data.get("success").and_then(Value::as_bool) == Some(true);
     if !success_ok || result.is_empty() {
@@ -299,7 +324,7 @@ pub fn threaddl(ctx: Ctx) -> Reply {
         return Reply::text(failed(reason)).with_reaction("❌");
     }
 
-    let text = caption(info, result.len());
+    let text = caption(&info, result.len());
     if result.len() > 1 {
         // `threaddl.js:115-117` — teks dulu lalu album. `Reply` tidak punya
         // album, jadi yang terkirim hanya teksnya.
@@ -316,6 +341,7 @@ pub fn threaddl(ctx: Ctx) -> Reply {
 
 #[cfg(test)]
 mod tests {
+    use oktz_plugin_api::HttpGet;
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpResponse};
     use serde_json::json;
@@ -331,6 +357,13 @@ mod tests {
         fn body(v: Value) -> Arc<Stub> {
             Arc::new(Stub {
                 body: Ok(v.to_string()),
+                seen: Mutex::new(Vec::new()),
+            })
+        }
+        /// Body mentah, untuk kasus JSON yang tidak bisa di-parse.
+        fn raw(text: &str) -> Arc<Stub> {
+            Arc::new(Stub {
+                body: Ok(text.into()),
                 seen: Mutex::new(Vec::new()),
             })
         }
@@ -438,7 +471,10 @@ mod tests {
     #[test]
     fn he_decode_covers_named_decimal_and_hex_entities() {
         assert_eq!(he_decode("a &amp; b"), "a & b");
-        assert_eq!(he_decode("&lt;p&gt;"), "<p>");
+        // `he.decode` tetap membaca entitas bernama lama tanpa titik dua
+        // (`he.js:246-264`), sudah dibuktikan di `he` 1.2.0.
+        assert_eq!(he_decode("a &amp b"), "a & b");
+        assert_eq!(he_decode("&ltp&gt;"), "<p>");
         assert_eq!(he_decode("&#39;&#x27;"), "''");
         assert_eq!(he_decode("a&#9731;b"), "a☃b");
         assert_eq!(he_decode("&hellip;"), "…");
@@ -495,7 +531,6 @@ mod tests {
             normalize_result(&info),
             vec![
                 Item::Video {
-                    quality: Some("hd".into()),
                     url: "https://cdn/v.mp4".into()
                 },
                 Item::Image {
@@ -519,7 +554,6 @@ mod tests {
             out,
             vec![
                 Item::Video {
-                    quality: None,
                     url: "https://cdn/v.mp4".into()
                 },
                 Item::Image {
@@ -580,7 +614,10 @@ mod tests {
             "https://www.threads.net/@zuck/post/1",
         );
         assert!(text_of(&r).starts_with("✨ *THREADS DOWNLOADER* ✨"), "{}", text_of(&r));
-        assert_eq!(r.media_source().map(|m| m.label()), Some("url"));
+        assert_eq!(
+            r.media_source().map(|m| m.label().to_string()),
+            Some("url".to_string())
+        );
         assert_eq!(reaction_of(&r), Some("✅"));
     }
 
@@ -622,6 +659,9 @@ mod tests {
             (json!({ "success": false }), "Tidak diketahui"),
             (json!({ "success": true, "data": {} }), "Tidak diketahui"),
             (json!({ "success": "true", "data": { "images": { "urls": [{ "url": "u" }] } } }), "Tidak diketahui"),
+            // `res.data || {}` menerima string, lalu `data.success !== true`
+            // dan `result.length === 0` menyalakan cabang gagal — bukan catch.
+            (json!("bukan objek"), "Tidak diketahui"),
         ] {
             let r = run(Stub::body(body.clone()), "https://www.threads.net/@zuck/post/1");
             assert_eq!(text_of(&r), failed(alasan), "body {body}");
@@ -631,7 +671,9 @@ mod tests {
 
     #[test]
     fn a_transport_failure_or_bad_json_reports_the_system_error() {
-        for http in [Stub::offline(), Stub::body(json!("bukan objek"))] {
+        // `Stub::offline()` = axios melempar. Body `{` gagal di-parse JSON,
+        // jadi axios juga melempar SyntaxError ke cabang catch.
+        for http in [Stub::offline(), Stub::raw("{")] {
             let r = run(http, "https://www.threads.net/@zuck/post/1");
             assert_eq!(text_of(&r), SYSTEM_FAILED);
             assert_eq!(reaction_of(&r), Some("☢"));

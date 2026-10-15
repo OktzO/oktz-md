@@ -37,7 +37,7 @@ pub(crate) const NO_VIDEO: &str = "❌ Gagal mengambil video. Coba link lain.";
 
 /// `capcutdl.js:40` — `data?.status` harus `true`.
 pub(crate) fn status_ok(data: &Value) -> bool {
-    data.get("status").is_some_and(Value::as_bool == Some(true))
+    data.get("status").and_then(Value::as_bool) == Some(true)
 }
 
 /// `capcutdl.js:40` — `data?.originalVideoUrl`.
@@ -136,7 +136,10 @@ mod tests {
 
     #[test]
     fn every_alias_resolves_to_this_plugin() {
-        for a in ["ccdl", "capcut", "cc"] {
+        // `cc` diklaim dua kali di JS: `download/capcutdl.js:5` (alias) dan
+        // `group/clearchat.js:3` (array `name`). Tabrakan bawaan repo, bukan
+        // hasil port — hanya satu yang bisa menang di registry.
+        for a in ["ccdl", "capcut"] {
             assert_eq!(oktz_plugin_api::find(a).unwrap().meta.name, "capcutdl");
         }
     }

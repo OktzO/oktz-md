@@ -234,38 +234,9 @@ pub fn islami(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse, NoHttp};
+    use oktz_plugin_api::{HttpGet, NoHttp};
     use serde_json::json;
     use std::sync::Arc;
-
-    #[derive(Debug)]
-    struct Stub(Value);
-
-    impl HttpGet for Stub {
-        fn get(&self, _: &str) -> Result<HttpResponse, HttpError> {
-            Ok(HttpResponse {
-                status: 200,
-                body: HttpBody::Bytes {
-                    data: Arc::from(serde_json::to_vec(&self.0).unwrap()),
-                    mimetype: None,
-                },
-                headers: vec![],
-            })
-        }
-        fn post_json(&self, _: &str, _: &Value) -> Result<HttpResponse, HttpError> {
-            unreachable!("tidak dipakai")
-        }
-        fn post_form(&self, _: &str, _: &str) -> Result<HttpResponse, HttpError> {
-            unreachable!("tidak dipakai")
-        }
-        fn post_multipart(
-            &self,
-            _: &str,
-            _: &[(&str, HttpBody)],
-        ) -> Result<HttpResponse, HttpError> {
-            unreachable!("tidak dipakai")
-        }
-    }
 
     fn run_with(http: Arc<dyn HttpGet>, command: &str, text: &str) -> Reply {
         let ctx = Ctx {

@@ -190,7 +190,11 @@ mod tests {
         fn post_form(&self, _: &str, _: &str) -> Result<HttpResponse, HttpError> {
             unimplemented!("cuma GET")
         }
-        fn post_multipart(&self, _: &str, _: &[(&str, HttpBody)]) -> Result<HttpResponse, HttpError> {
+        fn post_multipart(
+            &self,
+            _: &str,
+            _: &[(&str, HttpBody)],
+        ) -> Result<HttpResponse, HttpError> {
             unimplemented!("cuma GET")
         }
     }

@@ -75,7 +75,9 @@ pub(crate) fn caption(data: &Value, best: &Value) -> String {
 /// `extract(url)` — `Err` = lempar, jadi cabang `catch` plugin yang menyala.
 pub(crate) fn extract(url: &str, http: &dyn HttpGet) -> Result<Value, ()> {
     let target = format!("{BASE_URL}/api/extract");
-    let response = http.post_multipart(&target, &[("url", HttpBody::Form(url.into()))]).ok_or(())?;
+    let response = http
+        .post_multipart(&target, &[("url", HttpBody::Form(url.into()))])
+        .map_err(|_| ())?;
     // `if (!res.ok) throw new Error(...)` sudah ditangani trait: status di atas
     // 399 jadi `Err`.
     let data = response.json().ok_or(())?;
@@ -122,7 +124,7 @@ pub fn shopeedl(ctx: Ctx) -> Reply {
         .get("streams_array")
         .filter(|s| js_truthy_value(s))
         .and_then(Value::as_array)
-        .unwrap_or(&[]);
+        .map_or(&[][..], Vec::as_slice);
     if streams.is_empty() {
         return Reply::text(NO_STREAM).with_reaction("❌");
     }
@@ -295,7 +297,9 @@ mod tests {
         assert_eq!(best_stream(&tanpa_hd).unwrap()["quality"], "V720P");
 
         let h265_saja = vec![stream("V1080P_H265"), stream("V360P")];
-        assert_eq!(best_stream(&h265_saja).unwrap()["quality"], "V1080P_H265");
+        // `shopeedl.js:35` menaruh `V360P` sebelum `V1080P_H265`, jadi JS
+        // memilih yang lebih kecil lebih dulu kalau `V1080P` tidak ada.
+        assert_eq!(best_stream(&h265_saja).unwrap()["quality"], "V360P");
 
         // Tidak ada yang cocok → item pertama, bukan qualities[0] yang undefin.
         let lain = vec![stream("V999P"), stream("V1081P")];
@@ -319,7 +323,7 @@ mod tests {
             "🛍️ *SHOPEE VIDEO DOWNLOADER* 🛍️\n\n\
              *Username:* toko_saya\n\
              *Kualitas:* V720P\n\
-             \n> Dibuat oleh bot kesayangmu"
+             \n> Dibuat oleh bot kesayanganmu"
         );
         assert_eq!(reaction_of(&r), Some("✅"));
     }

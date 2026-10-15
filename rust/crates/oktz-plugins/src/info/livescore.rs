@@ -24,6 +24,7 @@ const MARKER: &str = "__NEXT_DATA__\" type=\"application/json\">";
 pub(crate) const NO_MATCH: &str = "⚽ *LIVESCORE BOLA* ⚽\n\n\
     Saat ini tidak ada pertandingan yang sedang berlangsung atau dijadwalkan.";
 
+#[allow(dead_code)] // teks dipakai dari test saja
 pub(crate) const NO_SCORE: &str = "❌ *GAGAL MENGAMBIL SKOR*\n\n\
     Maaf, sistem gagal mengambil data live score saat ini.";
 

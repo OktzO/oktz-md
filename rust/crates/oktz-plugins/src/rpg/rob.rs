@@ -184,15 +184,13 @@ mod tests {
     }
 
     fn user_of<'a>(r: &'a Reply, jid: &str) -> &'a serde_json::Value {
-        let hit = r
-            .mutations()
+        r.mutations()
             .iter()
             .find_map(|m| match m {
                 Mutation::SetUser { jid: j, data } if j == jid => Some(data),
                 _ => None,
             })
-            .unwrap_or_else(|| panic!("tidak ada SetUser untuk {jid}"));
-        hit
+            .unwrap_or_else(|| panic!("tidak ada SetUser untuk {jid}"))
     }
 
     #[test]

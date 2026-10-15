@@ -262,7 +262,10 @@ mod tests {
     #[test]
     fn a_falsy_analysis_status_prints_tidak_hoki() {
         for status in [json!(false), json!(0), json!(""), json!(null)] {
-            let r = run_with(Arc::new(Stub(payload_with_status(status))), &["628123"]);
+            let r = run_with(
+                Arc::new(Stub(payload_with_status(status.clone()))),
+                &["628123"],
+            );
             assert!(
                 reply_text(&r).ends_with("> Status: ❌ TIDAK HOKI"),
                 "{status}"

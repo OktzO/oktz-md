@@ -1,9 +1,8 @@
 //! `plugins/owner/q.js` — balas JSON pesan yang sedang di-reply.
 //!
 //! Catatan meta: `q.js` menulis `category: 'tools'` padahal berkasnya ada di
-//! `plugins/owner/`. Kategori di sini mengikuti direktori berkas (`owner`),
-//! bukan nilai JS — lihat aturan porting. Nilai `pluginConfig` lain disalin
-//! apa adanya.
+//! `plugins/owner/`. Nilai `pluginConfig` tetap disalin apa adanya (JS acuan),
+//! jadi kategorinya `"tools"` — bukan ikut direktori berkas.
 
 use oktz_plugin_api::{Ctx, QuotedMessage, Reply, plugin};
 use serde_json::{Map, Value, json};
@@ -33,7 +32,7 @@ pub(crate) fn quoted_json(q: &QuotedMessage) -> String {
 #[plugin(
     name = "q",
     alias = ["quoted", "inspect"],
-    category = "owner",
+    category = "tools",
     description = "Ambil JSON message dari pesan yang direply",
     usage = ".q (reply pesan)",
     example = "",
@@ -94,7 +93,7 @@ mod tests {
         let p = find("q").unwrap();
         assert_eq!(p.meta.name, "q");
         assert_eq!(p.meta.alias, ["quoted", "inspect"]);
-        assert_eq!(p.meta.category, "owner", "harus ikut direktori berkas");
+        assert_eq!(p.meta.category, "tools", "nilai JS menang atas nama folder");
         assert_eq!(p.meta.description, "Ambil JSON message dari pesan yang direply");
         assert_eq!(p.meta.usage, ".q (reply pesan)");
         assert_eq!(p.meta.cooldown, 3);

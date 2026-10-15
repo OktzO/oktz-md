@@ -229,7 +229,7 @@ pub(crate) fn error_template(prefix: &str, command: &str) -> String {
 /// scraping sungguhan; teks, daftar efek, dan semua cabang di file ini tetap
 /// berlaku.
 fn ephoto(_url: &str, _text: &str) -> Result<String, String> {
-    Err("scraper ephoto360 (cheerio + FormData + cookie sesi) belum di-port".to_string())
+    Err("scraper ephoto360 (cheerio + FormData + cookie sesi) belum di-port".into())
 }
 
 #[plugin(
@@ -404,9 +404,7 @@ mod tests {
                 let r = run(command, text);
                 assert_eq!(
                     text_of(&r),
-                    format!(
-                        "❌ *ᴇʀʀᴏʀ*\n\n> Masukkan text!\n> *Contoh:* .{command} Foto-AI"
-                    ),
+                    format!("❌ *ᴇʀʀᴏʀ*\n\n> Masukkan text!\n> *Contoh:* .{command} Foto-AI"),
                     "command {command}, teks {text:?}"
                 );
             }

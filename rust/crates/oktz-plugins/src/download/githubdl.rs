@@ -9,7 +9,7 @@
 //! `ponytail:` `Reply` tidak punya variant document, jadi hasil `sendMedia` hanya
 //! terkirim sebagai nama file teks.
 
-use oktz_plugin_api::{Ctx, HttpGet, Reply, plugin};
+use oktz_plugin_api::{Ctx, Reply, plugin};
 use serde_json::Value;
 
 use crate::fun::tod::error_template;
@@ -26,7 +26,7 @@ pub(crate) fn help(prefix: &str) -> String {
 }
 
 /// `githubdl.js:46` — username ada, repository tidak.
-pub(crate) const NO_REPO: &str = "❌ *ʀᴇᴘᴏ ᴅɪʙʜᴜᴛᴋᴀɴ*\n\n> Masukkan nama repository";
+pub(crate) const NO_REPO: &str = "❌ *ʀᴇᴘᴏ ᴅɪʙᴜᴛᴜʜᴋᴀɴ*\n\n> Masukkan nama repository";
 
 /// `githubdl.js:56` — API GitHub menjawab tidak `ok`.
 pub(crate) fn not_found(username: &str, repo: &str) -> String {
@@ -78,8 +78,8 @@ fn match_repo_url(url: &str) -> Option<(String, String)> {
 /// `githubdl.js:19-33`. `args[0]` kosong membuat `branch` tetap kosong, padahal
 /// JS isi `'main'` — bedanya tidak terlihat karena `username` kosong sudah lebih
 /// dulu mengembalikan kartu pakai.
-pub(crate) fn parse_target(args: &[String]) -> Target {
-    let Some(first) = args.first() else {
+pub(crate) fn parse_target<S: AsRef<str>>(args: &[S]) -> Target {
+    let Some(first) = args.first().map(AsRef::as_ref) else {
         return Target::default();
     };
     // `includes('github.com')` di JS TIDAK case-insensitive; regex-nya iya.
@@ -90,13 +90,19 @@ pub(crate) fn parse_target(args: &[String]) -> Target {
         return Target {
             username: Some(username),
             repo: Some(repo.strip_suffix(".git").unwrap_or(&repo).to_string()),
-            branch: args.get(1).cloned().unwrap_or_else(|| "main".to_string()),
+            branch: args
+                .get(1)
+                .map(|s| s.as_ref().to_string())
+                .unwrap_or_else(|| "main".to_string()),
         };
     }
     Target {
-        username: Some(first.clone()),
-        repo: args.get(1).cloned(),
-        branch: args.get(2).cloned().unwrap_or_else(|| "main".to_string()),
+        username: Some(first.to_string()),
+        repo: args.get(1).map(|s| s.as_ref().to_string()),
+        branch: args
+            .get(2)
+            .map(|s| s.as_ref().to_string())
+            .unwrap_or_else(|| "main".to_string()),
     }
 }
 
@@ -183,6 +189,7 @@ fn nullable_branch(value: &Value) -> String {
 
 #[cfg(test)]
 mod tests {
+    use oktz_plugin_api::HttpGet;
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpResponse};
     use serde_json::json;
@@ -227,13 +234,6 @@ mod tests {
                 seen: Mutex::new(Vec::new()),
             })
         }
-        fn offline() -> Arc<Stub> {
-            Arc::new(Stub {
-                repo: Err(()),
-                zip: Err(()),
-                seen: Mutex::new(Vec::new()),
-            })
-        }
     }
 
     impl HttpGet for Stub {
@@ -244,7 +244,7 @@ mod tests {
                     .clone()
                     .map_err(|()| HttpError { message: "offline".into() })?
             } else {
-                (self.zip.clone().map_err(|()| HttpError {
+                (self.zip.map_err(|()| HttpError {
                     message: "offline".into(),
                 })?, String::new())
             };
@@ -319,7 +319,7 @@ mod tests {
     #[test]
     fn three_bare_words_are_read_as_user_repo_branch() {
         assert_eq!(
-            parse_target(&["niceplugin".into(), "NiceBot".into(), "dev".into()]),
+            parse_target::<String>(&["niceplugin".into(), "NiceBot".into(), "dev".into()]),
             Target {
                 username: Some("niceplugin".into()),
                 repo: Some("NiceBot".into()),
@@ -331,7 +331,7 @@ mod tests {
     #[test]
     fn a_url_first_argument_wins_and_the_git_suffix_is_stripped() {
         assert_eq!(
-            parse_target(&["https://github.com/user/repo.git".into(), "dev".into()]),
+            parse_target::<String>(&["https://github.com/user/repo.git".into(), "dev".into()]),
             Target {
                 username: Some("user".into()),
                 repo: Some("repo".into()),
@@ -339,10 +339,10 @@ mod tests {
             }
         );
         // Tanpa branch, `args[1] || 'main'`.
-        assert_eq!(parse_target(&["https://github.com/u/r".into()]).branch, "main");
+        assert_eq!(parse_target::<String>(&["https://github.com/u/r".into()]).branch, "main");
         // `.git` hanya dilepas di akhir, `repo.git.git` jadi `repo.git`.
         assert_eq!(
-            parse_target(&["github.com/u/r.git.git".into()]).repo.unwrap(),
+            parse_target::<String>(&["github.com/u/r.git.git".into()]).repo.unwrap(),
             "r.git"
         );
     }

@@ -38,11 +38,12 @@ pub(crate) fn help(prefix: &str) -> String {
 /// `likeedl.js:32` — URL bukan Likee.
 pub(crate) const BAD_URL: &str = "❌ URL tidak valid. Gunakan link Likee.";
 
-/// `likeedl.js:41` — `!data`.
-pub(crate) const NO_DATA: &str = "❌ Gagal mengambil video. Coba link lain.";
-
 /// `likeedl.js:47` — kedua field watermark kosong.
 pub(crate) const NO_VIDEO: &str = "❌ Video tidak ditemukan.";
+
+// `likeedl.js:41` (`!data`) tidak punya padanan di sini: `likee()` di
+// `src/scraper/likee.js` hanya melempar atau mengembalikan objek, jadi cabang
+// itu tidak pernah menyala dan teksnya tidak ikut dipindah.
 
 /// Bagian hasil `likee` (`src/scraper/likee.js:29-34`) yang dibaca plugin.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -72,10 +73,10 @@ pub(crate) fn href_after(html: &str, needle: &str) -> String {
         let after = from + i + needle.len();
         if let Some(gt) = html.get(after..).and_then(|rest| rest.find('>')) {
             let span = &html[after..after + gt];
-            if let Some(href) = span.rfind("href=\"").and_then(|h| span.get(h + 6..)) {
-                if let Some(end) = href.find('"') {
-                    return href[..end].to_string();
-                }
+            if let Some(href) = span.rfind("href=\"").and_then(|h| span.get(h + 6..))
+                && let Some(end) = href.find('"')
+            {
+                return href[..end].to_string();
             }
         }
         from = after;
@@ -95,8 +96,14 @@ pub(crate) fn parse_template(html: &str) -> Likee {
 pub(crate) fn fetch_likee(url: &str, http: &dyn HttpGet) -> Result<Likee, ()> {
     // `new URLSearchParams({ id: url, locale: 'en' })` — spasi jadi `+`.
     let form = format!("id={}&locale=en", query_encode(url));
-    let body = http.post_form(ENDPOINT, &form).ok().and_then(|r| r.json())?;
-    let template = body.get("template").and_then(|v| v.as_str()).ok_or(())?;
+    let body = http.post_form(ENDPOINT, &form).map_err(|_| ())?.json().ok_or(())?;
+    // `res.data && res.data.template ? res.data.template : null` — string
+    // kosong itu falsy, jadi ikut jatuh ke lemparan `Fetch failed`.
+    let template = body
+        .get("template")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .ok_or(())?;
     Ok(parse_template(template))
 }
 
@@ -372,13 +379,5 @@ mod tests {
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "https://likee.video/@x");
         assert_eq!(text_of(&r), error_template(".", "lkdl"));
-    }
-
-    #[test]
-    fn the_no_data_message_exists_even_though_the_scraper_never_returns_null() {
-        // `likee()` hanya melempar atau mengembalikan objek, jadi `!data` di
-        // JS tidak pernah menyala. Konstantanya tetap dipindah supaya tidak
-        // ada teks tampilan yang hilang diam-diam.
-        assert_eq!(NO_DATA, "❌ Gagal mengambil video. Coba link lain.");
     }
 }
