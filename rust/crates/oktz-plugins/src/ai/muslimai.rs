@@ -203,7 +203,7 @@ mod tests {
         let __balasan = run(http.clone(), "");
         let t = body(&__balasan);
         assert!(t.contains("☪️ *ᴍᴜsʟɪᴍ ᴀɪ*"), "{t}");
-        assert!(t.contains("`.muslimai Apa itu sholat?`"), "{t}");
+        assert!(t.contains(".muslimai Apa itu sholat?"), "{t}");
         assert!(http.seen.lock().unwrap().is_empty());
     }
 

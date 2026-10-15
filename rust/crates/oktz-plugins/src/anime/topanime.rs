@@ -88,19 +88,20 @@ fn render_list(list: &Value) -> String {
     }
 
     // `NaN` masuk ke template literal apa adanya.
-    let tampil = max.map_or("NaN", |n| n.to_string());
+    let tampil = max.map_or_else(|| "NaN".to_string(), |n| n.to_string());
     txt.push_str(&format!("_Menampilkan {tampil} karakter teratas._"));
     txt
 }
 
 /// `list.length > 0 && list[0].image` (`topanime.js:49`) — `&&` ter-short
 /// circuit, jadi `list[0]` tidak pernah dibaca saat `.length` bukan positif.
-fn first_image(list: &Value) -> Option<&str> {
+fn first_image(list: &Value) -> Option<String> {
     let first = js_items(list, 1).into_iter().next()?;
     first
         .get("image")
         .filter(|v| js_truthy(Some(*v)))
         .and_then(Value::as_str)
+        .map(str::to_string)
 }
 
 #[plugin(

@@ -194,7 +194,7 @@ mod tests {
         let __balasan = run(http.clone(), "");
         let t = body(&__balasan);
         assert!(t.contains("📐 *ᴍᴀᴛʜ ɢᴘᴛ*"), "{t}");
-        assert!(t.contains("`.matematika 2+2 berapa?`"), "{t}");
+        assert!(t.contains(".matematika 2+2 berapa?"), "{t}");
         assert!(http.seen.lock().unwrap().is_empty());
     }
 

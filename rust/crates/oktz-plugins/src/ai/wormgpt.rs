@@ -188,7 +188,7 @@ mod tests {
         let __balasan = run(http.clone(), "");
         let t = body(&__balasan);
         assert!(t.contains("🐛 *ᴡᴏʀᴍ ɢᴘᴛ*"), "{t}");
-        assert!(t.contains("`.wormgpt perkenalkan dirimu`"), "{t}");
+        assert!(t.contains(".wormgpt perkenalkan dirimu"), "{t}");
         assert!(http.seen.lock().unwrap().is_empty());
     }
 

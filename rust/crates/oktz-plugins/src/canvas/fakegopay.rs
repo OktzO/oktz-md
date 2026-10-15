@@ -152,7 +152,7 @@ mod tests {
         let mut cur = r;
         loop {
             match cur {
-                Reply::Reaction { emoji, reply } => return Some(emoji),
+                Reply::Reaction { emoji, .. } => return Some(emoji),
                 Reply::Mutate { reply, .. } => cur = reply,
                 _ => return None,
             }

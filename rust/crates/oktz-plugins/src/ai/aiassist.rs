@@ -54,7 +54,7 @@ pub(crate) fn uuid_v4() -> String {
     let mut hex = String::with_capacity(32);
     for _ in 0..32 {
         // `from_digit(.., 16)` selalu `Some` untuk rentang 0..16.
-        hex.push(char::from_digit(u32::from(roll(16)), 16).unwrap_or('0'));
+        hex.push(char::from_digit(roll(16), 16).unwrap_or('0'));
     }
     format!(
         "{}-{}-4{}-a{}-{}",
@@ -464,7 +464,11 @@ mod tests {
         let mut uniq = prompts.clone();
         uniq.sort_unstable();
         uniq.dedup();
-        assert_eq!(uniq.len(), 4, "empat karakter, empat prompt berbeda");
+        assert_eq!(
+            uniq.len(),
+            5,
+            "lima karakter di `CHARACTERS`, lima prompt berbeda"
+        );
         assert!(character_prompt("tidak-ada").contains("AI Assistant"));
     }
 

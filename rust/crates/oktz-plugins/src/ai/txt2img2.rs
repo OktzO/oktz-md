@@ -32,7 +32,7 @@ type Generate = Result<String, String>;
 /// `crypto.randomBytes(8).toString("hex")` — 16 digit heksadesimal acak.
 fn session_hash() -> String {
     (0..16)
-        .map(|_| char::from_digit(u32::from(roll(16)), 16).unwrap_or('0'))
+        .map(|_| char::from_digit(roll(16), 16).unwrap_or('0'))
         .collect()
 }
 
@@ -53,7 +53,7 @@ fn tmp_gradio_url(run: &str) -> Option<String> {
         let mut from = 0usize;
         while let Some(rel) = run[from..].find(ext) {
             let abs = from + rel;
-            if best.map_or(true, |(start, _)| abs < start) {
+            if best.is_none_or(|(start, _)| abs < start) {
                 best = Some((abs, ext.len()));
             }
             from = abs + 1;

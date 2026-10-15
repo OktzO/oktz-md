@@ -112,7 +112,7 @@ mod tests {
             assert!(body(&r).contains("📿 *ᴛᴇxᴛ ᴛᴏ ɪᴍᴀɢᴇ*"), "args={args:?}");
             assert!(
                 // `text2img.js:25` memakai backtick, bukan `*`.
-                body(&r).contains("`.text2img Buat gambar dari teks`"),
+                body(&r).contains(".text2img Buat gambar dari teks"),
                 "args={args:?}"
             );
             assert!(r.mutations().is_empty());

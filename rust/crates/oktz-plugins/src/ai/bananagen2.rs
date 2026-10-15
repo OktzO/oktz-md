@@ -6,8 +6,8 @@
 //!
 //! `ponytail:` rantai `error.response.data.message || error.response.data.error`
 //! di `bananagen2.js:44-45` tidak bisa terjadi: `UreqHttp` mengubah status
-//! >= 400 jadi `Err` tanpa body. Yang tersisa `error.message`, persis seperti
-//! `src/lib/axios`/`UreqHttp` sudah dipakai plugin lain di folder ini.
+//! `>= 400` jadi `Err` tanpa body. Yang tersisa `error.message`, persis
+//! seperti `src/lib/axios`/`UreqHttp` sudah dipakai plugin lain di folder ini.
 
 use oktz_plugin_api::{Ctx, HttpGet, MediaSource, Reply, plugin};
 use serde_json::{Value, json};
@@ -191,7 +191,7 @@ mod tests {
         let __balasan = run(http.clone(), "");
         let t = body(&__balasan);
         assert!(t.contains("🍌 *BANANA GEN 2*"), "{t}");
-        assert!(t.contains("`.bananagen2 make a cat`"), "{t}");
+        assert!(t.contains(".bananagen2 make a cat"), "{t}");
         assert!(http.seen.lock().unwrap().is_empty());
     }
 

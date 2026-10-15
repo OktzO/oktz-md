@@ -11,7 +11,6 @@
 //! `trim()` dari sisa command — tidak ada selisih yang terlihat di user.
 
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
-use serde_json::Value;
 
 use crate::fun::tod::error_template;
 use crate::tools::phisingataubukan::encode_uri_component;
@@ -65,6 +64,7 @@ pub fn text2img2(ctx: Ctx) -> Reply {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::Value;
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
     use std::sync::{Arc, Mutex};
