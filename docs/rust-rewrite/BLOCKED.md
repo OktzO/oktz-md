@@ -195,6 +195,73 @@ Pola yang berulang dan murah dibuka: **`sock.sendTable`/`sendTableV2`** (3 file)
 dan **`Reply::Interactive` yang bisa membawa header/footer/buttons** (1 file).
 Menutup salah satunya langsung membuka `stats`, `ping2`, `totalfitur`, `sc`.
 
+## 17c. Terblokir dari batch B12-B15 (gelombang ketiga)
+
+Laporan agent B12-B15, diacukan ke file JS masing-masing. 45 plugin, 4 di
+antaranya berhasil di-port (`group/acc`, `autoreply`, `warn`, `welcome`).
+
+### `game/*` — 4 file, TIDAK memakai `games.createPlugin`
+
+| Plugin | Kapabilitas yang hilang |
+|---|---|
+| `game/fisch` | `sock.sendPreview` (§2), `getAssetBuffer`, lib `src/lib/fisch.js` + `fisch-data.js`, `config.info.website` (§7), `db.db.data.users` mentah + `db.markDirty`, `setTimeout` antar pesan |
+| `game/minecraft` | sama seperti `fisch`, lib `src/lib/minecraft.js` + `minecraft-data.js` |
+| `game/ulartangga` | §2 `sendPreview`, board `drawBoard` + `DICE_STICKERS` (`src/lib/game-ulartangga.js`), **`answerHandler` "kocok"** (§9), `config.saluran` (§15), `db.updateKoin`/`updateEnergi`, kirim sticker |
+| `game/werewolf` | §2 `sendPreview` + fan-out PM ke JID arbitrer, timer fase 60-90 detik (`setTimeout`/`clearTimeout`), `config.saluran` (§15), `db.updateKoin` |
+
+### lainnya — 41 file
+
+| Plugin | Kapabilitas yang hilang |
+|---|---|
+| `fun/sulap` | `export replyHandler` = entry point kedua (§9), sesi berkunci **id pesan terkirim**, `groupParticipantsUpdate` (§2), `sock.user.id`, 3 pesan berurutan + `sleep(2000)` |
+| `group/add` | `groupGetInviteInfo`, `groupMetadata` JID arbitrer, `groupParticipantsUpdate` (§2), `sock.user.id`; teks gerbang butuh `subject` yang tidak ada di `GroupRoster` |
+| `group/cekidgc` | field metadata (subject/creation/owner/desc/restrict/announce/joinApprovalMode) tidak ada di `GroupRoster`, `sharp` (§5), `profilePictureUrl` (§2), `prepareWAMessageMedia`+`relayMessage`+tombol `cta_copy`, `config.saluran` (§15) |
+| `group/cekonline` | `sock.presenceSubscribe` + `sock.ev.on('presence.update')` (§2), tunggu 5 detik, `groupMetadata.subject` |
+| `group/groupinfo` | field metadata teks utama tidak ada di roster, `profilePictureUrl` (§2), `src/lib/lid.js` (`resolveAnyLidToJid`), axios unduh PP |
+| `group/tam` | `pollResultSnapshotMessage` via `relayMessage` — varian `Reply` poll belum ada + `saluranCtx()` (§15) + `db.getUser(jid)` arbitrer |
+| `info/gag2` | mode `watch` = 5 iterasi x 30 detik + minimal 2 pesan berurutan; `HttpGet` tidak punya header kustom |
+| `info/infotourney` | scraping `infotourney.com` dengan **cheerio** (§11), kirim via `sock.sendMedia` type image (§2) |
+| `islamic/murrotal` | cheerio untuk parse daftar surah (§11) + `sock.sendMedia` type **audio** (§2/§3) |
+| `jpm/jpm` | `sock.relayMessage` + `prepareWAMessageMedia`/`generateWAMessageFromContent`/`proto`, `sock.query` IQ newsletter + `getBinaryNodeChild`, `fs`/`path`, `getAssetBuffer`, `config.bot`/`config.saluran`/`config.owner`, `saluranCtx()` (§15), `fetchGroupsSafe`, `qmsg.download()` (§1), scheduler `src/lib/auto-jpm.js`, state `global.statusjpm`/`stopjpm`, `setTimeout` fan-out |
+| `main/allmenu` | `sock.relayMessage` (varian 2/5/6), `prepareWAMessageMedia`, `getAssetBuffer`, `fs.readFileSync(config.assets)`, `sharp`, `getCasesByCategory`/`getCaseCount`, `config.saluran`/`config.bot`/`config.assets`, ffmpeg audio + `child_process.spawn`. Keluarga `main/menu` (§17b) |
+| `main/carifitur` | `loadAllPlugins()` membaca folder plugins dari disk (`fs.readdirSync` + `import()` dinamis) dan menambah command dari `getCaseCommands()` (`src/case/foto.js`); hasil via `sock.sendButton` + `getAssetBuffer("foto")`. Port dengan registry Rust akan mengubah hasil |
+| `main/donasi` | seluruh jalur output lewat `sock.sendButton` (`cta_copy`) / `interactiveButtons` + `contextInfo` forwarding (§2/§15); isinya dari `config.donasi`/`config.bot`/`config.owner`/`config.saluran` (§7) |
+| `main/jadibot` | `startJadibot`/`isJadibotActive` dari `src/lib/jadibot-manager.js` (socket WA kedua in-process). Keluarga `main/stopjadibot` (§17b) |
+| `main/leaderboard` | membaca **seluruh store users** (`db.data.users` / `db.getAllUsers()`); `Ctx` hanya punya user sender + roster. Cabang default via `sock.sendButton` + `getAssetBuffer('foto')` (§2) |
+| `owner/addowner` | (§17b) `fs`/`path` menulis balik `config.js`, `config.pterodactyl.*`, `src/lib/lid.js`, `jadibot-database.js`, `getGroupMode` |
+| `owner/ganti-asset` | keluarga `ganti-*` di bawah + entry point kedua `gantiAssetAnswerHandler` (§9) + `config.assets` (§7) |
+| `owner/ganti-namabot` | `fs.readFileSync/writeFileSync` `config.js` + regex ubah `bot.name`; baca `config.bot?.name` (§4/§7) |
+| `owner/ganti-namadev` | idem, regex `developer`; baca `config.bot?.developer` (§4/§7) |
+| `owner/ganti-namaowner` | cabang `main`: `fs` baca/tulis `config.js` regex `owner.name`; baca `config.owner?.number?.[0]`/`config.owner?.name`; `getOwnerName()` (`config.js:537-552`) |
+| `owner/ganti-large` | unduh media pemicu (`m.isImage`/`m.isMedia` + `download()`) (§1), lalu `fs.existsSync/mkdirSync/writeFileSync` menulis 3 berkas ke `assets/images/` (§4) |
+| `ganti-levelup`, `ganti-mp3`, `ganti-mp4`, `ganti-pp-kosong`, `ganti-promote`, `ganti-rpg`, `ganti-rules`, `ganti-store`, `ganti-v8`, `ganti-welcome`, `ganti-winner` | `m.download()`/`m.quoted.download()` + cek `m.isImage`/`isAudio`/`isVideo` (§1); `updateAssetUrl` (`src/lib/uploader.js:62-115`) baca/tulis `config.assets` + `fs.writeFileSync(config.js)` via regex + `fs.writeFileSync` berkas asset (`src/lib/asset-manager.js:99-111`) (§4/§7); `sharp` resize 1280x720 (§5, dilewati untuk `.mp3`/`.mp4`) |
+| `owner/ganticode` | `quoted.download()` (§1), `fs` rekursif `plugins/` + backup + `writeFileSync` (§4), `hotReloadPlugin` (`src/lib/plugins.js`) |
+| `owner/gantiscraper` | `fs` (`readdirSync`/`readFileSync`/`writeFileSync`/`copyFileSync`/`unlinkSync`/`statSync`) (§4), `quoted.download()` (§1), `hotReloadPlugin`, dan **`import()` dinamis** dengan cache-buster `?t=${Date.now()}` |
+| `owner/get` | `HttpGet` hanya punya `get`/`post_json`/`post_form`/`post_multipart` — JS butuh method arbitrer (PUT/DELETE/PATCH/HEAD/OPTIONS), header kustom, basic auth, timeout, maxRedirects; relay respons butuh varian `Reply` **Document**, **Audio**, **Video** dengan `gifPlayback` (§3) + kirim document dengan `fileName` |
+| `owner/getplugin` | `fs` (`readdirSync`/`statSync`/`readFileSync`/`existsSync`, scan dua pass nama+alias) (§4), kirim source sebagai document `.js` — `Reply::Document` dengan `fileName` belum ada (§3) |
+| `owner/hapusdata` | `db.resetToDefaults()` — fungsi server yang menulis file + backup (`database.js:788`), enumerasi store atas `stats`/`sewa`/`premium`/`owner`/`partner`, `interactiveButtons`, `Buffer.byteLength(JSON.stringify(store))` atas seluruh store |
+| `owner/join` | `sock.groupGetInviteInfo`, `sock.groupAcceptInvite`, `saluranCtx()` (§15), jeda `setTimeout` antar join |
+| `owner/leave` | `sock.groupGetInviteInfo`, `sock.groupLeave`, `config.saluran` (§7), contextInfo newsletter `forwardingScore: 9999` (§15), flag `global.sewaLeaving` |
+| `owner/listjadibot` | `getAllJadibotSessions`/`getActiveJadibots` (jadibot-manager, Map in-process + session di disk), `interactiveButtons`, mentions session JID |
+| `owner/listjadibotaktif` | `getActiveJadibots` (jadibot-manager), `interactiveButtons` |
+| `owner/listsewa` | `db.db.data.sewa` — store atas `sewa.json`; `Mutation` tidak punya jalannya; plus `db.db.write()` |
+| `owner/onlythisgrup` | `sock.groupInviteCode(m.chat)`, `sock.user.id`, `groupMetadata.subject`, `findParticipantByNumber` dari `src/lib/lid.js`. Cabang lock (fungsi utamanya) butuh 4 kapabilitas itu; port cabang unlock saja = port sebagian |
+| `owner/payment` | `config.payment.*` (`methods`/`banks`/`qrisUrl`/`customText`), `config.bot?.name`, `config.owner?.name` — config runtime yang tidak dibawa `Ctx` (§7). Cabang kirim QRIS sudah tertutup `Reply::image`, hanya datanya yang tidak ada |
+| `owner/ptvch` | `quoted.download()`/`m.download()` (§1), `config.saluran?.id` (§7), `sock.sendMessage` video + `ptv: true` ke JID channel pihak ketiga (§2/§3) |
+| `owner/renewsewa` | `db.db.data.sewa` (baca+tulis per-grup), `sock.groupGetInviteInfo`, `sock.sendText` + `saluranCtx()` (§15) |
+| `owner/resetdb` | `fs` backup `db.json` (`existsSync`/`copyFileSync`) (§4), bulk-clear store `users`/`groups`/`clans` (`Mutation` hanya per-JID; store `clans` tidak ada di `Ctx`), `db.save()` |
+
+Kapabilitas pembuka terbesar dari gelombang ini:
+
+1. **Unduh media pesan pemicu** (`downloadContentMessage`, §1) — membuka 15 file
+   `ganti-*`.
+2. **I/O `config.js` + config runtime** (`config.payment`, `config.donasi`,
+   `config.owner`, `config.bot`, `config.assets`) — membuka 8 file.
+3. **`Reply::Document` dengan `fileName`** — membuka `getplugin` dan sebagian
+   besar cabang output `get`.
+4. **Store atas `sewa.json`** — membuka `listsewa`/`renewsewa`.
+5. **Enumerasi seluruh store users** — membuka `leaderboard`.
+
 `download/pixeldraindl` **tidak** terblokir: jalur HTTP-nya port penuh, hanya
 `config.APIkey.neoxr` kosong — persis fallback `|| ''` di JS.
 
