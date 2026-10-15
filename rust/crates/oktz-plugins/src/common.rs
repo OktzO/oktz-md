@@ -706,6 +706,50 @@ pub(crate) fn arg_index(ctx: &Ctx, pos: usize) -> i64 {
         - 1
 }
 
+/// `new URL(...)` yang dipakai plugin hanya untuk `protocol` + `hostname`.
+/// `https://user@SFILE.MOBI:8443/x?y#z` -> `Some("sfile.mobi")`; skema selain
+/// http/https, host kosong, dan URL tanpa `://` -> `None` (padanan `URL` yang
+/// melempar).
+pub(crate) fn host_dari(url: &str) -> Option<String> {
+    let (scheme, rest) = url.trim().split_once("://")?;
+    let scheme = scheme.to_ascii_lowercase();
+    if scheme != "http" && scheme != "https" {
+        return None;
+    }
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let authority = authority.rsplit('@').next().unwrap_or("");
+    let host = match authority.split_once(':') {
+        Some((h, _port)) => h,
+        None => authority,
+    };
+    if host.is_empty() {
+        return None;
+    }
+    Some(host.to_ascii_lowercase())
+}
+
+/// `filename.replace(/[<>:"/\\|?*]/g, "")` — karakternya **dihapus**, bukan
+/// diganti.mis. `"a<b>c.mp4"` -> `"abc.mp4"`.
+pub(crate) fn scrub_nama_berkas(nama: &str) -> String {
+    nama.chars()
+        .filter(|c| !matches!(c, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*'))
+        .collect()
+}
+
+/// `te(m.prefix, m.command, m.pushName)` (`src/lib/error.js:3-9`).
+///
+/// `config.errorTemplate` (`config.js:153`) selalu terisi, jadi teks fallback
+/// `☢ *ᴇʀʀᴏʀ*` di `error.js` adalah kode mati — plugin yang memakainya
+/// menyimpang dari JS. `Ctx` tidak punya `m.pushName`, jadi `{pushName}`
+/// selalu jadi `User`, sama seperti `pushName || 'User'` di JS.
+pub(crate) fn error_template(prefix: &str, command: &str) -> String {
+    format!(
+        "☢ Kayaknya command `{prefix}{command}` lagi ada kendala\n\
+         Silahkan coba lagi nanti, User\n\n\
+         _Jika masalah berlanjut, silahkan hubungi owner bot_"
+    )
+}
+
 /// `formatDuration(botafk.js:78-90)` — jam/hari ke-atas diturunkan dari
 /// Menit ke-atas, bukan dari detik ke-atas, jadi `1 jam 0 menit` bukan
 /// `60 menit 0 detik`.

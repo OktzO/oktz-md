@@ -33,14 +33,10 @@ pub(crate) fn not_found(query: &str) -> String {
     format!("📱 HP tidak ditemukan untuk *{query}*")
 }
 
-/// `te(prefix, command, pushName)` dengan template default (`error.js`).
-/// `ponytail:` `Ctx` tidak membawa `pushName` dan plugin tidak bisa membaca
-/// `config.errorTemplate`, jadi keduanya jatuh ke fallback JS.
+/// `te(prefix, command, pushName)` (`src/lib/error.js:3-9`).
+/// `Ctx` tidak membawa `pushName`, jadi `{pushName}` jadi `User` seperti di JS.
 pub(crate) fn error_reply(prefix: &str, command: &str) -> String {
-    format!(
-        "☢ *ᴇʀʀᴏʀ*\n\n> Terjadi kesalahan pada command `{prefix}{command}`\n\
-         > Silahkan coba lagi nanti, User\n\n_Jika masalah berlanjut, hubungi owner_"
-    )
+    crate::common::error_template(prefix, command)
 }
 
 // ── SELECTOR MINIMAL ────────────────────────────────────────────────────────

@@ -25,15 +25,10 @@ pub(crate) fn url() -> String {
     format!("https://api.neoxr.eu/api/bola?apikey={NEOXR_APIKEY}")
 }
 
-/// `te(prefix, command, pushName)` dengan template default (`error.js`).
-/// `ponytail:` `Ctx` tidak membawa `pushName` dan plugin tidak bisa membaca
-/// `config.errorTemplate`, jadi keduanya jatuh ke fallback JS — sama seperti
-/// `game/wwkill.rs`.
+/// `te(prefix, command, pushName)` (`src/lib/error.js:3-9`).
+/// `Ctx` tidak membawa `pushName`, jadi `{pushName}` jadi `User` seperti di JS.
 pub(crate) fn error_reply(prefix: &str, command: &str) -> String {
-    format!(
-        "☢ *ᴇʀʀᴏʀ*\n\n> Terjadi kesalahan pada command `{prefix}{command}`\n\
-         > Silahkan coba lagi nanti, User\n\n_Jika masalah berlanjut, hubungi owner_"
-    )
+    crate::common::error_template(prefix, command)
 }
 
 /// `LEAGUE_EMOJI` (`jadwalbola.js:27-37`) — urutan penting, karena
@@ -268,8 +263,9 @@ mod tests {
         let r = run("");
         assert_eq!(
             text_of(&r),
-            "☢ *ᴇʀʀᴏʀ*\n\n> Terjadi kesalahan pada command `.jadwalbola`\n\
-             > Silahkan coba lagi nanti, User\n\n_Jika masalah berlanjut, hubungi owner_"
+            "☢ Kayaknya command `.jadwalbola` lagi ada kendala\n\
+             Silahkan coba lagi nanti, User\n\n\
+             _Jika masalah berlanjut, silahkan hubungi owner bot_"
         );
         assert_eq!(reaction_of(&r), "☢");
     }

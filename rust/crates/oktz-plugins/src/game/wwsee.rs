@@ -118,7 +118,7 @@ mod tests {
         // `try/catch` di `wwsee.js` membalas template error — bukan role.
         let r = run("2", Some(game("wizard")));
         let t = text_of(&r);
-        assert!(t.starts_with("☢ *ᴇʀʀᴏʀ*"), "{t}");
+        assert!(t.starts_with("☢ Kayaknya command "), "{t}");
         assert!(t.contains("command `.wwsee`"), "{t}");
     }
 

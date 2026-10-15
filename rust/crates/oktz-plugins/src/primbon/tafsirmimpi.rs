@@ -241,7 +241,7 @@ mod tests {
     fn a_transport_error_uses_the_error_template() {
         let r = run_with(Arc::new(NoHttp), &["bertemu"]);
         let t = reply_text(&r);
-        assert!(t.starts_with("☢ *ᴇʀʀᴏʀ*"), "{t}");
+        assert!(t.starts_with("☢ Kayaknya command "), "{t}");
         assert!(t.contains(".tafsirmimpi"), "{t}");
     }
 }

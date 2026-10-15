@@ -109,7 +109,7 @@ mod tests {
         // berarti "bukan Seer" — berbeda dari `wwsee`.
         let r = run("3", Some(game("wizard")));
         assert!(text_of(&r).contains("bukan Seer"), "{}", text_of(&r));
-        assert!(!text_of(&r).contains("ᴇʀʀᴏʀ"));
+        assert!(!text_of(&r).contains("Kayaknya command "));
     }
 
     #[test]
