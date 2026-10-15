@@ -1,7 +1,10 @@
 pub mod benefitpartner;
+#[path = "bluearchive-char.rs"]
+pub mod bluearchive_char;
 pub mod fiturpremium;
 pub mod gag;
 pub mod gagwatch;
+pub mod gempa;
 pub mod harilibur;
 pub mod howmuchenergy;
 pub mod jadwalbola;
