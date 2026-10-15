@@ -37,10 +37,15 @@ for (const dir of fs.readdirSync(ROOT, { withFileTypes: true })) {
   // dengan nama file, jadi pasangan yang sudah ada dipakai ulang apa adanya.
   // Tanpa ini, sinkron akan menulis `pub mod use;` yang keyword.
   const namaDariPath = new Map();
+  // Atribut lain yang menempel ke `pub mod` (`#[allow(clippy::module_inception)]`)
+  // harus ikut ditulis ulang di samping modulnya. Kalau tidak, atributnya
+  // jatuh ke ekor file dan jadi "expected item after attributes".
+  const attrDariModul = new Map();
   const lain = [];
   // Blok `//!` harus tetap paling atas: `//!` hanya sah sebelum item pertama,
   // jadi kalau ikut tersapu ke bawah, `mod.rs` gagal dikompilasi.
   let doc = [];
+  let attrPending = [];
   const barisLama = lama.split("\n");
   for (let i = 0; i < barisLama.length; i += 1) {
     const l = barisLama[i];
@@ -52,22 +57,32 @@ for (const dir of fs.readdirSync(ROOT, { withFileTypes: true })) {
       doc.push(l);
       continue;
     }
-    if (l.trim() === "" || /^pub mod \w+;\s*$/.test(l)) {
-      const p = barisLama[i - 1]?.match(/^#\[path = "([^"]+)"\]$/);
-      const d = l.match(/^pub mod (\w+);$/);
-      if (p && d) namaDariPath.set(p[1].slice(0, -3), d[1]);
+    if (/^#\[[^\]]+\]\s*$/.test(l)) {
+      attrPending.push(l);
       continue;
     }
-    // Atribut `#[path]` selalu ditulis ulang inline di bawah, jadi jangan
-    // ikut ditulis ulang di bawah — kalau tidak, makanya jadi dua kali.
-    if (/^#\[path = "[^"]+"\]$/.test(l)) continue;
+    if (l.trim() === "" || /^pub mod \w+;\s*$/.test(l)) {
+      const p = attrPending.find((a) => /^#\[path = "([^"]+)"\]$/.test(a));
+      const d = l.match(/^pub mod (\w+);$/);
+      if (d) {
+        if (p) namaDariPath.set(p.match(/"([^"]+)"/)[1].slice(0, -3), d[1]);
+        attrDariModul.set(
+          d[1],
+          attrPending.filter((a) => !/^#\[path = /.test(a))
+        );
+      }
+      attrPending = [];
+      continue;
+    }
     lain.push(l);
+    attrPending = [];
   }
 
   const deklarasi = mods.map((m) => {
     const nama = namaDariPath.get(m) ?? namaModul(m);
     const attr = nama === m ? "" : `#[path = "${m}.rs"]\n`;
-    return `${attr}pub mod ${nama};`;
+    const ekstra = (attrDariModul.get(nama) ?? []).map((a) => `${a}\n`).join("");
+    return `${ekstra}${attr}pub mod ${nama};`;
   });
 
   const isi =
