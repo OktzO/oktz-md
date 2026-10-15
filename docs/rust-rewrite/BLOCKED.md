@@ -142,3 +142,39 @@ dan `saluranCtx`), lalu `fun/tembak.js` (masih butuh `answerHandler`).
 `mod.rs` tiap kategori dan `lib.rs` crate `oktz-plugins` adalah milik
 orkestrator. Agent porting tidak boleh menyentuhnya; daftar modul dibangun
 dari isi folder.
+
+## 17. Terblokir dari batch B12-B15
+
+Dikumpulkan dari laporan agent, diacukan ke file JS masing-masing.
+
+| Plugin | Kapabilitas yang hilang |
+|---|---|
+| `ai/musicmaker` | `Reply` tidak punya varian `Audio` (§3), dan JS mengirim **dua pesan berurutan** (`sock.sendMessage` audio lalu gambar) sedangkan satu `Reply` hanya membawa satu payload (§2) |
+| `canvas/tiktokchat` | `downloadContentMessage` untuk pesan pemicu (§1), plus `HttpBody` multipart yang tidak punya `filename` padahal `form.append("avatar", buf, { filename })` (§13) |
+| `fun/cekkhodam` | `sock.sendMedia(..., { type: 'audio' })` (§2/§3), `fs.writeFileSync`/`unlinkSync` + `path.join(process.cwd(), 'temp')` (§4), dan TTS dari `google-tts-api` yang tidak ada padanannya |
+| `fun/confess` | `sock.onWhatsApp()` untuk verifikasi nomor, `sock.sendMessage()` ke JID pihak ketiga dengan `contextInfo.forwardingScore` (§15), `export { replyHandler }` sebagai entry point kedua (§9), `config.saluran.id`/`config.bot.name` (§7) |
+| `download/dailymotiondl` | `src/scraper/dailymotion.js` = POST form + 5 header kustom; `HttpGet` tidak punya header kustom. Perlu `child_process`/ffmpeg + `fs` + `sock.sendMessage` |
+| `download/terabox` | `src/scraper/terabox.js` = parse token CSRF dari HTML lalu POST JSON dengan `X-CSRF-TOKEN`/`Cookie`; stub selalu `Err` |
+| `download/pindl` | `src/capabilities/pinterest.js` belum di-port; perlu `queueFFmpeg` + `fs.statSync/readFileSync/writeFileSync/unlinkSync/renameSync` + `sock` |
+| `download/sfiledl` | `src/capabilities/sfile.js`: scraper lokal butuh `cheerio`, aggregator `neoxr` butuh `config.APIkey.neoxr` (§7) |
+| `download/videy` | `src/capabilities/videy.js`, alasan sama seperti `sfiledl` |
+| `fun/tembak`, `fun/terima`, `fun/tolak` | `answerHandler` (§9) dan `saluranCtx()` + `Ctx::bot_number` (§15) |
+
+`download/pixeldraindl` **tidak** terblokir: jalur HTTP-nya port penuh, hanya
+`config.APIkey.neoxr` kosong — persis fallback `|| ''` di JS.
+
+## 18. `m.pushName` tidak ada di `Ctx`
+
+`te(prefix, command, pushName)` meng-substitusi `{pushName}` dengan nama push
+pengirim; di Rust selalu jadi `User`, sama seperti `pushName || 'User'` ketika
+nilainya kosong. Ini penyempitan yang diketahui, bukan penyimpangan port.
+
+## 19. `config.errorTemplate` bukan kode mati yang boleh dipakai
+
+`config.errorTemplate` (`config.js:153`) **selalu terisi**, jadi teks fallback
+`☢ *ᴇʀʀᴏʀ*` di `src/lib/error.js` tidak pernah dipakai. Enam file Rust yang
+memakai teks itu menyimpang dari JS; semuanya sudah dikoreksi ke helper tunggal
+`common::error_template(prefix, command)`.
+
+Catatan kecil: `filename.replace(/[<>:"/\\|?*]/g, "")` **menghapus** karakter,
+bukan menggantinya. Helper-nya `common::scrub_nama_berkas`.

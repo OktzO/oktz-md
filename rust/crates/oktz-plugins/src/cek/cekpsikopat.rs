@@ -1,3 +1,5 @@
+//! `plugins/cek/cekpsikopat.js` — Cek tingkat kepsikopatan 0-100%, lima ambang `>= 90/70/50/30`.
+
 use crate::common::{cek_plugin, cek_reply, percent_101};
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
