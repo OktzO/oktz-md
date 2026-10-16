@@ -163,6 +163,15 @@ crate scraper, 4231 di `oktz-plugins`, 238 di `oktz-wa`, seluruh workspace hijau
 Rate limit provider: 6 subagent paralel = semua kena HTTP 429. Rombak: 2–3
 agent per gelombang.
 
+## Rencana folder mandiri — lihat `docs/rust-rewrite/FOLDER-PROYEK.md`
+
+Sistem Rust akan jadi folder proyek sendiri yang mencerminkan `ourin-md`
+(`crates/`, `data/`, `game-data/`, `assets/`, `storage/`, `config.example.toml`,
+`docs/`, `scripts/`). Pemindahan baru sah setelah gate: kapabilitas core §1–§9
+selesai, seluruh plugin ter-port atau terblokir dengan alasan final, test+clippy
+workspace hijau, smoke produksi nyata, dan skrip paritas hijau. Setelah
+dipindah, `ourin-md` jadi **acuan baca-saja** — bukan dua sumber kebenaran.
+
 ## ⚠️ INSIDEN LINGKUNGAN — 2026-10-10
 
 `/tmp/opencode/` **direset total** saat build `oktz-wa` (Task 1). Hilang: rustup toolchain,
