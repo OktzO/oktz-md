@@ -1,17 +1,21 @@
-// Sinkronkan `lib.rs` crate oktz-plugins dengan folder yang benar-benar ada.
+// Sinkronkan `lib.rs` crate dengan folder yang benar-benar ada.
 //
 // Hanya untuk orkestrator: agent porting tidak boleh menyentuh `lib.rs`.
 // Yang dipertahankan apa adanya: blok `//!`/`#![...]` paling atas, dan tiap
 // item `pub mod` yang sudah punya atribut (`#[path]`, `#[allow]`) atau
 // komentar sendiri. Baris lain (helper, re-export) tetap di bawah daftar.
 //
-// Pemakaian:  node scripts/sinkron-lib-plugin.mjs
+// Pemakaian:
+//   node scripts/sinkron-lib-plugin.mjs                      # oktz-plugins
+//   node scripts/sinkron-lib-plugin.mjs rust/crates/oktz-scraper/src
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO = path.resolve(fileURLToPath(import.meta.url), '../..');
-const ROOT = path.join(REPO, 'rust/crates/oktz-plugins/src');
+const ROOT = process.argv[2]
+  ? path.resolve(REPO, process.argv[2])
+  : path.join(REPO, 'rust/crates/oktz-plugins/src');
 
 const libPath = path.join(ROOT, 'lib.rs');
 const lama = fs.existsSync(libPath) ? fs.readFileSync(libPath, 'utf8') : '';
