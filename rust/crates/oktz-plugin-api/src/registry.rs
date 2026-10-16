@@ -992,6 +992,10 @@ pub struct HttpCall {
     pub url: String,
     pub headers: Vec<(String, String)>,
     pub body: Option<HttpBody>,
+    /// Padanan `validateStatus: () => true` di axios: status 4xx/5xx **tidak**
+    /// jadi error, isi bodinya tetap dibaca scraper. Bawaannya `false` — axios
+    /// melempar untuk 4xx/5xx, dan itu perilaku yang harus disalin.
+    pub terima_semua_status: bool,
 }
 
 impl HttpCall {
@@ -1001,7 +1005,14 @@ impl HttpCall {
             url: url.into(),
             headers: Vec::new(),
             body: None,
+            terima_semua_status: false,
         }
+    }
+
+    /// `validateStatus: () => true` — lihat catatan di `terima_semua_status`.
+    pub fn terima_semua_status(mut self) -> Self {
+        self.terima_semua_status = true;
+        self
     }
 
     pub fn get(url: impl Into<String>) -> Self {

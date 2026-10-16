@@ -82,6 +82,15 @@ Field yang tidak ada di JS berarti `false` (atau kosong untuk teks), bukan `true
   pamungkasnya.
 - Butuh HTTP: `ctx.http.get(url)` — baca `PORTING.md` §HTTP. Status di atas
   399 jadi `Err`, jadi selalu tangani hasilnya.
+- Butuh HTTP dengan header kustom, metode selain GET/POST, atau body mentah:
+  `ctx.http.call(&HttpCall::post(url).header("X-CSRF-TOKEN", "abc").json(&v))`.
+  Untuk `form-data` berbentuk berkas: `.multipart(vec![MultipartPart::file("file", "foto.jpg", buf)])`.
+  Untuk situs yang menolak 4xx/5xx tapi JS-nya memakai
+  `validateStatus: () => true`: tambahkan `.terima_semua_status()`.
+  Scraper siap pakai ada di crate `oktz-scraper` (mis.
+  `oktz_scraper::dailymotion::dailymotion_dl(ctx.http, url)`); kalau plugin JS
+  memanggil fungsi dari `src/scraper/`, **jangan** port ulang isinya di plugin
+  — panggil crate itu dan sebut di laporan kalau crate-nya belum ada.
 - Perlu simpan state: `ctx.sessions` dan `ctx.set(key, value)` — baca
   `PORTING.md`.
 

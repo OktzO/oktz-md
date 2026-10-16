@@ -1,0 +1,23 @@
+[package]
+name = "oktz-scraper"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# Trait HTTP (`HttpGet`, `HttpCall`, `HttpBody`) — scraper TIDAK boleh punya
+# klien jaringan sendiri; semua lewat kapabilitas yang sama dengan plugin,
+# supaya test bisa menyuntik stub dan pipeline tetap satu pintu.
+oktz-plugin-api = { path = "../oktz-plugin-api" }
+serde_json.workspace = true
+# `crypto.randomUUID()` / `randomBytes()` / `randomInt()` di JS.
+rand = "0.9"
+# Pola `replace(/.../)`, `match(/.../)`, `split(/.../)` — port regex JS.
+# Batas: lookahead/lookbehind/backreference tidak didukung crate ini; bagian
+# itu ditulis tangan dan dilaporkan.
+regex = "1"
+# `crypto.createHash("md5"|"sha1")` — tanda tangan API, bukan kriptografi
+# rahasia. Dipakai `reelsvideo.js` dan `yt.js`.
+md-5 = "0.10"
+sha1 = "0.10"

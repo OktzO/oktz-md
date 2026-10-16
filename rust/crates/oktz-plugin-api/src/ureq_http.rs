@@ -12,6 +12,11 @@ use serde_json::Value;
 
 use crate::registry::{HttpBody, HttpCall, HttpError, HttpGet, HttpResponse};
 
+/// Isi satu part multipart yang ditampung selama request dikirim — `Part`
+/// meminjam byte-nya, jadi tidak bisa dibuat langsung dari `HttpCall`.
+/// Urutannya: nama field, nama berkas, mimetype, byte.
+type PartMultipart = (String, Option<String>, Option<String>, Vec<u8>);
+
 /// User agent. API yang menolak UA bawaan `ureq` akan menolak bot dengan
 /// `403`; plugin JS lewat axios/Node memakai UA seperti ini.
 const UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -117,7 +122,7 @@ impl UreqHttp {
             message: format!("permintaan HTTP tidak valid: {e}"),
         })?;
         let res = self.agent.run(permintaan).map_err(to_err)?;
-        Self::guard(Self::collect(res)?)
+        Self::collect(res)
     }
 }
 
@@ -194,14 +199,14 @@ impl HttpGet for UreqHttp {
     }
 
     fn call(&self, req: &HttpCall) -> Result<HttpResponse, HttpError> {
-        match &req.body {
-            None => self.send(req, ()),
-            Some(HttpBody::Form(f)) => self.send(req, f.clone()),
-            Some(HttpBody::Bytes { data, .. }) => self.send(req, data.to_vec()),
+        let res = match &req.body {
+            None => self.send(req, ())?,
+            Some(HttpBody::Form(f)) => self.send(req, f.clone())?,
+            Some(HttpBody::Bytes { data, .. }) => self.send(req, data.to_vec())?,
             Some(HttpBody::Multipart(parts)) => {
                 // `Part` meminjam isi part, jadi semua byte ditampung dulu di
                 // sini sampai request selesai dikirim.
-                let owned: Vec<(String, Option<String>, Option<String>, Vec<u8>)> = parts
+                let owned: Vec<PartMultipart> = parts
                     .iter()
                     .map(|p| {
                         (
@@ -243,8 +248,14 @@ impl HttpGet for UreqHttp {
                     "content-type".to_string(),
                     format!("multipart/form-data; boundary={}", form.boundary()),
                 ));
-                self.send(&lokal, form)
+                self.send(&lokal, form)?
             }
+        };
+        // `validateStatus: () => true` di axios: scraper tetap membaca body 4xx.
+        if req.terima_semua_status {
+            Ok(res)
+        } else {
+            Self::guard(res)
         }
     }
 }
@@ -289,13 +300,19 @@ mod tests {
     /// Server loopback sekali-pakai: membalas `payload` JSON, dan mengembalikan
     /// permintaan mentah yang diterimanya untuk diperiksa test.
     fn server_sekali(payload: &'static str) -> (String, std::thread::JoinHandle<String>) {
+        server_kode(payload, 200)
+    }
+
+    /// Sama seperti [`server_sekali`], tapi dengan kode status pilihan —
+    /// dipakai untuk menguji perilaku 4xx/5xx.
+    fn server_kode(payload: &'static str, kode: u16) -> (String, std::thread::JoinHandle<String>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let alamat = format!("http://{}", listener.local_addr().unwrap());
         let handle = std::thread::spawn(move || {
             let (mut sock, _) = listener.accept().unwrap();
             let req = baca_permintaan(&mut sock);
             let resp = format!(
-                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                "HTTP/1.1 {kode} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
                 payload.len(),
                 payload
             );
@@ -381,5 +398,25 @@ mod tests {
         assert!(lower.contains("name=\"file\""), "{req}");
         assert!(lower.contains("name=\"type\""), "{req}");
         assert!(lower.contains("13"), "{req}");
+    }
+
+    #[test]
+    fn status_5xx_jadi_error_kecuali_diminta_seperti_validate_status() {
+        // `axios` melempar untuk 5xx; itulah perilaku bawaan.
+        let (alamat, handle) = server_kode("{\"pesan\":\"rusak\"}", 500);
+        let http = UreqHttp::new();
+        let salah = http.call(&HttpCall::post(format!("{alamat}/a")));
+        assert_eq!(salah.unwrap_err().message, "HTTP 500");
+        handle.join().unwrap();
+
+        // `validateStatus: () => true` di 5 scraper JS tetap membaca body-nya.
+        let (alamat, handle) = server_kode("{\"pesan\":\"rusak\"}", 500);
+        let http = UreqHttp::new();
+        let res = http
+            .call(&HttpCall::post(format!("{alamat}/b")).terima_semua_status())
+            .unwrap();
+        assert_eq!(res.status, 500);
+        assert_eq!(res.json().unwrap()["pesan"], "rusak");
+        handle.join().unwrap();
     }
 }
