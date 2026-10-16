@@ -136,6 +136,33 @@ Gate workspace: **42 test hijau**, clippy `-D warnings` EXIT=0, verify-db 24 fil
 **Operasional (penting):** di mesin ini `cargo test` (debug) **recompile wacore dari nol**
 (~15 menit sia-sia). Selalu `cargo test --release` / `cargo clippy --release`.
 
+## Fase 3 — crate `oktz-scraper` + kapabilitas A1–A3 (2026-10-16)
+
+Tujuan fase ini: port `src/scraper/` (59 file JS, 7483 baris) supaya plugin
+`download/*` dan `stalker/*` yang selama ini selalu gagal bisa hidup.
+
+Kapabilitas yang ditambahkan (semua di `oktz-plugin-api` + `oktz-wa`):
+
+| Kode | Isi | Status |
+|---|---|---|
+| A1 | `HttpCall` + `HttpMethod` (header kustom, metode apa pun, body mentah) | selesai |
+| A2 | `Reply::Video`/`Audio`/`Document` (`gif_playback`, `ptt`, `file_name`) | selesai |
+| A3 | `Ctx::media` + `Ctx::media_fetch` (`m.download()`, `m.quoted.download()`) | selesai |
+
+crate `oktz-scraper`: kontrak `pub fn <nama>(http: &dyn HttpGet, …) -> Result<Value, HttpError>`,
+helper bersama di `common.rs` (`truthy`, `parse_int_js`, `encode_uri_component`,
+`decode_entitas`), dan `dailymotion.rs` sebagai port contoh acuan. Divisi 14 grup
+masing-masing ~500 baris JS ada di `/tmp/opencode/scraper-batches/S01..S14.tsv`
+(regenerasi: `node scripts/bagi-batch-scraper.mjs`).
+
+Gelombang pertama: 16 file scraper masuk (feeb, hd, hokinfo, img2img, imglarger,
+mediafire, qwen3, reddit, reelsvideo, seaart, sfiledl, spotify, terabox,
+tiktoksearch, topmedia, txt2img, wwchar). Verifikasi: **96 test hijau** di
+crate scraper, 4231 di `oktz-plugins`, 238 di `oktz-wa`, seluruh workspace hijau.
+
+Rate limit provider: 6 subagent paralel = semua kena HTTP 429. Rombak: 2–3
+agent per gelombang.
+
 ## ⚠️ INSIDEN LINGKUNGAN — 2026-10-10
 
 `/tmp/opencode/` **direset total** saat build `oktz-wa` (Task 1). Hilang: rustup toolchain,

@@ -5,25 +5,34 @@ Daftar ini bukan belgekan: plugin di sini **tidak bisa** di-port tanpa menambah
 kapabilitas di `oktz-plugin-api` atau crate inti. Kalau salah satu kapabilitas di bawah
 ini, daftar ini ikut susut, daftar ini ikut susut.
 
-## 1. Unduh media pesan masuk (blocking terbesar)
+## 1. Unduh media pesan masuk (blocking terbesar) — SELESAI 2026-10-16
 
-Butuh `downloadContentMessage`. `QuotedMessage` di `oktz-plugin-api` hanya
-field baca tanpa I/O; `Ctx` tidak punya `isImage`/`isAudio`/`isVideo` untuk
-pesan pemicu.
+Dibuka oleh `Ctx::media` + `Ctx::media_fetch` (`MediaFetch`), bukan `Ctx::download_media`
+saja. `Ctx` sekarang punya:
 
-Tren 14 file `ai/to*.js`: `isImage?` → `download` → unggah → efek →
-`sock.sendMedia`. Setelah `Ctx` punya `download_media` + `Reply::image`,
-14 file ini murah (< 60 baris masing-masing).
+- `media: Option<IncomingMedia>` — padanan `m.isMedia`, `m.isImage`, `m.mimetype`,
+  `m.fileName`, dan caption pesan pemicu. `Ctx::is_media()`, `Ctx::media_type()`
+  (`"imageMessage"` dst), `Ctx::is_media_kind(…)`.
+- `media_fetch: Arc<dyn MediaFetch>` — `await m.download()` dan
+  `await m.quoted.download()` (`serialize.js:1669`, `:543`). Default-nya
+  `NoMediaFetch` yang menolak dengan alasan jelas; implementasi nyata
+  `oktz_wa::media_fetch::WaMediaFetch` memakai `Client::download` atas media
+  pemicu + pesan yang di-reply.
 
-File: `ai/bananagen.js`, `ai/to3d.js`, `ai/toanime.js`, `ai/toblack.js`,
-`ai/tocartoon.js`, `ai/tocermin.js`, `ai/tochibi.js`, `ai/toemotebatu.js`,
-`ai/tofigure.js`, `ai/tofigurev2.js`, `ai/tofigurine.js`, `ai/toghibli.js`,
-`ai/tohijab.js`, `ai/toisland.js`, `ai/tojapanese.js`, `ai/tomanga.js`,
-`ai/tomekah.js`, `ai/tooilpainting.js`, `ai/txt2img.js`,
-`canvas/fakecall.js`, `canvas/fakeml.js`, `canvas/fakestory*.js`,
-`canvas/gura.js`, `canvas/igstory*.js`, `canvas/applemusic.js`,
-`canvas/facepalm.js`, `canvas/musiccard.js`, `canvas/profileig.js`,
-`canvas/starboy.js`, `canvas/topixel.js`, `convert/audiofx.js`.
+Dua hal yang **tidak** ikut (sengaja, dicatat):
+
+1. `m.download(filename)` yang menulis ke `storage/temp` — butuh `fs` (§4).
+2. Retry `sock.updateMediaMessage` saat CDN menjawab 400/404/410/428/429/500/870
+   (`serialize.js:1684-1707`). Tidak ada re-enkripsi sisi klien di Rust, jadi
+   kegagalan CDN langsung jadi `Err`.
+
+Efek samping: `Ctx` gained dua field, jadi `Caller` di `oktz-router` ikut
+membawanya (partial-eq `Caller` sengaja dihapus — `Arc<dyn MediaFetch>` tidak
+punya identitas bermakna). Semua `Ctx { .. }` di test tetap jalan karena
+`Default` diisi `media: None` + `NoMediaFetch`.
+
+Plugin yang sekarang bisa lanjut: 14 file `ai/to*.js`, `canvas/*` yang butuh
+media pemicu, `owner/ganti-*` (15 file), `anime/autoanimewinbu.js`.
 
 ## 2. `sock.*` (profile picture, `sendMedia`, `getName`, `sendImageAsSticker`)
 
@@ -253,12 +262,14 @@ antaranya berhasil di-port (`group/acc`, `autoreply`, `warn`, `welcome`).
 
 Kapabilitas pembuka terbesar dari gelombang ini:
 
-1. **Unduh media pesan pemicu** (`downloadContentMessage`, §1) — membuka 15 file
-   `ganti-*`.
+1. ~~**Unduh media pesan pemicu**~~ — **selesai 2026-10-16**, lihat §1
+   (`Ctx::media` + `Ctx::media_fetch`). Membuka 15 file `ganti-*` dan 14 file
+   `ai/to*.js`.
 2. **I/O `config.js` + config runtime** (`config.payment`, `config.donasi`,
    `config.owner`, `config.bot`, `config.assets`) — membuka 8 file.
-3. **`Reply::Document` dengan `fileName`** — membuka `getplugin` dan sebagian
-   besar cabang output `get`.
+3. ~~**`Reply::Document` dengan `fileName`**~~ — **selesai** (A2, bersama
+   `Reply::Video`/`Reply::Audio`); membuka `getplugin` dan sebagian besar
+   cabang output `get`.
 4. **Store atas `sewa.json`** — membuka `listsewa`/`renewsewa`.
 5. **Enumerasi seluruh store users** — membuka `leaderboard`.
 
@@ -280,3 +291,27 @@ memakai teks itu menyimpang dari JS; semuanya sudah dikoreksi ke helper tunggal
 
 Catatan kecil: `filename.replace(/[<>:"/\\|?*]/g, "")` **menghapus** karakter,
 bukan menggantinya. Helper-nya `common::scrub_nama_berkas`.
+
+## 20. Dua jebakan verifikasi yang sudah memakan waktu (bukan blokir plugin)
+
+Keduanya ditemukan saat gelombang scraper pertama, dan keduanya bisa
+membuat hasil terlihat hijau padahal tidak:
+
+1. **`r#"` yang ditutup dengan `".`** — file `oktz-scraper/src/sfiledl.rs:741`
+   punya `r#"…html…".to_string()`. Penutupnya `"` biasa, bukan `"#`, jadi lexer
+   membaca ~37 baris berikutnya (termasuk dua fungsi test) sebagai isi string.
+   Akibatnya: type error di dalam tidak pernah muncul, `#[test]` di dalamnya
+   tidak terdaftar, dan test yang terdaftar berjalan dengan body milik test
+   lain. Tidak ada satu pun error kompilasi. Penjaga: `scripts/cek-raw-string.mjs`
+   (mencari raw string yang isinya berisi `fn `, `#[test]`, `assert!`, `let `).
+   Jalankan setelah setiap gelombang agent.
+2. **Cargo kadang tidak membangun ulang unit test** di lingkungan ini: `cargo
+   check`/`build` tetap mem-build ulang, tapi `cargo test` memakai binari lama
+   sehingga test yang baru ditulis tidak muncul. Gejalanya "test saya tidak
+   jalan". Hindari dengan menyentuh file sumber sebelum build:
+   `touch rust/crates/*/src/*.rs rust/crates/*/src/*/*.rs`. Kalau hasilnya
+   tetap janggal, buktikan dulu dengan `compile_error!` di dalam badan fungsi —
+   kalau tidak muncul, itu bukan soal staleness, tapi jebakan no-1 di atas.
+
+Aturan tambahan untuk agent: kalau jumlah `#[test]` pada disk berbeda dengan
+hasil `cargo test -- --list`, itu gejala yang harus dilaporkan, bukan dibiarkan.

@@ -80,6 +80,11 @@ yang tidak ada di JS berarti `false`, bukan `true`.
 | `db.setting(k, v)` | `Mutation::SetSetting { key, v }` |
 | `global.fooSessions` | `ctx.session_get("foo")` / `session_set` / `session_take` / `session_update` |
 | `axios.get(url)` | `ctx.http.get(url)` → `Result<HttpResponse, HttpError>` |
+| `axios({ method, url, data, headers })` | `ctx.http.call(&HttpCall::post(url).header(…).json(&v))` |
+| `axios.get(url, { validateStatus: () => true })` | `HttpCall::….terima_semua_status()` |
+| `m.isMedia` / `m.isImage` / `m.mimetype` / `m.fileName` | `ctx.media: Option<IncomingMedia>` (+ `ctx.is_media()`, `ctx.media_type()`, `ctx.is_media_kind(..)`) |
+| `await m.download()` | `ctx.download_media()` → `Result<Vec<u8>, MediaError>` |
+| `await m.quoted.download()` | `ctx.download_quoted_media()` |
 | `m.react(emoji)` | `Reply::….with_reaction("emoji")` |
 | `m.reply(teks, {mentions})` | `Reply::Text { text, mentions }` atau `Reply::TextQuoted` |
 
@@ -97,6 +102,10 @@ is_sticker/is_document/is_media`.
 - `Reply::TextQuoted { text, mentions }` — kalau JS pakai `m.reply` dengan quote
 - `Reply::image(MediaSource::url(path), caption)` / `MediaSource::bytes(...)`
 - `Reply::sticker(MediaSource::…)`
+- `Reply::video(src, caption)` / `Reply::video_gif(src, caption)` — `type: 'video'`
+- `Reply::audio(src)` / `Reply::voice_note(src)` — `type: 'audio'`, `ptt: true`
+- `Reply::document(src, "nama.pdf")` — `type: 'document'`; tanpa `type` di JS
+  berarti **document**, bukan image (`socket.js:756-820`)
 - `Reply::Interactive { body }` — kartu WA
 - `.with_reaction("✅")`, `.with_mutation(...)`, `.with_mutations(vec![...])`
 
@@ -106,9 +115,14 @@ aman dipakai.
 ## Yang TIDAK tersedia
 
 Kalau plugin butuh salah satu ini, **jangan port** — catat di laporan akhir:
-`downloadContentMessage`, `sock.*` (kirim/hapus/promote/demote/ubah nama grup/
-edit grup), `fs`, `child_process`, `sharp`/`ffmpeg`/`canvas`/`jimp`,
+`sock.*` (kirim/hapus/promote/demote/ubah nama grup/edit grup),
+`m.download(filename)` (tulis berkas lokal), `fs`, `child_process`,
+`sharp`/`ffmpeg`/`canvas`/`jimp`, `config.APIkey.*`, `config.saluran`,
 `baileys` khusus (viewOnceMessage, ephemeral, poll vote), fungsi server.
+
+`m.download()` **sudah ada** (`ctx.download_media()`); yang belum adalah versi
+yang menulis ke `storage/temp` dan retry `sock.updateMediaMessage` — lihat
+`BLOCKED.md` §1.
 
 `Math.floor(Math.random()*N)` → `crate::common::roll(n)`.
 `Math.random()` untuk pilih item → `crate::common::random_item(&[..])`.
