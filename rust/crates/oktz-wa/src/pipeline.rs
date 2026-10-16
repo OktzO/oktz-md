@@ -20,8 +20,8 @@
 //!   akan menguras kuota untuk command biasa. Gate-nya tetap tersedia lewat
 //!   [`Pipeline::allow_auto_work`].
 //!
-//! Media: `Reply::Image` / `Reply::Sticker` membawa [`MediaSource`]. Tidak ada
-//! "kirim dari URL" di whatsapp-rust — `Client::upload`
+//! Media: `Reply::Image` / `Sticker` / `Video` / `Audio` / `Document` membawa
+//! [`MediaSource`]. Tidak ada "kirim dari URL" di whatsapp-rust — `Client::upload`
 //! (`whatsapp-rust-0.7.0/src/upload.rs:409`) hanya menerima `Vec<u8>`, jadi
 //! `Url`/`Path` di-resolve ke byte dulu ([`load_media`]) sebelum upload.
 
@@ -51,7 +51,10 @@ use serde_json::Value;
 use crate::reply_variant;
 use whatsapp_rust::RevokeType;
 use whatsapp_rust::http::{HttpClient, HttpRequest, UreqHttpClient};
-use whatsapp_rust::media::{ImageOptions, image_message};
+use whatsapp_rust::media::{
+    AudioOptions, DocumentOptions, ImageOptions, VideoOptions, audio_message, document_message,
+    image_message, video_message,
+};
 use whatsapp_rust::prelude::*;
 use whatsapp_rust::GroupMetadata;
 use whatsapp_rust::upload::{UploadOptions, UploadResponse};
@@ -1281,6 +1284,9 @@ impl Rendered {
 pub enum MediaKind {
     Image,
     Sticker,
+    Video,
+    Audio,
+    Document,
 }
 
 impl MediaKind {
@@ -1290,6 +1296,9 @@ impl MediaKind {
         match self {
             Self::Image => MediaType::Image,
             Self::Sticker => MediaType::Sticker,
+            Self::Video => MediaType::Video,
+            Self::Audio => MediaType::Audio,
+            Self::Document => MediaType::Document,
         }
     }
 }
@@ -1302,6 +1311,12 @@ pub struct PendingMedia {
     pub caption: String,
     pub mentions: Vec<String>,
     pub quote: Option<QuoteSource>,
+    /// `{ type: 'video', gifPlayback: true }` (`socket.js:793`).
+    pub gif_playback: bool,
+    /// `{ type: 'audio', ptt: true }` (`socket.js:802`).
+    pub ptt: bool,
+    /// `fileName` dokumen. `None` → `"file"` seperti `socket.js:775`.
+    pub file_name: Option<String>,
 }
 
 /// `UploadResponse` → `wa::Message` siap kirim.
@@ -1322,15 +1337,10 @@ fn build_media_message(kind: MediaKind, up: UploadResponse, media: &PendingMedia
     // WA menolak caption kosong; `Some("")` dikirim apa adanya.
     let caption = (!media.caption.is_empty()).then(|| media.caption.clone());
     match kind {
-        MediaKind::Image => image_message(
-            up,
-            ImageOptions {
-                caption,
-                mimetype: media.source.mimetype().map(str::to_string),
-                jpeg_thumbnail: None,
-                context_info: ci,
-            },
-        ),
+        MediaKind::Image => image_message(up, image_options(media, caption, ci)),
+        MediaKind::Video => video_message(up, video_options(media, caption, ci)),
+        MediaKind::Audio => audio_message(up, audio_options(media, ci)),
+        MediaKind::Document => document_message(up, document_options(media, caption, ci)),
         MediaKind::Sticker => wa::Message {
             sticker_message: MessageField::some(wa::message::StickerMessage {
                 url: Some(up.url),
@@ -1356,6 +1366,87 @@ fn build_media_message(kind: MediaKind, up: UploadResponse, media: &PendingMedia
             }),
             ..Default::default()
         },
+    }
+}
+
+/// Opsi per jenis media, dipisah dari `build_media_message` supaya bisa diuji
+/// tanpa jaringan: `UploadResponse` itu `#[non_exhaustive]`, jadi tidak bisa
+/// dibuat dari luar crate `whatsapp-rust`.
+fn image_options(
+    media: &PendingMedia,
+    caption: Option<String>,
+    ci: Option<Box<wa::ContextInfo>>,
+) -> ImageOptions {
+    ImageOptions {
+        caption,
+        mimetype: media.source.mimetype().map(str::to_string),
+        jpeg_thumbnail: None,
+        context_info: ci,
+    }
+}
+
+/// `video_message` (`whatsapp-rust-0.7.0/src/media.rs:92`). Mimetype bawaannya
+/// `video/mp4`, sama seperti yang WA kirim untuk `{ video }`.
+fn video_options(
+    media: &PendingMedia,
+    caption: Option<String>,
+    ci: Option<Box<wa::ContextInfo>>,
+) -> VideoOptions {
+    VideoOptions {
+        caption,
+        mimetype: media.source.mimetype().map(str::to_string),
+        jpeg_thumbnail: None,
+        duration_seconds: None,
+        gif_playback: Some(media.gif_playback),
+        context_info: ci,
+    }
+}
+
+/// `audio_message` (`media.rs:150`). JS menulis `audio/mpeg` kalau pemanggil
+/// tidak memberi mimetype (`socket.js:798`), jadi itu yang dipakai di sini —
+/// bukan default `audio/ogg; codecs=opus` builder.
+fn audio_options(media: &PendingMedia, ci: Option<Box<wa::ContextInfo>>) -> AudioOptions {
+    AudioOptions {
+        mimetype: Some(
+            media
+                .source
+                .mimetype()
+                .unwrap_or("audio/mpeg")
+                .to_string(),
+        ),
+        duration_seconds: None,
+        ptt: Some(media.ptt),
+        waveform: None,
+        context_info: ci,
+    }
+}
+
+/// `document_message` (`media.rs:119`). `fileName` bawaannya `"file"` dan
+/// mimetype bawaannya `application/octet-stream` — persis `socket.js:775-776`.
+fn document_options(
+    media: &PendingMedia,
+    caption: Option<String>,
+    ci: Option<Box<wa::ContextInfo>>,
+) -> DocumentOptions {
+    DocumentOptions {
+        mimetype: Some(
+            media
+                .source
+                .mimetype()
+                .unwrap_or("application/octet-stream")
+                .to_string(),
+        ),
+        file_name: Some(
+            media
+                .file_name
+                .clone()
+                .unwrap_or_else(|| "file".to_string()),
+        ),
+        title: None,
+        caption,
+        page_count: None,
+        jpeg_thumbnail: None,
+        context_info: ci,
     }
 }
 
@@ -1394,10 +1485,11 @@ pub(crate) fn context_info(mentions: &[String], quote: Option<&QuoteSource>) -> 
 ///   `quote`, teks tetap terkirim tapi quote hilang.
 /// - `Interactive` → `Card::new(body).to_message()` + node `biz`
 ///   (bentuk yang sudah terbukti, `crate::cards`).
-/// - `Image` / `Sticker` → [`Rendered::media`] terisi, `message` sengaja
-///   kosong: byte-nya harus di-upload dulu sebelum ada pesan yang bisa dikirim.
-///   `media: None` → `Err(MediaSourceMissing)`, bukan `Ok(None)` — drop
-///   senyap akan membuat plugin terlihat sukses padahal tidak mengirim apa pun.
+/// - `Image` / `Sticker` / `Video` / `Audio` / `Document` → [`Rendered::media`]
+///   terisi, `message` sengaja kosong: byte-nya harus di-upload dulu sebelum ada
+///   pesan yang bisa dikirim. `media: None` → `Err(MediaSourceMissing)`, bukan
+///   `Ok(None)` — drop senyap akan membuat plugin terlihat sukses padahal tidak
+///   mengirim apa pun.
 #[derive(Debug, Clone, Default)]
 pub struct ReplyTarget {
     pub quote: Option<QuoteSource>,
@@ -1451,6 +1543,9 @@ pub fn render_reply(
             caption: caption.to_string(),
             mentions: mentions_of(mentions),
             quote: quote.cloned(),
+            gif_playback: false,
+            ptt: false,
+            file_name: None,
         })
     };
     match reply {
@@ -1469,6 +1564,43 @@ pub fn render_reply(
             extra_nodes: Vec::new(),
             media: Some(pending(MediaKind::Image, "Image", src, caption, mentions)?),
         })),
+        Reply::Video {
+            media: src,
+            caption,
+            mentions,
+            gif_playback,
+        } => {
+            let mut media = pending(MediaKind::Video, "Video", src, caption, mentions)?;
+            media.gif_playback = *gif_playback;
+            Ok(Some(Rendered {
+                message: wa::Message::default(),
+                extra_nodes: Vec::new(),
+                media: Some(media),
+            }))
+        }
+        Reply::Audio { media: src, ptt } => {
+            let mut media = pending(MediaKind::Audio, "Audio", src, "", &[])?;
+            media.ptt = *ptt;
+            Ok(Some(Rendered {
+                message: wa::Message::default(),
+                extra_nodes: Vec::new(),
+                media: Some(media),
+            }))
+        }
+        Reply::Document {
+            media: src,
+            file_name,
+            caption,
+            mentions,
+        } => {
+            let mut media = pending(MediaKind::Document, "Document", src, caption, mentions)?;
+            media.file_name = Some(file_name.clone());
+            Ok(Some(Rendered {
+                message: wa::Message::default(),
+                extra_nodes: Vec::new(),
+                media: Some(media),
+            }))
+        }
         // `quotedMsg = options.quoted !== false ? msg : undefined` — jadi
         // yang TANPA kutipan harus opt-out eksplisit.
         Reply::Text { text, mentions } => Ok(Some(Rendered::wire(
@@ -3591,10 +3723,178 @@ fn group_number_and_long_number_are_rejected() {
         assert_eq!(p.caption, "", "sticker tidak punya caption");
     }
 
+    #[test]
+    fn video_reply_membawa_gif_playback_dan_caption() {
+        let reply = Reply::video_gif(MediaSource::url("https://x/v.mp4"), "cap");
+        let r = render_reply(&reply, &ReplyTarget::default())
+            .unwrap()
+            .unwrap();
+        assert!(r.needs_media(), "video harus lewat jalur upload");
+        let p = r.media.expect("pending media");
+        assert_eq!(p.kind, MediaKind::Video);
+        assert_eq!(p.source, MediaSource::url("https://x/v.mp4"));
+        assert_eq!(p.caption, "cap");
+        assert!(p.gif_playback);
+        assert!(!p.ptt, "video tidak pernah ptt");
+
+        let biasa = Reply::video(MediaSource::url("https://x/v.mp4"), "");
+        let p2 = render_reply(&biasa, &ReplyTarget::default())
+            .unwrap()
+            .unwrap()
+            .media
+            .unwrap();
+        assert!(!p2.gif_playback);
+    }
+
+    #[test]
+    fn audio_reply_ptt_hanya_kalau_diminta() {
+        let p = render_reply(
+            &Reply::voice_note(MediaSource::bytes(vec![1])),
+            &ReplyTarget::default(),
+        )
+        .unwrap()
+        .unwrap()
+        .media
+        .unwrap();
+        assert_eq!(p.kind, MediaKind::Audio);
+        assert!(p.ptt);
+        assert_eq!(p.caption, "", "audio tidak punya caption");
+
+        let p2 = render_reply(
+            &Reply::audio(MediaSource::bytes(vec![1])),
+            &ReplyTarget::default(),
+        )
+        .unwrap()
+        .unwrap()
+        .media
+        .unwrap();
+        assert!(!p2.ptt);
+    }
+
+    #[test]
+    fn document_reply_membawa_nama_berkas() {
+        let p = render_reply(
+            &Reply::document(MediaSource::url("https://x/a.zip"), "bukti.zip"),
+            &ReplyTarget::default(),
+        )
+        .unwrap()
+        .unwrap()
+        .media
+        .unwrap();
+        assert_eq!(p.kind, MediaKind::Document);
+        assert_eq!(p.file_name.as_deref(), Some("bukti.zip"));
+    }
+
+    #[test]
+    fn media_baru_tanpa_sumber_jadi_error_bertipe() {
+        // Sama seperti Image/Sticker: media: None TIDAK boleh jadi drop senyap.
+        for (reply, variant) in [
+            (
+                Reply::Video {
+                    media: None,
+                    caption: String::new(),
+                    mentions: Vec::new(),
+                    gif_playback: false,
+                },
+                "Video",
+            ),
+            (
+                Reply::Audio {
+                    media: None,
+                    ptt: false,
+                },
+                "Audio",
+            ),
+            (
+                Reply::Document {
+                    media: None,
+                    file_name: "a".into(),
+                    caption: String::new(),
+                    mentions: Vec::new(),
+                },
+                "Document",
+            ),
+        ] {
+            let err = render_reply(&reply, &ReplyTarget::default()).unwrap_err();
+            assert_eq!(err, PipelineError::MediaSourceMissing { variant });
+        }
+    }
+
+    /// `PendingMedia` minimal untuk menguji pemetaan opsi tanpa jaringan.
+    fn pending_of(kind: MediaKind, source: MediaSource) -> PendingMedia {
+        PendingMedia {
+            kind,
+            source,
+            caption: String::new(),
+            mentions: Vec::new(),
+            quote: None,
+            gif_playback: false,
+            ptt: false,
+            file_name: None,
+        }
+    }
+
+    #[test]
+    fn opsi_video_audio_dokumen_mengikuti_socket_js() {
+        let _ = pending_of(MediaKind::Image, MediaSource::url("https://x"));
+
+        // Video: gifPlayback diteruskan; mimetype dari MediaSource kalau ada.
+        let mut p = pending_of(
+            MediaKind::Video,
+            MediaSource::url("https://x").with_mimetype("video/mp4"),
+        );
+        p.gif_playback = true;
+        let v = video_options(&p, Some("cap".into()), None);
+        assert_eq!(v.gif_playback, Some(true));
+        assert_eq!(v.mimetype.as_deref(), Some("video/mp4"));
+        assert_eq!(v.caption.as_deref(), Some("cap"));
+
+        // Audio: ptt diteruskan; mimetype bawaannya `audio/mpeg` seperti
+        // `socket.js:798`, bukan default builder (`audio/ogg`).
+        let mut p = pending_of(MediaKind::Audio, MediaSource::url("https://x"));
+        p.ptt = true;
+        let a = audio_options(&p, None);
+        assert_eq!(a.ptt, Some(true));
+        assert_eq!(a.mimetype.as_deref(), Some("audio/mpeg"));
+
+        // Dokumen: fileName dari plugin; default `"file"` kalau tidak diisi,
+        // dan mimetype default `application/octet-stream` (`socket.js:775`).
+        let p = pending_of(MediaKind::Document, MediaSource::url("https://x"));
+        let d = document_options(&p, None, None);
+        assert_eq!(d.file_name.as_deref(), Some("file"));
+        assert_eq!(d.mimetype.as_deref(), Some("application/octet-stream"));
+
+        let mut p = pending_of(MediaKind::Document, MediaSource::url("https://x"));
+        p.file_name = Some("laporan.pdf".into());
+        let d = document_options(&p, None, None);
+        assert_eq!(d.file_name.as_deref(), Some("laporan.pdf"));
+
+        // Mimetype dokumen dari pemanggil menang atas default.
+        let p = pending_of(
+            MediaKind::Document,
+            MediaSource::url("https://x").with_mimetype("application/zip"),
+        );
+        assert_eq!(
+            document_options(&p, None, None).mimetype.as_deref(),
+            Some("application/zip")
+        );
+    }
+
+    #[test]
+    fn upload_type_media_baru_tidak_tertukar() {
+        assert_eq!(MediaKind::Video.upload_type(), MediaType::Video);
+        assert_eq!(MediaKind::Audio.upload_type(), MediaType::Audio);
+        assert_eq!(MediaKind::Document.upload_type(), MediaType::Document);
+        assert_ne!(
+            MediaKind::Document.upload_type().upload_path(),
+            MediaKind::Image.upload_type().upload_path()
+        );
+    }
+
     #[tokio::test]
     async fn every_media_reply_routes_to_send_media_with_its_own_kind() {
-        // Yang diuji: pemetaan variant `Reply` → jalur kirim. `Image` dan
-        // `Sticker` TIDAK boleh jatuh ke `send` biasa.
+        // Yang diuji: pemetaan variant `Reply` → jalur kirim. Media TIDAK
+        // boleh jatuh ke `send` biasa.
         for (reply, want_kind, want_label) in [
             (
                 Reply::image(MediaSource::bytes(vec![7]), "c"),
@@ -3610,6 +3910,21 @@ fn group_number_and_long_number_are_rejected() {
                 Reply::sticker(MediaSource::path("/tmp/s.webp")),
                 MediaKind::Sticker,
                 "path",
+            ),
+            (
+                Reply::video(MediaSource::url("https://x/v.mp4"), "c"),
+                MediaKind::Video,
+                "url",
+            ),
+            (
+                Reply::voice_note(MediaSource::bytes(vec![1, 2])),
+                MediaKind::Audio,
+                "bytes(2)",
+            ),
+            (
+                Reply::document(MediaSource::url("https://x/a.zip"), "a.zip"),
+                MediaKind::Document,
+                "url",
             ),
         ] {
             let s = RecordingSender::default();
@@ -3657,6 +3972,9 @@ fn group_number_and_long_number_are_rejected() {
             Reply::Sticker {
                 media: Some(MediaSource::bytes(vec![1])),
             },
+            Reply::video(MediaSource::bytes(vec![1]), "c"),
+            Reply::audio(MediaSource::bytes(vec![1])),
+            Reply::document(MediaSource::bytes(vec![1]), "a.txt"),
         ];
         for c in cases {
             let Some(r) = render_reply(&c, &ReplyTarget::default()).unwrap() else {

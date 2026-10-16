@@ -164,6 +164,30 @@ dan seluruh skrip bantu di `/tmp/opencode/` hilang. Repo + commit utuh. Recovery
 kali ini lebih pendek: nix store sudah punya gcc-wrapper dan binutils-wrapper,
 jadi tidak perlu unduh nixpkgs.
 
+**Insiden ketiga dan keempat — 2026-10-16.** Dua reset lagi dalam satu hari,
+plus server restart dua kali yang memutus subagent. Karena itu seluruh skrip
+bantu dipindah ke repo (commit `35abe5c`) supaya tahan reset:
+
+| Tugas | Skrip repo |
+|---|---|
+| Env build + auto-pasang-ulang toolchain | `scripts/build-env.sh` |
+| Paritas metadata plugin Rust↔JS | `scripts/cek-paritas-plugin.mjs` |
+| Daftar belum ter-port + bagi batch | `scripts/daftar-batch-plugin.mjs` |
+| Scan kebocoran huruf non-Latin | `scripts/scan-nonlatin.mjs` |
+| Sinkron `lib.rs` | `scripts/sinkron-lib-plugin.mjs` |
+| Sinkron `mod.rs` per kategori | `scripts/sync-plugin-mods.mjs` (sudah lama) |
+| Parser metadata bersama | `scripts/plugin-meta.mjs` |
+
+Recovery sekarang satu langkah:
+
+```bash
+cd /home/user/noddjs/ourin-md && source scripts/build-env.sh
+node scripts/daftar-batch-plugin.mjs   # batch baru ditulis ke /tmp/opencode/batches
+```
+
+Satu-satunya yang tidak bisa diselamatkan dari reset `/tmp` adalah hasil compile
+(`CARGO_TARGET_DIR`) — build penuh dari nol butuh ~10 menit.
+
 ```bash
 mkdir -p /tmp/opencode
 curl -sSf https://sh.rustup.rs -o /tmp/rustup-init.sh

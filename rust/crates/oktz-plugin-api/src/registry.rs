@@ -174,6 +174,36 @@ pub enum Reply {
     ///
     /// Sama seperti `Image`: `None` = error eksplisit, bukan drop senyap.
     Sticker { media: Option<MediaSource> },
+    /// Video (WA `videoMessage`) — `sock.sendMedia(..., { type: 'video' })`
+    /// (`src/lib/socket.js:786-793`).
+    ///
+    /// `gif_playback` = `options.gifPlayback` yang ikut tersebar ke payload
+    /// (`socket.js:793` — `...options`): WA memutar video berulang tanpa suara.
+    /// Dipakai `asupan/*` dan `cek/cekfemboy` (9 pemanggil di plugins/).
+    Video {
+        media: Option<MediaSource>,
+        caption: String,
+        mentions: Vec<String>,
+        gif_playback: bool,
+    },
+    /// Audio (WA `audioMessage`) — `{ type: 'audio' }` (`socket.js:795-805`).
+    ///
+    /// `ptt` = voice note (`options.ptt || false` di JS). Mimetype bawaannya
+    /// `audio/mpeg` kalau `MediaSource` tidak membawa mimetype sendiri —
+    /// `socket.js:798` mengganti `application/octet-stream` jadi itu.
+    Audio {
+        media: Option<MediaSource>,
+        ptt: bool,
+    },
+    /// Dokumen (WA `documentMessage`) — bentuk DEFAULT `sock.sendMedia` tanpa
+    /// `type` (`socket.js:805-812`): `fileName` bawaannya `"file"` dan
+    /// mimetype bawaannya `application/octet-stream`.
+    Document {
+        media: Option<MediaSource>,
+        file_name: String,
+        caption: String,
+        mentions: Vec<String>,
+    },
     /// Card/button list interaktif (WA native flow).
     Interactive { body: String },
     /// Reaksi emoji pada pesan yang memicu (JS `m.react`).
@@ -247,6 +277,52 @@ impl Reply {
     pub fn sticker(source: MediaSource) -> Self {
         Self::Sticker {
             media: Some(source),
+        }
+    }
+
+    /// Video biasa — `sock.sendMedia(..., { type: 'video' })`.
+    pub fn video(source: MediaSource, caption: impl Into<String>) -> Self {
+        Self::Video {
+            media: Some(source),
+            caption: caption.into(),
+            mentions: Vec::new(),
+            gif_playback: false,
+        }
+    }
+
+    /// Video mode GIF — `{ type: 'video', gifPlayback: true }`.
+    pub fn video_gif(source: MediaSource, caption: impl Into<String>) -> Self {
+        Self::Video {
+            media: Some(source),
+            caption: caption.into(),
+            mentions: Vec::new(),
+            gif_playback: true,
+        }
+    }
+
+    /// Audio biasa — `{ type: 'audio' }`, bukan voice note.
+    pub fn audio(source: MediaSource) -> Self {
+        Self::Audio {
+            media: Some(source),
+            ptt: false,
+        }
+    }
+
+    /// Voice note — `{ type: 'audio', ptt: true }`.
+    pub fn voice_note(source: MediaSource) -> Self {
+        Self::Audio {
+            media: Some(source),
+            ptt: true,
+        }
+    }
+
+    /// Dokumen dengan nama berkas yang dilihat penerima.
+    pub fn document(source: MediaSource, file_name: impl Into<String>) -> Self {
+        Self::Document {
+            media: Some(source),
+            file_name: file_name.into(),
+            caption: String::new(),
+            mentions: Vec::new(),
         }
     }
 
@@ -347,14 +423,25 @@ impl Reply {
 
     /// `true` kalau reply ini butuh upload media sebelum bisa dikirim.
     pub fn has_media(&self) -> bool {
-        matches!(self.payload(), Self::Image { .. } | Self::Sticker { .. })
+        matches!(
+            self.payload(),
+            Self::Image { .. }
+                | Self::Sticker { .. }
+                | Self::Video { .. }
+                | Self::Audio { .. }
+                | Self::Document { .. }
+        )
     }
 
     /// Sumber media yang di-carry, kalau ada. `None` = tidak ada sumber yang
     /// bisa dikirim — pemanggil WAJIB memperlakukan itu sebagai error.
     pub fn media_source(&self) -> Option<&MediaSource> {
         match self.payload() {
-            Self::Image { media, .. } | Self::Sticker { media } => media.as_ref(),
+            Self::Image { media, .. }
+            | Self::Sticker { media }
+            | Self::Video { media, .. }
+            | Self::Audio { media, .. }
+            | Self::Document { media, .. } => media.as_ref(),
             _ => None,
         }
     }
@@ -367,13 +454,15 @@ impl Reply {
             | Self::NoQuote { text, .. }
             | Self::TextNoMention { text } => Some(text),
             Self::Image { caption, .. } => Some(caption),
+            Self::Video { caption, .. } => Some(caption),
+            Self::Document { caption, .. } => Some(caption),
             Self::Interactive { body } => Some(body),
             Self::Reaction { reply, .. } => reply.text_body(),
-            // `Sticker` tidak punya teks — router tidak boleh reply teks kosong.
-            // Cabang `Mutate` mustahil (`without_mutations` sudah turun),
-            // tapi tetap ditulis supaya menambah variant baru tidak diam-diam
-            // jadi teks kosong yang terkirim ke user.
-            Self::None | Self::Sticker { .. } | Self::Mutate { .. } => None,
+            // `Sticker`/`Audio` tidak punya teks — router tidak boleh reply
+            // teks kosong. Cabang `Mutate` mustahil (`without_mutations` sudah
+            // turun), tapi tetap ditulis supaya menambah variant baru tidak
+            // diam-diam jadi teks kosong yang terkirim ke user.
+            Self::None | Self::Sticker { .. } | Self::Audio { .. } | Self::Mutate { .. } => None,
         }
     }
 }
@@ -761,8 +850,71 @@ pub fn new_session_store() -> SessionStore {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HttpBody {
-    Bytes { data: Arc<[u8]>, mimetype: Option<String> },
+    Bytes {
+        data: Arc<[u8]>,
+        mimetype: Option<String>,
+    },
     Form(String),
+    /// `form-data` multipart — `form.append("file", buf, { filename })` +
+    /// `form.append("type", 13)`. Bentuk ini muncul di 10 scraper
+    /// (`src/scraper/hd.js`, `imglarger`, `imgdrop`, `seaart`, `videy`, …)
+    /// yang mengunggah buffer/gambar ke API pihak ketiga.
+    Multipart(Vec<MultipartPart>),
+}
+
+/// Satu bagian `multipart/form-data`.
+///
+/// Field `file_name` adalah alasan variant ini ada: `post_multipart` lama
+/// menamai part dengan NAMA FIELD (`form.append("file", buf)` jadi part
+/// bernama `file`), sedangkan `form-data` JS mengirim `filename=` dari opsi
+/// ketiga. Server yang memeriksa nama berkas menolak bentuk lama.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MultipartPart {
+    /// Nama field (`form.append("file", …)` → `"file"`).
+    pub name: String,
+    /// `{ filename }` untuk part berkas; `None` = field biasa.
+    pub file_name: Option<String>,
+    /// `content-type` part; `None` = biarkan implementasi memilih.
+    pub mimetype: Option<String>,
+    pub body: HttpBody,
+}
+
+impl MultipartPart {
+    /// `form.append(nama, nilai)` — field teks.
+    pub fn field(name: impl Into<String>, value: impl Into<String>) -> Self {
+        let value: String = value.into();
+        Self {
+            name: name.into(),
+            file_name: None,
+            mimetype: None,
+            body: HttpBody::Bytes {
+                data: Arc::from(value.into_bytes()),
+                mimetype: None,
+            },
+        }
+    }
+
+    /// `form.append(nama, buf, { filename })` — part berkas.
+    pub fn file(
+        name: impl Into<String>,
+        file_name: impl Into<String>,
+        data: impl Into<Vec<u8>>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            file_name: Some(file_name.into()),
+            mimetype: None,
+            body: HttpBody::Bytes {
+                data: Arc::from(data.into()),
+                mimetype: None,
+            },
+        }
+    }
+
+    pub fn with_mimetype(mut self, mimetype: impl Into<String>) -> Self {
+        self.mimetype = Some(mimetype.into());
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -773,10 +925,14 @@ pub struct HttpResponse {
 }
 
 impl HttpBody {
+    /// Byte datar untuk body. `Multipart` TIDAK punya bentuk datar — yang
+    /// dikembalikan slice kosong, dan pemanggil yang butuh multipart harus
+    /// menanganinya sendiri (lihat `UreqHttp::call`).
     pub fn bytes(&self) -> &[u8] {
         match self {
             Self::Bytes { data, .. } => data.as_ref(),
             Self::Form(s) => s.as_bytes(),
+            Self::Multipart(_) => &[],
         }
     }
 }
@@ -795,6 +951,117 @@ pub struct HttpError {
     pub message: String,
 }
 
+/// Metode HTTP untuk [`HttpCall`].
+///
+/// `HEAD` disertakan karena scraper `terabox`/`mediafire` memakainya untuk
+/// mengecek tautan; `DELETE`/`PATCH` untuk API yang menolak selain POST/GET.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HttpMethod {
+    Get,
+    Post,
+    Put,
+    Patch,
+    Delete,
+    Head,
+}
+
+impl HttpMethod {
+    /// Nama wire, huruf besar seperti `axios` mengirimnya.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Get => "GET",
+            Self::Post => "POST",
+            Self::Put => "PUT",
+            Self::Patch => "PATCH",
+            Self::Delete => "DELETE",
+            Self::Head => "HEAD",
+        }
+    }
+}
+
+/// Permintaan HTTP dengan kendali penuh — padanan objek config `axios({...})`.
+///
+/// Empat method lama (`get`/`post_json`/`post_form`/`post_multipart`) cuma
+/// menjangkau bentuk yang dipakai plugin class B lama. Scraper di
+/// `src/scraper/` memakai `axios` dengan `headers: {...}` bebas
+/// (`X-CSRF-TOKEN`, `Cookie`, `Referer`, `X-Forwarded-For`), metode `PUT`, dan
+/// body mentah; semuanya lewat satu pintu ini.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HttpCall {
+    pub method: HttpMethod,
+    pub url: String,
+    pub headers: Vec<(String, String)>,
+    pub body: Option<HttpBody>,
+}
+
+impl HttpCall {
+    pub fn new(method: HttpMethod, url: impl Into<String>) -> Self {
+        Self {
+            method,
+            url: url.into(),
+            headers: Vec::new(),
+            body: None,
+        }
+    }
+
+    pub fn get(url: impl Into<String>) -> Self {
+        Self::new(HttpMethod::Get, url)
+    }
+
+    pub fn post(url: impl Into<String>) -> Self {
+        Self::new(HttpMethod::Post, url)
+    }
+
+    pub fn put(url: impl Into<String>) -> Self {
+        Self::new(HttpMethod::Put, url)
+    }
+
+    /// Tambah header. Nama yang sama dua kali: yang lama dibuang — pemanggil
+    /// terakhir menang, sama seperti objek `headers` JS yang tidak bisa punya
+    /// kunci kembar.
+    pub fn header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        let name = name.into();
+        self.headers
+            .retain(|(k, _)| !k.eq_ignore_ascii_case(&name));
+        self.headers.push((name, value.into()));
+        self
+    }
+
+    /// Body JSON (`data: {...}` di axios). Content-type sengaja TIDAK dipasang
+    /// di sini: implementasi klien yang memutuskan (lihat `UreqHttp::call`),
+    /// dan pemanggil yang menulis header eksplisit tetap menang.
+    pub fn json(mut self, value: &Value) -> Self {
+        let data = serde_json::to_vec(value).unwrap_or_default();
+        self.body = Some(HttpBody::Bytes {
+            data: Arc::from(data),
+            mimetype: Some("application/json".to_string()),
+        });
+        self
+    }
+
+    /// Body mentah dengan tipe isi eksplisit — `data: "url=..."` atau byte
+    /// biner yang tidak masuk akal ditafsirkan.
+    pub fn raw(mut self, data: impl Into<Vec<u8>>, content_type: &str) -> Self {
+        self.body = Some(HttpBody::Bytes {
+            data: Arc::from(data.into()),
+            mimetype: Some(content_type.to_string()),
+        });
+        self
+    }
+
+    /// Body form-urlencoded (bentuk string yang sudah di-encode pemanggil).
+    pub fn form(mut self, body: impl Into<String>) -> Self {
+        self.body = Some(HttpBody::Form(body.into()));
+        self
+    }
+
+    /// Body multipart — `form-data` JS (`form.append(...)`).
+    pub fn multipart(mut self, parts: Vec<MultipartPart>) -> Self {
+        self.body = Some(HttpBody::Multipart(parts));
+        self
+    }
+}
+
 /// Klien HTTP sinkron untuk plugin.
 ///
 /// `ponytail:` trait, bukan implementasi. Default-nya [`NoHttp`] yang
@@ -809,6 +1076,41 @@ pub trait HttpGet: Send + Sync + std::fmt::Debug {
         url: &str,
         parts: &[(&str, HttpBody)],
     ) -> Result<HttpResponse, HttpError>;
+
+    /// Permintaan umum: header kustom, metode apa pun, body mentah.
+    ///
+    /// Implementasi default merutekan ke empat method lama. Dua alasannya:
+    /// stub `HttpGet` di ratusan test plugin lama tetap jalan tanpa disentuh,
+    /// dan klien yang tidak bisa lebih (mis. `NoHttp`) tidak perlu menyalin
+    /// method ke-5.
+    ///
+    /// Batas yang jujur: header kustom DIBUANG di jalur default — stub test
+    /// yang mencocokkan URL tetap benar, tapi klien nyata WAJIB menimpa
+    /// method ini kalau plugin memakai header. `UreqHttp` menimpanya.
+    fn call(&self, req: &HttpCall) -> Result<HttpResponse, HttpError> {
+        match (req.method, req.body.as_ref()) {
+            (HttpMethod::Get, _) | (HttpMethod::Head, None) => self.get(&req.url),
+            (_, Some(HttpBody::Multipart(_))) => Err(HttpError {
+                message: "klien HTTP ini tidak mendukung multipart umum".to_string(),
+            }),
+            (HttpMethod::Post, Some(HttpBody::Form(form))) => self.post_form(&req.url, form),
+            (HttpMethod::Post, Some(HttpBody::Bytes { data, .. }))
+            | (HttpMethod::Put, Some(HttpBody::Bytes { data, .. })) => {
+                match serde_json::from_slice::<Value>(data) {
+                    Ok(v) => self.post_json(&req.url, &v),
+                    Err(e) => Err(HttpError {
+                        message: format!("body bukan JSON: {e}"),
+                    }),
+                }
+            }
+            (HttpMethod::Post, None) | (HttpMethod::Put, None) => {
+                self.post_json(&req.url, &Value::Null)
+            }
+            (m, _) => Err(HttpError {
+                message: format!("metode {} belum didukung klien HTTP ini", m.as_str()),
+            }),
+        }
+    }
 }
 
 /// Default [`Ctx::http`]. Selalu gagal, tidak pernah jaringan.
@@ -1171,5 +1473,86 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(ctx.sender_number(), "628123456789:5");
+    }
+
+    /// Klien lama: cuma menimpa empat method asli, seperti ratusan stub test
+    /// plugin yang sudah ada. `call` bawaan harus tetap merutekan ke sana.
+    #[derive(Debug, Default)]
+    struct KlienLama {
+        jejak: std::sync::Mutex<Vec<String>>,
+    }
+
+    impl KlienLama {
+        fn catat(&self, s: String) -> Result<HttpResponse, HttpError> {
+            self.jejak.lock().unwrap().push(s);
+            Ok(HttpResponse {
+                status: 200,
+                body: HttpBody::Bytes {
+                    data: Arc::from("{}".as_bytes()),
+                    mimetype: None,
+                },
+                headers: Vec::new(),
+            })
+        }
+    }
+
+    impl HttpGet for KlienLama {
+        fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
+            self.catat(format!("get:{url}"))
+        }
+        fn post_json(&self, url: &str, body: &Value) -> Result<HttpResponse, HttpError> {
+            self.catat(format!("post_json:{url}:{body}"))
+        }
+        fn post_form(&self, url: &str, form: &str) -> Result<HttpResponse, HttpError> {
+            self.catat(format!("post_form:{url}:{form}"))
+        }
+        fn post_multipart(
+            &self,
+            url: &str,
+            _parts: &[(&str, HttpBody)],
+        ) -> Result<HttpResponse, HttpError> {
+            self.catat(format!("post_multipart:{url}"))
+        }
+    }
+
+    #[test]
+    fn call_bawaan_merute_ke_method_lama() {
+        let klien = KlienLama::default();
+        klien.call(&HttpCall::get("https://x/a")).unwrap();
+        klien
+            .call(&HttpCall::post("https://x/b").form("a=1"))
+            .unwrap();
+        klien
+            .call(&HttpCall::post("https://x/c").json(&serde_json::json!({"k": 1})))
+            .unwrap();
+        let jejak = klien.jejak.lock().unwrap().clone();
+        assert_eq!(
+            jejak,
+            vec![
+                "get:https://x/a",
+                "post_form:https://x/b:a=1",
+                "post_json:https://x/c:{\"k\":1}",
+            ]
+        );
+    }
+
+    #[test]
+    fn call_bawaan_menolak_metode_yang_tidak_bisa_dirutekan() {
+        let klien = KlienLama::default();
+        let err = klien
+            .call(&HttpCall::new(HttpMethod::Delete, "https://x/d"))
+            .unwrap_err();
+        assert!(err.message.contains("DELETE"), "{}", err.message);
+    }
+
+    #[test]
+    fn header_dengan_nama_sama_diganti_bukan_ditumpuk() {
+        let call = HttpCall::get("https://x")
+            .header("Referer", "lama")
+            .header("referer", "baru");
+        assert_eq!(
+            call.headers,
+            vec![("referer".to_string(), "baru".to_string())]
+        );
     }
 }
