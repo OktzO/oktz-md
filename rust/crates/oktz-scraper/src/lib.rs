@@ -69,6 +69,7 @@ pub mod unlimitedai;
 pub mod upscaler;
 pub mod videy;
 pub mod wallpapersearch;
+pub mod wink;
 pub mod wwchar;
 pub mod youtube;
 pub mod yt;
