@@ -746,6 +746,13 @@ pub struct Ctx {
     /// `m.download()` / `m.quoted.download()` (`serialize.js:1669`, `:543`).
     /// Selalu terisi; default-nya [`NoMediaFetch`] yang menolak dengan alasan.
     pub media_fetch: Arc<dyn MediaFetch>,
+    /// `config.js` yang boleh dibaca plugin (`bot`, `owner`, `APIkey`,
+    /// `assets`, `sticker`, `payment`, `donasi`, `saluran`, `info`).
+    ///
+    /// Default-nya [`oktz_core::config::Runtime::default`] yang SEMUA stringnya
+    /// kosong — bukan nilai produksi. Tanpa itu plugin yang salah baca kunci
+    /// akan diam-diam memakai API key milik orang lain di test.
+    pub config: Arc<oktz_core::config::Runtime>,
 }
 
 impl Ctx {
@@ -772,6 +779,11 @@ impl Ctx {
     /// `await m.quoted.download()` — byte mentah media pesan yang di-reply.
     pub fn download_quoted_media(&self) -> Result<Vec<u8>, MediaError> {
         self.media_fetch.download(MediaOrigin::Quoted)
+    }
+
+    /// `config.js` — nilai runtime yang dibaca plugin.
+    pub fn config(&self) -> &oktz_core::config::Runtime {
+        &self.config
     }
 }
 
@@ -1407,6 +1419,7 @@ impl Default for Ctx {
             settings: Value::Null,
             media: None,
             media_fetch: Arc::new(NoMediaFetch),
+            config: Arc::new(oktz_core::config::Runtime::default()),
         }
     }
 }
@@ -1414,6 +1427,15 @@ impl Default for Ctx {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn config_default_kosong_supaya_test_tidak_bocor_api_key() {
+        let c = Ctx::default();
+        assert_eq!(c.config().bot.name, "");
+        assert_eq!(c.config().api_keys.firefly, "");
+        assert_eq!(c.config().assets.get("foto"), None);
+        assert_eq!(c.config().saluran.id, "");
+    }
 
     #[test]
     fn text_reply_has_no_mentions_by_default() {

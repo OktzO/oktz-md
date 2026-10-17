@@ -77,12 +77,21 @@ File: `canvas/fakedev7.js`, `canvas/fakestory*.js`, `canvas/igstory*.js`,
 
 ## 7. `config.APIkey.*` dan `config.saluran`
 
-`Ctx` tidak membawa config runtime; `ctx.setting()` membaca `settings.json`,
-itu lain. Kunci yang jadi `""` membuat cabang HTTP tak terjangkau.
+Jalur baca config runtime sudah ada: `Ctx.config()` mengembalikan
+`oktz_core::config::Runtime`, cerminan `config.js` untuk kunci yang dibaca
+plugin (`info`, `owner`, `bot`, `assets`, `sticker`, `payment`,
+`donasi`, `saluran`, `api_keys`). Produksi memasangnya lewat
+`Pipeline::with_config`, dipanggil `wiring_from_with_config` di
+`connect_device`. Default-nya `Runtime::default()` yang SEMUA stringnya
+kosong, bukan nilai produksi, supaya `Ctx::default()` di test tidak bisa
+menarik API key sungguhan dari environment.
 
-File: `ai/txt2img.js`, `ai/anime-gen.js`, `info/jadwalbola.rs` (pola sama),
-`canvas/watercolortext.rs`, `canvas/pakustad.rs`, `asupan/asupantiktok.js`,
-`download/aio.js` (`saluranCtx()`).
+Yang tersisa per file:
+- `ai/txt2img.js`, `ai/anime-gen.js`, `info/jadwalbola.rs` (pola sama),
+  `canvas/watercolortext.rs`, `canvas/pakustad.rs`,
+  `asupan/asupantiktok.js` — belum rewiring ke `ctx.config()`.
+- `download/aio.js` (`saluranCtx()`) masih butuh `sock.sendMessage` ke
+  newsletter (§2).
 
 ## 8. `games.createPlugin` — 27 plugin `game/*`
 

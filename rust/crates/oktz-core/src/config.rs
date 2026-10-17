@@ -6,6 +6,312 @@ fn d(v: &str) -> String {
     v.to_string()
 }
 
+/// `config.js` `APIkey` — semua dari env, nilai kosong kalau tidak diisi
+/// (`config.js:326-335`). Field yang kosong tidak dihapus supaya nama kuncinya
+/// masih terlihat saat debugging.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiKeys {
+    pub neoxr: String,
+    pub fgsi: String,
+    pub groq: String,
+    pub covenant: String,
+    pub obscura: String,
+    pub firefly: String,
+    pub cuki: String,
+    pub linode: String,
+}
+
+impl Default for ApiKeys {
+    fn default() -> Self {
+        Self {
+            neoxr: Env::get_or("APIKEY_NEOXR", ""),
+            fgsi: Env::get_or("APIKEY_FGSI", ""),
+            groq: Env::get_or("GROQ_API_KEY", ""),
+            covenant: Env::get_or("APIKEY_COVENANT", ""),
+            obscura: Env::get_or("APIKEY_OBSCURA", ""),
+            firefly: Env::get_or("APIKEY_FIREFLY", ""),
+            cuki: Env::get_or("APIKEY_CUKI", ""),
+            linode: Env::get_or("LINODE_API_TOKEN", ""),
+        }
+    }
+}
+
+/// `config.js` `owner` (`config.js:13-16`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Owner {
+    pub name: String,
+    pub number: Vec<String>,
+}
+
+impl Default for Owner {
+    fn default() -> Self {
+        Self {
+            name: d("Oktz"),
+            number: vec![d("6285608953677")],
+        }
+    }
+}
+
+/// `config.js` `sticker` (`config.js:112-115`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Sticker {
+    pub packname: String,
+    pub author: String,
+}
+
+impl Default for Sticker {
+    fn default() -> Self {
+        Self {
+            packname: d("႙𝓢𝓢𝓢 𝓞𝓮𝓯𝓲"),
+            author: d("Zann"),
+        }
+    }
+}
+
+/// `config.js` `info` (`config.js:10-13`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Info {
+    pub website: String,
+    pub grupwa: String,
+}
+
+impl Default for Info {
+    fn default() -> Self {
+        Self {
+            website: d("https://oktzz.xyz"),
+            grupwa: d("https://chat.whatsapp.com/H1MOIGsWKuK1ulzOBAjW9b"),
+        }
+    }
+}
+
+/// Satu metode pembayaran pada `config.payment` / `config.donasi.payment`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PaymentMethod {
+    pub name: String,
+    pub number: String,
+    pub holder: String,
+}
+
+/// Tautan donasi pada `config.donasi.links`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DonasiLink {
+    pub name: String,
+    pub url: String,
+}
+
+/// `config.js` `payment` (`config.js:81-100`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Payment {
+    pub qris_url: String,
+    pub methods: Vec<PaymentMethod>,
+    pub banks: Vec<PaymentMethod>,
+    pub custom_text: String,
+}
+
+impl Default for Payment {
+    fn default() -> Self {
+        Self {
+            qris_url: String::new(),
+            methods: ["Dana", "GoPay", "OVO", "ShopeePay"]
+                .into_iter()
+                .map(|n| PaymentMethod {
+                    name: n.to_string(),
+                    number: String::new(),
+                    holder: String::new(),
+                })
+                .collect(),
+            banks: Vec::new(),
+            custom_text: d("https://imgdrop.web.id/KodpV.webp"),
+        }
+    }
+}
+
+/// `config.js` `donasi` (`config.js:102-112`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Donasi {
+    pub payment: Vec<PaymentMethod>,
+    pub links: Vec<DonasiLink>,
+    pub benefits: Vec<String>,
+    pub qris: String,
+}
+
+impl Default for Donasi {
+    fn default() -> Self {
+        Self {
+            payment: ["Dana", "GoPay", "OVO"]
+                .into_iter()
+                .map(|n| PaymentMethod {
+                    name: n.to_string(),
+                    number: d("08xxxxxxxxxx"),
+                    holder: d("Nama Owner"),
+                })
+                .collect(),
+            links: vec![
+                DonasiLink {
+                    name: d("Saweria"),
+                    url: d("saweria.co/username"),
+                },
+                DonasiLink {
+                    name: d("Trakteer"),
+                    url: d("trakteer.id/username"),
+                },
+            ],
+            benefits: vec![
+                d("Mendukung development"),
+                d("Server lebih stabil"),
+                d("Fitur baru lebih cepat"),
+                d("Priority support"),
+            ],
+            qris: d("https://imgdrop.web.id/KodpV.webp"),
+        }
+    }
+}
+
+/// `config.js` `assets` — peta nama ke path relatif (`config.js:44-66`).
+///
+/// Disimpan apa adanya sebagai string, bukan `PathBuf`: plugin JS melakukan
+/// `fs.readFileSync(config.assets["mp4"])`, jadi yang dibutuhkan Hanya teks path.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Assets(pub std::collections::BTreeMap<String, String>);
+
+impl Default for Assets {
+    fn default() -> Self {
+        let mut m = std::collections::BTreeMap::new();
+        for (k, v) in [
+            ("daftar", "./assets/image/daftar.jpeg"),
+            ("demote", "./assets/image/demote.jpeg"),
+            ("fishit", "./assets/image/fishit.jpeg"),
+            ("games", "./assets/image/games.jpeg"),
+            ("landscape", "./assets/image/landscape.jpeg"),
+            ("levelup", "./assets/image/levelup.jpeg"),
+            ("minecraft", "./assets/image/minecraft.jpeg"),
+            ("promote", "./assets/image/promote.jpeg"),
+            ("rpg", "./assets/image/rpg.jpeg"),
+            ("rules", "./assets/image/rules.jpeg"),
+            ("store", "./assets/image/store.jpeg"),
+            ("v8", "./assets/image/v8.jpeg"),
+            ("winner", "./assets/image/winner.jpeg"),
+            ("foto", "./assets/image/foto.jpeg"),
+            ("foto2", "./assets/image/foto2.jpeg"),
+            ("foto3", "./assets/image/foto3.jpeg"),
+            ("pp-kosong", "./assets/image/pp-kosong.jpeg"),
+            ("mp4", "./assets/video/mp4.mp4"),
+            ("mp3", "./assets/audio/mp3.mp3"),
+            ("font", "./assets/font.ttf"),
+            ("kertas", "./assets/image/kertas.jpeg"),
+        ] {
+            m.insert(d(k), d(v));
+        }
+        Self(m)
+    }
+}
+
+impl Assets {
+    /// `config.assets[nama]` — `None` kalau kuncinya tidak ada, supaya plugin
+    /// bisa membedakan `undefined` (jalur error) dari path kosong.
+    pub fn get(&self, name: &str) -> Option<&str> {
+        self.0.get(name).map(String::as_str)
+    }
+}
+
+/// Yang boleh dibaca plugin lewat `ctx.config()`: cerminan `config.js` yang
+/// dipakai plugin, bukan seluruh objeknya.
+///
+/// Yang TIDAK ada di sini sengaja: `session`, `database`, `turso`,
+/// `groupProtection`, `features`, `autoWork`, `registration`, `ui`, dan
+/// `energi` — semuanya sudah punya jalur sendiri di pipeline (gate, limiter,
+/// store), jadi menyalinnya ke sini hanya menciptakan dua sumber kebenaran.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Runtime {
+    pub info: Info,
+    pub owner: Owner,
+    pub bot: BotInfo,
+    pub assets: Assets,
+    pub sticker: Sticker,
+    pub payment: Payment,
+    pub donasi: Donasi,
+    pub saluran: Saluran,
+    pub api_keys: ApiKeys,
+}
+
+impl Default for Runtime {
+    /// Semua string KOSONG. Nilai produksi ada di [`Runtime::from_config`].
+    ///
+    /// Sengaja tidak memakai `BotInfo::default`/`Owner::default`:
+    /// `ApiKeys::default` membaca environment, jadi `Ctx::default()` di test
+    /// bisa mengambil API key sungguhan kalau env-nya terisi. Default kosong
+    /// membuat kebocoran itu mustahil.
+    fn default() -> Self {
+        Self {
+            info: Info {
+                website: String::new(),
+                grupwa: String::new(),
+            },
+            owner: Owner {
+                name: String::new(),
+                number: Vec::new(),
+            },
+            bot: BotInfo {
+                name: String::new(),
+                version: String::new(),
+                developer: String::new(),
+                website: String::new(),
+            },
+            assets: Assets(std::collections::BTreeMap::new()),
+            sticker: Sticker {
+                packname: String::new(),
+                author: String::new(),
+            },
+            payment: Payment {
+                qris_url: String::new(),
+                methods: Vec::new(),
+                banks: Vec::new(),
+                custom_text: String::new(),
+            },
+            donasi: Donasi {
+                payment: Vec::new(),
+                links: Vec::new(),
+                benefits: Vec::new(),
+                qris: String::new(),
+            },
+            saluran: Saluran::default(),
+            api_keys: ApiKeys {
+                neoxr: String::new(),
+                fgsi: String::new(),
+                groq: String::new(),
+                covenant: String::new(),
+                obscura: String::new(),
+                firefly: String::new(),
+                cuki: String::new(),
+                linode: String::new(),
+            },
+        }
+    }
+}
+
+impl Runtime {
+    /// Bawaan `config.js`. `saluran.id` dan `name` mengikuti `config.js`
+    /// apa adanya; `Saluran::default()` sengaja kosong supaya unit test lain
+    /// tidak ikut terbawa nilai produksi.
+    pub fn from_config() -> Self {
+        Self {
+            info: Info::default(),
+            owner: Owner::default(),
+            bot: BotInfo::default(),
+            assets: Assets::default(),
+            sticker: Sticker::default(),
+            payment: Payment::default(),
+            donasi: Donasi::default(),
+            saluran: Saluran {
+                id: d("120363411617217441@newsletter"),
+                name: d("Join saluran resmi Oktz"),
+                link: d("https://whatsapp.com/channel/0029Vb8z7S0KrWQvCa8i0J0I"),
+            },
+            api_keys: ApiKeys::default(),
+        }
+    }
+}
+
 /// Mirror config.js (nilai default sama persis; env override bila ada).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
@@ -183,6 +489,8 @@ impl Default for BotInfo {
 pub struct Saluran {
     pub id: String,
     pub name: String,
+    /// `config.js:125` — link undangan saluran.
+    pub link: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -239,6 +547,36 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn runtime_default_kosong_tapi_from_config_berisi_nilai_prodiksi() {
+        let kosong = Runtime::default();
+        assert_eq!(kosong.bot.name, "");
+        assert_eq!(kosong.owner.name, "");
+        assert_eq!(kosong.info.website, "");
+        assert_eq!(kosong.api_keys.firefly, "");
+        assert!(kosong.assets.get("foto").is_none());
+        assert_eq!(kosong.payment.methods.len(), 0);
+
+        let prod = Runtime::from_config();
+        assert_eq!(prod.bot.name, "Oktz Bot");
+        assert_eq!(prod.bot.developer, "Zann");
+        assert_eq!(prod.owner.name, "Oktz");
+        assert_eq!(prod.owner.number, vec!["6285608953677".to_string()]);
+        assert_eq!(prod.info.website, "https://oktzz.xyz");
+        assert_eq!(prod.sticker.author, "Zann");
+        assert_eq!(prod.saluran.id, "120363411617217441@newsletter");
+        assert_eq!(
+            prod.assets.get("mp4"),
+            Some("./assets/video/mp4.mp4"),
+            "path aset ikut apa adanya, bukan digabung ke storage"
+        );
+        assert_eq!(prod.assets.get("pp-kosong"), Some("./assets/image/pp-kosong.jpeg"));
+        assert_eq!(prod.payment.methods.len(), 4);
+        assert_eq!(prod.donasi.payment.len(), 3);
+        assert_eq!(prod.donasi.links.len(), 2);
+        assert_eq!(prod.donasi.benefits.len(), 4);
+    }
 
     #[test]
     fn defaults_match_config_js() {

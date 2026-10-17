@@ -2135,6 +2135,9 @@ struct PluginCtxSource {
     rosters: Arc<Mutex<RosterCache>>,
     sessions: SessionStore,
     http: Arc<dyn HttpGet>,
+    /// `config.js` untuk `ctx.config()`. Default-nya `Runtime::default()`
+    /// yang kosong; produksi memasang lewat `Pipeline::with_config`.
+    config: Arc<oktz_core::config::Runtime>,
 }
 
 impl PluginCtxSource {
@@ -2163,6 +2166,7 @@ impl PluginCtxSource {
         c.settings = self.store.settings_entry();
         c.sessions = self.sessions.clone();
         c.http = self.http.clone();
+        c.config = self.config.clone();
     }
 }
 
@@ -2350,6 +2354,7 @@ impl Pipeline {
                 })),
                 sessions: new_session_store(),
                 http: Arc::new(NoHttp),
+                config: Arc::new(oktz_core::config::Runtime::default()),
             },
             ctx,
             sender,
@@ -2387,6 +2392,12 @@ impl Pipeline {
     /// test tidak pernah menembak jaringan.
     pub fn with_http(mut self, http: Arc<dyn HttpGet>) -> Self {
         self.plugin_src.http = http;
+        self
+    }
+
+    /// Pasang `config.js` runtime untuk `ctx.config()`.
+    pub fn with_config(mut self, config: oktz_core::config::Runtime) -> Self {
+        self.plugin_src.config = Arc::new(config);
         self
     }
 
@@ -4744,6 +4755,7 @@ fn group_number_and_long_number_are_rejected() {
             })),
             sessions: new_session_store(),
             http: Arc::new(NoHttp),
+            config: Arc::new(oktz_core::config::Runtime::default()),
         }
     }
 

@@ -81,6 +81,8 @@ pub struct PipelineWiring {
     ctx: StoreContext,
     identity: Identity,
     bot_id: String,
+    /// `config.js` runtime untuk `ctx.config()`.
+    config: oktz_core::config::Runtime,
     /// Pipeline yang sudah menempel ke bus. Disimpan supaya reconnect
     /// memakai instance yang sama — membangun yang baru akan meninggalkan
     /// loop lama hidup dan membalas dua kali.
@@ -97,12 +99,30 @@ pub fn wiring_from(
     owners: impl IntoIterator<Item = String>,
     bot_id: impl Into<String>,
 ) -> Result<PipelineWiring> {
+    wiring_from_with_config(
+        settings,
+        owners,
+        bot_id,
+        oktz_core::config::Runtime::default(),
+    )
+}
+
+/// Seperti [`wiring_from`], tapi `config.js`-nya bisa diganti. Dipakai jalur
+/// produksi yang memang punya `config.js` sungguhan; test memakai varian
+/// bawaan yang kosong.
+pub fn wiring_from_with_config(
+    settings: &std::path::Path,
+    owners: impl IntoIterator<Item = String>,
+    bot_id: impl Into<String>,
+    config: oktz_core::config::Runtime,
+) -> Result<PipelineWiring> {
     let store = JsonStore::open(settings)
         .with_context(|| format!("buka settings store {}", settings.display()))?;
     Ok(PipelineWiring {
         ctx: StoreContext::new(Arc::new(store)),
         identity: identity_from_owners(owners),
         bot_id: bot_id.into(),
+        config,
         live: Mutex::new(None),
     })
 }
@@ -122,7 +142,8 @@ impl PipelineWiring {
                         ParseOptions::default(),
                     )
                     .with_identity(self.identity.clone())
-                    .with_http(Arc::new(UreqHttp::new())),
+                    .with_http(Arc::new(UreqHttp::new()))
+                    .with_config(self.config.clone()),
                 );
                 *slot = Some(p.clone());
                 p
@@ -420,7 +441,12 @@ where
         &cfg.database.path,
         oktz_core::env::Env::get(SETTINGS_ENV).as_deref(),
     );
-    let wiring = match wiring_from(&settings, cfg.owner_numbers.clone(), bot_id_from(&creds)) {
+    let wiring = match wiring_from_with_config(
+        &settings,
+        cfg.owner_numbers.clone(),
+        bot_id_from(&creds),
+        oktz_core::config::Runtime::from_config(),
+    ) {
         Ok(w) => Some(Arc::new(w)),
         Err(e) => {
             tracing::error!(
