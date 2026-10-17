@@ -1641,6 +1641,12 @@ pub fn render_reply(
         Reply::Reaction { .. } => Err(PipelineError::Unsupported(
             "Reaction harus lewat send_reaction, bukan render".into(),
         )),
+        // `Sequence` handled pipeline sebelum `render_reply` dipanggil (satu
+        // pemanggilan = satu pesan, sequence perlu loop). Kalau sampai sini,
+        // pemanggilnya salah.
+        Reply::Sequence(_) => Err(PipelineError::Unsupported(
+            "Sequence harus dikirim lewat loop pipeline, bukan render_reply".into(),
+        )),
         // Pagar: mutasi yang belum ditulis store TIDAK boleh dirender
         // menjadi pesan "✅ tersimpan" yang bohong. Lihat catatan fungsi.
         Reply::Mutate { mutations, .. } => Err(PipelineError::UnappliedMutation {
@@ -2999,6 +3005,29 @@ impl Pipeline {
             // `src/lib/socket.js` untuk memastikan apa yang terjadi pada
             // `m.reply({image}, {text})`. Sampai itu dicek, jalur lama
             // dipertahankan: user tetap dapat gambar, cuma bukan bubble pesanan.
+            // `Reply::Sequence` — beberapa pesan berurutan dari satu handler.
+            // Mutasi SUDAH ditulis di atas, jadi setiap elemen cukup dirender
+            // dan dikirim; error di tengah menghentikan sisa, meniru `await`
+            // berurutan di JS yang melempar dan tidak mengirim pesan berikutnya.
+            if let Reply::Sequence(list) = reply.without_mutations() {
+                for item in list {
+                    match self.render_with_reply_variant(item, &target)? {
+                        Some(r) => self.deliver(&caller.chat, r).await?,
+                        None => continue,
+                    }
+                }
+                if matches!(decision, Decision::Handled(_))
+                    && let Some((name, secs)) = cooldown_key
+                {
+                    self.gates.start_cooldown(&caller, &name, secs, now_ms);
+                }
+                return Ok(if matches!(decision, Decision::Handled(_)) {
+                    Outcome::Sent
+                } else {
+                    Outcome::Denied
+                });
+            }
+
             let Some(rendered) = self.render_with_reply_variant(&reply, &target)? else {
                 // `Reply::None`: `DeniedMode::Silent`, `SelfGroup`, `NoPlugin`,
                 // `NotACommand`, atau `Reply::None` dari plugin — semua sengaja diam.

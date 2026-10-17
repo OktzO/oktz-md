@@ -212,6 +212,15 @@ pub enum Reply {
     /// kehilangan konfirmasi. Reaksi tidak selalu mengirim teks balasan,
     /// jadi ini berdiri sendiri, bukan tempelan pada `Text`.
     Reaction { emoji: String, reply: Box<Reply> },
+    /// Beberapa pesan berurutan dari satu pemanggilan handler.
+    ///
+    /// Plugin JS yang memanggil `m.reply`/`sock.sendMedia` beberapa kali tidak
+    /// punya padanan sebelum ini — satu `Reply` hanya jadi satu pesan. Vektor
+    /// kosong berarti "tidak balas", sama seperti `None`.
+    ///
+    /// Pipeline mengirim berurutan dan berhenti di error pertama, jadi pesan
+    /// setelahnya tidak terkirim — meniru `await` berurutan di JS.
+    Sequence(Vec<Reply>),
     /// Balasan PLUS mutasi store yang harus ditulis pipeline.
     ///
     /// Dipisah dari variant lain supaya 87 plugin lama yang `-> Reply` tidak
@@ -240,6 +249,20 @@ impl Reply {
             text: text.into(),
             mentions: Vec::new(),
         }
+    }
+
+    /// Beberapa pesan berurutan. Vektor kosong diratakan jadi
+    /// [`Self::None`] supaya `is_none` benar tanpa penanganan khusus.
+    pub fn sequence(list: Vec<Reply>) -> Self {
+        if list.iter().all(Reply::is_none) {
+            return Self::None;
+        }
+        Self::Sequence(list)
+    }
+
+    /// Bentuk `m.reply` berulang: vektor teks polos, mention mengikuti default.
+    pub fn sequence_text(list: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        Self::sequence(list.into_iter().map(|t| Reply::text(t.into())).collect())
     }
 
     pub fn text_mention(text: impl Into<String>, mention: impl Into<String>) -> Self {
@@ -425,8 +448,24 @@ impl Reply {
     /// `true` kalau plugin tidak mau membalas.
     ///
     /// `Mutate { reply: None }` = simpan tanpa balas, jadi ikut `true`.
+    /// `Sequence` kosong juga `true` — tidak ada yang perlu dikirim.
     pub fn is_none(&self) -> bool {
-        matches!(self.without_mutations(), Self::None)
+        match self.without_mutations() {
+            Self::None => true,
+            Self::Sequence(list) => list.iter().all(Self::is_none),
+            Self::Text { .. }
+            | Self::TextQuoted { .. }
+            | Self::NoQuote { .. }
+            | Self::TextNoMention { .. }
+            | Self::Image { .. }
+            | Self::Sticker { .. }
+            | Self::Video { .. }
+            | Self::Audio { .. }
+            | Self::Document { .. }
+            | Self::Interactive { .. }
+            | Self::Reaction { .. }
+            | Self::Mutate { .. } => false,
+        }
     }
 
     /// [`Self::Mutate`] dan [`Self::Reaction`] diratakan: keduanya cuma
@@ -446,6 +485,10 @@ impl Reply {
 
     /// `true` kalau reply ini butuh upload media sebelum bisa dikirim.
     pub fn has_media(&self) -> bool {
+        // `Sequence` jadi `true` kalau satu elemen pun punya media.
+        if let Self::Sequence(list) = self.payload() {
+            return list.iter().any(Self::has_media);
+        }
         matches!(
             self.payload(),
             Self::Image { .. }
@@ -458,6 +501,10 @@ impl Reply {
 
     /// Sumber media yang di-carry, kalau ada. `None` = tidak ada sumber yang
     /// bisa dikirim — pemanggil WAJIB memperlakukan itu sebagai error.
+    ///
+    /// `Sequence` sengaja mengembalikan `None` walau ada isinya: satu sequence
+    /// bisa punya beberapa sumber berbeda, jadi pemanggil harus mengiterasi
+    /// elemennya dan memanggil fungsi ini per elemen.
     pub fn media_source(&self) -> Option<&MediaSource> {
         match self.payload() {
             Self::Image { media, .. }
@@ -485,6 +532,10 @@ impl Reply {
             // teks kosong. Cabang `Mutate` mustahil (`without_mutations` sudah
             // turun), tapi tetap ditulis supaya menambah variant baru tidak
             // diam-diam jadi teks kosong yang terkirim ke user.
+            // `Sequence` text_body = teks pesan PERTAMA yang punya teks; router
+            // cuma butuh satu baris untuk log/permission. `None` kalau
+            // tidak ada isinya.
+            Self::Sequence(list) => list.iter().find_map(Self::text_body),
             Self::None | Self::Sticker { .. } | Self::Audio { .. } | Self::Mutate { .. } => None,
         }
     }
@@ -1752,5 +1803,51 @@ mod tests {
             call.headers,
             vec![("referer".to_string(), "baru".to_string())]
         );
+    }
+    #[test]
+    fn sequence_kirim_berurutan_dan_teks_pertama_yang_punya_teks() {
+        let r = Reply::sequence_text(["satu", "dua", "tiga"]);
+        assert!(!r.is_none());
+        assert_eq!(r.text_body(), Some("satu"));
+        let Reply::Sequence(list) = &r else {
+            panic!("harus Sequence, dapat {r:?}");
+        };
+        assert_eq!(list.len(), 3);
+    }
+
+    #[test]
+    fn sequence_kosong_diratakan_jadi_none() {
+        assert_eq!(Reply::sequence(Vec::new()), Reply::None);
+        assert_eq!(Reply::sequence_text(Vec::<String>::new()), Reply::None);
+        // Elemen yang semuanya diam juga dianggap tidak membalas.
+        let campur = Reply::sequence(vec![Reply::None, Reply::None]);
+        assert_eq!(campur, Reply::None);
+    }
+
+    #[test]
+    fn sequence_dengan_media_terdeteksi_punya_media() {
+        let tanpa = Reply::sequence_text(["a"]);
+        assert!(!tanpa.has_media());
+        let dengan = Reply::sequence(vec![
+            Reply::text("foto dulu"),
+            Reply::image(
+                MediaSource::Url {
+                    url: "https://a/b.jpg".into(),
+                    mimetype: None,
+                },
+                "",
+            ),
+        ]);
+        assert!(dengan.has_media());
+        // Sumbernya per elemen, bukan di tingkat sequence.
+        assert!(dengan.media_source().is_none());
+    }
+
+    #[test]
+    fn sequence_membungkus_mutasi_dan_reaksi_seperti_varian_lain() {
+        let r = Reply::sequence_text(["a"]).mutating(vec![]);
+        assert_eq!(r.text_body(), Some("a"));
+        let isi = Reply::sequence(vec![Reply::None]).with_reaction("OK");
+        assert_eq!(isi.mutations().len(), 0);
     }
 }
