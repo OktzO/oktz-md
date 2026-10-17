@@ -14,12 +14,14 @@ use serde_json::Value;
 use crate::common::js_truthy;
 use crate::tools::phisingataubukan::encode_uri_component;
 
-/// `config.APIkey.neoxr` (`config.js:327`) = `process.env.APIKEY_NEOXR || ""`.
-///
-/// `ponytail:` `Ctx` tidak membawa config, jadi kunci di-hardcode kosong —
-/// persis seperti `info::jadwalbola`. Begitu `.env` diisi, baris ini ikut stale
-/// sampai router menyediakannya lewat `Ctx`.
-const NEOXR_APIKEY: &str = "";
+/// `config.APIkey.neoxr` dibaca dari `ctx.config()`; nilai kosong di
+/// produksi sama dengan `process.env.APIKEY_NEOXR || ""` di `config.js:327`.
+fn url(prompt: &str, api_key: &str) -> String {
+    format!(
+        "https://api.neoxr.eu/api/ai-anime?q={}&apikey={api_key}",
+        encode_uri_component(prompt)
+    )
+}
 
 fn help(prefix: &str) -> String {
     format!(
@@ -61,10 +63,7 @@ pub fn anime_gen(ctx: Ctx) -> Reply {
         return Reply::text(help(&ctx.prefix));
     }
 
-    let url = format!(
-        "https://api.neoxr.eu/api/ai-anime?q={}&apikey={NEOXR_APIKEY}",
-        encode_uri_component(&prompt)
-    );
+    let url = url(&prompt, &ctx.config().api_keys.neoxr);
     // `f()` mengembalikan `null` untuk status >= 400 maupun error jaringan,
     // jadi `ctx.http.get(..).ok().and_then(|r| r.json())` meniru keduanya.
     let fail = || {

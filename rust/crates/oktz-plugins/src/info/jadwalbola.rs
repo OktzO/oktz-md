@@ -13,16 +13,11 @@ use serde_json::Value;
 
 use crate::common::js_truthy_value;
 
-/// `config.APIkey.neoxr` (`config.js`) = `process.env.APIKEY_NEOXR || ""`.
-///
-/// `ponytail:` `Ctx` tidak membawa config, jadi kunci ikut `config.js` yang
-/// di-hardcode — persis seperti `panel/cpanel.rs` untuk
-/// `config.pterodactyl.*`. Begitu `.env` diisi, baris ini ikut stale sampai
-/// router menyediakannya lewat `Ctx`.
-pub(crate) const NEOXR_APIKEY: &str = "";
-
-pub(crate) fn url() -> String {
-    format!("https://api.neoxr.eu/api/bola?apikey={NEOXR_APIKEY}")
+/// `config.APIkey.neoxr` dibaca dari `ctx.config()` — nilainya sudah
+/// `process.env.APIKEY_NEOXR || ""` di `oktz_core::config::ApiKeys`, jadi
+/// string kosong di produksi sama dengan `"|| ""` di JS.
+pub(crate) fn url(api_key: &str) -> String {
+    format!("https://api.neoxr.eu/api/bola?apikey={api_key}")
 }
 
 /// `te(prefix, command, pushName)` (`src/lib/error.js:3-9`).
@@ -167,7 +162,7 @@ pub(crate) fn render(matches: &[Value], filter: &str) -> Result<String, RenderEr
 pub fn jadwalbola(ctx: Ctx) -> Reply {
     let filter = ctx.args.join(" ").to_lowercase().trim().to_string();
 
-    let res = match ctx.http.get(&url()) {
+    let res = match ctx.http.get(&url(&ctx.config().api_keys.neoxr)) {
         Ok(r) => r,
         Err(_) => return error_branch(&ctx),
     };
@@ -273,10 +268,12 @@ mod tests {
     #[test]
     fn the_api_url_carries_the_config_key() {
         assert_eq!(
-            url(),
-            format!("https://api.neoxr.eu/api/bola?apikey={NEOXR_APIKEY}")
+            url("KUNCI"),
+            "https://api.neoxr.eu/api/bola?apikey=KUNCI"
         );
-        assert_eq!(NEOXR_APIKEY, "", "config.js tidak meng-hardcode kunci");
+        // `Ctx::default()` config-nya kosong, jadi jalurINI tetap menghasilkan
+        // `apikey=` persis seperti `process.env.APIKEY_NEOXR || ""`.
+        assert_eq!(url(""), "https://api.neoxr.eu/api/bola?apikey=");
     }
 
     #[test]

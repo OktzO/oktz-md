@@ -1,10 +1,8 @@
 //! `plugins/search/mcpedl.js` — cari map dan addon Minecraft PE lewat API Cuki.
 //!
-//! `ponytail:` `config.APIkey?.cuki` tidak ada di `Ctx`, jadi `CUKI_APIKEY`
-//! dikunci `""` — pola yang sama dengan `search::mangatoon` dan
-//! `canvas::pakustad`. Cabang "API Key belum diset" (`mcpedl.js:53`) selalu
-//! benar dan jalur HTTP setelahnya tidak terjangkau sampai router menyediakan
-//! config.
+//! Kunci `config.APIkey?.cuki` dibaca dari `ctx.config()` — sama seperti
+//! `search::mangatoon`. Cabang "API Key belum diset" (`mcpedl.js:53`) benar
+//! kalau kuncinya kosong.
 //!
 //! `ponytail:` `trimText` memakai satuan UTF-16 V8 (`length`/`slice`); di sini
 //! `.chars()`. Sama seperti `search::mangatoon`.
@@ -16,7 +14,6 @@ use crate::common::{error_template, js_truthy};
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `config.APIkey?.cuki || ""` (`mcpedl.js:21`).
-const CUKI_APIKEY: &str = "";
 
 /// `mcpedl.js:50` — kartu pakai; contoh memakai command `mcpe`, bukan
 /// `mcpedl`, persis seperti di JS.
@@ -116,10 +113,10 @@ pub(crate) fn caption(items: &[Value], data: &Value, query: &str) -> String {
 }
 
 /// `fetchMcpe` (`mcpedl.js:30-44`).
-fn api_url(query: &str) -> String {
+fn api_url(query: &str, api_key: &str) -> String {
     format!(
-        "https://api.cuki.biz.id/api/search/mcpe?apikey={}&query={}",
-        encode_uri_component(CUKI_APIKEY),
+        "https://api.cuki.biz.id/api/search/mcpedl?apikey={}&query={}",
+        encode_uri_component(api_key),
         encode_uri_component(query)
     )
 }
@@ -149,7 +146,7 @@ pub fn mcpedl(ctx: Ctx) -> Reply {
     }
 
     // Dicek sebelum `m.react('🔍')` di `:57`, jadi tanpa reaksi.
-    if CUKI_APIKEY.is_empty() {
+    if ctx.config().api_keys.cuki.is_empty() {
         return Reply::text(MISSING_KEY);
     }
 
@@ -158,8 +155,8 @@ pub fn mcpedl(ctx: Ctx) -> Reply {
     let Ok(res) = ctx
         .http
         .call(
-            &oktz_plugin_api::HttpCall::get(api_url(query))
-                .header("x-api-key", CUKI_APIKEY)
+            &oktz_plugin_api::HttpCall::get(api_url(query, &ctx.config().api_keys.cuki))
+                .header("x-api-key", ctx.config().api_keys.cuki)
                 .header("user-agent", "Mozilla/5.0"),
         )
     else {

@@ -1,10 +1,8 @@
 //! `plugins/search/mangatoon.js` — cari komik di Mangatoon lewat API Cuki.
 //!
-//! `ponytail:` `config.APIkey?.cuki` tidak ada di `Ctx` (yang hanya membawa
-//! state store), jadi `CUKI_APIKEY` dikunci `""` — pola yang sama dengan
-//! `canvas::pakustad` dan `search::android1`. Efeknya cabang "API Key belum
-//! diset" (`mangatoon.js:53`) selalu benar dan jalur HTTP setelahnya tidak
-//! terjangkau sampai router menyediakan config.
+//! Kunci `config.APIkey?.cuki` dibaca dari `ctx.config()`. Cabang "API Key
+//! belum diset" (`mangatoon.js:53`) benar kalau kuncinya kosong — persis
+//! seperti `process.env.APIKEY_CUKI || ""` di `config.js`.
 //!
 //! `ponytail:` `sock.sendMedia(m.chat, cover, caption.trim(), m, {type:'image'})`
 //! ada padanannya: `Reply::Image` dengan `MediaSource::url`.
@@ -20,7 +18,6 @@ use crate::common::error_template;
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `config.APIkey?.cuki || ""` (`mangatoon.js:21`).
-const CUKI_APIKEY: &str = "";
 
 /// `mangatoon.js:50` — kartu pakai saat `m.text` kosong.
 pub(crate) fn help(prefix: &str) -> String {
@@ -130,10 +127,10 @@ pub(crate) fn flat_items(data: &Value) -> Vec<Value> {
 }
 
 /// `fetchMangatoon` (`mangatoon.js:30-44`) — endpoint + dua header.
-fn api_url(query: &str) -> String {
+fn api_url(query: &str, api_key: &str) -> String {
     format!(
         "https://api.cuki.biz.id/api/search/mangatoon?apikey={}&query={}",
-        encode_uri_component(CUKI_APIKEY),
+        encode_uri_component(api_key),
         encode_uri_component(query)
     )
 }
@@ -164,7 +161,7 @@ pub fn mangatoon(ctx: Ctx) -> Reply {
 
     // `mangatoon.js:53` dicek sebelum `m.react('🔍')` di `:57`, jadi cabang ini
     // tidak bereaksi sama sekali.
-    if CUKI_APIKEY.is_empty() {
+    if ctx.config().api_keys.cuki.is_empty() {
         return Reply::text(MISSING_KEY);
     }
 
@@ -173,8 +170,8 @@ pub fn mangatoon(ctx: Ctx) -> Reply {
     let Ok(res) = ctx
         .http
         .call(
-            &oktz_plugin_api::HttpCall::get(api_url(query))
-                .header("x-api-key", CUKI_APIKEY)
+            &oktz_plugin_api::HttpCall::get(api_url(query, &ctx.config().api_keys.cuki))
+                .header("x-api-key", ctx.config().api_keys.cuki)
                 .header("user-agent", "Mozilla/5.0"),
         )
     else {
