@@ -93,8 +93,21 @@ yang belum di-port. Selain itu butuh `fs`, `sharp`, `sock.sendPreview`,
 `setSessionTimer`, data JSON `src/data/*.json`, dan `src/lib/game-data.js`,
 `database.js`, `level.js`, `context.js`.
 
-Masalah arsitektur: `PluginEntry` cuma punya satu `handler`, sedangkan JS punya
-dua (perintah + jawaban bebas). Perlu API registry baru sebelum port mungkin.
+Masalah arsitektur `PluginEntry` cuma punya satu `handler` sudah tertutup:
+`oktz-plugin-api::registry` kini punya `ANSWER_HANDLERS` (distributed slice
+`linkme` kedua), macro `#[answer_handler]` untuk mendaftarkan fungsi
+`fn(Ctx) -> Option<Reply>`, dan `run_answer_handlers` yang berhenti di `Some`
+pertama. `oktz_router::Router::answer` membangun `Ctx` lewat `build_ctx` yang
+sama dengan dispatch command, dan `oktz-wa::pipeline` memanggilnya untuk pesan
+yang bukan command. Yang tersisa untuk port isi: `fs`, `sharp`,
+`sock.sendPreview`, `setSessionTimer`, data JSON `src/data/*.json`, dan
+`src/lib/game-data.js`, `database.js`, `level.js`, `context.js`.
+
+Catatan parity: `handleGameAnswer` di JS dijaga predicate
+`hasActiveSession`/`hasSuitGame`/`hasTTTGame`/`hasUTGame`
+(`src/handler.js:1294-1304`). Predicate itu belum ada di pipeline Rust, jadi
+rantai answer handler dipanggil untuk setiap pesan non-command dan masing-masing
+handler yang memutuskan sendiri; ini ditandai `ponytail:` di `pipeline.rs`.
 
 Nilainya sudah didokumentasikan di laporan batch B09 (alias, description,
 `timeout`, `hasImage`, `questionField`, `answerField`, `hintCount`) supaya
@@ -105,16 +118,30 @@ nanti tidak perlu baca ulang.
 `ai/characterai.js` (`caiAnswerHandler`/`caiChatHandler` dipanggil untuk semua
 pesan biasa) dan `anime/autoanimewinbu.js`.
 
+Jalur pemanggilannya sudah ada (§8): entry point kedua `answerHandler` bisa
+didaftarkan dari crate plugin mana pun dengan `#[answer_handler]`. Yang belum
+ada adalah isi kedua plugin itu sendiri.
+
 ## 10. `AIRich` dan pesan kaya builder
 
 `ai/ai.js` memakai `AIRich` dari `src/lib/builder.js` (`addTable`, `addCode`,
 `addText`) lalu mengirim lewat `relayMessage`. `Reply` cuma satu payload.
 
-## 11. Scraper belum di-port
+## 11. Scraper yang tertinggal
 
-`download/aio.js` butuh `src/scraper/aio.js` (cheerio + `Youtube`).
-`info/berita.js` dan `islamic/quran.js` butuh parse HTML/XML (cheerio),
-dan tidak boleh menambah dependency baru.
+Semua 59 file `src/scraper/*.js` sudah punya padanan di
+`oktz-scraper/src/` (dicek ulang: `lib.rs` mendaftarkan 59 modul).
+
+`info/berita.js` dan `islamic/quran.js` tetap terblokir, tapi bukan karena
+scrapernya belum ada — keduanya butuh parse HTML/XML `cheerio` yang tidak
+punya padanan di crate ini dan tidak boleh menambah dependency baru. Dua plugin
+itu belum di-port karena itu.
+
+Kapabilitas yang masih hilang di dalam scraper yang SUDAH ada tercatat di
+bagian lain: dekripsi AES untuk `imgdrop`, `ffprobe`/`ffmpeg` plus berkas
+sementara untuk `youtube` (SaveTube dan QByte), `sharp` untuk
+`removebackground`, dan tulis/hapus berkas temporer untuk `mconverter`,
+`hdvid`, `hdvid2`.
 
 ## 12. Album dan pesan asosiasi
 

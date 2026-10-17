@@ -28,7 +28,7 @@ pub use permission::{
     AccessGrant, Caller, DenyReason, GroupState, PermissionInput, UserState,
 };
 
-use oktz_plugin_api::{Ctx, PluginEntry, Reply};
+use oktz_plugin_api::{Ctx, PluginEntry, Reply, all_answer_handlers};
 use std::sync::Arc;
 
 /// Keputusan router untuk satu pesan — router yang memutuskan; ini yang
@@ -140,7 +140,35 @@ impl<'a, C: RouterContext> Router<'a, C> {
         }
 
         // 5. Dispatch.
-        let c = Ctx {
+        let c = self.build_ctx(caller, &parsed);
+        Decision::Handled((entry.handler)(c))
+    }
+
+    /// Entry point kedua: `answerHandler(m, sock)` (`src/handler.js:440-473`).
+    ///
+    /// Rantai answer handler dijalankan berurutan dan berhenti di yang
+    /// pertama mengembalikan `Some`. Tidak ada gate permission atau mode
+    /// di sini, sama seperti JS: `handleGameAnswer` dipanggil dari
+    /// `try` yang menutupi galat, dan memang tidak mengecek izin.
+    pub fn answer(&self, caller: &Caller, body: &str) -> Option<Reply> {
+        if all_answer_handlers().is_empty() {
+            return None;
+        }
+        let parsed = parse_command(body, &self.parse_opts);
+        // `answerHandler` menerima `m` apa adanya, bukan hasil parse command,
+        // jadi `Ctx.text` isi mentah dan `command` kosong.
+        let parsed = ParsedCommand {
+            command: String::new(),
+            text: body.to_string(),
+            ..parsed
+        };
+        oktz_plugin_api::run_answer_handlers(self.build_ctx(caller, &parsed))
+    }
+
+    /// Isi `Ctx` dari `Caller` — sama untuk dispatch command dan answer
+    /// handler, supaya keduanya lihat pesan yang identik.
+    fn build_ctx(&self, caller: &Caller, parsed: &ParsedCommand) -> Ctx {
+        Ctx {
             text: parsed.text.clone(),
             args: parsed.args.clone(),
             sender: caller.sender.clone(),
@@ -164,8 +192,7 @@ impl<'a, C: RouterContext> Router<'a, C> {
             // `oktz-wa::pipeline` lewat pembungkus handler; router tidak punya
             // akses ke sana.
             ..Default::default()
-        };
-        Decision::Handled((entry.handler)(c))
+        }
     }
 }
 
@@ -233,6 +260,57 @@ mod tests {
             chat: "628123@s.whatsapp.net".into(),
             ..Default::default()
         }
+    }
+
+    /// Answer handler uji: hanya menjawab teks `jawab` dan mencatat urutan
+    /// pemanggilan lewat statik global.
+    static DITANGANI: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
+
+    #[oktz_plugin_api::answer_handler]
+    fn uji_jawab(ctx: oktz_plugin_api::Ctx) -> Option<oktz_plugin_api::Reply> {
+        if ctx.text != "jawab" {
+            return None;
+        }
+        DITANGANI.lock().unwrap().push("pertama");
+        Some(oktz_plugin_api::Reply::text("pertama menjawab"))
+    }
+
+    #[oktz_plugin_api::answer_handler]
+    fn uji_jawab_kedua(ctx: oktz_plugin_api::Ctx) -> Option<oktz_plugin_api::Reply> {
+        if ctx.text != "jawab" {
+            return None;
+        }
+        DITANGANI.lock().unwrap().push("kedua");
+        Some(oktz_plugin_api::Reply::text("kedua menjawab"))
+    }
+
+    #[test]
+    fn rantai_answer_berhenti_di_yang_pertama_membalas() {
+        DITANGANI.lock().unwrap().clear();
+        let s = stub();
+        let r = Router::new(&s, ParseOptions::default(), 1000);
+        let balasan = r.answer(&caller(), "jawab").expect("harus ada yang menjawab");
+        assert_eq!(balasan, oktz_plugin_api::Reply::text("pertama menjawab"));
+        assert_eq!(*DITANGANI.lock().unwrap(), vec!["pertama"]);
+    }
+
+    #[test]
+    fn jawaban_di_luar_pola_melewati_seluruh_rantai() {
+        DITANGANI.lock().unwrap().clear();
+        let s = stub();
+        let r = Router::new(&s, ParseOptions::default(), 1000);
+        assert!(r.answer(&caller(), "bukan jawaban").is_none());
+        assert!(DITANGANI.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn answer_menerima_pesan_mentah_bukan_hasil_parse() {
+        DITANGANI.lock().unwrap().clear();
+        let s = stub();
+        let r = Router::new(&s, ParseOptions::default(), 1000);
+        // Command yang tidak dikenal diteruskan apa adanya ke handler.
+        assert!(r.answer(&caller(), "/tak-dikenal").is_none());
+        assert!(DITANGANI.lock().unwrap().is_empty());
     }
 
     #[test]

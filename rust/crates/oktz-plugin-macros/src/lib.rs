@@ -107,6 +107,36 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
     expanded.into()
 }
 
+/// `#[answer_handler]` — mendaftarkan fungsi sebagai entry point kedua.
+///
+/// Padanan `answerHandler` di JS (`src/handler.js:435-473`): dipanggil
+/// untuk pesan yang BUKAN command, jadi fungsi ini harus menerima `Ctx` dan
+/// mengembalikan `Option<Reply>`. `None` berarti "tidak menangani" dan
+/// rantai lanjut ke handler berikutnya.
+#[proc_macro_attribute]
+pub fn answer_handler(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let func: ItemFn = match syn::parse(item) {
+        Ok(f) => f,
+        Err(e) => return e.to_compile_error().into(),
+    };
+    let ident = &func.sig.ident;
+    let reg = quote::format_ident!("__ANSWER_{}", ident.to_string().to_uppercase());
+
+    let expanded = quote! {
+        #func
+
+        #[allow(non_upper_case_globals)]
+        #[::linkme::distributed_slice(::oktz_plugin_api::registry::ANSWER_HANDLERS)]
+        static #reg: ::oktz_plugin_api::registry::AnswerInit = || {
+            ::std::boxed::Box::leak(::std::boxed::Box::new([
+                ::std::sync::Arc::new(#ident)
+                    as ::oktz_plugin_api::registry::AnswerHandlerFn
+            ]))
+        };
+    };
+    expanded.into()
+}
+
 /// Buang satu lapisan `Expr::Group`.
 ///
 /// Kalau argumen `#[plugin(...)]` diteruskan lewat `macro_rules!`, token-nya

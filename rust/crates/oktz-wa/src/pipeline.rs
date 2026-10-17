@@ -2850,6 +2850,28 @@ impl Pipeline {
             )
         };
 
+        // --- Entry point kedua: answer handler -----------------------------
+        // `handleGameAnswer` (`src/handler.js:440-473`) dipanggil untuk jawaban
+        // main yang BUKAN command, jadi router biasa tidak akan pernah
+        // melihatnya. Di JS panggilan itu dijaga predicate `hasActiveSession`
+        // / `hasSuitGame` / `hasTTTGame` / `hasUTGame`; predicate itu belum
+        // ada di sini, jadi setiap answer handler yang memutuskan sendiri —
+        // semuanya mengembalikan `None` kalau tidak ada sesi aktif.
+        //
+        // `ponytail:` kalau nanti sesi game punya store sendiri, pindahkan
+        // penjaga ini ke `if session_ada(&caller.chat)` supaya jalur non-game
+        // tidak pernah menyentuh rantai ini.
+        if !parse_command(&body, &self.parse_opts).is_command {
+            let router = Router::new(&*self.ctx, self.parse_opts.clone(), now_ms);
+            if let Some(reply) = router.answer(&caller, &body) {
+                let target = reply_target(m, &caller.sender);
+                if let Some(rendered) = render_reply(&reply, &target)? {
+                    self.deliver(&caller.chat, rendered).await?;
+                }
+                return Ok(Outcome::Sent);
+            }
+        }
+
         // --- Gate 3: kuota auto-work + `AutoWorkGuard` ----------------------
         // Gate-nya dibakar per-FEATURE yang memakainya, bukan per-pesan: di JS
         // `allowAutoWork()` dipanggil auto-AI, CAI chat, auto-download,

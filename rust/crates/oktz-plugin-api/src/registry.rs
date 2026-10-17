@@ -896,6 +896,38 @@ pub fn find(command: &str) -> Option<&'static PluginEntry> {
         .find(|e| e.meta.matches(command))
 }
 
+// ---------------------------------------------------------------------------
+// Entry point kedua: `answerHandler(m, sock)` (`src/handler.js:435-473`).
+//
+// Plugin game memakai jalur ini: jawaban main bukan command, jadi router
+// biasa tidak akan pernah memanggilnya. Rantai berhenti di handler pertama
+// yang mengembalikan `Some`, jadi `None` berarti "tidak menangani" — padanan
+// `return false` di JS.
+// ---------------------------------------------------------------------------
+
+pub type AnswerHandlerFn = Arc<dyn Fn(Ctx) -> Option<Reply> + Send + Sync>;
+
+#[doc(hidden)]
+pub type AnswerInit = fn() -> &'static [AnswerHandlerFn];
+
+#[linkme::distributed_slice]
+pub static ANSWER_HANDLERS: [AnswerInit];
+
+static ANSWER_CACHE: OnceLock<Vec<&'static [AnswerHandlerFn]>> = OnceLock::new();
+
+/// Semua answer handler, urut tautan seperti urutan pemanggilan di JS.
+pub fn all_answer_handlers() -> &'static [&'static [AnswerHandlerFn]] {
+    ANSWER_CACHE.get_or_init(|| ANSWER_HANDLERS.iter().map(|f| f()).collect())
+}
+
+/// Jalankan rantai answer handler; `Some` dari yang pertama menang.
+pub fn run_answer_handlers(ctx: Ctx) -> Option<Reply> {
+    all_answer_handlers()
+        .iter()
+        .flat_map(|list| list.iter())
+        .find_map(|f| f(ctx.clone()))
+}
+
 /// State volatil antar-pesan. Pakai suffix `""` kalau mau menyimpan JSON
 /// utuh, bukan cuma [`Mutex`] biasa.
 pub type SessionStore = Arc<std::sync::Mutex<HashMap<String, Value>>>;
