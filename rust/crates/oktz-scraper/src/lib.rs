@@ -31,6 +31,7 @@ pub mod gemini_vision;
 pub mod gpt5;
 pub mod gsmarena;
 pub mod hd;
+pub mod gpt52;
 pub mod hdvid;
 pub mod hdvid2;
 pub mod hokinfo;
