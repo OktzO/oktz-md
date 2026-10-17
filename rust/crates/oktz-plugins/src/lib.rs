@@ -23,6 +23,7 @@ pub mod panel;
 pub mod primbon;
 pub mod random;
 pub mod religi;
+pub mod stalker;
 pub mod rpg;
 pub mod search;
 pub mod sticker;
