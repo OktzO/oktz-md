@@ -17,8 +17,6 @@ use serde_json::Value;
 use crate::common::error_template;
 use crate::tools::phisingataubukan::encode_uri_component;
 
-/// `config.APIkey?.cuki || ""` (`mangatoon.js:21`).
-
 /// `mangatoon.js:50` — kartu pakai saat `m.text` kosong.
 pub(crate) fn help(prefix: &str) -> String {
     format!("📚 *MANGATOON SEARCH*\n\n> Contoh:\n`{prefix}mangatoon love`")

@@ -13,8 +13,6 @@ use serde_json::Value;
 use crate::common::{error_template, js_truthy};
 use crate::tools::phisingataubukan::encode_uri_component;
 
-/// `config.APIkey?.cuki || ""` (`mcpedl.js:21`).
-
 /// `mcpedl.js:50` — kartu pakai; contoh memakai command `mcpe`, bukan
 /// `mcpedl`, persis seperti di JS.
 pub(crate) fn help(prefix: &str) -> String {
