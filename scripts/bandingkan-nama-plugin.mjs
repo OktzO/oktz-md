@@ -23,12 +23,21 @@ function walk(dir, ekstensi, out = []) {
   return out;
 }
 
-// `name: "x"` atau `name: ['a', 'b']` di dalam `pluginConfig`.
+// `name: "x"` atau `name: ['a', 'b']`.
 const POLA_NAMA = /\bname:\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\[[^\]]*\])/;
 
 function namaDariJs(path) {
   const teks = readFileSync(path, "utf8");
-  const m = teks.match(POLA_NAMA);
+  // Cari HANYA di dalam objek config plugin. Dua bentuk dipakai repo:
+  // `const pluginConfig = {…}` dan `const config = {…}` (mis.
+  // `info/fiturpremium.js`). File seperti `canvas/ttqc.js` punya array font
+  // dengan `name:` di baris 10, jauh sebelum objek config; tanpa batas ini
+  // skrip akan membaca "Plus Jakarta Sans" sebagai nama plugin.
+  const kandidat = ["pluginConfig = {", "config = {"]
+    .map((k) => teks.indexOf(k))
+    .filter((i) => i >= 0);
+  if (kandidat.length === 0) return null;
+  const m = teks.slice(Math.min(...kandidat)).match(POLA_NAMA);
   if (!m) return null;
   let v = m[1].trim();
   if (v.startsWith("[")) {
@@ -47,10 +56,18 @@ for (const f of walk(join(ROOT, "plugins"), ".js")) {
 const rs = new Map();
 for (const f of walk(join(ROOT, "rust/crates/oktz-plugins/src"), ".rs")) {
   const t = readFileSync(f, "utf8");
-  for (const m of t.matchAll(/#\[plugin\(([\s\S]*?)\)\]/g)) {
-    const nm = m[1].match(/name\s*=\s*"((?:[^"\\]|\\.)*)"/);
-    if (nm) rs.set(nm[1], f.replace(ROOT, ""));
-  }
+  // Dua cara mendaftarkan plugin: atribut `#[plugin(name = "..")]` langsung,
+  // dan macro `cek_plugin!`/`data_plugin!`/`tanya_plugin!` yang memancarkan
+  // atribut itu sendiri. Nama pada macro adalah argumen kedua.
+  const daftar = [
+    ...[...t.matchAll(/#\[plugin\(([\s\S]*?)\)\]/g)].map(
+      (m) => m[1].match(/name\s*=\s*"((?:[^"\\]|\\.)*)"/),
+    ),
+    ...[...t.matchAll(/\b(?:cek|data|tanya)_plugin!\(\s*[^,]+,\s*"((?:[^"\\]|\\.)*)"/g)].map(
+      (m) => m,
+    ),
+  ];
+  for (const nm of daftar) if (nm) rs.set(nm[1], f.replace(ROOT, ""));
 }
 
 const hanyaJs = [...js.keys()].filter((n) => !rs.has(n)).sort();
