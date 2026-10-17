@@ -6,7 +6,8 @@ pub use meta::PluginMeta;
 pub use ureq_http::UreqHttp;
 pub use oktz_plugin_macros::plugin;
 pub use registry::{
-    Ctx, HandlerFn, HttpBody, HttpCall, HttpError, HttpGet, HttpMethod, HttpResponse, MediaSource,
-    MultipartPart, Mutation, NoHttp, Participant, PluginEntry, QuotedKind, QuotedMessage, Reply,
-    SessionStore, all_plugins, count, find, new_session_store,
+    Ctx, HandlerFn, HttpBody, HttpCall, HttpError, HttpGet, HttpMethod, HttpResponse, IncomingKind,
+    IncomingMedia, MediaError, MediaFetch, MediaOrigin, MediaSource, MultipartPart, Mutation,
+    NoHttp, NoMediaFetch, Participant, PluginEntry, QuotedKind, QuotedMessage, Reply, SessionStore,
+    all_plugins, count, find, new_session_store,
 };

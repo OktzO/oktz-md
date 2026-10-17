@@ -1,24 +1,25 @@
 //! `plugins/download/rednotedl.js` — unduh video/foto dari RedNote.
 //!
-//! Scraper `RedNoteDL` (`src/scraper/rednote.js`) ikut dipindah: satu POST JSON
-//! ke `savevideodown.com` lalu pemetaan field, tanpa parser HTML.
+//! Scraper `RedNoteDL` (`src/scraper/rednote.js`) sudah ada di crate
+//! `oktz-scraper` (`oktz_scraper::rednote::red_note_dl`): satu POST JSON ke
+//! `rednote.savevideodown.com` lengkap dengan header `X-Forwarded-For`,
+//! `X-Real-IP`, dan `Client-IP` berisi IP acak, lalu pemetaan field. Plugin ini
+//! hanya memetakan hasilnya ke balasan.
 //!
-//! `ponytail:` scraper memasang `X-Forwarded-For`/`X-Real-IP`/`Client-IP` dengan
-//! IP acak, tapi trait `HttpGet` tidak punya kontrol header, jadi ketiga header
-//! itu hilang.
+//! Tiga penyimpangan yang tercatat apa adanya:
 //!
-//! `ponytail:` `Reply` hanya bisa membawa satu media. JS mengirim maksimal 5
-//! foto dalam satu album; di sini hanya foto pertama yang ikut, dan teks
-//! "Masih ada N foto lagi" pindah ke caption-nya. `Reply` juga tidak punya
-//! variant video, jadi video terkirim sebagai judulnya saja.
+//! - **Foto kedua dan seterusnya tidak dikirim.** JS mengirim maksimal 5 foto
+//!   satu per satu (`rednotedl.js:48-52`); satu `Reply` hanya satu pesan, jadi
+//!   hanya foto pertama yang ikut.
+//! - **Catatan sisa foto pindah ke caption.** JS mengirimnya sebagai pesan
+//!   terpisah setelah semua foto (`rednotedl.js:53-57`); di sini teks itu
+//!   jadi caption foto pertama supaya tidak hilang.
+//! - **Reaksi awal `🕕` dibuang** (`rednotedl.js:33`), mengikuti konvensi repo:
+//!   `Reply::Reaction` hanya bisa satu, jadi reaksi terakhir yang ikut — `✅`
+//!   setelah terkirim, `☢` di cabang gagal.
 
-use oktz_plugin_api::{Ctx, HttpGet, MediaSource, Reply, plugin};
+use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 use serde_json::Value;
-
-use crate::common::js_truthy_value;
-
-/// `rednote.js:10` — endpoint scraper.
-pub(crate) const ENDPOINT: &str = "https://rednote.savevideodown.com/api/download";
 
 /// `rednotedl.js:23-29` — kartu pakai, delimiter markdown-nya asterisk.
 pub(crate) fn help(prefix: &str) -> String {
@@ -40,65 +41,55 @@ pub(crate) fn rednote_failed(error: &str) -> String {
 /// `rednotedl.js:64` — cabang `catch`.
 pub(crate) const TRANSPORT_FAILED: &str = "❌ Gagal mengambil data RedNote, coba lagi nanti";
 
-/// `rednotedl.js:42` — `resData.error` kosong.
-pub(crate) const DEFAULT_ERROR: &str = "Gagal mengambil data";
-
 /// Bentuk `status: true` dari `RedNoteDL` (`src/scraper/rednote.js:35-44`).
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub(crate) struct Rednote {
-    pub title: String,
-    /// `resData.type` — `"video"` berarti `results` cuma satu URL.
+    /// `title` tidak ikut keluar kalau `undefined`, jadi `None` = `undefined`.
+    pub title: Option<String>,
+    /// `type` — `"video"` berarti `results` cuma satu URL.
     pub kind: String,
     pub results: Vec<String>,
 }
 
-/// `src/scraper/rednote.js:28-44`. `Err` = `success` falsy, `String` = pesan
-/// yang sudah siap tampil.
-pub(crate) fn normalize(body: &Value) -> Result<Rednote, String> {
-    if !body.get("success").is_some_and(js_truthy_value) {
-        let error = body
-            .get("error")
-            .filter(|e| js_truthy_value(e))
-            .and_then(Value::as_str)
-            .unwrap_or(DEFAULT_ERROR)
-            .to_string();
-        return Err(error);
+/// `String(v)` untuk nilai JSON — `${result.error}` (`rednotedl.js:40`) sama
+/// saja mem-string-kan nilai apa adanya, bukan memaksa jadi teks. Kunci yang
+/// tidak ada berarti `undefined`, yang berbeda dari `null`.
+fn teks_js(value: Option<&Value>) -> String {
+    match value {
+        None => "undefined".to_string(),
+        Some(Value::Null) => "null".to_string(),
+        Some(Value::String(s)) => s.clone(),
+        Some(other) => other.to_string(),
     }
-    let kind = body
-        .get("type")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string();
-    let results = if kind == "video" {
-        // `[resData.directVideoUrl || resData.downloadUrl]` — arr-nya selalu
-        // panjang satu walau elemennya `undefined`.
-        let url = body
-            .get("directVideoUrl")
-            .filter(|v| js_truthy_value(v))
-            .or_else(|| body.get("downloadUrl"))
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string();
-        vec![url]
-    } else {
-        body.get("directImages")
-            .and_then(Value::as_array)
-            .map(|items| {
-                items
-                    .iter()
-                    .map(|i| i.as_str().unwrap_or("").to_string())
-                    .collect()
-            })
-            .unwrap_or_default()
-    };
+}
+
+/// Baca hasil scraper. `Err` = `status: false` dengan pesan error siap tampil.
+pub(crate) fn hasil_dari(body: &Value) -> Result<Rednote, String> {
+    if body.get("status").and_then(Value::as_bool) != Some(true) {
+        return Err(teks_js(body.get("error")));
+    }
     Ok(Rednote {
         title: body
             .get("title")
             .and_then(Value::as_str)
+            .map(str::to_string),
+        kind: body
+            .get("type")
+            .and_then(Value::as_str)
             .unwrap_or("")
             .to_string(),
-        kind,
-        results,
+        // `[directVideoUrl || downloadUrl]` bisa berisi `undefined`, dan
+        // `directImages` bisa bukan array — keduanya jadi daftar kosong URL.
+        results: body
+            .get("results")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .map(|i| i.as_str().unwrap_or_default().to_string())
+                    .collect()
+            })
+            .unwrap_or_default(),
     })
 }
 
@@ -109,17 +100,6 @@ pub(crate) fn more_note(count: usize) -> String {
     } else {
         String::new()
     }
-}
-
-/// `RedNoteDL(url)` — `Err` = lempar (transport atau body bukan JSON).
-pub(crate) fn fetch_rednote(url: &str, http: &dyn HttpGet) -> Result<Result<Rednote, String>, ()> {
-    let payload = serde_json::json!({ "url": url });
-    let body = http
-        .post_json(ENDPOINT, &payload)
-        .map_err(|_| ())?
-        .json()
-        .ok_or(())?;
-    Ok(normalize(&body))
 }
 
 #[plugin(
@@ -144,20 +124,30 @@ pub fn rednotedl(ctx: Ctx) -> Reply {
         return Reply::text(help(&ctx.prefix)).with_reaction("❌");
     }
 
-    let data = match fetch_rednote(url, ctx.http.as_ref()) {
-        Err(()) => return Reply::text(TRANSPORT_FAILED).with_reaction("☢"),
-        Ok(Err(error)) => return Reply::text(rednote_failed(&error)).with_reaction("☢"),
-        Ok(Ok(data)) => data,
+    let data = match oktz_scraper::rednote::red_note_dl(ctx.http.as_ref(), url) {
+        // `RedNoteDL` tidak punya `try`, jadi kegagalan transport melempar dan
+        // masuk `catch` (`rednotedl.js:61-65`).
+        Err(_) => return Reply::text(TRANSPORT_FAILED).with_reaction("☢"),
+        Ok(value) => match hasil_dari(&value) {
+            Ok(data) => data,
+            Err(error) => return Reply::text(rednote_failed(&error)).with_reaction("☢"),
+        },
     };
 
     if data.kind == "video" {
         // `results[0]` bisa `undefined` walau array-nya panjang satu; di JS
-        // `sendMedia(undefined)` melempar dan masuk ke `catch`.
-        if data.results.first().is_none_or(String::is_empty) {
-            return Reply::text(TRANSPORT_FAILED).with_reaction("☢");
+        // `sendMedia(undefined)` melempar dan masuk `catch`.
+        match data.results.first() {
+            Some(video) if !video.is_empty() => {
+                // `rednotedl.js:44` — video dengan caption `result.title`.
+                return Reply::video(
+                    MediaSource::url(video.clone()),
+                    data.title.clone().unwrap_or_default(),
+                )
+                .with_reaction("✅");
+            }
+            _ => return Reply::text(TRANSPORT_FAILED).with_reaction("☢"),
         }
-        // `rednotedl.js:44` — `sendMedia` video dengan caption `result.title`.
-        return Reply::text(data.title.clone()).with_reaction("✅");
     }
 
     if data.results.is_empty() {
@@ -176,26 +166,28 @@ pub fn rednotedl(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::{HttpBody, HttpError, HttpResponse};
+    use oktz_plugin_api::{HttpBody, HttpCall, HttpError, HttpGet, HttpResponse};
     use serde_json::json;
     use std::sync::{Arc, Mutex};
 
+    const SENDER: &str = "628111@s.whatsapp.net";
+
     #[derive(Debug)]
     struct Stub {
-        body: Result<String, ()>,
-        seen: Mutex<Vec<String>>,
+        balasan: Result<String, String>,
+        seen: Mutex<Vec<HttpCall>>,
     }
 
     impl Stub {
         fn body(v: Value) -> Arc<Stub> {
             Arc::new(Stub {
-                body: Ok(v.to_string()),
+                balasan: Ok(v.to_string()),
                 seen: Mutex::new(Vec::new()),
             })
         }
         fn offline() -> Arc<Stub> {
             Arc::new(Stub {
-                body: Err(()),
+                balasan: Err("offline".to_string()),
                 seen: Mutex::new(Vec::new()),
             })
         }
@@ -203,14 +195,27 @@ mod tests {
 
     impl HttpGet for Stub {
         fn get(&self, _: &str) -> Result<HttpResponse, HttpError> {
-            unimplemented!("cuma POST")
+            unreachable!("scraper ini lewat HttpCall::call")
         }
-        fn post_json(&self, url: &str, body: &Value) -> Result<HttpResponse, HttpError> {
-            self.seen.lock().unwrap().push(format!("{url}::{body}"));
+        fn post_json(&self, _: &str, _: &Value) -> Result<HttpResponse, HttpError> {
+            unreachable!("scraper ini lewat HttpCall::call")
+        }
+        fn post_form(&self, _: &str, _: &str) -> Result<HttpResponse, HttpError> {
+            unreachable!("scraper ini lewat HttpCall::call")
+        }
+        fn post_multipart(
+            &self,
+            _: &str,
+            _: &[(&str, HttpBody)],
+        ) -> Result<HttpResponse, HttpError> {
+            unreachable!("scraper ini tidak multipart")
+        }
+        fn call(&self, req: &HttpCall) -> Result<HttpResponse, HttpError> {
+            self.seen.lock().unwrap().push(req.clone());
             let text = self
-                .body
+                .balasan
                 .clone()
-                .map_err(|()| HttpError { message: "offline".into() })?;
+                .map_err(|message| HttpError { message })?;
             Ok(HttpResponse {
                 status: 200,
                 body: HttpBody::Bytes {
@@ -220,24 +225,14 @@ mod tests {
                 headers: vec![],
             })
         }
-        fn post_form(&self, _: &str, _: &str) -> Result<HttpResponse, HttpError> {
-            unimplemented!("cuma POST")
-        }
-        fn post_multipart(
-            &self,
-            _: &str,
-            _: &[(&str, HttpBody)],
-        ) -> Result<HttpResponse, HttpError> {
-            unimplemented!("cuma POST")
-        }
     }
 
     fn run(http: Arc<Stub>, text: &str) -> Reply {
         let ctx = Ctx {
             prefix: ".".into(),
             command: "rednotedl".into(),
-            sender: "628111@s.whatsapp.net".into(),
-            chat: "628111@s.whatsapp.net".into(),
+            sender: SENDER.into(),
+            chat: SENDER.into(),
             text: text.into(),
             args: vec![text.into()],
             http,
@@ -254,6 +249,15 @@ mod tests {
         match r.without_mutations() {
             Reply::Reaction { emoji, .. } => Some(emoji),
             _ => None,
+        }
+    }
+
+    /// Isi balasan sebenarnya: `without_mutations` hanya membuang `Mutate`,
+    /// jadi `Reaction { reply }` masih harus dibuka satu lapis.
+    fn isi(r: &Reply) -> &Reply {
+        match r.without_mutations() {
+            Reply::Reaction { reply, .. } => reply.as_ref(),
+            lain => lain,
         }
     }
 
@@ -296,23 +300,43 @@ mod tests {
 
     #[test]
     fn a_failed_response_reports_the_backend_message() {
+        // Body di sini bentuk responses `rednote.savevideodown.com`, bukan
+        // bentuk hasil scraper: `success` yang menentukan cabang gagal.
         let r = run(
             Stub::body(json!({ "success": false, "error": "Postingan privat" })),
             "https://www.xiaohongshu.com/x",
         );
         assert_eq!(text_of(&r), "❌ *RedNote Gagal*\n\n> Postingan privat");
         assert_eq!(reaction_of(&r), Some("☢"));
-    }
-
-    #[test]
-    fn a_failure_without_a_reason_uses_the_default_text() {
+        // `resData.error || "Gagal mengambil data"` juga kena error kosong.
         for body in [json!({ "success": false }), json!({ "success": false, "error": "" })] {
-            assert_eq!(normalize(&body).unwrap_err(), DEFAULT_ERROR, "body {body}");
+            let r = run(Stub::body(body.clone()), "https://www.xiaohongshu.com/x");
+            assert_eq!(text_of(&r), "❌ *RedNote Gagal*\n\n> Gagal mengambil data");
+            assert_eq!(reaction_of(&r), Some("☢"), "body {body}");
         }
     }
 
     #[test]
-    fn a_video_result_replies_with_the_post_title() {
+    fn the_failure_branch_prints_a_missing_error_verbatim() {
+        // `rednotedl.js:40` memakai `${result.error}`; scraper selalu mengisi
+        // error dari `resData.error || "Gagal mengambil data"`, jadi di sini
+        // yang bisa hilang adalah seluruh kuncinya — tercetak `undefined`.
+        for body in [json!({ "status": false }), json!({})] {
+            assert_eq!(
+                hasil_dari(&body).unwrap_err(),
+                "undefined",
+                "body {body}"
+            );
+        }
+        // Nilai non-teks ikut ter-string-kan seperti `String(v)` di JS.
+        assert_eq!(
+            hasil_dari(&json!({ "status": false, "error": 7 })).unwrap_err(),
+            "7"
+        );
+    }
+
+    #[test]
+    fn a_video_result_is_sent_as_a_video_carrying_the_post_title() {
         let r = run(
             Stub::body(json!({
                 "success": true,
@@ -322,33 +346,80 @@ mod tests {
             })),
             "https://www.xiaohongshu.com/x",
         );
-        assert_eq!(text_of(&r), "Catatan Umum");
         assert_eq!(reaction_of(&r), Some("✅"));
-    }
-
-    #[test]
-    fn a_video_without_any_url_falls_into_the_catch_branch() {
-        // `results` tetap panjang satu walau nilainya kosong, dan `sendMedia`
-        // dengan URL kosong melempar di JS.
-        for body in [
-            json!({ "success": true, "type": "video", "title": "x" }),
-            json!({ "success": true, "type": "video", "title": "x", "directVideoUrl": null }),
-        ] {
-            let r = run(Stub::body(body.clone()), "https://www.xiaohongshu.com/x");
-            assert_eq!(text_of(&r), TRANSPORT_FAILED, "body {body}");
-            assert_eq!(reaction_of(&r), Some("☢"));
+        match isi(&r) {
+            Reply::Video { media, caption, .. } => {
+                assert_eq!(caption, "Catatan Umum");
+                assert_eq!(
+                    media,
+                    &Some(oktz_plugin_api::MediaSource::Url {
+                        url: "https://cdn.example/v.mp4".to_string(),
+                        mimetype: None,
+                    })
+                );
+            }
+            lain => panic!("harus video, dapat {lain:?}"),
+        }
+        // `directVideoUrl || downloadUrl` — tanpa yang pertama, yang kedua dipakai.
+        let r = run(
+            Stub::body(json!({
+                "success": true,
+                "type": "video",
+                "directVideoUrl": "",
+                "downloadUrl": "https://cdn.example/fallback.mp4"
+            })),
+            "https://www.xiaohongshu.com/x",
+        );
+        match isi(&r) {
+            Reply::Video { media, .. } => assert_eq!(
+                media,
+                &Some(oktz_plugin_api::MediaSource::Url {
+                    url: "https://cdn.example/fallback.mp4".to_string(),
+                    mimetype: None,
+                })
+            ),
+            lain => panic!("harus video, dapat {lain:?}"),
         }
     }
 
     #[test]
-    fn the_fallback_url_is_used_when_direct_video_is_missing() {
-        let data = normalize(&json!({
-            "success": true,
+    fn a_video_without_any_url_falls_into_the_catch_branch() {
+        // `results` tetap panjang satu walau nilainya `undefined` (`rednote.js:42`),
+        // jadi `result.results?.[0]` falsy dan `sendMedia` melempar di JS.
+        for body in [
+            json!({ "success": true, "type": "video", "title": "x" }),
+            json!({ "success": true, "type": "video", "title": "x", "directVideoUrl": null, "downloadUrl": null }),
+        ] {
+            let r = run(Stub::body(body.clone()), "https://www.xiaohongshu.com/x");
+            assert_eq!(text_of(&r), TRANSPORT_FAILED, "body {body}");
+            assert_eq!(reaction_of(&r), Some("☢"), "body {body}");
+        }
+    }
+
+    #[test]
+    fn the_video_title_may_be_absent_and_then_the_caption_is_empty() {
+        let r = run(
+            Stub::body(json!({
+                "success": true,
+                "type": "video",
+                "downloadUrl": "https://cdn.example/v.mp4"
+            })),
+            "https://www.xiaohongshu.com/x",
+        );
+        assert_eq!(text_of(&r), "");
+    }
+
+    #[test]
+    fn hasil_dari_takes_the_single_results_entry_of_a_video_post() {
+        // `directVideoUrl || downloadUrl` sudah diselesaikan di dalam scraper.
+        let data = hasil_dari(&json!({
+            "status": true,
             "type": "video",
-            "downloadUrl": "https://cdn.example/fallback.mp4"
+            "results": ["https://cdn.example/fallback.mp4"]
         }))
         .unwrap();
         assert_eq!(data.results, ["https://cdn.example/fallback.mp4"]);
+        assert_eq!(data.title, None);
     }
 
     #[test]
@@ -369,6 +440,28 @@ mod tests {
             "https://www.xiaohongshu.com/x",
         );
         assert_eq!(text_of(&r), "_Masih ada 3 foto lagi, maksimal 5_");
+    }
+
+    #[test]
+    fn the_first_photo_is_the_one_that_is_sent() {
+        let r = run(
+            Stub::body(json!({
+                "success": true,
+                "type": "image",
+                "directImages": ["https://cdn.example/0.jpg", "https://cdn.example/1.jpg"]
+            })),
+            "https://www.xiaohongshu.com/x",
+        );
+        match isi(&r) {
+            Reply::Image { media, .. } => assert_eq!(
+                media,
+                &Some(oktz_plugin_api::MediaSource::Url {
+                    url: "https://cdn.example/0.jpg".to_string(),
+                    mimetype: None,
+                })
+            ),
+            lain => panic!("harus image, dapat {lain:?}"),
+        }
     }
 
     #[test]
@@ -393,15 +486,17 @@ mod tests {
 
     #[test]
     fn the_url_is_sent_as_a_json_body_field() {
-        let http = Stub::body(json!({ "success": true, "type": "image", "directImages": [] }));
+        let http = Stub::body(json!({ "status": true, "type": "image", "results": [] }));
         let _ = run(http.clone(), "https://www.xiaohongshu.com/x");
+        let seen = http.seen.lock().unwrap();
+        assert_eq!(seen.len(), 1);
         assert_eq!(
-            http.seen.lock().unwrap().clone(),
-            vec![
-                "https://rednote.savevideodown.com/api/download\
-                 ::{\"url\":\"https://www.xiaohongshu.com/x\"}"
-                    .to_string()
-            ]
+            seen[0].url,
+            "https://rednote.savevideodown.com/api/download"
+        );
+        assert_eq!(
+            seen[0].body.as_ref().unwrap().bytes(),
+            br#"{"url":"https://www.xiaohongshu.com/x"}"#
         );
     }
 
@@ -410,5 +505,14 @@ mod tests {
         let r = run(Stub::offline(), "https://www.xiaohongshu.com/x");
         assert_eq!(text_of(&r), TRANSPORT_FAILED);
         assert_eq!(reaction_of(&r), Some("☢"));
+    }
+
+    #[test]
+    fn the_plugin_only_reads_and_never_mutates() {
+        let r = run(
+            Stub::body(json!({ "status": true, "type": "image", "results": ["u"] })),
+            "https://www.xiaohongshu.com/x",
+        );
+        assert!(r.mutations().is_empty());
     }
 }

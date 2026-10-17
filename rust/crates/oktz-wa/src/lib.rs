@@ -8,6 +8,7 @@ pub mod creds;
 pub mod load;
 pub mod pairing;
 pub mod pairing_run;
+pub mod media_fetch;
 pub mod pipeline;
 pub mod pipeline_gate;
 pub mod reply_variant;

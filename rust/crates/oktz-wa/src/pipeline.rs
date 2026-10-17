@@ -964,6 +964,16 @@ pub trait MessageSender: Send + Sync {
         extra_nodes: Vec<Node>,
     ) -> SendBox<'_>;
 
+    /// Klien WA sungguhan, kalau pengirim ini memegangnya.
+    ///
+    /// Dipakai satu hal: memasang [`oktz_plugin_api::MediaFetch`] untuk
+    /// `m.download()`. Pengirim stub (test) mengembalikan `None`, dan itu
+    /// membuat `Ctx::media_fetch` tetap `NoMediaFetch` — menolak dengan alasan
+    /// jelas, bukan mengembalikan byte palsu.
+    fn client(&self) -> Option<Arc<Client>> {
+        None
+    }
+
     /// Kirim media: baca sumbernya → upload ke CDN → kirim.
     ///
     /// Terpisah dari `send` karena butuh I/O (disk/HTTP/upload) yang `send`
@@ -1022,6 +1032,10 @@ impl ClientSender {
 }
 
 impl MessageSender for ClientSender {
+    fn client(&self) -> Option<Arc<Client>> {
+        Some(self.client.clone())
+    }
+
     fn send(&self, to: &str, message: wa::Message, extra_nodes: Vec<Node>) -> SendBox<'_> {
         let client = self.client.clone();
         let to = to.to_string();
@@ -2454,6 +2468,11 @@ impl Pipeline {
     pub fn caller_of(&self, m: &InboundMessage) -> Caller {
         let s = &m.info.source;
         let sender = s.sender.to_string();
+        // Media pesan + jalur unduhnya. Pengirim stub (test) tidak punya
+        // `Client`, jadi `media_fetch` tetap `None` dan `Ctx` memakai
+        // `NoMediaFetch` — `Ctx::media` tetap terisi supaya plugin bisa
+        // memeriksa `m.isImage` tanpa sesi WA.
+        let (media, media_fetch) = crate::media_fetch::ctx_media(self.sender.client(), m);
         Caller {
             sender: sender.clone(),
             chat: s.chat.to_string(),
@@ -2466,6 +2485,8 @@ impl Pipeline {
             is_bot_admin: false,
             mentioned: mentioned_jids(m),
             quoted: quoted_of(m),
+            media,
+            media_fetch,
         }
     }
 

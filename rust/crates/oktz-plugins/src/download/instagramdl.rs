@@ -1,14 +1,24 @@
 //! `plugins/download/instagramdl.js` — unduh video/foto Instagram.
 //!
-//! `ponytail:` JS memakai `instagramDownloader` dari `src/scraper/ig.js`, yang
-//! memanggil `igdl` dari paket npm `btch-downloader` — modul JS, tidak bisa
-//! di-port dan tidak ada backend lain di repo ini untuk Instagram. Yang
-//! dipindah di sini SEMUA logika plugin: guard URL, pemisahan Caption, dan
-//! pemilihan video-vs-image per item. Pemanggilan scraper menjadi satu fungsi
-//! `fetch_media` yang selalu gagal di port ini; sisa alurnya tetap utuh dan
-//! cabang "gagal" tetap bisa diuji.
+//! Scraper `instagramDownloader` (`src/scraper/ig.js`) sudah ada di crate
+//! `oktz-scraper` (`oktz_scraper::ig::instagram_download`), termasuk pemanggilan
+//! `igdl` dari paket npm `btch-downloader`. Plugin ini hanya memetakan
+//! hasilnya: guard URL, pemisahan caption, dan pemilihan video-vs-image.
+//!
+//! Tiga penyimpangan yang tercatat apa adanya:
+//!
+//! - **Item kedua dan seterusnya tidak dikirim.** JS mengirim satu pesan per
+//!   item media (`instagramdl.js:59-74`); satu `Reply` hanya satu pesan, jadi
+//!   hanya item pertama — yang juga satu-satunya yang boleh membawa caption —
+//!   yang ikut. Untuk unggahan multi-foto sisanya hilang.
+//! - **Thumbnail tidak dikirim.** Scraper menyediakan `thumbnail`, tapi JS pun
+//!   tidak pernah memakainya di plugin ini.
+//! - **Reaksi awal `🕕` dibuang** (`instagramdl.js:39`), mengikuti konvensi
+//!   repo: `Reply::Reaction` hanya bisa satu, jadi reaksi terakhir yang ikut —
+//!   `✅` setelah terkirim, `❌` di cabang gagal.
 
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
+use serde_json::Value;
 
 /// `IG_REGEX` (`instagramdl.js:18`) tanpa regex crate: `instagram.com/`
 /// diikuti salah satu segmen `p|reel|reels|stories|tv` lalu `/`.
@@ -86,12 +96,42 @@ pub(crate) fn build_caption(url: &str, download: &Download) -> String {
     caption.trim().to_string()
 }
 
-/// `fetchMedia` — satu-satunya bagian yang tidak bisa di-port.
-///
-/// Ganti dengan pemanggilan scraper sungguhan (atau backend HTTP) di sini;
-/// semua teks, caption, dan pemilihan tipe media di file ini tetap berlaku.
-fn fetch_media(_url: &str) -> Result<Download, String> {
-    Err("scraper Instagram (btch-downloader) belum di-port".to_string())
+/// Baca hasil scraper (`src/scraper/ig.js:41-49`). Field yang tidak ada berarti
+/// string kosong di JS juga, karena scraper selalu mengisinya.
+fn hasil_dari(data: &Value) -> Download {
+    Download {
+        username: data
+            .get("username")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        caption: data
+            .get("caption")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        media: data
+            .get("media")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .map(|item| Item {
+                        // `instagramdl.js:60` — `video` atau `mp4` jadi video.
+                        is_video: matches!(
+                            item.get("type").and_then(Value::as_str),
+                            Some("video") | Some("mp4")
+                        ),
+                        url: item
+                            .get("url")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
+                            .to_string(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+    }
 }
 
 #[plugin(
@@ -120,42 +160,114 @@ pub fn instagramdl(ctx: Ctx) -> Reply {
         return Reply::text(BAD_URL);
     }
 
-    let download = match fetch_media(url) {
-        Ok(d) if !d.media.is_empty() => d,
-        Ok(_) => return Reply::text(NO_MEDIA).with_reaction("❌"),
-        Err(message) => return Reply::text(failed(&message)).with_reaction("❌"),
+    let download = match oktz_scraper::ig::instagram_download(ctx.http.as_ref(), url) {
+        Ok(value) => hasil_dari(&value),
+        // `instagramDownloader` melempar `Gagal mengambil media dari Instagram`
+        // dua kali — termasuk saat `media` kosong, jadi cabang `NO_MEDIA` di
+        // bawah praktis tidak terjangkau (`ig.js:20` dan `:36`).
+        Err(e) => return Reply::text(failed(&e.message)).with_reaction("❌"),
     };
+
+    if download.media.is_empty() {
+        return Reply::text(NO_MEDIA).with_reaction("❌");
+    }
 
     let caption = build_caption(url, &download);
     let first = &download.media[0];
     // `instagramdl.js:60-73`: `video`/`mp4` → video, sisanya → image.
-    // `Reply` hanya punya `Image` dan `Sticker`, jadi video tidak punya
-    // padanan dan ikut hilang; teks caption tetap dikirim.
-    if first.is_video {
-        return Reply::text(caption);
-    }
-    Reply::image(MediaSource::url(first.url.clone()), caption)
+    let balasan = if first.is_video {
+        Reply::video(MediaSource::url(first.url.clone()), caption)
+    } else {
+        Reply::image(MediaSource::url(first.url.clone()), caption)
+    };
+    balasan.with_reaction("✅")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oktz_plugin_api::{HttpBody, HttpCall, HttpError, HttpGet, HttpResponse};
+    use std::sync::{Arc, Mutex};
+
+    const SENDER: &str = "628111@s.whatsapp.net";
+
+    /// Stub `HttpGet` yang membalas JSON tetap — scraper dan plugin diuji
+    /// tanpa jaringan.
+    #[derive(Debug, Default)]
+    struct StubHttp {
+        dipanggil: Mutex<Vec<String>>,
+        balasan: String,
+    }
+
+    impl HttpGet for StubHttp {
+        fn get(&self, _: &str) -> Result<HttpResponse, HttpError> {
+            unreachable!("scraper ini lewat HttpCall::call")
+        }
+        fn post_json(&self, _: &str, _: &Value) -> Result<HttpResponse, HttpError> {
+            unreachable!("scraper ini cuma GET")
+        }
+        fn post_form(&self, _: &str, _: &str) -> Result<HttpResponse, HttpError> {
+            unreachable!("scraper ini cuma GET")
+        }
+        fn post_multipart(
+            &self,
+            _: &str,
+            _: &[(&str, HttpBody)],
+        ) -> Result<HttpResponse, HttpError> {
+            unreachable!("scraper ini tidak multipart")
+        }
+        fn call(&self, req: &HttpCall) -> Result<HttpResponse, HttpError> {
+            self.dipanggil.lock().unwrap().push(req.url.clone());
+            Ok(HttpResponse {
+                status: 200,
+                body: HttpBody::Bytes {
+                    data: Arc::from(self.balasan.as_bytes()),
+                    mimetype: None,
+                },
+                headers: Vec::new(),
+            })
+        }
+    }
+
+    fn stub(balasan: &str) -> Arc<StubHttp> {
+        Arc::new(StubHttp {
+            dipanggil: Mutex::new(Vec::new()),
+            balasan: balasan.to_string(),
+        })
+    }
 
     fn run(text: &str) -> Reply {
-        let ctx = Ctx {
+        (oktz_plugin_api::find("instagramdl").unwrap().handler)(ctx_http(stub("[]"), text))
+    }
+
+    fn ctx_http(http: Arc<StubHttp>, text: &str) -> Ctx {
+        Ctx {
             prefix: ".".into(),
             command: "igdl".into(),
-            sender: "628111@s.whatsapp.net".into(),
-            chat: "628111@s.whatsapp.net".into(),
+            sender: SENDER.into(),
+            chat: SENDER.into(),
             text: text.into(),
             args: vec![text.into()],
+            http,
             ..Default::default()
-        };
-        (oktz_plugin_api::find("instagramdl").unwrap().handler)(ctx)
+        }
+    }
+
+    fn ctx_dengan(text: &str, balasan: &str) -> Ctx {
+        ctx_http(stub(balasan), text)
     }
 
     fn text_of(r: &Reply) -> &str {
         r.without_mutations().text_body().expect("harus ada teks")
+    }
+
+    /// Isi balasan sebenarnya: `without_mutations` hanya membuang `Mutate`,
+    /// jadi `Reaction { reply }` masih harus dibuka satu lapis.
+    fn isi(r: &Reply) -> &Reply {
+        match r.without_mutations() {
+            Reply::Reaction { reply, .. } => reply.as_ref(),
+            lain => lain,
+        }
     }
 
     fn download(items: &[(&str, bool)], username: &str, caption: &str) -> Download {
@@ -286,14 +398,102 @@ mod tests {
 
     #[test]
     fn the_scraper_failure_branch_is_the_error_template() {
-        // `fetch_media` selalu gagal di port ini, jadi handler tidak pernah
-        // mencapai cabang media — persis yang akan terjadi kalau scraper
-        // `btch-downloader` melempar di JS.
+        // Backend menjawab array kosong → `igdl` mengembalikan `{status:false}`
+        // lalu `instagramDownloader` melempar, persis yang terjadi kalau
+        // `btch-downloader` gagal di Node.
         let r = run("https://www.instagram.com/p/abc");
-        assert!(text_of(&r).starts_with("❌ *ɢᴀɢᴀʟ ᴍᴇɴɢᴜɴᴅᴜʂ*"), "{}", text_of(&r));
+        assert_eq!(
+            text_of(&r),
+            "❌ *ɢᴀɢᴀʟ ᴍᴇɴɢᴜɴᴅᴜʂ*\n\n> Gagal mengambil media dari Instagram"
+        );
         assert!(
             matches!(r.without_mutations(), Reply::Reaction { emoji, .. } if emoji == "❌"),
             "kegagalan harus bereaksi ❌"
         );
+    }
+
+    #[test]
+    fn a_photo_post_is_sent_as_an_image_with_the_caption() {
+        let balasan = r#"[{"url":"https://cdn.example/a.jpg","thumbnail":"https://cdn.example/t.jpg"}]"#;
+        let http = stub(balasan);
+        let r = (oktz_plugin_api::find("instagramdl").unwrap().handler)(ctx_http(
+            http.clone(),
+            "https://www.instagram.com/p/abc",
+        ));
+        assert!(
+            matches!(r.without_mutations(), Reply::Reaction { emoji, .. } if emoji == "✅"),
+            "sukses harus bereaksi ✅"
+        );
+        match isi(&r) {
+            Reply::Image { media, caption, .. } => {
+                assert_eq!(caption, "📸 *Instagram Downloader*");
+                assert_eq!(
+                    media,
+                    &Some(oktz_plugin_api::MediaSource::Url {
+                        url: "https://cdn.example/a.jpg".to_string(),
+                        mimetype: None,
+                    })
+                );
+            }
+            lain => panic!("harus image, dapat {lain:?}"),
+        }
+        // Scraper benar-benar dipanggil dengan URL yang diketik user.
+        let dipanggil = http.dipanggil.lock().unwrap();
+        assert_eq!(dipanggil.len(), 1);
+        assert!(
+            dipanggil[0].starts_with("https://backend1.tioo.eu.org/igdl?url="),
+            "endpoint tak terduga: {dipanggil:?}"
+        );
+        assert!(dipanggil[0].ends_with("https%3A%2F%2Fwww.instagram.com%2Fp%2Fabc"));
+    }
+
+    #[test]
+    fn a_video_post_is_sent_as_a_video_with_the_caption() {
+        let balasan = r#"[{"url":"https://cdn.example/a.mp4","thumbnail":""}]"#;
+        let r = (oktz_plugin_api::find("instagramdl").unwrap().handler)(ctx_dengan(
+            "https://www.instagram.com/reel/abc",
+            balasan,
+        ));
+        match isi(&r) {
+            Reply::Video {
+                media,
+                caption,
+                gif_playback,
+                ..
+            } => {
+                assert_eq!(caption, "📸 *Instagram Downloader*");
+                assert!(!gif_playback);
+                assert_eq!(
+                    media,
+                    &Some(oktz_plugin_api::MediaSource::Url {
+                        url: "https://cdn.example/a.mp4".to_string(),
+                        mimetype: None,
+                    })
+                );
+            }
+            lain => panic!("harus video, dapat {lain:?}"),
+        }
+    }
+
+    #[test]
+    fn the_placeholder_username_keeps_the_author_line_out_of_the_caption() {
+        // `igdl` tidak mengembalikan nama penulis, jadi scraper selalu mengisi
+        // `"-"` dan baris `👤 *Author*` tidak pernah ikut.
+        let balasan = r#"[{"url":"https://cdn.example/a.jpg"}]"#;
+        let r = (oktz_plugin_api::find("instagramdl").unwrap().handler)(ctx_dengan(
+            "https://www.instagram.com/p/abc",
+            balasan,
+        ));
+        assert_eq!(text_of(&r), "📸 *Instagram Downloader*");
+    }
+
+    #[test]
+    fn the_plugin_only_reads_and_never_mutates() {
+        let balasan = r#"[{"url":"https://cdn.example/a.jpg"}]"#;
+        let r = (oktz_plugin_api::find("instagramdl").unwrap().handler)(ctx_dengan(
+            "https://www.instagram.com/p/abc",
+            balasan,
+        ));
+        assert!(r.mutations().is_empty());
     }
 }

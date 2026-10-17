@@ -1,21 +1,32 @@
 //! `plugins/download/dailymotiondl.js` — unduh video Dailymotion.
 //!
-//! `ponytail:` scraper `DailymotionDL` (`src/scraper/dailymotion.js`) mengirim
-//! **POST** `x-www-form-urlencoded` ke `vidomon.com` dengan lima header kustom
-//! (`User-Agent`, `Referer`, `X-Forwarded-For`, `X-Real-IP` dan IP acak yang
-//! dibuat sendiri). `HttpGet` tidak punya kontrol header maupun POST ber-header,
-//! jadi scraper itu tidak bisa di-port. Yang dipindah di sini SEMUA logika
-//! plugin: guard teks kosong, kartu pakai, penyusun caption, dan peng Scrub nama
-//! berkas. `dailymotion_dl` selalu gagal, persis seperti scraper yang melempar.
+//! Scraper `DailymotionDL` (`src/scraper/dailymotion.js`) sudah di-port ke
+//! crate `oktz-scraper` (`oktz_scraper::dailymotion::dailymotion_dl`), jadi
+//! POST `x-www-form-urlencoded` ke `vidomon.com` dengan lima header kustom
+//! sekarang benar-benar terjadi. Plugin ini hanya memanggilnya — logika
+//! scraper tidak diduplikasi di sini.
 //!
-//! Blok media juga butuh `child_process` (`exec("ffmpeg", …)`), `fs`, dan
-//! `sock.sendMessage` untuk dokumen — tidak ada padanannya di API plugin, jadi
-//! bahkan setelah scraper berhasil jalurnya berakhir di `catch`, sama seperti
-//! di Node saat `ffmpeg` tidak ada di `PATH`.
+//! Tiga penyimpitan yang tersisa, semuanya tercatat apa adanya:
 //!
-//! `ponytail:` `Ctx` tidak punya `pushName`; tidak dipakai plugin ini.
+//! - **ffmpeg tidak dijalankan.** JS.remux video ke `storage temp` dengan
+//!   `-c copy -bsf:a aac_adtstoasc` sebelum mengirimnya sebagai dokumen
+//!   (`dailymotiondl.js:66-82`). Rust mengirim URL video apa adanya lewat
+//!   `Reply::document(MediaSource::url(..))`. Bedanya nyata: berkas yang
+//!   dikirim tidak sudah dilewatkan filter bitstream WA, jadi sebagian klien
+//!   mungkin menolak memutar-nya. Butuh `queueFFmpeg` (§6 BLOCKED.md).
+//! - **Thumbnail tidak dikirim.** JS mengirim dua pesan: gambar thumbnail
+//!   (`dailymotiondl.js:57-61`) lalu dokumen video (`:84-94`). Satu `Reply`
+//!   hanya satu pesan, dan dokumen video yang jadi tujuan plugin ini, jadi
+//!   gambar thumbnail yang diabaikan. Butuh `Reply::Sequence` / multi-pesan.
+//! - **Reaksi awal `🕕` dibuang** (`dailymotiondl.js:41`), mengikuti
+//!   konvensi yang sudah dipakai plugin lain: `Reply::Reaction` hanya bisa
+//!   satu, jadi reaksi terakhir yang ikut — `✅` setelah video terkirim, `☢`
+//!   di cabang gagal.
+//!
+//! `Ctx` tidak punya `pushName`; tidak dipakai plugin ini.
 
-use oktz_plugin_api::{Ctx, Reply, plugin};
+use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
+use serde_json::Value;
 
 use crate::common::scrub_nama_berkas;
 
@@ -32,9 +43,8 @@ pub(crate) fn help(prefix: &str) -> String {
     )
 }
 
-/// `dailymotiondl.js:48` — `result.status` falsy. `error` sudah di-string-kan
+/// `dailymotiondl.js:48` — cabang `!result.status`. `error` sudah di-string-kan
 /// lebih dulu supaya `undefined` ikut tercetak apa adanya seperti di JS.
-#[allow(dead_code)] // cabang `!result.status` tidak terjangkau di port ini
 pub(crate) fn gagal_pakai(error: &str) -> String {
     format!("❌ *Dailymotion Gagal*\n\n> {error}")
 }
@@ -42,47 +52,61 @@ pub(crate) fn gagal_pakai(error: &str) -> String {
 /// `dailymotiondl.js:101` — cabang `catch`.
 pub(crate) const GAGAL: &str = "❌ Gagal mengambil data Dailymotion, coba lagi nanti";
 
-/// Bentuk objek yang `DailymotionDL` kembalikan (`src/scraper/dailymotion.js:26-35`).
-#[allow(dead_code)] // dipakai `caption`/`nama_berkas`, keduanya hanya diuji
+/// Bentuk objek yang `DailymotionDL` kembalikan (`src/scraper/dailymotion.js:36-45`).
+///
+/// Field opsional `None` berarti tidak ada di respons; pemanggil yang
+/// menulis `${…}` harus memperlakukannya sebagai `undefined`, bukan string
+/// kosong — itu sebabnya ada test khusus untuk itu.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct HasilDailymotion {
     pub status: bool,
-    /// `null` berarti field-nya tidak ada; JS tetap mencetak `undefined`.
     pub error: Option<String>,
-    pub title: String,
+    pub title: Option<String>,
     pub thumbnail: Option<String>,
-    pub duration: String,
-    pub quality: String,
+    pub duration: Option<String>,
+    pub quality: Option<String>,
     pub video: Option<String>,
+}
+
+/// Baca hasil scraper. Kunci yang tidak ada di JSON berarti `undefined` di JS.
+fn hasil_dari(data: &Value) -> HasilDailymotion {
+    let teks = |k: &str| data.get(k).and_then(Value::as_str).map(str::to_string);
+    HasilDailymotion {
+        status: data
+            .get("status")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        error: teks("error"),
+        title: teks("title"),
+        thumbnail: teks("thumbnail"),
+        duration: teks("duration"),
+        quality: teks("quality"),
+        video: teks("video"),
+    }
 }
 
 /// `dailymotiondl.js:51-55` — caption. `result.error` yang `undefined` ikut jadi
 /// teks `"undefined"`, bukan string kosong.
-#[allow(dead_code)] // tidak terjangkau di port ini; teksnya dijaga lewat test
 pub(crate) fn caption(hasil: &HasilDailymotion) -> String {
     format!(
         "🎬 *Dailymotion*\n\n\
          > 📌 {}\n\
          > ⏱️ Durasi: {}\n\
          > 📺 Kualitas: {}",
-        hasil.title, hasil.duration, hasil.quality
+        hasil.title.as_deref().unwrap_or("undefined"),
+        hasil.duration.as_deref().unwrap_or("undefined"),
+        hasil.quality.as_deref().unwrap_or("undefined")
     )
 }
 
 /// `dailymotiondl.js:90` — `(result.title || "video").replace(/[<>:"\/\\|?*]/g, "")
 /// + ".mp4"`. `||` bukan `??`: title kosong ikut jadi `"video"`.
-#[allow(dead_code)] // tidak terjangkau di port ini; teksnya dijaga lewat test
-pub(crate) fn nama_berkas(title: &str) -> String {
-    let dasar = if title.is_empty() { "video" } else { title };
+pub(crate) fn nama_berkas(title: Option<&str>) -> String {
+    let dasar = match title {
+        Some(t) if !t.is_empty() => t,
+        _ => "video",
+    };
     format!("{}.mp4", scrub_nama_berkas(dasar))
-}
-
-
-/// `DailymotionDL` — satu-satunya bagian yang tidak bisa di-port. `Err` =
-/// melempar, jadi cabang `catch` yang menyala.
-#[allow(dead_code)] // scraper tidak ada di port ini
-fn dailymotion_dl(_url: &str) -> Result<HasilDailymotion, ()> {
-    Err(())
 }
 
 #[plugin(
@@ -107,10 +131,10 @@ pub fn dailymotiondl(ctx: Ctx) -> Reply {
         return Reply::text(help(&ctx.prefix)).with_reaction("❌");
     }
 
-    let hasil = match dailymotion_dl(text) {
-        Ok(hasil) => hasil,
+    let hasil = match oktz_scraper::dailymotion::dailymotion_dl(ctx.http.as_ref(), text) {
+        Ok(data) => hasil_dari(&data),
         // `dailymotiondl.js:98-102`.
-        Err(()) => return Reply::text(GAGAL).with_reaction("☢"),
+        Err(_) => return Reply::text(GAGAL).with_reaction("☢"),
     };
 
     if !hasil.status {
@@ -119,40 +143,111 @@ pub fn dailymotiondl(ctx: Ctx) -> Reply {
         return Reply::text(gagal_pakai(teks)).with_reaction("☢");
     }
 
-    // `dailymotiondl.js:51-95` — caption sudah dirakit, lalu thumbnail dikirim
-    // sebagai gambar dan `result.video` (selalu terisi dari scraper yang hidup)
-    // diproses ffmpeg. Tanpa `child_process`/`fs`/`sock` langkah itu melempar,
-    // jadi `catch` yang menyala — persis yang terjadi di Node tanpa ffmpeg.
-    Reply::text(GAGAL).with_reaction("☢")
+    // `dailymotiondl.js:63` — tanpa `video` JS mengirim apa saja (thumbnail
+    // saja), jadi di sini tidak ada pesan sama sekali.
+    let Some(video) = hasil.video.as_deref() else {
+        return Reply::text(GAGAL).with_reaction("☢");
+    };
+
+    // `dailymotiondl.js:84-94` — dokumen video, mengutip pesan pemicu.
+    Reply::document(MediaSource::url(video), nama_berkas(hasil.title.as_deref()))
+        .with_caption(caption(&hasil))
+        .with_reaction("✅")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::find;
+    use std::sync::{Arc, Mutex};
+
+    use oktz_plugin_api::{HttpBody, HttpCall, HttpError, HttpGet, HttpResponse, find};
+    use serde_json::json;
 
     const SENDER: &str = "628111@s.whatsapp.net";
 
-    fn run(text: &str) -> Reply {
-        let ctx = Ctx {
+    /// Stub `HttpGet` yang membalas JSON tetap — scraper dan plugin diuji
+    /// tanpa jaringan.
+    #[derive(Debug, Default)]
+    struct StubHttp {
+        dipanggil: Mutex<Vec<String>>,
+        balasan: String,
+    }
+
+    impl HttpGet for StubHttp {
+        fn get(&self, _: &str) -> Result<HttpResponse, HttpError> {
+            unreachable!("scraper ini cuma POST")
+        }
+        fn post_json(&self, _: &str, _: &Value) -> Result<HttpResponse, HttpError> {
+            unreachable!("scraper ini pakai form, bukan JSON")
+        }
+        fn post_form(&self, _: &str, _: &str) -> Result<HttpResponse, HttpError> {
+            unreachable!("scraper ini lewat HttpCall::call")
+        }
+        fn post_multipart(
+            &self,
+            _: &str,
+            _: &[(&str, HttpBody)],
+        ) -> Result<HttpResponse, HttpError> {
+            unreachable!("scraper ini tidak multipart")
+        }
+        fn call(&self, req: &HttpCall) -> Result<HttpResponse, HttpError> {
+            self.dipanggil.lock().unwrap().push(req.url.clone());
+            Ok(HttpResponse {
+                status: 200,
+                body: HttpBody::Bytes {
+                    data: Arc::from(self.balasan.as_bytes()),
+                    mimetype: None,
+                },
+                headers: Vec::new(),
+            })
+        }
+    }
+
+    fn ctx_dengan(text: &str, balasan: &str) -> Ctx {
+        Ctx {
             prefix: ".".into(),
             command: "dailymotiondl".into(),
             sender: SENDER.into(),
             chat: SENDER.into(),
             text: text.into(),
             args: text.split_whitespace().map(str::to_string).collect(),
+            http: Arc::new(StubHttp {
+                dipanggil: Mutex::new(Vec::new()),
+                balasan: balasan.to_string(),
+            }),
             ..Default::default()
-        };
-        (find("dailymotiondl").unwrap().handler)(ctx)
+        }
     }
 
-    fn text_of(r: &Reply) -> &str {
-        r.without_mutations().text_body().expect("harus ada teks")
+    fn run(text: &str) -> Reply {
+        (find("dailymotiondl").unwrap().handler)(ctx_dengan(
+            text,
+            r#"{"medias":[]}"#,
+        ))
     }
 
-    fn reaksi(r: &Reply) -> Option<&str> {
+    fn reaction(r: &Reply) -> Option<&str> {
         match r.without_mutations() {
             Reply::Reaction { emoji, .. } => Some(emoji.as_str()),
+            _ => None,
+        }
+    }
+
+    /// Isi balasan sebenarnya: `without_mutations` hanya membuang `Mutate`, jadi
+/// `Reaction { reply }` masih harus dibuka satu lapis.
+    fn isi(r: &Reply) -> &Reply {
+        match r.without_mutations() {
+            Reply::Reaction { reply, .. } => reply.as_ref(),
+            lain => lain,
+        }
+    }
+
+    /// Balasan apa pun yang bukan teks — media punya `media` terisi.
+    fn media(r: &Reply) -> Option<&oktz_plugin_api::MediaSource> {
+        match isi(r) {
+            Reply::Document { media, .. }
+            | Reply::Video { media, .. }
+            | Reply::Audio { media, .. } => media.as_ref(),
             _ => None,
         }
     }
@@ -187,81 +282,109 @@ mod tests {
     fn an_empty_argument_reacts_then_shows_the_card() {
         for text in ["", "   ", "\t\n"] {
             let r = run(text);
-            assert_eq!(text_of(&r), help("."), "input {text:?}");
-            assert_eq!(reaksi(&r), Some("❌"), "input {text:?}");
+            assert_eq!(
+                r.without_mutations().text_body().expect("harus ada teks"),
+                help("."),
+                "input {text:?}"
+            );
+            assert_eq!(reaction(&r), Some("❌"), "input {text:?}");
         }
     }
 
     #[test]
     fn the_card_follows_the_prefix() {
-        // `m.prefix` disisipkan di dua baris; kartu tidak ditulis ulang.
-        let ctx = Ctx {
-            prefix: "!".into(),
-            command: "dailymotiondl".into(),
-            sender: SENDER.into(),
-            chat: SENDER.into(),
-            ..Default::default()
-        };
+        let mut ctx = ctx_dengan("", r#"{"medias":[]}"#);
+        ctx.prefix = "!".into();
         let r = (find("dailymotiondl").unwrap().handler)(ctx);
-        assert_eq!(text_of(&r), help("!"));
-        assert!(text_of(&r).contains("> *!dailymotiondl <link>*"));
+        let teks = r.without_mutations().text_body().expect("teks");
+        assert_eq!(teks, help("!"));
+        assert!(teks.contains("> *!dailymotiondl <link>*"));
     }
 
     #[test]
-    fn the_scraper_failure_is_the_catch_branch() {
-        for text in [
-            "https://www.dailymotion.com/video/xxx",
+    fn status_false_menampilkan_pesan_error_scraper() {
+        let ctx = ctx_dengan(
             "https://dailymotion.com/video/x",
-            "bukan url sama sekali",
-        ] {
-            let r = run(text);
-            assert_eq!(text_of(&r), GAGAL, "input {text}");
-            assert_eq!(reaksi(&r), Some("☢"), "input {text}");
+            r#"{"status":false,"error":"Tidak ada media yang tersedia"}"#,
+        );
+        let r = (find("dailymotiondl").unwrap().handler)(ctx);
+        assert_eq!(
+            r.without_mutations().text_body().expect("teks"),
+            gagal_pakai("Tidak ada media yang tersedia")
+        );
+        assert_eq!(reaction(&r), Some("☢"));
+    }
+
+    #[test]
+    fn scraper_gagal_adalah_cabang_catch() {
+        // Stub menjawab 200 tapi `medias` kosong tanpa `status` → scraper
+        // mengembalikan `{status:false, error}`; untuk menguji `catch`sebenarnya
+        // dipakai respons yang bukan JSON di test terpisah di bawah.
+        let ctx = ctx_dengan("https://dailymotion.com/video/x", "bukan json");
+        let r = (find("dailymotiondl").unwrap().handler)(ctx);
+        assert_eq!(r.without_mutations().text_body().expect("teks"), GAGAL);
+        assert_eq!(reaction(&r), Some("☢"));
+    }
+
+    #[test]
+    fn sukses_mengirim_dokumen_video_dengan_nama_dari_title() {
+        let balasan = r#"{"status":true,"title":"Kucing Lucu","duration":"02:10",
+            "quality":"720","video":"https://cdn/video.mp4","thumbnail":"https://cdn/t.jpg",
+            "medias":[{"videoAvailable":true,"extension":"mp4","quality":"720","url":"https://cdn/video.mp4"}]}"#;
+        let ctx = ctx_dengan("https://dailymotion.com/video/x", balasan);
+        let r = (find("dailymotiondl").unwrap().handler)(ctx);
+        assert_eq!(reaction(&r), Some("✅"), "reaksi sukses");
+        match isi(&r) {
+            Reply::Document {
+                file_name, caption, ..
+            } => {
+                assert_eq!(file_name, "Kucing Lucu.mp4");
+                assert_eq!(
+                    caption,
+                    "🎬 *Dailymotion*\n\n> 📌 Kucing Lucu\n> ⏱️ Durasi: 02:10\n> 📺 Kualitas: 720"
+                );
+            }
+            lain => panic!("harus dokumen, dapat {:?}", lain),
         }
+        assert!(media(&r).is_some(), "sumber media harus terisi");
+    }
+
+    #[test]
+    fn hasil_dari_membaca_kunci_yang_hilang_sebagai_none() {
+        let hasil = hasil_dari(&json!({"status": true, "video": "https://cdn/v.mp4"}));
+        assert!(hasil.status);
+        assert_eq!(hasil.video.as_deref(), Some("https://cdn/v.mp4"));
+        assert_eq!(hasil.title, None);
+        assert_eq!(hasil.quality, None);
+        // Field hilang → `undefined` di caption, bukan string kosong.
+        assert!(caption(&hasil).contains("> 📌 undefined"));
     }
 
     #[test]
     fn the_status_false_branch_prints_undefined_verbatim() {
         // `dailymotiondl.js:48` memakai `${result.error}`; field yang tidak ada
         // tercetak literal sebagai "undefined" di JS. Bukan string kosong.
-        assert_eq!(gagal_pakai("Tidak ada media yang tersedia"), "❌ *Dailymotion Gagal*\n\n> Tidak ada media yang tersedia");
+        assert_eq!(
+            gagal_pakai("Tidak ada media yang tersedia"),
+            "❌ *Dailymotion Gagal*\n\n> Tidak ada media yang tersedia"
+        );
         assert_eq!(gagal_pakai("undefined"), "❌ *Dailymotion Gagal*\n\n> undefined");
         assert_eq!(
-            HasilDailymotion {
-                status: false,
-                error: None,
-                ..Default::default()
-            }
-            .error
-            .as_deref()
-            .unwrap_or("undefined"),
+            HasilDailymotion::default().error.as_deref().unwrap_or("undefined"),
             "undefined"
         );
     }
 
     #[test]
-    fn the_caption_uses_the_three_js_labels() {
-        let hasil = HasilDailymotion {
-            status: true,
-            error: None,
-            title: "Judul Video".into(),
-            thumbnail: Some("https://img/t.jpg".into()),
-            duration: "02:10".into(),
-            quality: "720".into(),
-            video: Some("https://cdn/v.mp4".into()),
-        };
-        assert_eq!(
-            caption(&hasil),
-            "🎬 *Dailymotion*\n\n> 📌 Judul Video\n> ⏱️ Durasi: 02:10\n> 📺 Kualitas: 720"
-        );
-    }
-
-    #[test]
     fn the_file_name_scrubs_reserved_characters() {
-        assert_eq!(nama_berkas(""), "video.mp4");
-        assert_eq!(nama_berkas("a<b>c:d\"e/f\\g|h?i*j"), "abcdefghij.mp4");
-        assert_eq!(nama_berkas("video"), "video.mp4");
-        assert_eq!(nama_berkas("a b-c_d.e"), "a b-c_d.e.mp4");
+        assert_eq!(nama_berkas(None), "video.mp4");
+        assert_eq!(nama_berkas(Some("")), "video.mp4");
+        assert_eq!(
+            nama_berkas(Some("a<b>c:d\"e/f\\g|h?i*j")),
+            "abcdefghij.mp4"
+        );
+        assert_eq!(nama_berkas(Some("video")), "video.mp4");
+        assert_eq!(nama_berkas(Some("a b-c_d.e")), "a b-c_d.e.mp4");
         assert_eq!(scrub_nama_berkas("<>:\"/\\|?*"), "");
     }
 

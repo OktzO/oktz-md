@@ -29,6 +29,7 @@ pub use permission::{
 };
 
 use oktz_plugin_api::{Ctx, PluginEntry, Reply};
+use std::sync::Arc;
 
 /// Keputusan router untuk satu pesan — router yang memutuskan; ini yang
 /// differentiate "diam" (drop) dari "reply".
@@ -148,6 +149,14 @@ impl<'a, C: RouterContext> Router<'a, C> {
             command: parsed.command.clone(),
             prefix: parsed.prefix.clone(),
             quoted: caller.quoted.clone(),
+            // Media pesan pemicu + jalur unduhnya ikut ke `Ctx`: handler yang
+            // memanggil `m.download()`/`ctx.download_media()` butuh keduanya,
+            // dan router-lah satu-satunya tempat `caller` bertemu `Ctx`.
+            media: caller.media.clone(),
+            media_fetch: caller
+                .media_fetch
+                .clone()
+                .unwrap_or_else(|| Arc::new(oktz_plugin_api::NoMediaFetch)),
             is_group: caller.is_group,
             is_owner: caller.is_owner,
             uptime_secs: self.ctx.uptime_secs(),

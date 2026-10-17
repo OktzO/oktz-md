@@ -1,18 +1,36 @@
 //! `plugins/download/terabox.js` — unduh video/file dari TeraBox.
 //!
-//! `ponytail:` scraper `TeraBoxDL` (`src/scraper/terabox.js`) melakukan GET ke
-//! `flowvideoplayer.com` untuk memetik token CSRF dari HTML lalu POST JSON ke
-//! endpoint yang sama sambil mengirim `X-CSRF-TOKEN`, `X-Requested-With`,
-//! `Cookie`, dan `Referer`. `HttpGet` tidak punya kontrol header, jadi scraper
-//! itu tidak bisa di-port. Yang dipindah di sini SEMUA logika plugin: guard teks
-//! kosong, kartu pakai, penyusun caption, dan peng Scrub nama berkas.
-//! `terabox_dl` selalu gagal, persis seperti scraper yang melempar.
+//! Scraper `TeraBoxDL` (`src/scraper/terabox.js`) sudah ada di crate
+//! `oktz-scraper` (`oktz_scraper::terabox::tera_box_dl`), jadi GET ke
+//! `flowvideoplayer.com` untuk memetik token CSRF lalu POST pencarian video
+//! sekarang benar-benar terjadi. Plugin ini hanya memetakan hasilnya ke
+//! balasan — logika scraper tidak diduplikasi di sini.
 //!
-//! Blok media juga butuh `child_process` (`exec("ffmpeg", …)` untuk stream
-//! `.m3u8`), `fs`, dan `sock.sendMessage` untuk dokumen — tidak ada padanannya di
-//! API plugin.
+//! Empat penyimpitan yang tersisa, semuanya tercatat apa adanya:
+//!
+//! - **ffmpeg tidak dijalankan.** Cabang `.m3u8` (`terabox.js:64-95`) meremux
+//!   stream ke MP4 dengan `exec("ffmpeg", …)` lalu membaca buffer dari
+//!   `storage/temp`. Rust menunjuk URL stream-nya sebagai dokumen `video/mp4`,
+//!   jadi berkas yang diterima belum dilewatkan filter bitstream WA dan
+//!   sebagian klien mungkin menolak memutar-nya. Butuh `queueFFmpeg`
+//!   (§6 BLOCKED.md).
+//! - **Thumbnail tidak dikirim.** JS mengirim gambar thumbnail
+//!   (`terabox.js:58-62`) lalu dokumen (`:85-116`) — dua pesan. Satu `Reply`
+//!   hanya satu pesan dan dokumen video/berkas yang jadi tujuan plugin ini,
+//!   jadi gambar thumbnail yang dikorbankan.
+//! - **Berkas tidak ditarik ke memori.** Cabang `download_url`
+//!   (`terabox.js:96-117`) memakai `axios.get` dengan
+//!   `responseType: "arraybuffer"` sampai 200 MB lalu mengirim `Buffer`.
+//!   Rust hanya menunjuk URL-nya; pipeline yang mengunduh.
+//! - **Reaksi awal `🕕` dibuang** (`terabox.js:42`), mengikuti konvensi repo:
+//!   `Reply::Reaction` hanya bisa satu, jadi reaksi terakhir yang ikut — `✅`
+//!   setelah terkirim, `☢` di cabang gagal.
+//!
+//! Scraper itu sendiri tidak pernah melempar: seluruh badan JS ada di dalam
+//! `try`, jadi kegagalan apa pun kembali sebagai `{ status: false, error }`.
 
-use oktz_plugin_api::{Ctx, Reply, plugin};
+use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
+use serde_json::Value;
 
 use crate::common::scrub_nama_berkas;
 
@@ -31,7 +49,6 @@ pub(crate) fn help(prefix: &str) -> String {
 
 /// `terabox.js:49` — `result.status` falsy; `result.error` ikut tercetak
 /// `undefined` kalau field-nya tidak ada.
-#[allow(dead_code)] // cabang `!result.status` tidak terjangkau di port ini
 pub(crate) fn gagal_pakai(error: &str) -> String {
     format!("❌ *TeraBox Gagal*\n\n> {error}")
 }
@@ -39,31 +56,53 @@ pub(crate) fn gagal_pakai(error: &str) -> String {
 /// `terabox.js:123` — cabang `catch`.
 pub(crate) const GAGAL: &str = "❌ Gagal mengambil data TeraBox, coba lagi nanti";
 
-/// Bentuk objek yang `TeraBoxDL` kembalikan (`src/scraper/terabox.js:40-52`).
-#[allow(dead_code)] // dipakai `caption`/`nama_berkas`, keduanya hanya diuji
+/// Bentuk objek yang `TeraBoxDL` kembalikan (`src/scraper/terabox.js:42-54`).
+///
+/// Scraper menyalin kunci apa adanya, jadi field yang tidak ada di item
+/// Respons berarti `undefined` di JS — karena itu semuanya `Option`, dan
+/// pemformatnya memakai `"undefined"`, bukan string kosong.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct HasilTerabox {
     pub status: bool,
-    /// `null` berarti field-nya tidak ada; JS tetap mencetak `undefined`.
     pub error: Option<String>,
-    pub file_name: String,
+    pub file_name: Option<String>,
     pub thumbnail: Option<String>,
     pub download_url: Option<String>,
     pub stream_url: Option<String>,
-    pub file_size: String,
-    pub duration: String,
+    pub file_size: Option<String>,
+    pub duration: Option<String>,
     pub extension: Option<String>,
 }
 
+/// Baca hasil scraper. Kunci yang tidak ada di JSON berarti `undefined` di JS.
+fn hasil_dari(data: &Value) -> HasilTerabox {
+    let teks = |k: &str| data.get(k).and_then(Value::as_str).map(str::to_string);
+    HasilTerabox {
+        status: data
+            .get("status")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        error: teks("error"),
+        file_name: teks("file_name"),
+        thumbnail: teks("thumbnail"),
+        download_url: teks("download_url"),
+        stream_url: teks("stream_url"),
+        file_size: teks("file_size"),
+        duration: teks("duration"),
+        extension: teks("extension"),
+    }
+}
+
 /// `terabox.js:52-56` — caption.
-#[allow(dead_code)] // tidak terjangkau di port ini; teksnya dijaga lewat test
 pub(crate) fn caption(hasil: &HasilTerabox) -> String {
     format!(
         "📦 *TeraBox*\n\n\
          > 📌 {}\n\
          > 📏 Size: {}\n\
          > ⏱️ Durasi: {}",
-        hasil.file_name, hasil.file_size, hasil.duration
+        hasil.file_name.as_deref().unwrap_or("undefined"),
+        hasil.file_size.as_deref().unwrap_or("undefined"),
+        hasil.duration.as_deref().unwrap_or("undefined")
     )
 }
 
@@ -71,7 +110,6 @@ pub(crate) fn caption(hasil: &HasilTerabox) -> String {
 ///
 /// `endsWith` tidak membedakan huruf besar/kecil: `MOV.M3U8` **tidak** ikut,
 /// karena `"MOV.M3U8".endsWith(".m3u8")` bernilai `false` di JS.
-#[allow(dead_code)] // tidak terjangkau di port ini
 pub(crate) fn stream_hls(hasil: &HasilTerabox) -> bool {
     hasil
         .stream_url
@@ -79,8 +117,9 @@ pub(crate) fn stream_hls(hasil: &HasilTerabox) -> bool {
         .is_some_and(|u| !u.is_empty() && u.ends_with(".m3u8"))
 }
 
-/// `terabox.js:91` — nama berkas video hasil ffmpeg.
-#[allow(dead_code)] // tidak terjangkau di port ini
+/// `terabox.js:91` — nama berkas video hasil ffmpeg. `result.file_name` yang
+/// `undefined` diteruskan sebagai string kosong supaya `|| "video"` tetap
+/// berlaku, persis seperti di JS.
 pub(crate) fn nama_berkas_video(file_name: &str) -> String {
     let dasar = if file_name.is_empty() { "video" } else { file_name };
     format!("{}.mp4", scrub_nama_berkas(dasar))
@@ -88,7 +127,6 @@ pub(crate) fn nama_berkas_video(file_name: &str) -> String {
 
 /// `terabox.js:103-105` — nama berkas unduhan biasa; `|| ".mp4"` hanya dipakai
 /// kalau `result.extension` kosong atau `null`.
-#[allow(dead_code)] // tidak terjangkau di port ini
 pub(crate) fn nama_berkas_unduhan(file_name: &str, extension: Option<&str>) -> String {
     let dasar = if file_name.is_empty() { "file" } else { file_name };
     let ext = match extension {
@@ -96,14 +134,6 @@ pub(crate) fn nama_berkas_unduhan(file_name: &str, extension: Option<&str>) -> S
         _ => ".mp4",
     };
     format!("{}{}", scrub_nama_berkas(dasar), ext)
-}
-
-
-/// `TeraBoxDL` — satu-satunya bagian yang tidak bisa di-port. `Err` = melempar,
-/// jadi cabang `catch` yang menyala.
-#[allow(dead_code)] // scraper tidak ada di port ini
-fn terabox_dl(_url: &str) -> Result<HasilTerabox, ()> {
-    Err(())
 }
 
 #[plugin(
@@ -128,42 +158,127 @@ pub fn terabox(ctx: Ctx) -> Reply {
         return Reply::text(help(&ctx.prefix)).with_reaction("❌");
     }
 
-    let hasil = match terabox_dl(text) {
-        Ok(hasil) => hasil,
-        // `terabox.js:120-124`.
-        Err(()) => return Reply::text(GAGAL).with_reaction("☢"),
+    let hasil = match oktz_scraper::terabox::tera_box_dl(ctx.http.as_ref(), text) {
+        Ok(data) => hasil_dari(&data),
+        // Scraper tidak pernah melempar; cabang ini hanya jaga-jaga kalau suatu saat
+        // badannya keluar dari `try` seperti di JS.
+        Err(_) => return Reply::text(GAGAL).with_reaction("☢"),
     };
 
     if !hasil.status {
+        // `terabox.js:47-50` — `result.error` boleh `undefined`.
         let teks = hasil.error.as_deref().unwrap_or("undefined");
         return Reply::text(gagal_pakai(teks)).with_reaction("☢");
     }
 
-    // `terabox.js:52-119` — caption lalu thumbnail; cabang `.m3u8` memproses
-    // stream dengan ffmpeg, cabang lain menarik `download_url` ke memori lalu
-    // mengirim dokumen. Semuanya butuh `sock` + `fs` (+ `child_process`), jadi
-    // tidak ada padanannya dan jalur ini berakhir di `catch`.
-    Reply::text(GAGAL).with_reaction("☢")
+    // `terabox.js:52-56`.
+    let caption = caption(&hasil);
+
+    if stream_hls(&hasil) {
+        // `terabox.js:64-95` — remux ffmpeg dilewati, URL stream dikirim
+        // apa adanya dengan nama berkas dan mimetype yang sama.
+        let stream = hasil.stream_url.clone().unwrap_or_default();
+        return Reply::document(
+            MediaSource::url(stream).with_mimetype("video/mp4"),
+            nama_berkas_video(hasil.file_name.as_deref().unwrap_or("")),
+        )
+        .with_caption(caption)
+        .with_reaction("✅");
+    }
+
+    if let Some(url) = hasil.download_url.as_deref() {
+        // `terabox.js:96-117` — dokumen biasa; JS menarik isinya ke memori
+        // dulu, di sini URL-nya yang ditulis.
+        return Reply::document(
+            MediaSource::url(url).with_mimetype("application/zip"),
+            nama_berkas_unduhan(
+                hasil.file_name.as_deref().unwrap_or(""),
+                hasil.extension.as_deref(),
+            ),
+        )
+        .with_caption(caption)
+        .with_reaction("✅");
+    }
+
+    // `terabox.js:58-117` — tanpa `.m3u8` dan tanpa `download_url` tidak ada
+    // pesan yang dikirim, hanya reaksi centang.
+    Reply::None.with_reaction("✅")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::find;
+    use oktz_plugin_api::{HttpBody, HttpCall, HttpError, HttpGet, HttpMethod, HttpResponse, find};
+    use std::sync::{Arc, Mutex};
 
     const SENDER: &str = "628111@s.whatsapp.net";
 
-    fn run(text: &str) -> Reply {
-        let ctx = Ctx {
+    /// Stub `HttpGet`: halaman bot dulu (GET), lalu hasil pencarian (POST).
+    #[derive(Debug, Default)]
+    struct StubHttp {
+        dipanggil: Mutex<Vec<HttpCall>>,
+        halaman: String,
+        hasil: String,
+    }
+
+    impl HttpGet for StubHttp {
+        fn get(&self, _: &str) -> Result<HttpResponse, HttpError> {
+            unreachable!("scraper ini lewat HttpCall::call")
+        }
+        fn post_json(&self, _: &str, _: &Value) -> Result<HttpResponse, HttpError> {
+            unreachable!("scraper ini lewat HttpCall::call")
+        }
+        fn post_form(&self, _: &str, _: &str) -> Result<HttpResponse, HttpError> {
+            unreachable!("scraper ini lewat HttpCall::call")
+        }
+        fn post_multipart(
+            &self,
+            _: &str,
+            _: &[(&str, HttpBody)],
+        ) -> Result<HttpResponse, HttpError> {
+            unreachable!("scraper ini tidak multipart")
+        }
+        fn call(&self, req: &HttpCall) -> Result<HttpResponse, HttpError> {
+            self.dipanggil.lock().unwrap().push(req.clone());
+            let body = if req.method == HttpMethod::Get {
+                &self.halaman
+            } else {
+                &self.hasil
+            };
+            Ok(HttpResponse {
+                status: 200,
+                body: HttpBody::Bytes {
+                    data: Arc::from(body.as_bytes()),
+                    mimetype: None,
+                },
+                headers: Vec::new(),
+            })
+        }
+    }
+
+    /// Halaman bot yang memuat token CSRF, seperti yang dicari scraper.
+    const HALAMAN: &str =
+        r#"<html><head><meta name="csrf-token" content="tok123"></head><body></body></html>"#;
+
+    fn ctx_dengan(text: &str, halaman: &str, hasil: &str) -> Ctx {
+        Ctx {
             prefix: ".".into(),
             command: "terabox".into(),
             sender: SENDER.into(),
             chat: SENDER.into(),
             text: text.into(),
             args: text.split_whitespace().map(str::to_string).collect(),
+            http: Arc::new(StubHttp {
+                dipanggil: Mutex::new(Vec::new()),
+                halaman: halaman.to_string(),
+                hasil: hasil.to_string(),
+            }),
             ..Default::default()
-        };
-        (find("terabox").unwrap().handler)(ctx)
+        }
+    }
+
+    fn run(text: &str, halaman: &str, hasil: &str) -> Reply {
+        (find("terabox").unwrap().handler)(ctx_dengan(text, halaman, hasil))
     }
 
     fn text_of(r: &Reply) -> &str {
@@ -177,16 +292,25 @@ mod tests {
         }
     }
 
+    /// Isi balasan sebenarnya: `without_mutations` hanya membuang `Mutate`,
+    /// jadi `Reaction { reply }` masih harus dibuka satu lapis.
+    fn isi(r: &Reply) -> &Reply {
+        match r.without_mutations() {
+            Reply::Reaction { reply, .. } => reply.as_ref(),
+            lain => lain,
+        }
+    }
+
     fn hasil_lengkap() -> HasilTerabox {
         HasilTerabox {
             status: true,
             error: None,
-            file_name: "Video HD.mp4".into(),
+            file_name: Some("Video HD.mp4".into()),
             thumbnail: Some("https://img/t.jpg".into()),
             download_url: Some("https://cdn/d.mp4".into()),
             stream_url: Some("https://cdn/s.m3u8".into()),
-            file_size: "120 MB".into(),
-            duration: "00:45".into(),
+            file_size: Some("120 MB".into()),
+            duration: Some("00:45".into()),
             extension: Some(".mp4".into()),
         }
     }
@@ -217,7 +341,7 @@ mod tests {
     #[test]
     fn an_empty_argument_reacts_then_shows_the_card() {
         for text in ["", "   ", "\t"] {
-            let r = run(text);
+            let r = run(text, HALAMAN, "{}");
             assert_eq!(text_of(&r), help("."), "input {text:?}");
             assert_eq!(reaksi(&r), Some("❌"), "input {text:?}");
         }
@@ -225,30 +349,26 @@ mod tests {
 
     #[test]
     fn the_card_follows_the_prefix() {
-        let ctx = Ctx {
-            prefix: "!!".into(),
-            command: "terabox".into(),
-            sender: SENDER.into(),
-            chat: SENDER.into(),
-            ..Default::default()
-        };
+        let mut ctx = ctx_dengan("", HALAMAN, "{}");
+        ctx.prefix = "!!".into();
         let r = (find("terabox").unwrap().handler)(ctx);
         assert_eq!(text_of(&r), help("!!"));
     }
 
     #[test]
-    fn the_scraper_failure_is_the_catch_branch() {
-        // Terabox tidak punya guard host: teks apa pun diteruskan ke scraper.
-        for text in [
+    fn the_scraper_never_throws_so_a_failed_lookup_reports_the_backend_message() {
+        // `TeraBoxDL` menelan error di dalam `try`, jadi yang sampai ke plugin
+        // selalu `{status:false, error}` — bukan lemparan.
+        let r = run(
             "https://terabox.com/s/xxx",
-            "https://example.com/x",
-            "bukan url",
-            "😀 emoji",
-        ] {
-            let r = run(text);
-            assert_eq!(text_of(&r), GAGAL, "input {text}");
-            assert_eq!(reaksi(&r), Some("☢"), "input {text}");
-        }
+            "<html><body>t tanpa token</body></html>",
+            r#"{"error":false,"data":[]}"#,
+        );
+        assert_eq!(
+            text_of(&r),
+            "❌ *TeraBox Gagal*\n\n> CSRF Token not found"
+        );
+        assert_eq!(reaksi(&r), Some("☢"));
     }
 
     #[test]
@@ -258,6 +378,11 @@ mod tests {
             "❌ *TeraBox Gagal*\n\n> Tidak ada data ditemukan"
         );
         assert_eq!(gagal_pakai("undefined"), "❌ *TeraBox Gagal*\n\n> undefined");
+        // `TeraBoxDL` bisa mengembalikan `status:false` tanpa `error` kalau
+        // pemformatan JSON-nya gagal; cetaknya tetap `undefined`.
+        let kosong = hasil_dari(&serde_json::json!({}));
+        assert!(!kosong.status);
+        assert_eq!(kosong.error.as_deref().unwrap_or("undefined"), "undefined");
     }
 
     #[test]
@@ -266,11 +391,12 @@ mod tests {
             caption(&hasil_lengkap()),
             "📦 *TeraBox*\n\n> 📌 Video HD.mp4\n> 📏 Size: 120 MB\n> ⏱️ Durasi: 00:45"
         );
-        // Field kosong tetap menyisakan barisnya, bukan dihapus.
+        // Field hilang tetap menyisakan barisnya, dan nilainya tercetak
+        // `undefined` seperti di JS — bukan string kosong.
         let kosong = HasilTerabox::default();
         assert_eq!(
             caption(&kosong),
-            "📦 *TeraBox*\n\n> 📌 \n> 📏 Size: \n> ⏱️ Durasi: "
+            "📦 *TeraBox*\n\n> 📌 undefined\n> 📏 Size: undefined\n> ⏱️ Durasi: undefined"
         );
     }
 
@@ -307,7 +433,71 @@ mod tests {
     }
 
     #[test]
+    fn an_m3u8_stream_is_sent_as_a_video_mp4_document() {
+        let balasan = r#"{"error":false,"data":[{"file_name":"Film HD.mp4",
+            "thumbnail":"https://img/t.jpg","download_url":"https://cdn/d.mp4",
+            "stream_url":"https://cdn/s.m3u8","file_size":"120 MB","duration":"00:45",
+            "extension":".mp4"}]}"#;
+        let r = run("https://terabox.com/s/xxx", HALAMAN, balasan);
+        assert_eq!(reaksi(&r), Some("✅"));
+        match isi(&r) {
+            Reply::Document {
+                file_name, caption, media, ..
+            } => {
+                assert_eq!(file_name, "Film HD.mp4.mp4");
+                assert_eq!(
+                    caption,
+                    "📦 *TeraBox*\n\n> 📌 Film HD.mp4\n> 📏 Size: 120 MB\n> ⏱️ Durasi: 00:45"
+                );
+                assert_eq!(
+                    media.as_ref().map(|m| m.label()),
+                    Some("url".to_string())
+                );
+                assert_eq!(media.as_ref().unwrap().mimetype(), Some("video/mp4"));
+            }
+            lain => panic!("harus dokumen, dapat {lain:?}"),
+        }
+    }
+
+    #[test]
+    fn a_plain_download_url_is_sent_as_a_zip_document() {
+        let balasan = r#"{"error":false,"data":[{"file_name":"Arsip",
+            "download_url":"https://cdn/d.zip","file_size":"12 MB","duration":"00:10",
+            "extension":".zip"}]}"#;
+        let r = run("https://terabox.com/s/xxx", HALAMAN, balasan);
+        assert_eq!(reaksi(&r), Some("✅"));
+        match isi(&r) {
+            Reply::Document {
+                file_name, caption, media, ..
+            } => {
+                assert_eq!(file_name, "Arsip.zip");
+                assert_eq!(
+                    caption,
+                    "📦 *TeraBox*\n\n> 📌 Arsip\n> 📏 Size: 12 MB\n> ⏱️ Durasi: 00:10"
+                );
+                assert_eq!(
+                    media.as_ref().unwrap().mimetype(),
+                    Some("application/zip")
+                );
+            }
+            lain => panic!("harus dokumen, dapat {lain:?}"),
+        }
+    }
+
+    #[test]
+    fn a_result_without_any_media_only_reacts() {
+        // `terabox.js:58-117` — tanpa `.m3u8` dan tanpa `download_url` tidak ada
+        // pesan yang dikirim.
+        let balasan = r#"{"error":false,"data":[{"file_name":"x","file_size":"1 MB","duration":"00:01"}]}"#;
+        let r = run("https://terabox.com/s/xxx", HALAMAN, balasan);
+        assert_eq!(reaksi(&r), Some("✅"));
+        assert!(r.without_mutations().text_body().is_none());
+    }
+
+    #[test]
     fn the_plugin_only_reads_and_never_mutates() {
-        assert!(run("https://terabox.com/s/x").mutations().is_empty());
+        let balasan = r#"{"error":false,"data":[{"file_name":"x","download_url":"https://cdn/d.zip"}]}"#;
+        let r = run("https://terabox.com/s/x", HALAMAN, balasan);
+        assert!(r.mutations().is_empty());
     }
 }

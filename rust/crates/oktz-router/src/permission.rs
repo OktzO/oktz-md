@@ -9,10 +9,15 @@
 //!   terhadap `&UserState`; prune jadi urusan caller.
 
 use oktz_core::config::Messages;
-use oktz_plugin_api::{PluginMeta, QuotedMessage};
+use oktz_plugin_api::{IncomingMedia, MediaFetch, PluginMeta, QuotedMessage};
+use std::sync::Arc;
 
 /// Identitas caller — cerminan flag `m.*` yang dipakai checkPermission.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+///
+/// `PartialEq`/`Eq` sengaja TIDAK diturunkan: `media_fetch` memegang
+/// `Arc<dyn MediaFetch>` yang tidak punya identitas bermakna, dan tidak ada
+/// gate maupun test yang membandingkan `Caller` utuh.
+#[derive(Debug, Clone, Default)]
 pub struct Caller {
     pub sender: String,
     pub chat: String,
@@ -28,6 +33,11 @@ pub struct Caller {
     pub mentioned: Vec<String>,
     /// `m.quoted` — pesan yang di-reply, diteruskan ke `Ctx`.
     pub quoted: Option<QuotedMessage>,
+    /// `m.isMedia` dkk — media pesan pemicu, diteruskan ke `Ctx`.
+    pub media: Option<IncomingMedia>,
+    /// `m.download()` — disuntik pipeline, karena router tidak memegang sesi
+    /// WA. `None` = biarkan `Ctx` memakai [`oktz_plugin_api::NoMediaFetch`].
+    pub media_fetch: Option<Arc<dyn MediaFetch>>,
 }
 
 /// Grant per-command dari `user.access[]`.

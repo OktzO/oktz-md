@@ -6,6 +6,9 @@ rust-version.workspace = true
 
 [dependencies]
 oktz-plugin-api = { path = "../oktz-plugin-api" }
+# Scraper hasil port `src/scraper/` JS. Plugin memanggil crate ini, bukan
+# menyalin logikanya — supaya hanya ada satu versi tiap scraper.
+oktz-scraper = { path = "../oktz-scraper" }
 # `#[plugin]` memancarkan `linkme::distributed_slice`, jadi crate yang memakai
 # macro WAJIB punya linkme sebagai direct dependency.
 linkme = "0.3"

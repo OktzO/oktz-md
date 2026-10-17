@@ -1,23 +1,23 @@
 //! `plugins/download/likeedl.js` — unduh video Likee.
 //!
-//! Scraper `likee` (`src/scraper/likee.js`) ikut dipindah: satu POST form ke
-//! `likeedownloader.com` lalu empat regex kecil, tanpa parser HTML.
+//! Scraper `likee` (`src/scraper/likee.js`) sudah ada di crate `oktz-scraper`
+//! (`oktz_scraper::likee::likee`): satu POST form ke `likeedownloader.com`
+//! lengkap dengan header `User-Agent`, `Referer`, `origin`, dan
+//! `x-requested-with`, lalu empat regex kecil. Plugin ini hanya memetakan
+//! hasilnya — logika scraper tidak diduplikasi di sini.
 //!
-//! `ponytail:` scraper mengirim `User-Agent`, `Referer`, `origin`, dan
-//! `x-requested-with`, tapi trait `HttpGet` tidak punya kontrol header, jadi
-//! header itu hilang. Kalau Likee mulai menolak request, tambahkan dukungan
-//! header di `HttpGet` — jangan mengganti scraping-nya.
+//! Dua penyimpangan yang tercatat apa adanya:
 //!
-//! `ponytail:` `Reply` tidak punya variant video, jadi hasil `sendMedia` hanya
-//! terkirim sebagai URL teks.
+//! - **`contextInfo` forwarding tidak ikut** (`likeedl.js:52-55`); `Reply` tidak
+//!   punya field forwarding.
+//! - **Reaksi terakhir yang dipakai, sesuai tiap cabang JS.** `Reply::Reaction`
+//!   hanya bisa satu, jadi `🕕` (`likeedl.js:35`) ikut sebagai reaksi terakhir di
+//!   cabang gagal dan `✅` (`:58`) di cabang sukses.
 
-use oktz_plugin_api::{Ctx, HttpGet, Reply, plugin};
+use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
+use serde_json::Value;
 
-use super::douyindl::query_encode;
 use crate::fun::tod::error_template;
-
-/// `likee.js:7` — endpoint scraper.
-pub(crate) const ENDPOINT: &str = "https://likeedownloader.com/process";
 
 /// `likeedl.js:31` — `/likee\.(video|com)/i`, tidak dikunci ke host.
 pub(crate) fn is_likee_url(url: &str) -> bool {
@@ -41,11 +41,13 @@ pub(crate) const BAD_URL: &str = "❌ URL tidak valid. Gunakan link Likee.";
 /// `likeedl.js:47` — kedua field watermark kosong.
 pub(crate) const NO_VIDEO: &str = "❌ Video tidak ditemukan.";
 
-// `likeedl.js:41` (`!data`) tidak punya padanan di sini: `likee()` di
-// `src/scraper/likee.js` hanya melempar atau mengembalikan objek, jadi cabang
-// itu tidak pernah menyala dan teksnya tidak ikut dipindah.
+// `likeedl.js:41` (`!data`) tidak punya padanan di sini: `likee()` hanya
+// melempar atau mengembalikan objek, jadi cabang itu tidak pernah menyala dan
+// teksnya tidak ikut dipindah.
 
 /// Bagian hasil `likee` (`src/scraper/likee.js:29-34`) yang dibaca plugin.
+/// Regex yang tidak cocok mengisi `null` di scraper, yang oleh `||` di
+/// `likeedl.js:44` diperlakukan sama dengan string kosong.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct Likee {
     pub without_watermark: String,
@@ -63,48 +65,18 @@ impl Likee {
     }
 }
 
-/// `pick(/with_watermark[^>]+href="([^"]+)"/)` (`src/scraper/likee.js:24-27`)
-/// tanpa regex crate. `[^>]+` itu serakah: dari `needle` diambil potongan
-/// sampai `>` pertama, lalu `href="` yang TERAKHIR di potongan itu yang
-/// dipakai — persis seperti backtracking regex.
-pub(crate) fn href_after(html: &str, needle: &str) -> String {
-    let mut from = 0usize;
-    while let Some(i) = html.get(from..).and_then(|rest| rest.find(needle)) {
-        let after = from + i + needle.len();
-        if let Some(gt) = html.get(after..).and_then(|rest| rest.find('>')) {
-            let span = &html[after..after + gt];
-            if let Some(href) = span.rfind("href=\"").and_then(|h| span.get(h + 6..))
-                && let Some(end) = href.find('"')
-            {
-                return href[..end].to_string();
-            }
-        }
-        from = after;
-    }
-    String::new()
-}
-
-/// `src/scraper/likee.js:29-34` — dua regex yang dibutuhkan plugin.
-pub(crate) fn parse_template(html: &str) -> Likee {
+/// Baca hasil scraper.
+fn hasil_dari(data: &Value) -> Likee {
+    let teks = |k: &str| {
+        data.get(k)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
     Likee {
-        without_watermark: href_after(html, "without_watermark"),
-        with_watermark: href_after(html, "with_watermark"),
+        without_watermark: teks("without_watermark"),
+        with_watermark: teks("with_watermark"),
     }
-}
-
-/// `likee(url)` — `Err` = lempar, jadi cabang `catch` plugin yang menyala.
-pub(crate) fn fetch_likee(url: &str, http: &dyn HttpGet) -> Result<Likee, ()> {
-    // `new URLSearchParams({ id: url, locale: 'en' })` — spasi jadi `+`.
-    let form = format!("id={}&locale=en", query_encode(url));
-    let body = http.post_form(ENDPOINT, &form).map_err(|_| ())?.json().ok_or(())?;
-    // `res.data && res.data.template ? res.data.template : null` — string
-    // kosong itu falsy, jadi ikut jatuh ke lemparan `Fetch failed`.
-    let template = body
-        .get("template")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .ok_or(())?;
-    Ok(parse_template(template))
 }
 
 #[plugin(
@@ -133,71 +105,84 @@ pub fn likeedl(ctx: Ctx) -> Reply {
         return Reply::text(BAD_URL);
     }
 
-    // `src/scraper/likee.js:22` melempar `Fetch failed` kalau `template` kosong.
-    let Ok(data) = fetch_likee(url, ctx.http.as_ref()) else {
+    // `src/scraper/likee.js:22` melempar `Fetch failed` kalau `template`
+    // kosong, dan `catch` di plugin ikut membawa `te(...)` dengan reaksi jam
+    // yang sudah menyala sejak baris 35.
+    let Ok(value) = oktz_scraper::likee::likee(ctx.http.as_ref(), url) else {
         return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("🕕");
     };
 
+    let data = hasil_dari(&value);
     let video = data.video_url();
     if video.is_empty() {
         return Reply::text(NO_VIDEO).with_reaction("🕕");
     }
 
-    // `likeedl.js:50-58` — `sendMedia` video lalu centang hijau.
-    Reply::text(video.to_string()).with_reaction("✅")
+    // `likeedl.js:50-58` — `sendMedia` video tanpa caption, lalu centang hijau.
+    Reply::video(MediaSource::url(video), "").with_reaction("✅")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::{HttpBody, HttpError, HttpResponse};
-    use serde_json::Value;
+    use oktz_plugin_api::{HttpBody, HttpCall, HttpError, HttpGet, HttpResponse};
     use std::sync::{Arc, Mutex};
+
+    const SENDER: &str = "628111@s.whatsapp.net";
 
     #[derive(Debug)]
     struct Stub {
-        body: Result<String, ()>,
-        seen: Mutex<Vec<String>>,
+        balasan: Result<String, String>,
+        seen: Mutex<Vec<HttpCall>>,
     }
 
     impl Stub {
+        /// Balasan backend dengan template HTML Likee.
         fn template(html: &str) -> Arc<Stub> {
             let body = serde_json::json!({ "template": html }).to_string();
             Arc::new(Stub {
-                body: Ok(body),
+                balasan: Ok(body),
                 seen: Mutex::new(Vec::new()),
             })
         }
+        /// Balasan JSON bebas.
         fn body(v: Value) -> Arc<Stub> {
             Arc::new(Stub {
-                body: Ok(v.to_string()),
+                balasan: Ok(v.to_string()),
                 seen: Mutex::new(Vec::new()),
             })
         }
         fn offline() -> Arc<Stub> {
             Arc::new(Stub {
-                body: Err(()),
+                balasan: Err("offline".to_string()),
                 seen: Mutex::new(Vec::new()),
             })
         }
     }
 
     impl HttpGet for Stub {
-        fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
-            self.seen.lock().unwrap().push(url.to_string());
-            Err(HttpError {
-                message: format!("cuma POST: {url}"),
-            })
+        fn get(&self, _: &str) -> Result<HttpResponse, HttpError> {
+            unreachable!("scraper ini lewat HttpCall::call")
         }
         fn post_json(&self, _: &str, _: &Value) -> Result<HttpResponse, HttpError> {
-            unimplemented!("cuma POST form")
+            unreachable!("scraper ini mengirim form")
         }
-        fn post_form(&self, url: &str, form: &str) -> Result<HttpResponse, HttpError> {
-            self.seen.lock().unwrap().push(format!("{url}::{form}"));
+        fn post_form(&self, _: &str, _: &str) -> Result<HttpResponse, HttpError> {
+            unreachable!("scraper ini lewat HttpCall::call")
+        }
+        fn post_multipart(
+            &self,
+            _: &str,
+            _: &[(&str, HttpBody)],
+        ) -> Result<HttpResponse, HttpError> {
+            unreachable!("scraper ini tidak multipart")
+        }
+        fn call(&self, req: &HttpCall) -> Result<HttpResponse, HttpError> {
+            self.seen.lock().unwrap().push(req.clone());
             let text = self
-                .body
+                .balasan
                 .clone()
-                .map_err(|()| HttpError { message: "offline".into() })?;
+                .map_err(|message| HttpError { message })?;
             Ok(HttpResponse {
                 status: 200,
                 body: HttpBody::Bytes {
@@ -207,21 +192,14 @@ mod tests {
                 headers: vec![],
             })
         }
-        fn post_multipart(
-            &self,
-            _: &str,
-            _: &[(&str, HttpBody)],
-        ) -> Result<HttpResponse, HttpError> {
-            unimplemented!("cuma POST form")
-        }
     }
 
     fn run(http: Arc<Stub>, text: &str) -> Reply {
         let ctx = Ctx {
             prefix: ".".into(),
             command: "lkdl".into(),
-            sender: "628111@s.whatsapp.net".into(),
-            chat: "628111@s.whatsapp.net".into(),
+            sender: SENDER.into(),
+            chat: SENDER.into(),
             text: text.into(),
             args: vec![text.into()],
             http,
@@ -232,6 +210,15 @@ mod tests {
 
     fn text_of(r: &Reply) -> &str {
         r.without_mutations().text_body().expect("harus ada teks")
+    }
+
+    /// Isi balasan sebenarnya: `without_mutations` hanya membuang `Mutate`,
+    /// jadi `Reaction { reply }` masih harus dibuka satu lapis.
+    fn isi(r: &Reply) -> &Reply {
+        match r.without_mutations() {
+            Reply::Reaction { reply, .. } => reply.as_ref(),
+            lain => lain,
+        }
     }
 
     #[test]
@@ -296,61 +283,66 @@ mod tests {
     fn the_form_body_is_encoded_the_way_url_search_params_does_it() {
         let http = Stub::template("");
         let _ = run(http.clone(), "https://likee.video/@x");
+        let seen = http.seen.lock().unwrap();
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].url, "https://likeedownloader.com/process");
         assert_eq!(
-            http.seen.lock().unwrap().clone(),
-            vec![
-                "https://likeedownloader.com/process\
-                 ::id=https%3A%2F%2Flikee.video%2F%40x&locale=en"
-                    .to_string()
-            ]
+            seen[0].body,
+            Some(HttpBody::Form(
+                "id=https%3A%2F%2Flikee.video%2F%40x&locale=en".to_string()
+            )),
+            "spasi jadi `+` dan `@` jadi `%40`, gaya URLSearchParams"
         );
-    }
-
-    #[test]
-    fn the_href_picker_takes_the_last_one_before_the_closing_bracket() {
-        let html = r#"<a class="without_watermark" href="https://cdn/a.mp4" data-x="1">x</a>"#;
-        assert_eq!(href_after(html, "without_watermark"), "https://cdn/a.mp4");
-
-        // Dua `href` sebelum `>`: yang diambil yang terakhir, seperti regex
-        // serakah `[^>]+`.
-        let greed = r#"without_watermark x href="a" href="b">"#;
-        assert_eq!(href_after(greed, "without_watermark"), "b");
-
-        // `[^>]+` minimal satu karakter: `without_watermark"` tanpa attribute
-        // tidak cocok.
-        assert_eq!(href_after("without_watermark>", "without_watermark"), "");
-        assert_eq!(href_after("without_watermark", "without_watermark"), "");
     }
 
     #[test]
     fn the_watermark_free_url_wins_over_the_watermarked_one() {
-        let html = concat!(
-            r#"<a id="with_watermark" href="https://cdn/w.mp4">w</a>"#,
-            r#"<a id="without_watermark" href="https://cdn/n.mp4">n</a>"#,
-        );
-        let parsed = parse_template(html);
+        let parsed = hasil_dari(&serde_json::json!({
+            "with_watermark": "https://cdn/w.mp4",
+            "without_watermark": "https://cdn/n.mp4"
+        }));
         assert_eq!(parsed.with_watermark, "https://cdn/w.mp4");
         assert_eq!(parsed.without_watermark, "https://cdn/n.mp4");
         assert_eq!(parsed.video_url(), "https://cdn/n.mp4");
 
-        let only_marked = Likee {
-            without_watermark: String::new(),
-            with_watermark: "https://cdn/w.mp4".into(),
-        };
+        // Regex `without_watermark` yang tidak cocok mengisi `null`, jadi
+        // `||` jatuh ke `with_watermark`.
+        let only_marked = hasil_dari(&serde_json::json!({
+            "with_watermark": "https://cdn/w.mp4",
+            "without_watermark": null
+        }));
         assert_eq!(only_marked.video_url(), "https://cdn/w.mp4");
 
         assert_eq!(Likee::default().video_url(), "");
     }
 
     #[test]
-    fn a_resolved_video_replies_with_the_url_and_a_green_tick() {
+    fn a_resolved_video_is_sent_as_a_video_with_a_green_tick() {
         let html = r#"<a id="without_watermark" href="https://cdn/n.mp4">n</a>"#;
         let r = run(Stub::template(html), "https://likee.video/@x");
-        assert_eq!(text_of(&r), "https://cdn/n.mp4");
         assert!(
             matches!(r.without_mutations(), Reply::Reaction { emoji, .. } if emoji == "✅"),
             "sukses harus bereaksi ✅"
         );
+        match isi(&r) {
+            Reply::Video {
+                media,
+                caption,
+                gif_playback,
+                ..
+            } => {
+                assert_eq!(caption, "", "sendMedia dikirim tanpa caption");
+                assert!(!gif_playback);
+                assert_eq!(
+                    media,
+                    &Some(oktz_plugin_api::MediaSource::Url {
+                        url: "https://cdn/n.mp4".to_string(),
+                        mimetype: None,
+                    })
+                );
+            }
+            lain => panic!("harus video, dapat {lain:?}"),
+        }
     }
 
     #[test]
@@ -379,5 +371,12 @@ mod tests {
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "https://likee.video/@x");
         assert_eq!(text_of(&r), error_template(".", "lkdl"));
+    }
+
+    #[test]
+    fn the_plugin_only_reads_and_never_mutates() {
+        let html = r#"<a id="without_watermark" href="https://cdn/n.mp4">n</a>"#;
+        let r = run(Stub::template(html), "https://likee.video/@x");
+        assert!(r.mutations().is_empty());
     }
 }

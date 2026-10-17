@@ -326,6 +326,29 @@ impl Reply {
         }
     }
 
+    /// Set caption pada balasan media.
+    ///
+    /// `Image`/`Video` menerima caption sejak konstruktor, tapi `Document`
+    /// tidak — JS sering mengirim `document` + `caption` sekaligus
+    /// (`socket.js:756-820`), jadi tanpa ini plugin harus membentuk varian
+    /// enum secara manual.
+    ///
+    /// Caption kosong TIDAK dipasang (WA menolak `Some("")`), sama seperti
+    /// konstruktor [`Reply::image`].
+    pub fn with_caption(mut self, caption: impl Into<String>) -> Self {
+        let caption = caption.into();
+        if caption.is_empty() {
+            return self;
+        }
+        match &mut self {
+            Self::Image { caption: c, .. }
+            | Self::Video { caption: c, .. }
+            | Self::Document { caption: c, .. } => *c = caption,
+            _ => return self,
+        }
+        self
+    }
+
     /// Bungkus balasan dengan mutasi store, diratakan.
     ///
     /// `Mutate` di dalam `Mutate` digabung ke vektor yang sama, jadi
@@ -666,6 +689,39 @@ pub struct Ctx {
     /// butuh `storeLists`/`energi`/`capprem` membacanya lewat
     /// [`Ctx::setting`] dan turunan bertipe, bukan menggali JSON mentah.
     pub settings: Value,
+    /// `m.isMedia` dkk untuk pesan PEMICU. `None` = pesan pemicu bukan media
+    /// (teks biasa) — bukan berarti gagal dibaca.
+    pub media: Option<IncomingMedia>,
+    /// `m.download()` / `m.quoted.download()` (`serialize.js:1669`, `:543`).
+    /// Selalu terisi; default-nya [`NoMediaFetch`] yang menolak dengan alasan.
+    pub media_fetch: Arc<dyn MediaFetch>,
+}
+
+impl Ctx {
+    /// `m.isMedia` — pesan pemicu membawa media.
+    pub fn is_media(&self) -> bool {
+        self.media.is_some()
+    }
+
+    /// `m.type` — `"imageMessage"` dst; `None` kalau pesan pemicu bukan media.
+    pub fn media_type(&self) -> Option<&'static str> {
+        self.media.as_ref().map(|m| m.kind.wire())
+    }
+
+    /// `m.isImage` / `m.isVideo` / `m.isAudio` / `m.isSticker` / `m.isDocument`.
+    pub fn is_media_kind(&self, kind: IncomingKind) -> bool {
+        self.media.as_ref().is_some_and(|m| m.kind == kind)
+    }
+
+    /// `await m.download()` — byte mentah media pesan pemicu.
+    pub fn download_media(&self) -> Result<Vec<u8>, MediaError> {
+        self.media_fetch.download(MediaOrigin::Trigger)
+    }
+
+    /// `await m.quoted.download()` — byte mentah media pesan yang di-reply.
+    pub fn download_quoted_media(&self) -> Result<Vec<u8>, MediaError> {
+        self.media_fetch.download(MediaOrigin::Quoted)
+    }
 }
 
 impl Ctx {
@@ -1149,6 +1205,103 @@ impl HttpGet for NoHttp {
     }
 }
 
+/// Jenis media pada pesan pemicu — nilai `m.type` di JS
+/// (`serialize.js:getContentType`). Selalu media: tipe non-media tidak masuk
+/// sini sama sekali, dan `None` di [`Ctx::media`] yang mewakilinya.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IncomingKind {
+    Image,
+    Video,
+    Audio,
+    Sticker,
+    Document,
+}
+
+impl IncomingKind {
+    /// `m.type` — `"imageMessage"` dst, apa adanya seperti JS.
+    pub fn wire(self) -> &'static str {
+        match self {
+            Self::Image => "imageMessage",
+            Self::Video => "videoMessage",
+            Self::Audio => "audioMessage",
+            Self::Sticker => "stickerMessage",
+            Self::Document => "documentMessage",
+        }
+    }
+}
+
+/// Media yang menempel pada pesan pemicu — padanan `m.isMedia`, `m.isImage`,
+/// `m.mimetype`, `m.fileName`, `m.body` untuk pesan media.
+///
+/// Yang TIDAK ada di sini: byte-nya (itu tugas [`MediaFetch`]) dan jalur
+/// `m.type.replace("Message", "")` (pemanggil memakai [`IncomingKind`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IncomingMedia {
+    pub kind: IncomingKind,
+    /// `m.mimetype` — `None` kalau pesan tidak menyebutkannya (sticker JS
+    /// sering `image/webp` tanpa field, dan `socket.js:791` yang mengisinya).
+    pub mimetype: Option<String>,
+    /// `m.fileName` — hanya dokumen yang punya.
+    pub file_name: Option<String>,
+    /// `getMessageBody(m)` untuk pesan media: caption, `""` kalau tidak ada.
+    pub caption: String,
+}
+
+/// Asal media yang diunduh — `m.download()` atau `m.quoted.download()`
+/// (`serialize.js:1669` dan `:543`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MediaOrigin {
+    /// Pesan yang memicu command (`m.download()`).
+    Trigger,
+    /// Pesan yang di-reply (`m.quoted.download()`).
+    Quoted,
+}
+
+impl MediaOrigin {
+    /// Nama yang dipakai pesan galat, biar pembaca tahu jalur mana yang gagal.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Trigger => "pesan pemicu",
+            Self::Quoted => "pesan yang di-reply",
+        }
+    }
+}
+
+/// Kegagalan unduh media. Terpisah dari [`HttpError`] karena jalurnya bukan
+/// HTTP biasa: media WA terenkripsi dan datang dari CDN WhatsApp.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MediaError {
+    pub message: String,
+}
+
+/// Unduh isi media pesan — kapabilitas `m.download()`.
+///
+/// JS mengembalikan `null` kalau pesannya bukan media; di sini pemanggil
+/// memeriksa [`Ctx::media`] lebih dulu (itu `m.isMedia`), dan `Err` muncul
+/// kalau memang tidak ada media atau CDN menolak.
+pub trait MediaFetch: Send + Sync + std::fmt::Debug {
+    fn download(&self, origin: MediaOrigin) -> Result<Vec<u8>, MediaError>;
+}
+
+/// Default [`Ctx::media_fetch`]: selalu gagal, tidak pernah menyentuh jaringan.
+///
+/// Dipasang pipeline kalau pengirim pesan bukan `Client` WA sungguhan (test,
+/// stub) — sama seperti [`NoHttp`], gagal dengan alasan jelas lebih baik
+/// daripada byte palsu.
+#[derive(Debug, Default)]
+pub struct NoMediaFetch;
+
+impl MediaFetch for NoMediaFetch {
+    fn download(&self, origin: MediaOrigin) -> Result<Vec<u8>, MediaError> {
+        Err(MediaError {
+            message: format!(
+                "unduh media {} tidak tersedia di konteks ini",
+                origin.label()
+            ),
+        })
+    }
+}
+
 impl Default for Ctx {
     fn default() -> Self {
         Self {
@@ -1169,6 +1322,8 @@ impl Default for Ctx {
             user_data: Value::Null,
             group_data: Value::Null,
             settings: Value::Null,
+            media: None,
+            media_fetch: Arc::new(NoMediaFetch),
         }
     }
 }
