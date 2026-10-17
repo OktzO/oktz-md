@@ -14,9 +14,6 @@ use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 
 use crate::tools::phisingataubukan::encode_uri_component;
 
-/// `config.APIkey.cuki` — `APIKEY_CUKI` di `.env` (`config.js`).
-const CUKI_APIKEY: &str = "";
-
 /// `watercolortext.js:26-28` — cabang `if (!text)`.
 fn help(prefix: &str) -> String {
     format!(
@@ -77,7 +74,7 @@ pub fn watercolortext(ctx: Ctx) -> Reply {
 
     // `m.react("🕕")` di `:31` terjadi sebelum cabang ini; reaksi terakhir
     // yang dipegang adalah "❌" dari `:36`.
-    if CUKI_APIKEY.is_empty() {
+    if ctx.config().api_keys.cuki.is_empty() {
         return Reply::text(missing_key_message(&format!(
             "{}watercolortext",
             ctx.prefix
@@ -86,7 +83,8 @@ pub fn watercolortext(ctx: Ctx) -> Reply {
     }
 
     let url = format!(
-        "https://api.cuki.biz.id/api/ephoto/watercolortext?apikey={CUKI_APIKEY}&query={}",
+        "https://api.cuki.biz.id/api/ephoto/watercolortext?apikey={}&query={}",
+        ctx.config().api_keys.cuki,
         encode_uri_component(&text)
     );
 

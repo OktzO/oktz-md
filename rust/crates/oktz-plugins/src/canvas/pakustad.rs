@@ -16,9 +16,6 @@ use serde_json::Value;
 
 use crate::tools::phisingataubukan::encode_uri_component;
 
-/// `config.APIkey?.cuki || ""` (`pakustad.js:4`).
-const CUKI_APIKEY: &str = "";
-
 /// `pakustad.js:25-29` — cabang `if (!text)`.
 fn help(prefix: &str) -> String {
     format!(
@@ -80,12 +77,13 @@ pub fn pakustad(ctx: Ctx) -> Reply {
 
     // `await m.react('🕕')` di `:32` sudah jalan sebelum cabang ini, jadi reaksi
     // satu-satunya pada cabang ini adalah "🕕".
-    if CUKI_APIKEY.is_empty() {
+    if ctx.config().api_keys.cuki.is_empty() {
         return Reply::text(MISSING_KEY).with_reaction("🕕");
     }
 
     let url = format!(
-        "https://api.cuki.biz.id/api/canvas/ustadz?apikey={CUKI_APIKEY}&text={}",
+        "https://api.cuki.biz.id/api/canvas/ustadz?apikey={}&text={}",
+        ctx.config().api_keys.cuki,
         encode_uri_component(&text)
     );
 
