@@ -7,13 +7,12 @@
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
 /// Kartu pakai saat tidak ada argumen dan bukan di grup, atau JID tidak valid.
-fn help(prefix: &str) -> String {
-    format!(
-        "🗑️ *ʜᴀᴘᴜs ɢʀᴜᴘ*\n\n\
-         > `.hapusgrup` (di dalam grup) — Keluar dari grup ini\n\
-         > `.hapusgrup <id_grup>` — Keluar dari grup tertentu\n\n\
-         ⚠️ Bot akan keluar dari grup, bukan menghapus grup secara permanen"
-    )
+fn help() -> String {
+    "🗑️ *ʜᴀᴘᴜs ɢʀᴜᴘ*\n\n\
+     > `.hapusgrup` (di dalam grup) — Keluar dari grup ini\n\
+     > `.hapusgrup <id_grup>` — Keluar dari grup tertentu\n\n\
+     ⚠️ Bot akan keluar dari grup, bukan menghapus grup secara permanen"
+        .to_string()
 }
 
 /// Membersihkan JID: hanya menyimpan digit, `@`, dan titik (mirip `/[^0-9@.]/g` di JS).
@@ -21,6 +20,18 @@ fn bersihkan_jid(raw: &str) -> String {
     raw.chars()
         .filter(|c| c.is_ascii_digit() || *c == '@' || *c == '.')
         .collect()
+}
+
+/// `m.args[0].replace(/[^0-9@.]/g, '')` lalu `if (!x.endsWith('@g.us')) x += '@g.us'`.
+/// Argumen yang tersaring habis jadi `"@g.us"` — JS tidak menolaknya, jadi
+/// penolakan hanya terjadi saat guard `!targetJid || !endsWith('@g.us')`.
+fn target_jid_dari_arg(raw: &str) -> String {
+    let cleaned = bersihkan_jid(raw);
+    if cleaned.ends_with("@g.us") {
+        cleaned
+    } else {
+        cleaned + "@g.us"
+    }
 }
 
 #[plugin(
@@ -38,28 +49,18 @@ fn bersihkan_jid(raw: &str) -> String {
 )]
 pub fn hapusgrup(ctx: Ctx) -> Reply {
     let target_jid = match ctx.args.first() {
-        Some(raw) => {
-            let cleaned = bersihkan_jid(raw);
-            if cleaned.is_empty() {
-                return Reply::text(help(&ctx.prefix));
-            }
-            if cleaned.ends_with("@g.us") {
-                cleaned
-            } else {
-                cleaned + "@g.us"
-            }
-        }
+        Some(raw) => target_jid_dari_arg(raw),
         None => {
             if ctx.is_group {
                 ctx.chat.clone()
             } else {
-                return Reply::text(help(&ctx.prefix));
+                return Reply::text(help());
             }
         }
     };
 
     if !target_jid.ends_with("@g.us") {
-        return Reply::text(help(&ctx.prefix));
+        return Reply::text(help());
     }
 
     let group_name = match ctx.sock().metadata_grup(&target_jid) {
@@ -85,7 +86,6 @@ pub fn hapusgrup(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn ctx_sock_ok(args: Vec<String>, is_group: bool, chat: &str) -> Ctx {
         Ctx {
@@ -112,8 +112,41 @@ mod tests {
     fn argumen_tanpa_gus_ditambahi_gus() {
         let ctx = ctx_sock_ok(vec!["1234567890".into()], false, "x");
         let r = hapusgrup(ctx);
-        // SockMati: metadata_grup dan keluar_grup selalu error
-        let text = r.text_body().unwrap();
-        assert!(text.contains("1234567890@g.us"));
+        // SockMati: `groupMetadata` gagal → `groupName = targetJid`, lalu
+        // `groupLeave` gagal → cabang catch JS `❌ Gagal keluar dari grup: ...`
+        assert_eq!(
+            r.text_body().unwrap(),
+            "❌ Gagal keluar dari grup: sock tidak tersedia"
+        );
+    }
+
+    #[test]
+    fn argumen_dibersihkan_dan_ditambahi_gus() {
+        // `replace(/[^0-9@.]/g, '')` membuang huruf, jadi `123-456@g.us` jadi
+        // `123456@.` lalu ditambahi `@g.us` — kuirk JS, bukan bug port.
+        assert_eq!(target_jid_dari_arg("123-456@g.us"), "123456@.@g.us");
+        assert_eq!(target_jid_dari_arg("1234567890"), "1234567890@g.us");
+        // Argumen yang tersaring habis jadi "@g.us" (mirip JS), bukan kartu bantuan.
+        assert_eq!(target_jid_dari_arg("abc"), "@g.us");
+    }
+
+    #[test]
+    fn argumen_tak_layak_tetap_masuk_cabang_catch() {
+        let ctx = ctx_sock_ok(vec!["abc".into()], false, "x");
+        let r = hapusgrup(ctx);
+        assert_eq!(
+            r.text_body().unwrap(),
+            "❌ Gagal keluar dari grup: sock tidak tersedia"
+        );
+    }
+
+    #[test]
+    fn tanpa_argumen_di_grup_memakai_chat_sebagai_target() {
+        let ctx = ctx_sock_ok(vec![], true, "123456@g.us");
+        let r = hapusgrup(ctx);
+        assert_eq!(
+            r.text_body().unwrap(),
+            "❌ Gagal keluar dari grup: sock tidak tersedia"
+        );
     }
 }

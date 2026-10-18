@@ -21,7 +21,6 @@ use oktz_plugin_api::{Ctx, Reply, plugin};
 /// `bcgc.js:30-48` — `5s`/`2m`/`1h`/`1d` ke milidetik (case-insensitive,
 /// mirip `/^(\d+)(s|m|h|d)$/i`); satuan gabung seperti `15ms` → `None`.
 pub(crate) fn parse_delay(input: &str) -> Option<i64> {
-    let mut bytes = input.bytes();
     let mut digits_end = 0;
     for (i, b) in input.bytes().enumerate() {
         if b.is_ascii_digit() {
@@ -39,7 +38,7 @@ pub(crate) fn parse_delay(input: &str) -> Option<i64> {
         "s" => val * 1_000,
         "m" => val * 60 * 1_000,
         "h" => val * 60 * 60 * 1_000,
-        "d" => val * 24 * 60 * 1_000,
+        "d" => val * 24 * 60 * 60 * 1_000,
         _ => return None,
     };
     Some(ms)

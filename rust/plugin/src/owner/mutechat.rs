@@ -11,14 +11,12 @@
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
-fn help(prefix: &str) -> String {
-    format!(
-        "🔇 *ᴍᴜᴛᴇ ᴄʜᴀᴛ*\n\n\
-         > `.mutechat 628xxx` — Mute chat\n\
-         > `.mutechat` (di private chat) — Mute chat ini\n\
-         > `.mutechat buka 628xxx` — Unmute chat\n\
-         Prefix saat ini: `{prefix}`"
-    )
+fn help() -> String {
+    "🔇 *ᴍᴜᴛᴇ ᴄʜᴀᴛ*\n\n\
+     > `.mutechat 628xxx` — Mute chat\n\
+     > `.mutechat` (di private chat) — Mute chat ini\n\
+     > `.mutechat buka 628xxx` — Unmute chat"
+        .to_string()
 }
 
 fn digits_only(s: &str) -> String {
@@ -57,8 +55,8 @@ pub fn mutechat(ctx: Ctx) -> Reply {
             target_jid = Some(ctx.chat.clone());
         }
     } else {
-        if ctx.mentioned.first().is_some() {
-            target_jid = Some(ctx.mentioned.first().cloned().unwrap());
+        if let Some(pertama) = ctx.mentioned.first() {
+            target_jid = Some(pertama.clone());
         } else if let Some(q) = ctx.quoted() {
             target_jid = Some(q.sender.clone());
         } else if let Some(a) = ctx.args.first() {
@@ -72,7 +70,7 @@ pub fn mutechat(ctx: Ctx) -> Reply {
     }
 
     let Some(target_jid) = target_jid else {
-        return Reply::text(help(&ctx.prefix));
+        return Reply::text(help());
     };
 
     let target = target_jid.split('@').next().unwrap_or(&target_jid);
@@ -127,9 +125,18 @@ mod tests {
     }
 
     #[test]
-    fn without_target_shows_help() {
-        let r = run(&[], None, false, false);
+    fn without_target_and_in_group_shows_help() {
+        // JS: tanpa mention/quote/argumen, target hanya terisi saat `!m.isGroup`.
+        // Di grup tanpa target, `targetJid` tetap null → kartu bantuan.
+        let r = run(&[], None, false, true);
         assert!(body(&r).starts_with("🔇 *ᴍᴜᴛᴇ ᴄʜᴀᴛ*"));
+    }
+
+    #[test]
+    fn private_chat_without_target_mutes_the_chat_itself() {
+        // JS: `else if (!m.isGroup) targetJid = m.chat`.
+        let r = run(&[], None, false, false);
+        assert_eq!(body(&r), "🔇 *ᴄʜᴀᴛ ᴅɪᴍᴜᴛᴇ*\n\n> Target: 628111");
     }
 
     #[test]

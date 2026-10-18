@@ -733,3 +733,20 @@ setelah galatnya dibereskan.
 
 Struktur: folder `rust/lib/` dihapus — crate pendukung kini langsung di
 `rust/oktz-*` (members workspace `["oktz-*", "plugin"]`).
+
+## 26. Tiga berkas owner yang tadi gagal test
+
+- `owner/mutechat.rs` — **terdaftar**. Dua kesalahan: teks bantuan menambah baris
+  `Prefix saat ini: ...` yang tidak ada di JS, dan kasus "tanpa target" di chat
+  pribadi dianggap kartu bantuan padahal JS memakai `m.chat` sebagai target.
+  Test ikut dibetulkan. `sock.chatModify` tetap tak ada di `Ctx` (teks balasan
+  yang diuji, bukan aksinya).
+- `owner/hapusgrup.rs` — **terdaftar**. Port menolak argumen yang tersaring
+  habis, padahal JS membentuk `"@g.us"` lalu masuk cabang `catch`. Resolusi JID
+  dipecah ke `target_jid_dari_arg` + test kuirk `123-456@g.us` → `123456@.@g.us`.
+- `owner/bcgc.rs` — **tidak didaftarkan**: badannya stub (selalu membalas
+  `STOP_TEXT`). Sekaligus perbaiki bug `parse_delay` `"1d"` = 24 menit
+  (kurang satu `* 60`) supaya berkasnya benar saat `sock`/`db` tersedia.
+- Sisa `Prefix saat ini: ...` yang tidak ada di JS: `ai/tomekah.rs`,
+  `ai/toemotebatu.rs`, `rpg/dice.rs` (belum terdaftar) — buang saat
+  mendaftarkannya.

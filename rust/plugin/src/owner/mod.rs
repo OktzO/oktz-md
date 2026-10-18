@@ -89,3 +89,7 @@ pub mod setownertype;
 pub mod star;
 pub mod stopdandeletejadibot;
 pub mod stopschedule;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod hapusgrup;
+pub mod mutechat;
