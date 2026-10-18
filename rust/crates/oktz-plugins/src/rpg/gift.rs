@@ -8,7 +8,6 @@
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
 use serde_json::Value;
-use serde_json::json;
 
 use crate::common::jid_number;
 use crate::rpg::heal::{inventory_map, other_user, or_default, rpg_map};
@@ -79,22 +78,22 @@ pub fn gift(ctx: Ctx) -> Reply {
         );
     }
 
-    inv.insert(item.clone(), json!(owned - amount));
+    inv.insert(item.clone(), serde_json::json!(owned - amount));
     let love = or_default(rpg.get("love").and_then(Value::as_i64), 0) + amount * 10;
-    rpg.insert("love".into(), json!(love));
+    rpg.insert("love".into(), serde_json::json!(love));
 
     // Sisi pasangan hanya ditulis kalau barisnya terbaca lewat roster.
     let partner_mutation = partner.and_then(|p| {
         p.get("rpg").filter(|r| crate::common::js_truthy(Some(r)))?;
         Some(Mutation::SetUser {
             jid: spouse.clone(),
-            data: json!({ "rpg": { "love": love } }),
+            data: serde_json::json!({ "rpg": { "love": love } }),
         })
     });
 
     let mut mutations = vec![Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "inventory": inv, "rpg": rpg }),
+        data: serde_json::json!({ "inventory": inv, "rpg": rpg }),
     }];
     mutations.extend(partner_mutation);
 
@@ -117,7 +116,6 @@ pub fn gift(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::registry::{GroupRoster, Participant};
-    use serde_json::json;
 
     fn run(user: Value, partner: Option<Value>, args: &[&str]) -> Reply {
         let ctx = Ctx {
@@ -147,7 +145,7 @@ mod tests {
     }
 
     fn married(inventory: Value) -> Value {
-        json!({ "inventory": inventory,
+        serde_json::json!({ "inventory": inventory,
                 "rpg": { "spouse": "628222@s.whatsapp.net", "love": 20 } })
     }
 
@@ -174,7 +172,7 @@ mod tests {
 
     #[test]
     fn an_unmarried_user_is_told_to_marry_first() {
-        for user in [json!(null), json!({}), json!({ "rpg": {} })] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({ "rpg": {} })] {
             let r = run(user.clone(), None, &["diamond", "1"]);
             assert!(text_of(&r).starts_with("❌ *ʙᴇʟᴜᴍ ᴍᴇɴɪᴋᴀʜ*"), "input {user}");
             assert!(text_of(&r).contains("Nikah dulu dengan `.marry @user`"), "input {user}");
@@ -194,8 +192,8 @@ mod tests {
         assert_eq!(amount_of(Some(&"5".into())), 5);
 
         let r = run(
-            married(json!({ "diamond": 9 })),
-            Some(json!({ "rpg": {} })),
+            married(serde_json::json!({ "diamond": 9 })),
+            Some(serde_json::json!({ "rpg": {} })),
             &["diamond", "-3"],
         );
         assert!(text_of(&r).starts_with("❌ Jumlah item tidak valid."), "{}", text_of(&r));
@@ -204,7 +202,7 @@ mod tests {
 
     #[test]
     fn without_an_item_the_usage_is_shown() {
-        let r = run(married(json!({})), None, &[]);
+        let r = run(married(serde_json::json!({})), None, &[]);
         let t = text_of(&r);
         assert!(t.starts_with("🎁 *ɢɪꜰᴛ*"), "{t}");
         assert!(t.contains("`.gift diamond 1`"), "{t}");
@@ -213,7 +211,7 @@ mod tests {
 
     #[test]
     fn a_short_bag_is_reported_with_have_over_need() {
-        let r = run(married(json!({ "diamond": 1 })), None, &["diamond", "5"]);
+        let r = run(married(serde_json::json!({ "diamond": 1 })), None, &["diamond", "5"]);
         let t = text_of(&r);
         assert!(t.starts_with("❌ *ɪᴛᴇᴍ ᴛɪᴅᴀᴋ ᴄᴜᴋᴜᴘ*"), "{t}");
         assert!(t.contains("Item *diamond* kamu: 1"), "{t}");
@@ -223,7 +221,7 @@ mod tests {
 
     #[test]
     fn a_partner_outside_the_roster_stops_the_gift() {
-        let r = run(married(json!({ "diamond": 9 })), None, &["diamond", "2"]);
+        let r = run(married(serde_json::json!({ "diamond": 9 })), None, &["diamond", "2"]);
         let t = text_of(&r);
         assert!(t.starts_with("❌ *ᴘᴀsᴀɴɢᴀɴ ɴᴏᴛ ꜰᴏᴜɴᴅ*"), "{t}");
         assert!(r.mutations().is_empty(), "tak ada pertukaran yang terjadi");
@@ -232,8 +230,8 @@ mod tests {
     #[test]
     fn a_gift_moves_the_item_and_raises_love_by_ten_each() {
         let r = run(
-            married(json!({ "diamond": 9, "gold": 40 })),
-            Some(json!({ "rpg": { "spouse": "628111@s.whatsapp.net", "love": 5 } })),
+            married(serde_json::json!({ "diamond": 9, "gold": 40 })),
+            Some(serde_json::json!({ "rpg": { "spouse": "628111@s.whatsapp.net", "love": 5 } })),
             &["diamond", "3"],
         );
         let t = text_of(&r);
@@ -247,30 +245,30 @@ mod tests {
             panic!("harus SetUser");
         };
         assert_eq!(jid, "628111@s.whatsapp.net");
-        assert_eq!(data["inventory"]["diamond"], json!(6));
-        assert_eq!(data["inventory"]["gold"], json!(40), "item lain tak boleh hilang");
-        assert_eq!(data["rpg"]["love"], json!(50), "20 + 30");
+        assert_eq!(data["inventory"]["diamond"], serde_json::json!(6));
+        assert_eq!(data["inventory"]["gold"], serde_json::json!(40), "item lain tak boleh hilang");
+        assert_eq!(data["rpg"]["love"], serde_json::json!(50), "20 + 30");
     }
 
     #[test]
     fn giving_the_last_one_drains_the_stack_to_zero() {
         let r = run(
-            married(json!({ "diamond": 2 })),
-            Some(json!({ "rpg": {} })),
+            married(serde_json::json!({ "diamond": 2 })),
+            Some(serde_json::json!({ "rpg": {} })),
             &["diamond", "2"],
         );
         let mine = &r.mutations()[0];
         let Mutation::SetUser { data, .. } = mine else {
             panic!("harus SetUser");
         };
-        assert_eq!(data["inventory"]["diamond"], json!(0));
+        assert_eq!(data["inventory"]["diamond"], serde_json::json!(0));
     }
 
     #[test]
     fn the_spouse_is_mentioned_in_the_reply() {
         let r = run(
-            married(json!({ "diamond": 5 })),
-            Some(json!({ "rpg": {} })),
+            married(serde_json::json!({ "diamond": 5 })),
+            Some(serde_json::json!({ "rpg": {} })),
             &["diamond", "1"],
         );
         match r.without_mutations() {

@@ -12,7 +12,6 @@
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
 use crate::common::js_truthy;
-use crate::fun::tod::error_template;
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `NEXRAY_BASES[0]` + `nexrayPaths.wormgpt` (`stalker-fallback.js:4,268,298`).
@@ -54,11 +53,11 @@ pub fn wormgpt(ctx: Ctx) -> Reply {
     // Semua kegagalan provider (termasuk cuki yang key-nya kosong) berakhir di
     // satu `catch` yang sama di `wormgpt.js:36-40`, jadi pesannya sama.
     let Some(body) = ctx.http.get(&url).ok().and_then(|r| r.json()) else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
 
     if !js_truthy(body.get("status")) || !js_truthy(body.get("result")) {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     }
 
     let answer = match body.get("result") {
@@ -96,7 +95,7 @@ mod tests {
         }
         fn respond(&self) -> Result<HttpResponse, HttpError> {
             let Some(text) = &self.resp else {
-                return Err(HttpError {
+                return Err(oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 });
             };
@@ -232,7 +231,7 @@ mod tests {
             r#"bukan json"#,
         ] {
             let r = run(Stub::ok(payload), "pertanyaan");
-            assert_eq!(body(&r), error_template(".", "wormgpt"), "{payload}");
+            assert_eq!(body(&r), crate::common::error_template(".", "wormgpt"), "{payload}");
             assert_eq!(emoji(&r), "☢");
         }
     }
@@ -240,7 +239,7 @@ mod tests {
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "pertanyaan");
-        assert_eq!(body(&r), error_template(".", "wormgpt"));
+        assert_eq!(body(&r), crate::common::error_template(".", "wormgpt"));
         assert_eq!(emoji(&r), "☢");
     }
 }

@@ -87,7 +87,6 @@ pub fn autoread(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
 
-    use serde_json::json;
 
     fn run(prefix: &str, text: &str, settings: Value) -> Reply {
         let ctx = Ctx {
@@ -144,22 +143,22 @@ mod tests {
     fn on_writes_true_and_off_writes_false() {
         let r = run(".", "on", Value::Null);
         assert_eq!(text_of(&r), ON);
-        assert_eq!(stored(&r), &json!(true));
+        assert_eq!(stored(&r), &serde_json::json!(true));
 
         let r = run(".", "off", Value::Null);
         assert_eq!(text_of(&r), OFF);
-        assert_eq!(stored(&r), &json!(false));
+        assert_eq!(stored(&r), &serde_json::json!(false));
     }
 
     #[test]
     fn the_option_is_lowercased_and_trimmed_before_it_is_compared() {
         let r = run(".", "  ON  ", Value::Null);
-        assert_eq!(stored(&r), &json!(true));
+        assert_eq!(stored(&r), &serde_json::json!(true));
         let r = run(".", "\tOff\t", Value::Null);
-        assert_eq!(stored(&r), &json!(false));
+        assert_eq!(stored(&r), &serde_json::json!(false));
         // `m.text?.toLowerCase()?.trim()` — newline di ujung ikut hilang.
         let r = run(".", "on\n", Value::Null);
-        assert_eq!(stored(&r), &json!(true));
+        assert_eq!(stored(&r), &serde_json::json!(true));
     }
 
     #[test]
@@ -180,7 +179,7 @@ mod tests {
     #[test]
     fn a_blank_option_reports_status_and_writes_nothing() {
         for text in ["", "   ", "\n\t"] {
-            let r = run("!", text, json!({KEY: false}));
+            let r = run("!", text, serde_json::json!({KEY: false}));
             assert_eq!(
                 text_of(&r),
                 "📖 *Auto Read*\n\n\
@@ -205,7 +204,7 @@ mod tests {
             "{}",
             text_of(&r)
         );
-        let r = run(".", "", json!({KEY: null}));
+        let r = run(".", "", serde_json::json!({KEY: null}));
         assert!(text_of(&r).contains("Status: *Aktif ✅*"));
         assert!(r.mutations().is_empty());
     }
@@ -214,7 +213,7 @@ mod tests {
     fn a_stored_false_is_not_overwritten_by_the_config_default() {
         // `??` hanya reacts ke null/undefined — `false` yang tersimpan tetap
         // dipakai, tidak ditimpa `true` dari config.
-        let r = run(".", "", json!({KEY: false}));
+        let r = run(".", "", serde_json::json!({KEY: false}));
         assert!(
             text_of(&r).contains("Status: *Nonaktif ❌*"),
             "{}",
@@ -225,8 +224,8 @@ mod tests {
 
     #[test]
     fn a_stored_value_is_read_back_as_the_status() {
-        for truthy in [json!(true), json!(1), json!("ya"), json!({})] {
-            let r = run(".", "", json!({KEY: truthy.clone()}));
+        for truthy in [serde_json::json!(true), serde_json::json!(1), serde_json::json!("ya"), serde_json::json!({})] {
+            let r = run(".", "", serde_json::json!({KEY: truthy.clone()}));
             assert!(text_of(&r).contains("Status: *Aktif ✅*"), "{truthy}");
         }
     }

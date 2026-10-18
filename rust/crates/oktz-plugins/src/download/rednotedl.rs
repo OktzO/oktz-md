@@ -167,7 +167,6 @@ pub fn rednotedl(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpCall, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const SENDER: &str = "628111@s.whatsapp.net";
@@ -215,7 +214,7 @@ mod tests {
             let text = self
                 .balasan
                 .clone()
-                .map_err(|message| HttpError { message })?;
+                .map_err(|message| oktz_plugin_api::HttpError { message })?;
             Ok(HttpResponse {
                 status: 200,
                 body: HttpBody::Bytes {
@@ -289,7 +288,7 @@ mod tests {
 
     #[test]
     fn an_empty_argument_shows_the_usage_card_with_a_red_cross() {
-        let http = Stub::body(json!({ "success": true }));
+        let http = Stub::body(serde_json::json!({ "success": true }));
         for text in ["", "   "] {
             let r = run(http.clone(), text);
             assert_eq!(text_of(&r), help("."), "input {text:?}");
@@ -303,13 +302,13 @@ mod tests {
         // Body di sini bentuk responses `rednote.savevideodown.com`, bukan
         // bentuk hasil scraper: `success` yang menentukan cabang gagal.
         let r = run(
-            Stub::body(json!({ "success": false, "error": "Postingan privat" })),
+            Stub::body(serde_json::json!({ "success": false, "error": "Postingan privat" })),
             "https://www.xiaohongshu.com/x",
         );
         assert_eq!(text_of(&r), "❌ *RedNote Gagal*\n\n> Postingan privat");
         assert_eq!(reaction_of(&r), Some("☢"));
         // `resData.error || "Gagal mengambil data"` juga kena error kosong.
-        for body in [json!({ "success": false }), json!({ "success": false, "error": "" })] {
+        for body in [serde_json::json!({ "success": false }), serde_json::json!({ "success": false, "error": "" })] {
             let r = run(Stub::body(body.clone()), "https://www.xiaohongshu.com/x");
             assert_eq!(text_of(&r), "❌ *RedNote Gagal*\n\n> Gagal mengambil data");
             assert_eq!(reaction_of(&r), Some("☢"), "body {body}");
@@ -321,7 +320,7 @@ mod tests {
         // `rednotedl.js:40` memakai `${result.error}`; scraper selalu mengisi
         // error dari `resData.error || "Gagal mengambil data"`, jadi di sini
         // yang bisa hilang adalah seluruh kuncinya — tercetak `undefined`.
-        for body in [json!({ "status": false }), json!({})] {
+        for body in [serde_json::json!({ "status": false }), serde_json::json!({})] {
             assert_eq!(
                 hasil_dari(&body).unwrap_err(),
                 "undefined",
@@ -330,7 +329,7 @@ mod tests {
         }
         // Nilai non-teks ikut ter-string-kan seperti `String(v)` di JS.
         assert_eq!(
-            hasil_dari(&json!({ "status": false, "error": 7 })).unwrap_err(),
+            hasil_dari(&serde_json::json!({ "status": false, "error": 7 })).unwrap_err(),
             "7"
         );
     }
@@ -338,7 +337,7 @@ mod tests {
     #[test]
     fn a_video_result_is_sent_as_a_video_carrying_the_post_title() {
         let r = run(
-            Stub::body(json!({
+            Stub::body(serde_json::json!({
                 "success": true,
                 "type": "video",
                 "title": "Catatan Umum",
@@ -362,7 +361,7 @@ mod tests {
         }
         // `directVideoUrl || downloadUrl` — tanpa yang pertama, yang kedua dipakai.
         let r = run(
-            Stub::body(json!({
+            Stub::body(serde_json::json!({
                 "success": true,
                 "type": "video",
                 "directVideoUrl": "",
@@ -387,8 +386,8 @@ mod tests {
         // `results` tetap panjang satu walau nilainya `undefined` (`rednote.js:42`),
         // jadi `result.results?.[0]` falsy dan `sendMedia` melempar di JS.
         for body in [
-            json!({ "success": true, "type": "video", "title": "x" }),
-            json!({ "success": true, "type": "video", "title": "x", "directVideoUrl": null, "downloadUrl": null }),
+            serde_json::json!({ "success": true, "type": "video", "title": "x" }),
+            serde_json::json!({ "success": true, "type": "video", "title": "x", "directVideoUrl": null, "downloadUrl": null }),
         ] {
             let r = run(Stub::body(body.clone()), "https://www.xiaohongshu.com/x");
             assert_eq!(text_of(&r), TRANSPORT_FAILED, "body {body}");
@@ -399,7 +398,7 @@ mod tests {
     #[test]
     fn the_video_title_may_be_absent_and_then_the_caption_is_empty() {
         let r = run(
-            Stub::body(json!({
+            Stub::body(serde_json::json!({
                 "success": true,
                 "type": "video",
                 "downloadUrl": "https://cdn.example/v.mp4"
@@ -412,7 +411,7 @@ mod tests {
     #[test]
     fn hasil_dari_takes_the_single_results_entry_of_a_video_post() {
         // `directVideoUrl || downloadUrl` sudah diselesaikan di dalam scraper.
-        let data = hasil_dari(&json!({
+        let data = hasil_dari(&serde_json::json!({
             "status": true,
             "type": "video",
             "results": ["https://cdn.example/fallback.mp4"]
@@ -427,7 +426,7 @@ mod tests {
         for count in 1..=5usize {
             let urls: Vec<String> = (0..count).map(|i| format!("https://cdn.example/{i}.jpg")).collect();
             let r = run(
-                Stub::body(json!({ "success": true, "type": "image", "directImages": urls })),
+                Stub::body(serde_json::json!({ "success": true, "type": "image", "directImages": urls })),
                 "https://www.xiaohongshu.com/x",
             );
             assert_eq!(text_of(&r), "", "jumlah {count} tidak ada catatan sisa");
@@ -436,7 +435,7 @@ mod tests {
 
         let urls: Vec<String> = (0..8).map(|i| format!("https://cdn.example/{i}.jpg")).collect();
         let r = run(
-            Stub::body(json!({ "success": true, "type": "image", "directImages": urls })),
+            Stub::body(serde_json::json!({ "success": true, "type": "image", "directImages": urls })),
             "https://www.xiaohongshu.com/x",
         );
         assert_eq!(text_of(&r), "_Masih ada 3 foto lagi, maksimal 5_");
@@ -445,7 +444,7 @@ mod tests {
     #[test]
     fn the_first_photo_is_the_one_that_is_sent() {
         let r = run(
-            Stub::body(json!({
+            Stub::body(serde_json::json!({
                 "success": true,
                 "type": "image",
                 "directImages": ["https://cdn.example/0.jpg", "https://cdn.example/1.jpg"]
@@ -474,9 +473,9 @@ mod tests {
     #[test]
     fn a_post_without_any_media_only_reacts() {
         for body in [
-            json!({ "success": true, "type": "image", "directImages": [] }),
-            json!({ "success": true, "type": "image" }),
-            json!({ "success": true }),
+            serde_json::json!({ "success": true, "type": "image", "directImages": [] }),
+            serde_json::json!({ "success": true, "type": "image" }),
+            serde_json::json!({ "success": true }),
         ] {
             let r = run(Stub::body(body.clone()), "https://www.xiaohongshu.com/x");
             assert!(r.without_mutations().text_body().is_none(), "body {body}");
@@ -486,7 +485,7 @@ mod tests {
 
     #[test]
     fn the_url_is_sent_as_a_json_body_field() {
-        let http = Stub::body(json!({ "status": true, "type": "image", "results": [] }));
+        let http = Stub::body(serde_json::json!({ "status": true, "type": "image", "results": [] }));
         let _ = run(http.clone(), "https://www.xiaohongshu.com/x");
         let seen = http.seen.lock().unwrap();
         assert_eq!(seen.len(), 1);
@@ -510,7 +509,7 @@ mod tests {
     #[test]
     fn the_plugin_only_reads_and_never_mutates() {
         let r = run(
-            Stub::body(json!({ "status": true, "type": "image", "results": ["u"] })),
+            Stub::body(serde_json::json!({ "status": true, "type": "image", "results": ["u"] })),
             "https://www.xiaohongshu.com/x",
         );
         assert!(r.mutations().is_empty());

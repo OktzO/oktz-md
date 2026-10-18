@@ -63,7 +63,7 @@ pub fn cmdvn(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(settings: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -118,7 +118,7 @@ mod tests {
 
     #[test]
     fn no_argument_and_the_word_status_share_the_status_branch() {
-        for s in [json!({}), json!({"cmdVn": true}), json!({"cmdVn": false})] {
+        for s in [serde_json::json!({}), serde_json::json!({"cmdVn": true}), serde_json::json!({"cmdVn": false})] {
             let none = run(s.clone(), "");
             let status = run(s.clone(), "status");
             assert_eq!(text_of(&none), text_of(&status), "input {s}");
@@ -130,31 +130,31 @@ mod tests {
 
     #[test]
     fn the_status_line_reflects_the_stored_flag() {
-        assert!(text_of(&run(json!({"cmdVn": true}), "")).contains("✅ ON"));
-        assert!(text_of(&run(json!({"cmdVn": false}), "")).contains("❌ OFF"));
+        assert!(text_of(&run(serde_json::json!({"cmdVn": true}), "")).contains("✅ ON"));
+        assert!(text_of(&run(serde_json::json!({"cmdVn": false}), "")).contains("❌ OFF"));
         assert!(
-            text_of(&run(json!({}), "")).contains("❌ OFF"),
+            text_of(&run(serde_json::json!({}), "")).contains("❌ OFF"),
             "`|| false` berarti key yang hilang tampil OFF"
         );
     }
 
     #[test]
     fn on_and_off_write_their_own_boolean_and_react_to_nothing() {
-        let on = run(json!({}), "on");
-        assert_eq!(stored(&on), json!(true));
+        let on = run(serde_json::json!({}), "on");
+        assert_eq!(stored(&on), serde_json::json!(true));
         assert_eq!(text_of(&on), ON_MSG);
         // Plugin ini TIDAK memanggil m.react — tidak boleh ada Reaction.
-        assert!(matches!(on.without_mutations(), Reply::Text { .. }));
+        assert!(matches!(on.without_mutations().tanpa_reaksi(), Reply::Text { .. }));
 
-        let off = run(json!({}), "off");
-        assert_eq!(stored(&off), json!(false));
+        let off = run(serde_json::json!({}), "off");
+        assert_eq!(stored(&off), serde_json::json!(false));
         assert_eq!(text_of(&off), OFF_MSG);
     }
 
     #[test]
     fn an_unknown_sub_command_is_rejected_and_writes_nothing() {
         for bad in ["maybe", "1", "ON!", "enable"] {
-            let r = run(json!({}), bad);
+            let r = run(serde_json::json!({}), bad);
             assert!(text_of(&r).starts_with("❌ Gunakan"), "input {bad}");
             assert!(r.mutations().is_empty(), "input {bad}");
         }
@@ -169,7 +169,7 @@ mod tests {
     fn the_status_reply_uses_the_live_prefix_except_where_the_js_hardcodes_it() {
         let t = status_text(&Ctx {
             prefix: "#".into(),
-            settings: json!({}),
+            settings: serde_json::json!({}),
             ..Default::default()
         });
         assert!(t.contains("#cmdvn on"), "prefix substitusi: {t}");
@@ -208,7 +208,7 @@ mod tests {
         ];
         for roster in rosters {
             for arg in ["", "on", "off", "zzz"] {
-                let base = run(json!({}), arg);
+                let base = run(serde_json::json!({}), arg);
                 let with_roster = {
                     let ctx = Ctx {
                         prefix: ".".into(),

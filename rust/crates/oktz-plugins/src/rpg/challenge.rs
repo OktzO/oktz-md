@@ -11,7 +11,7 @@
 //! yang menulis `rpg.dailyChallenge.progress`; plugin ini hanya membacanya.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::rpg::heal::{apply_exp, or_default, rpg_map};
 use crate::tools::kalkulatormbg::thousands_id;
@@ -52,7 +52,7 @@ fn today_string(ms: i64) -> String {
 /// `getNewDailyChallenge()` (`challenge.js:30`) — challenges acak + progres 0.
 fn new_challenge(ms: i64) -> Value {
     let (name, kind, target, gold, exp) = CHALLENGES[crate::common::random_index(CHALLENGES.len())];
-    json!({
+    serde_json::json!({
         "name": name,
         "type": kind,
         "target": target,
@@ -117,7 +117,7 @@ pub fn challenge(ctx: Ctx) -> Reply {
 
         let mut claimed_task = fresh.clone();
         if let Some(obj) = claimed_task.as_object_mut() {
-            obj.insert("claimed".into(), json!(true));
+            obj.insert("claimed".into(), serde_json::json!(true));
         }
         rpg.insert("dailyChallenge".into(), claimed_task);
 
@@ -137,7 +137,7 @@ pub fn challenge(ctx: Ctx) -> Reply {
         .with_reaction("🎉")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "koin": crate::common::int_field(&ctx, "koin") + gold,
+            data: serde_json::json!({ "koin": crate::common::int_field(&ctx, "koin") + gold,
                           "exp": new_exp,
                           "rpg": rpg }),
         });
@@ -174,7 +174,7 @@ pub fn challenge(ctx: Ctx) -> Reply {
     // `db.save()` berjalan di kedua jalur.
     Reply::text(txt).with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "rpg": rpg }),
+        data: serde_json::json!({ "rpg": rpg }),
     })
 }
 
@@ -182,7 +182,6 @@ pub fn challenge(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: Value, arg: &str) -> Reply {
         let ctx = Ctx {
@@ -213,7 +212,7 @@ mod tests {
     }
 
     fn today_task(progress: i64, target: i64, claimed: bool) -> Value {
-        json!({ "rpg": { "dailyChallenge": {
+        serde_json::json!({ "rpg": { "dailyChallenge": {
             "name": "⚔️ Kalahkan 5 Monster",
             "type": "kill",
             "target": target,
@@ -256,15 +255,15 @@ mod tests {
     #[test]
     fn a_stale_date_gets_a_brand_new_challenge() {
         let r = run(
-            json!({ "rpg": { "dailyChallenge": {
+            serde_json::json!({ "rpg": { "dailyChallenge": {
                 "name": "LAMA", "target": 99, "reward": { "gold": 1, "exp": 1 },
                 "progress": 50, "date": "Thu Jan 1 1970", "claimed": true } } }),
             "",
         );
         let task = task_of(&r);
-        assert_ne!(task["name"], json!("LAMA"), "tanggal beda -> diacak ulang");
-        assert_eq!(task["progress"], json!(0));
-        assert_eq!(task["claimed"], json!(false));
+        assert_ne!(task["name"], serde_json::json!("LAMA"), "tanggal beda -> diacak ulang");
+        assert_eq!(task["progress"], serde_json::json!(0));
+        assert_eq!(task["claimed"], serde_json::json!(false));
         assert!(CHALLENGES
             .iter()
             .any(|(n, ..)| *n == task["name"].as_str().unwrap()));
@@ -274,8 +273,8 @@ mod tests {
     fn the_same_day_keeps_the_stored_challenge_untouched() {
         let r = run(today_task(2, 5, false), "");
         let task = task_of(&r);
-        assert_eq!(task["progress"], json!(2), "tidak boleh diacak ulang");
-        assert_eq!(task["target"], json!(5));
+        assert_eq!(task["progress"], serde_json::json!(2), "tidak boleh diacak ulang");
+        assert_eq!(task["target"], serde_json::json!(5));
         let t = text_of(&r);
         assert!(t.contains("🎯 *⚔️ Kalahkan 5 Monster*"), "{t}");
         assert!(t.contains("📊 Progress: *2/5*"), "{t}");
@@ -308,10 +307,10 @@ mod tests {
         let Mutation::SetUser { data, .. } = &r.mutations()[0] else {
             panic!("harus SetUser");
         };
-        assert_eq!(data["koin"], json!(500));
-        assert_eq!(data["exp"], json!(200));
-        assert_eq!(data["rpg"]["dailyChallenge"]["claimed"], json!(true));
-        assert_eq!(data["rpg"]["dailyChallenge"]["progress"], json!(5), "progres tak direset");
+        assert_eq!(data["koin"], serde_json::json!(500));
+        assert_eq!(data["exp"], serde_json::json!(200));
+        assert_eq!(data["rpg"]["dailyChallenge"]["claimed"], serde_json::json!(true));
+        assert_eq!(data["rpg"]["dailyChallenge"]["progress"], serde_json::json!(5), "progres tak direset");
     }
 
     #[test]
@@ -329,7 +328,7 @@ mod tests {
 
     #[test]
     fn a_missing_user_row_still_gets_a_challenge_and_persists_it() {
-        for user in [json!(null), json!({}), json!({ "rpg": {} })] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({ "rpg": {} })] {
             let r = run(user.clone(), "");
             assert!(text_of(&r).starts_with("📋 *TANTANGAN HARIAN GUILD*"), "input {user}");
             assert_eq!(r.mutations().len(), 1, "challenge baru harus disimpan");

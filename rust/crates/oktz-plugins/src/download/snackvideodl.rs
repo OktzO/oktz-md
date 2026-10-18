@@ -11,7 +11,6 @@
 use oktz_plugin_api::{Ctx, Reply, plugin};
 use serde_json::Value;
 
-use crate::fun::tod::error_template;
 
 /// `snackvideodl.js:31` — `/snackvideo\.com/i`, tidak dikunci ke host.
 pub(crate) fn is_snackvideo_url(url: &str) -> bool {
@@ -92,7 +91,7 @@ pub fn snackvideodl(ctx: Ctx) -> Reply {
     let data = match fetch_snackvideo(url) {
         Ok(data) => data,
         Err(()) => {
-            return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("🕕");
+            return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("🕕");
         }
     };
 
@@ -108,7 +107,6 @@ pub fn snackvideodl(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(text: &str) -> Reply {
         let ctx = Ctx {
@@ -178,12 +176,12 @@ mod tests {
     #[test]
     fn a_response_without_video_url_is_refused() {
         for data in [
-            json!({ "status": false, "result": { "videoUrl": "https://cdn/v.mp4" } }),
-            json!({ "status": true }),
-            json!({ "status": true, "result": {} }),
-            json!({ "status": true, "result": { "videoUrl": "" } }),
-            json!({ "status": true, "result": { "videoUrl": null } }),
-            json!({}),
+            serde_json::json!({ "status": false, "result": { "videoUrl": "https://cdn/v.mp4" } }),
+            serde_json::json!({ "status": true }),
+            serde_json::json!({ "status": true, "result": {} }),
+            serde_json::json!({ "status": true, "result": { "videoUrl": "" } }),
+            serde_json::json!({ "status": true, "result": { "videoUrl": null } }),
+            serde_json::json!({}),
         ] {
             assert!(!accepted(&data), "{data} seharusnya ditolak");
             assert_eq!(video_url(&data), "", "{data}");
@@ -193,7 +191,7 @@ mod tests {
     #[test]
     fn the_scraper_failure_branch_is_the_error_template() {
         let r = run("https://www.snackvideo.com/@a/video/1");
-        assert_eq!(text_of(&r), error_template(".", "svdl"));
+        assert_eq!(text_of(&r), crate::common::error_template(".", "svdl"));
         assert!(
             matches!(r.without_mutations(), Reply::Reaction { emoji, .. } if emoji == "🕕"),
             "reaksi jam harus tetap ada di cabang catch"

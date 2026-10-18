@@ -11,3 +11,5 @@ pub mod setbio;
 pub mod setname;
 pub mod setpp;
 pub mod toimg;
+
+// Ditambahkan scripts/pasang-modul.mjs.

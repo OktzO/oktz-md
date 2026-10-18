@@ -89,7 +89,6 @@ pub fn ramalanjodoh(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse, NoHttp};
-    use serde_json::json;
     use std::sync::Arc;
 
     const LENUH: [&str; 8] = ["putu", "16", "11", "2007", "keyla", "1", "1", "2008"];
@@ -142,7 +141,7 @@ mod tests {
     }
 
     fn payload() -> Value {
-        json!({
+        serde_json::json!({
             "status": true,
             "data": {
                 "result": {
@@ -200,11 +199,11 @@ mod tests {
     #[test]
     fn a_missing_status_data_or_result_gives_the_failure_message() {
         for body in [
-            json!({ "data": { "result": {} } }),
-            json!({ "status": true, "data": {} }),
-            json!({ "status": true }),
-            json!({ "status": true, "data": { "result": null } }),
-            json!({}),
+            serde_json::json!({ "data": { "result": {} } }),
+            serde_json::json!({ "status": true, "data": {} }),
+            serde_json::json!({ "status": true }),
+            serde_json::json!({ "status": true, "data": { "result": null } }),
+            serde_json::json!({}),
         ] {
             let r = run_with(Arc::new(Stub(body.clone())), &LENUH);
             assert_eq!(reply_text(&r), "❌ *ɢᴀɢᴀʟ*\n\n> Gagal meramal", "{body}");
@@ -215,7 +214,7 @@ mod tests {
     #[test]
     fn a_non_array_hasil_ramalan_leaves_the_numbered_list_empty() {
         let mut body = payload();
-        body["data"]["result"]["hasil_ramalan"] = json!("bukan array");
+        body["data"]["result"]["hasil_ramalan"] = serde_json::json!("bukan array");
         let r = run_with(Arc::new(Stub(body)), &LENUH);
         let t = reply_text(&r);
         assert!(t.contains("📜 *ʜᴀꜱɪʟ ʀᴀᴍᴀʟᴀɴ:*\n"), "{t}");

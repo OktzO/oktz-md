@@ -133,7 +133,13 @@ pub fn lirik(ctx: Ctx) -> Reply {
     let Ok(resp) = ctx.http.get(&api_url(query)) else {
         return Reply::text(not_found(query)).with_reaction("❌");
     };
-    let data = resp.json().unwrap_or(Value::Null);
+    let root = resp.json().unwrap_or(Value::Null);
+    // `fetchLyrics` (`lyrics.js:6-9`): hanya `result` yang dipakai, dan hanya
+    // kalau `status` truthy. Tanpa `status`, hasilnya `null` seperti gagal.
+    let data = match root.get("result") {
+        Some(v) if js_truthy(root.get("status")) && js_truthy(Some(v)) => v.clone(),
+        _ => return Reply::text(not_found(query)).with_reaction("❌"),
+    };
 
     let Some(text) = lyrics_text(&data, query) else {
         return Reply::text(not_found(query)).with_reaction("❌");
@@ -159,7 +165,6 @@ pub(crate) fn server_down() -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug)]
@@ -186,7 +191,7 @@ mod tests {
     impl HttpGet for Stub {
         fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
             self.seen.lock().unwrap().push(url.to_string());
-            let body = self.body.clone().ok_or_else(|| HttpError {
+            let body = self.body.clone().ok_or_else(|| oktz_plugin_api::HttpError {
                 message: "offline".into(),
             })?;
             Ok(HttpResponse {
@@ -220,7 +225,7 @@ mod tests {
             sender: "628111@s.whatsapp.net".into(),
             chat: "628111@s.whatsapp.net".into(),
             text: text.into(),
-            args: text.split_whitespace().collect(),
+            args: text.split_whitespace().map(str::to_string).collect(),
             http,
             ..Default::default()
         };
@@ -311,12 +316,12 @@ mod tests {
 
     #[test]
     fn the_artist_falls_back_to_the_lyrics_object_then_to_a_placeholder() {
-        let data = json!({"lyrics": {"artist_name": "Dari Lyrics", "plain_lyrics": "x"}});
+        let data = serde_json::json!({"lyrics": {"artist_name": "Dari Lyrics", "plain_lyrics": "x"}});
         assert!(lyrics_text(&data, "q")
             .unwrap()
             .contains("🎤 *Artis:* Dari Lyrics\n"));
 
-        let data = json!({"title": "", "lyrics": {"plain_lyrics": "x"}});
+        let data = serde_json::json!({"title": "", "lyrics": {"plain_lyrics": "x"}});
         let text = lyrics_text(&data, "judulku").unwrap();
         assert!(
             text.contains("🎵 *Judul:* judulku\n"),
@@ -352,9 +357,10 @@ mod tests {
 
     #[test]
     fn a_placeholder_thumbnail_means_plain_text() {
-        let data = json!({"lyrics": {"plain_lyrics": "x"}, "thumbnail": "-"});
-        assert_eq!(thumbnail_of(&data), None);
-        let r = run(Stub::new(&data.to_string()), "laguku");
+        let hasil = serde_json::json!({"lyrics": {"plain_lyrics": "x"}, "thumbnail": "-"});
+        assert_eq!(thumbnail_of(&hasil), None);
+        let root = serde_json::json!({"status": true, "result": hasil});
+        let r = run(Stub::new(&root.to_string()), "laguku");
         assert!(!r.has_media());
         assert_eq!(reaction_of(&r), Some("✅"));
         assert!(body_of(&r).starts_with("Ketemu nih liriknya! 🎉"), "{}", body_of(&r));

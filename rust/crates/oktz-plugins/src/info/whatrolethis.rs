@@ -87,10 +87,10 @@ pub fn whatrolethis(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::Ctx;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(args: &[&str]) -> String {
-        run_with(args, json!({}))
+        run_with(args, serde_json::json!({}))
     }
 
     fn run_with(args: &[&str], settings: Value) -> String {
@@ -275,10 +275,10 @@ mod tests {
     fn an_absent_or_empty_capprem_setting_falls_back_to_the_plugin_meta() {
         let baseline = run(&["dare", "tagall"]);
         for settings in [
-            json!({}),
-            json!({"capprem": {}}),
-            json!({"capprem": null}),
-            json!({"capprem": [1, 2]}),
+            serde_json::json!({}),
+            serde_json::json!({"capprem": {}}),
+            serde_json::json!({"capprem": null}),
+            serde_json::json!({"capprem": [1, 2]}),
         ] {
             assert_eq!(
                 run_with(&["dare", "tagall"], settings.clone()),
@@ -290,7 +290,7 @@ mod tests {
 
     #[test]
     fn capprem_true_adds_the_premium_line_to_a_free_command() {
-        let out = run_with(&["dare"], json!({"capprem": {"dare": true}}));
+        let out = run_with(&["dare"], serde_json::json!({"capprem": {"dare": true}}));
         assert_eq!(out, "🔍 *DETAIL AKSES FITUR*\n\n✅ *dare*\n  - Premium 💎");
     }
 
@@ -300,11 +300,11 @@ mod tests {
         assert!(meta.is_premium, "premis test: cekprem harus plugin premium");
         assert!(!meta.is_group && !meta.is_private, "satu-satunya syaratnya premium");
         assert_eq!(
-            run_with(&["cekprem"], json!({})),
+            run_with(&["cekprem"], serde_json::json!({})),
             "🔍 *DETAIL AKSES FITUR*\n\n✅ *cekprem*\n  - Premium 💎"
         );
         assert_eq!(
-            run_with(&["cekprem"], json!({"capprem": {"cekprem": false}})),
+            run_with(&["cekprem"], serde_json::json!({"capprem": {"cekprem": false}})),
             "🔍 *DETAIL AKSES FITUR*\n\n✅ *cekprem*\n  - Free / Semua Orang 🆓",
             "`capprem[cekprem] = false` mematikan satu-satunya role"
         );
@@ -314,8 +314,8 @@ mod tests {
     fn a_falsy_but_present_override_wins_over_the_plugin_meta() {
         // `overrides[name] !== undefined` benar-benar dipakai di JS, jadi nilai
         // falsy yang tersimpan tetap mengalahkan `isPremium`.
-        for value in [json!(false), json!(null), json!(0), json!("")] {
-            let out = run_with(&["cekprem"], json!({ "capprem": { "cekprem": value } }));
+        for value in [serde_json::json!(false), serde_json::json!(null), serde_json::json!(0), serde_json::json!("")] {
+            let out = run_with(&["cekprem"], serde_json::json!({ "capprem": { "cekprem": value } }));
             assert!(out.ends_with("  - Free / Semua Orang 🆓"), "override {value}: {out}");
         }
     }
@@ -324,27 +324,27 @@ mod tests {
     fn capprem_is_keyed_by_canonical_name_not_by_alias() {
         // `cekrole` = alias dari whatrolethis, jadi override "cekrole" tidak
         // pernah dibaca; yang dipakai adalah meta plugin itu sendiri.
-        let by_alias = run_with(&["cekrole"], json!({"capprem": {"cekrole": true}}));
+        let by_alias = run_with(&["cekrole"], serde_json::json!({"capprem": {"cekrole": true}}));
         assert!(
             by_alias.contains("Free / Semua Orang 🆓"),
             "override by alias diabaikan: {by_alias}"
         );
         let by_name = run_with(
             &["cekrole"],
-            json!({"capprem": {"whatrolethis": true}}),
+            serde_json::json!({"capprem": {"whatrolethis": true}}),
         );
         assert!(by_name.contains("  - Premium 💎"), "{by_name}");
     }
 
     #[test]
     fn only_the_probe_branch_carries_a_reaction() {
-        let help_reply = handler(&[], json!({}));
+        let help_reply = handler(&[], serde_json::json!({}));
         assert!(matches!(
             help_reply.without_mutations(),
             Reply::Text { .. }
         ));
 
-        let probed = handler(&["dare"], json!({}));
+        let probed = handler(&["dare"], serde_json::json!({}));
         let mut cur = probed.without_mutations();
         let mut seen = 0;
         while let Reply::Reaction { emoji, reply } = cur {

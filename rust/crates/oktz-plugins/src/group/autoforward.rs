@@ -69,7 +69,7 @@ pub fn autoforward(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -135,40 +135,40 @@ mod tests {
 
     #[test]
     fn no_argument_reports_status_without_writing() {
-        let off = run(json!({}), "");
+        let off = run(serde_json::json!({}), "");
         assert!(text_of(&off).contains("┃ ◦ Status: *❌ OFF*"), "{}", text_of(&off));
         assert!(off.mutations().is_empty());
 
-        let on = run(json!({"autoforward": true}), "");
+        let on = run(serde_json::json!({"autoforward": true}), "");
         assert!(text_of(&on).contains("┃ ◦ Status: *✅ ON*"), "{}", text_of(&on));
         assert!(on.mutations().is_empty());
     }
 
     #[test]
     fn a_non_boolean_stored_value_counts_as_active_like_javascript() {
-        let r = run(json!({"autoforward": "ya"}), "");
+        let r = run(serde_json::json!({"autoforward": "ya"}), "");
         assert!(text_of(&r).contains("┃ ◦ Status: *✅ ON*"), "{}", text_of(&r));
     }
 
     #[test]
     fn on_writes_true_and_reacts_with_a_check() {
-        let r = run(json!({}), "on");
-        assert_eq!(written(&r), &json!({ "autoforward": true }));
+        let r = run(serde_json::json!({}), "on");
+        assert_eq!(written(&r), &serde_json::json!({ "autoforward": true }));
         assert_eq!(reaction(&r), "✅");
         assert!(text_of(&r).contains("✅ *ᴀᴋᴛɪꜰ*"), "{}", text_of(&r));
     }
 
     #[test]
     fn off_writes_false_and_reacts_with_a_cross() {
-        let r = run(json!({"autoforward": true}), "off");
-        assert_eq!(written(&r), &json!({ "autoforward": false }));
+        let r = run(serde_json::json!({"autoforward": true}), "off");
+        assert_eq!(written(&r), &serde_json::json!({ "autoforward": false }));
         assert_eq!(reaction(&r), "❌");
         assert!(text_of(&r).contains("❌ *ɴᴏɴᴀᴋᴛɪꜰ*"), "{}", text_of(&r));
     }
 
     #[test]
     fn an_unknown_option_is_refused_and_nothing_is_written() {
-        let r = run(json!({}), "mungkin");
+        let r = run(serde_json::json!({}), "mungkin");
         assert_eq!(text_of(&r), BAD_OPTION);
         assert!(r.mutations().is_empty());
     }
@@ -176,8 +176,8 @@ mod tests {
     #[test]
     fn options_are_matched_after_lowercase_and_trim() {
         assert_eq!(
-            written(&run(json!({}), "  ON  ")),
-            &json!({ "autoforward": true })
+            written(&run(serde_json::json!({}), "  ON  ")),
+            &serde_json::json!({ "autoforward": true })
         );
     }
 }

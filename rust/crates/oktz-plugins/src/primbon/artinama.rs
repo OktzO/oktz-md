@@ -98,7 +98,6 @@ pub fn artinama(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse, NoHttp};
-    use serde_json::json;
     use std::sync::Arc;
 
     #[derive(Debug)]
@@ -150,7 +149,7 @@ mod tests {
 
     fn ok(payload: Value) -> Reply {
         run_with(
-            Arc::new(Stub(json!({ "status": true, "data": payload }))),
+            Arc::new(Stub(serde_json::json!({ "status": true, "data": payload }))),
             Some("putu"),
         )
     }
@@ -180,7 +179,7 @@ mod tests {
 
     #[test]
     fn a_good_payload_is_rendered_field_by_field() {
-        let r = ok(json!({
+        let r = ok(serde_json::json!({
             "nama": "Putu",
             "arti": " meanings ",
             "catatan": "catatan dari primbon",
@@ -195,7 +194,7 @@ mod tests {
     /// `!data?.status || !data?.data` — kedua cabang sama-sama "GAGAL" + ❌.
     #[test]
     fn a_missing_status_or_data_falls_into_the_failure_branch() {
-        for body in [json!({ "data": {} }), json!({ "status": true }), json!({})] {
+        for body in [serde_json::json!({ "data": {} }), serde_json::json!({ "status": true }), serde_json::json!({})] {
             let r = run_with(Arc::new(Stub(body)), Some("putu"));
             assert_eq!(
                 reply_text(&r),

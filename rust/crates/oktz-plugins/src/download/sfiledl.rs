@@ -16,7 +16,7 @@
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
-use crate::common::{error_template, host_dari};
+use crate::common::{host_dari};
 
 /// `sfiledl.js:49-52` — kartu pakai, delimiter markdown-nya backtick.
 pub(crate) fn help(prefix: &str) -> String {
@@ -112,7 +112,7 @@ pub fn sfiledl(ctx: Ctx) -> Reply {
         // `sfiledl.js:85-109` — tanpa `error.tried`, `missingEnvNameOf` dan
         // `adaNormalisasiGagal` sama-sama `false`, jadi template error yang
         // menyala. `m.pushName` tidak ada di `Ctx`, jadi `User` yang dipakai.
-        Err(()) => Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
+        Err(()) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
     }
 }
 
@@ -239,7 +239,7 @@ mod tests {
         // Tidak ada `error.tried`, jadi `missingEnvNameOf` dan
         // `adaNormalisasiGagal` keduanya false.
         let r = run("https://sfile.mobi/xxxxx");
-        assert_eq!(text_of(&r), error_template(".", "sfiledl"));
+        assert_eq!(text_of(&r), crate::common::error_template(".", "sfiledl"));
         assert_eq!(reaksi(&r), Some("☢"));
     }
 

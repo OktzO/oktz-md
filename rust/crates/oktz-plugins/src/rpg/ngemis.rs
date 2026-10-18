@@ -3,7 +3,7 @@
 //! Reaksi + pesan antara sebelum jeda `setTimeout` tidak masuk `Reply`.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::int_field;
 use crate::rpg::jualan::{
@@ -35,7 +35,7 @@ pub fn ngemis(ctx: Ctx) -> Reply {
         ));
     }
     let stamina = stamina - STAMINA_COST;
-    rpg.insert("stamina".into(), json!(stamina));
+    rpg.insert("stamina".into(), serde_json::json!(stamina));
 
     let koin = int_field(&ctx, "koin");
     let old_exp = or_default(ctx.user_field("exp").and_then(Value::as_i64), 0);
@@ -45,7 +45,7 @@ pub fn ngemis(ctx: Ctx) -> Reply {
         // Nasi Padang: stamina pulih, tidak ada koin dan tidak ada exp.
         let heal = roll_incl(10, 29);
         let healed = (stamina + heal).min(100);
-        rpg.insert("stamina".into(), json!(healed));
+        rpg.insert("stamina".into(), serde_json::json!(healed));
         return Reply::text(format!(
             "ALHAMDULILLAH DIKASIH NASI PADANG! 🍱✨\n\n\
              Ada bapak-bapak baik hati yang ngasih kamu bungkus nasi sisa rapet!\n\
@@ -56,7 +56,7 @@ pub fn ngemis(ctx: Ctx) -> Reply {
         .with_reaction("🍱")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "rpg": rpg }),
+            data: serde_json::json!({ "rpg": rpg }),
         });
     }
 
@@ -71,7 +71,7 @@ pub fn ngemis(ctx: Ctx) -> Reply {
         .with_reaction("💢")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "rpg": rpg }),
+            data: serde_json::json!({ "rpg": rpg }),
         });
     }
 
@@ -90,7 +90,7 @@ pub fn ngemis(ctx: Ctx) -> Reply {
     .with_reaction("✅")
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": koin + earning, "exp": new_exp, "rpg": rpg }),
+        data: serde_json::json!({ "koin": koin + earning, "exp": new_exp, "rpg": rpg }),
     })
 }
 
@@ -167,10 +167,10 @@ mod tests {
     #[test]
     fn four_stamina_is_enough_and_four_is_not() {
         // 5 - 5 = 0, lalu cabang nasi bisa memulihkannya lagi ke 10..29.
-        let r = run(json!({"rpg": {"stamina": 5}}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 5}}));
         assert!(written(&r)["rpg"]["stamina"].as_i64().unwrap() <= 29);
 
-        let r = run(json!({"rpg": {"stamina": 4}}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 4}}));
         assert!(text_of(&r).contains("sisa stamina kamu *4*"));
         assert!(r.mutations().is_empty());
     }
@@ -181,7 +181,7 @@ mod tests {
         let mut usir = 0;
         let mut receh = 0;
         for _ in 0..4000 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
             let d = written(&r);
             let t = text_of(&r);
             if t.starts_with("ALHAMDULILLAH DIKASIH NASI") {
@@ -196,7 +196,7 @@ mod tests {
                 receh += 1;
                 let koin = d["koin"].as_i64().unwrap();
                 assert!((500..=3499).contains(&koin), "receh {koin}");
-                assert_eq!(d["exp"], json!(koin / 10), "exp = koin / 10");
+                assert_eq!(d["exp"], serde_json::json!(koin / 10), "exp = koin / 10");
             }
         }
         assert!(nasi > 0 && usir > 0 && receh > 0, "{nasi}/{usir}/{receh}");
@@ -205,10 +205,10 @@ mod tests {
     #[test]
     fn nasi_padang_heals_towards_a_hundred_and_never_past_it() {
         for _ in 0..4000 {
-            let r = run(json!({"rpg": {"stamina": 99}, "koin": 0, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 99}, "koin": 0, "exp": 0}));
             let d = written(&r);
             if text_of(&r).starts_with("ALHAMDULILLAH DIKASIH NASI") {
-                assert_eq!(d["rpg"]["stamina"], json!(100), "99 - 5 + heal, clamp 100");
+                assert_eq!(d["rpg"]["stamina"], serde_json::json!(100), "99 - 5 + heal, clamp 100");
                 return;
             }
         }
@@ -218,10 +218,10 @@ mod tests {
     #[test]
     fn being_chased_still_pays_the_stamina_cost() {
         for _ in 0..4000 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
             let d = written(&r);
             if text_of(&r).starts_with("DIUSIR PREMAN") {
-                assert_eq!(d["rpg"]["stamina"], json!(95), "100 - 5");
+                assert_eq!(d["rpg"]["stamina"], serde_json::json!(95), "100 - 5");
                 return;
             }
         }

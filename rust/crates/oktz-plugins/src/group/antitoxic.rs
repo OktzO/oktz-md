@@ -128,7 +128,7 @@ pub fn antitoxic(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn no_subcommand_only_reports_and_never_writes() {
-        let r = run(json!({}), "");
+        let r = run(serde_json::json!({}), "");
         assert!(r.mutations().is_empty());
         assert!(text_of(&r).contains("> Status: *❌ OFF*"), "{}", text_of(&r));
         assert!(text_of(&r).contains("> Kata: *20*"), "{}", text_of(&r));
@@ -198,7 +198,7 @@ mod tests {
     #[test]
     fn the_status_panel_reads_every_stored_field() {
         let r = run(
-            json!({
+            serde_json::json!({
                 "antitoxic": true,
                 "toxicWords": ["satu", "dua", "tiga"],
                 "toxicMaxWarn": 7,
@@ -216,7 +216,7 @@ mod tests {
     fn falsy_stored_values_fall_back_to_the_defaults() {
         // `toxicWords?.length || 20`, `toxicMaxWarn || 3`, `toxicMethod || 'kick'`
         let r = run(
-            json!({ "toxicWords": [], "toxicMaxWarn": 0, "toxicMethod": "" }),
+            serde_json::json!({ "toxicWords": [], "toxicMaxWarn": 0, "toxicMethod": "" }),
             "",
         );
         assert!(text_of(&r).contains("> Kata: *20*"), "{}", text_of(&r));
@@ -226,17 +226,17 @@ mod tests {
 
     #[test]
     fn on_and_off_write_the_flag_with_their_reaction() {
-        let on = run(json!({}), "on");
+        let on = run(serde_json::json!({}), "on");
         assert_eq!(text_of(&on), ON);
-        assert_eq!(written(&on), &json!({ "antitoxic": true }));
+        assert_eq!(written(&on), &serde_json::json!({ "antitoxic": true }));
         assert!(matches!(
             on.without_mutations(),
             Reply::Reaction { emoji, .. } if emoji == "✅"
         ));
 
-        let off = run(json!({ "antitoxic": true }), "off");
+        let off = run(serde_json::json!({ "antitoxic": true }), "off");
         assert_eq!(text_of(&off), OFF);
-        assert_eq!(written(&off), &json!({ "antitoxic": false }));
+        assert_eq!(written(&off), &serde_json::json!({ "antitoxic": false }));
         assert!(matches!(
             off.without_mutations(),
             Reply::Reaction { emoji, .. } if emoji == "❌"
@@ -246,8 +246,8 @@ mod tests {
     #[test]
     fn warn_accepts_one_to_ten_and_stores_the_parsed_number() {
         for n in 1..=10 {
-            let r = run(json!({}), &format!("warn {n}"));
-            assert_eq!(written(&r), &json!({ "toxicMaxWarn": n }), "warn {n}");
+            let r = run(serde_json::json!({}), &format!("warn {n}"));
+            assert_eq!(written(&r), &serde_json::json!({ "toxicMaxWarn": n }), "warn {n}");
             assert!(
                 text_of(&r).contains(&format!("✅ Max peringatan diubah ke *{n}*")),
                 "{}",
@@ -260,7 +260,7 @@ mod tests {
     fn warn_outside_the_range_is_refused_and_writes_nothing() {
         // `!count || count < 1 || count > 10` — "abc" jadi NaN -> !count.
         for text in ["warn", "warn 0", "warn -3", "warn 11", "warn abc"] {
-            let r = run(json!({}), text);
+            let r = run(serde_json::json!({}), text);
             assert_eq!(text_of(&r), BAD_WARN, "input {text:?}");
             assert!(r.mutations().is_empty(), "input {text:?} tidak boleh menulis");
         }
@@ -268,8 +268,8 @@ mod tests {
 
     #[test]
     fn warn_uses_parse_int_so_trailing_digits_are_dropped() {
-        let r = run(json!({}), "warn 5luck");
-        assert_eq!(written(&r), &json!({ "toxicMaxWarn": 5 }));
+        let r = run(serde_json::json!({}), "warn 5luck");
+        assert_eq!(written(&r), &serde_json::json!({ "toxicMaxWarn": 5 }));
         assert!(
             text_of(&r).contains("*5*"),
             "angka yang tampil harus hasil parseInt: {}",
@@ -281,10 +281,10 @@ mod tests {
     fn all_three_method_spellings_write_the_same_field() {
         for input in ["metode", "method", "mode"] {
             for method in ["kick", "delete"] {
-                let r = run(json!({}), &format!("{input} {method}"));
+                let r = run(serde_json::json!({}), &format!("{input} {method}"));
                 assert_eq!(
                     written(&r),
-                    &json!({ "toxicMethod": method }),
+                    &serde_json::json!({ "toxicMethod": method }),
                     "{input} {method}"
                 );
                 assert!(
@@ -299,7 +299,7 @@ mod tests {
     #[test]
     fn an_unknown_method_is_refused_and_writes_nothing() {
         for text in ["metode", "metode warn", "metode hapus", "metode kickall"] {
-            let r = run(json!({}), text);
+            let r = run(serde_json::json!({}), text);
             assert_eq!(text_of(&r), BAD_METHOD, "input {text:?}");
             assert!(r.mutations().is_empty(), "input {text:?} tidak boleh menulis");
         }
@@ -307,14 +307,14 @@ mod tests {
 
     #[test]
     fn an_unknown_subcommand_falls_through_to_the_tail_reply() {
-        let r = run(json!({}), "mungkin");
+        let r = run(serde_json::json!({}), "mungkin");
         assert_eq!(text_of(&r), UNKNOWN);
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn subcommands_are_lowercased_before_matching() {
-        assert_eq!(written(&run(json!({}), "ON")), &json!({ "antitoxic": true }));
-        assert_eq!(written(&run(json!({}), "METODE DELETE")), &json!({ "toxicMethod": "delete" }));
+        assert_eq!(written(&run(serde_json::json!({}), "ON")), &serde_json::json!({ "antitoxic": true }));
+        assert_eq!(written(&run(serde_json::json!({}), "METODE DELETE")), &serde_json::json!({ "toxicMethod": "delete" }));
     }
 }

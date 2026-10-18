@@ -18,7 +18,7 @@
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
-use crate::common::{error_template, host_dari};
+use crate::common::{host_dari};
 
 /// `pindl.js:20` — batas body video (dan batas file yang boleh dikirim).
 pub(crate) const BATAS_BODY_VIDEO: u64 = 64 * 1024 * 1024;
@@ -285,7 +285,7 @@ pub fn pindl(ctx: Ctx) -> Reply {
             Reply::text(gagal(None)).with_reaction("❌")
         }
         // `pindl.js:310-314` — `m.pushName` tidak ada di `Ctx`, jadi `User`.
-        Err(()) => Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
+        Err(()) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
     }
 }
 
@@ -417,7 +417,7 @@ mod tests {
     #[test]
     fn the_resolve_failure_lands_on_the_generic_catch_branch() {
         let r = run("https://pin.it/xxx");
-        assert_eq!(text_of(&r), error_template(".", "pindl"));
+        assert_eq!(text_of(&r), crate::common::error_template(".", "pindl"));
         assert_eq!(reaksi(&r), Some("☢"));
     }
 

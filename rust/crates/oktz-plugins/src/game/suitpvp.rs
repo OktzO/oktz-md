@@ -8,7 +8,7 @@
 //! berikutnya — efek yang sama, tanpa pengusir yang berjalan sendiri.
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 /// `TIMEOUT` (`suitpvp.js:20`) — 90 detik.
 pub(crate) const TIMEOUT_MS: i64 = 90_000;
@@ -118,7 +118,7 @@ pub fn suitpvp(ctx: Ctx) -> Reply {
             .expect("suitGames selalu objek")
             .entry(room_id.clone())
             .or_insert(Value::Null);
-        *entry = json!({
+        *entry = serde_json::json!({
             "id": room_id,
             "chat": chat,
             "p": p,
@@ -168,7 +168,7 @@ mod tests {
     }
 
     fn room(p: &str, p2: &str, created: i64) -> Value {
-        json!({
+        serde_json::json!({
             "id": "suit_1",
             "chat": CHAT,
             "p": p,
@@ -204,7 +204,7 @@ mod tests {
 
     #[test]
     fn without_a_mention_or_a_quote_the_usage_card_appears() {
-        let r = run(ctx_with(json!({})));
+        let r = run(ctx_with(serde_json::json!({})));
         assert_eq!(text_of(&r), usage());
         assert!(text_of(&r).contains("Tag orang yang mau kamu tantang!"));
     }
@@ -214,20 +214,20 @@ mod tests {
         // Urutan guard di JS: "masih dalam game" diperiksa lebih dulu, jadi
         // comando tanpa target pun tetap kena_branch ini.
         let now = crate::common::now_ms();
-        let r = run(ctx_with(json!({ "suit_1": room(SENDER, OTHER, now) })));
+        let r = run(ctx_with(serde_json::json!({ "suit_1": room(SENDER, OTHER, now) })));
         assert_eq!(text_of(&r), BUSY);
     }
 
     #[test]
     fn a_room_left_by_its_opponent_still_blocks_the_sender() {
         let now = crate::common::now_ms();
-        let r = run(ctx_with(json!({ "suit_1": room(OTHER, SENDER, now) })));
+        let r = run(ctx_with(serde_json::json!({ "suit_1": room(OTHER, SENDER, now) })));
         assert_eq!(text_of(&r), BUSY, "pemain kedua juga sedang duel");
     }
 
     #[test]
     fn challenging_yourself_is_refused_and_writes_nothing() {
-        let mut ctx = ctx_with(json!({}));
+        let mut ctx = ctx_with(serde_json::json!({}));
         ctx.mentioned = vec![SENDER.into()];
         let r = run(ctx.clone());
         assert_eq!(text_of(&r), SELF);
@@ -241,7 +241,7 @@ mod tests {
     #[test]
     fn a_target_already_duelling_someone_else_is_refused() {
         let now = crate::common::now_ms();
-        let mut ctx = ctx_with(json!({ "suit_1": room("628000@s.whatsapp.net", OTHER, now) }));
+        let mut ctx = ctx_with(serde_json::json!({ "suit_1": room("628000@s.whatsapp.net", OTHER, now) }));
         ctx.mentioned = vec![OTHER.into()];
         let r = run(ctx.clone());
         assert_eq!(text_of(&r), TARGET_BUSY);
@@ -253,7 +253,7 @@ mod tests {
 
     #[test]
     fn a_mention_creates_the_room_and_answers_with_the_challenge() {
-        let mut ctx = ctx_with(json!({}));
+        let mut ctx = ctx_with(serde_json::json!({}));
         ctx.mentioned = vec![OTHER.into()];
         let r = run(ctx.clone());
         assert_eq!(text_of(&r), challenge(OTHER));
@@ -275,10 +275,10 @@ mod tests {
         let games = ctx.session_get(GAMES_KEY).unwrap();
         assert_eq!(games.as_object().unwrap().len(), 1);
         let room = &games[games.as_object().unwrap().keys().next().unwrap()];
-        assert_eq!(room["chat"], json!(CHAT));
-        assert_eq!(room["p"], json!(SENDER));
-        assert_eq!(room["p2"], json!(OTHER));
-        assert_eq!(room["status"], json!("waiting"));
+        assert_eq!(room["chat"], serde_json::json!(CHAT));
+        assert_eq!(room["p"], serde_json::json!(SENDER));
+        assert_eq!(room["p2"], serde_json::json!(OTHER));
+        assert_eq!(room["status"], serde_json::json!("waiting"));
         assert_eq!(room["pilih"], Value::Null);
         assert_eq!(room["pilih2"], Value::Null);
     }
@@ -286,7 +286,7 @@ mod tests {
     #[test]
     fn the_quoted_sender_wins_over_the_mention() {
         // `suitpvp.js:43-47`: `m.quoted` dicek lebih dulu.
-        let mut ctx = ctx_with(json!({}));
+        let mut ctx = ctx_with(serde_json::json!({}));
         ctx.mentioned = vec!["628000@s.whatsapp.net".into()];
         ctx.quoted = Some(QuotedMessage {
             id: "MSG1".into(),
@@ -301,7 +301,7 @@ mod tests {
         run(ctx.clone());
         let games = ctx.session_get(GAMES_KEY).unwrap();
         let key = games.as_object().unwrap().keys().next().unwrap();
-        assert_eq!(games[key]["p2"], json!(OTHER));
+        assert_eq!(games[key]["p2"], serde_json::json!(OTHER));
     }
 
     #[test]
@@ -310,7 +310,7 @@ mod tests {
         // tidak, satu duel yang ditinggalkan membekukan kedua pemainnya.
         let now = crate::common::now_ms();
         let stale = room(SENDER, OTHER, now - TIMEOUT_MS - 1_000);
-        let mut ctx = ctx_with(json!({ "suit_1": stale }));
+        let mut ctx = ctx_with(serde_json::json!({ "suit_1": stale }));
         ctx.mentioned = vec!["628000@s.whatsapp.net".into()];
         let r = run(ctx.clone());
         assert!(text_of(&r).starts_with("Kamu menantang"), "{}", text_of(&r));
@@ -324,7 +324,7 @@ mod tests {
     #[test]
     fn a_fresh_room_is_still_blocking_at_exactly_ninety_seconds() {
         let now = crate::common::now_ms();
-        let games = json!({ "suit_1": room(SENDER, OTHER, now - TIMEOUT_MS + 5_000) });
+        let games = serde_json::json!({ "suit_1": room(SENDER, OTHER, now - TIMEOUT_MS + 5_000) });
         assert_eq!(text_of(&run(ctx_with(games))), BUSY);
     }
 }

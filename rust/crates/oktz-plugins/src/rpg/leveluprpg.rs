@@ -77,7 +77,7 @@ pub fn leveluprpg(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(user: Value, arg: &str) -> Reply {
         let ctx = Ctx {
@@ -132,7 +132,7 @@ mod tests {
     #[test]
     fn the_default_when_the_flag_is_absent_is_on() {
         assert!(current_enabled(&Ctx::default()));
-        for user in [json!(null), json!({}), json!({"settings": {}})] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"settings": {}})] {
             assert!(
                 text_of(&run(user.clone(), "")).contains("ON ✅"),
                 "input {user}"
@@ -143,22 +143,22 @@ mod tests {
 
     #[test]
     fn an_explicit_false_turns_it_off() {
-        let user = json!({"settings": {"rpgLevelupNotif": false}});
+        let user = serde_json::json!({"settings": {"rpgLevelupNotif": false}});
         assert!(text_of(&run(user.clone(), "")).contains("OFF ❌"));
     }
 
     #[test]
     fn on_and_off_write_their_own_boolean() {
         assert_eq!(
-            settings_of(&run(json!({}), "on"))["rpgLevelupNotif"],
-            json!(true)
+            settings_of(&run(serde_json::json!({}), "on"))["rpgLevelupNotif"],
+            serde_json::json!(true)
         );
         assert_eq!(
             settings_of(&run(
-                json!({"settings": {"rpgLevelupNotif": true}}),
+                serde_json::json!({"settings": {"rpgLevelupNotif": true}}),
                 "off"
             ))["rpgLevelupNotif"],
-            json!(false)
+            serde_json::json!(false)
         );
     }
 
@@ -166,26 +166,26 @@ mod tests {
     /// menimpa field milik yang lain, notifikasi yang lain ikut mati.
     #[test]
     fn writing_rpg_notif_leaves_the_plain_levelup_notif_intact() {
-        let user = json!({"settings": {"levelupNotif": false}});
+        let user = serde_json::json!({"settings": {"levelupNotif": false}});
         let __balasan = run(user.clone(), "on");
         let s = settings_of(&__balasan);
-        assert_eq!(s["levelupNotif"], json!(false), "harus tetap false");
-        assert_eq!(s["rpgLevelupNotif"], json!(true));
+        assert_eq!(s["levelupNotif"], serde_json::json!(false), "harus tetap false");
+        assert_eq!(s["rpgLevelupNotif"], serde_json::json!(true));
     }
 
     #[test]
     fn writing_rpg_notif_preserves_other_settings_fields() {
-        let user = json!({"settings": {"lain": 1, "levelupNotif": true}});
+        let user = serde_json::json!({"settings": {"lain": 1, "levelupNotif": true}});
         let __balasan = run(user.clone(), "off");
         let s = settings_of(&__balasan);
-        assert_eq!(s["lain"], json!(1));
-        assert_eq!(s["levelupNotif"], json!(true));
+        assert_eq!(s["lain"], serde_json::json!(1));
+        assert_eq!(s["levelupNotif"], serde_json::json!(true));
     }
 
     #[test]
     fn no_argument_and_unknown_options_both_show_status_without_writing() {
         for bad in ["", "maybe", "1", "ON!"] {
-            let r = run(json!({}), bad);
+            let r = run(serde_json::json!({}), bad);
             assert!(
                 text_of(&r).starts_with("🔔 *ʀᴘɢ ʟᴇᴠᴇʟ ᴜᴘ ɴᴏᴛɪꜰ*"),
                 "input {bad:?}"
@@ -196,14 +196,14 @@ mod tests {
 
     #[test]
     fn the_switch_replies_name_the_direction_that_was_written() {
-        assert!(text_of(&run(json!({}), "on")).starts_with("✅ *ʀᴘɢ ʟᴇᴠᴇʟ ᴜᴘ ɴᴏᴛɪꜰ*"));
-        assert!(text_of(&run(json!({}), "off")).starts_with("❌ *ʀᴘɢ ʟᴇᴠᴇʟ ᴜᴘ ɴᴏᴛɪꜰ*"));
+        assert!(text_of(&run(serde_json::json!({}), "on")).starts_with("✅ *ʀᴘɢ ʟᴇᴠᴇʟ ᴜᴘ ɴᴏᴛɪꜰ*"));
+        assert!(text_of(&run(serde_json::json!({}), "off")).starts_with("❌ *ʀᴘɢ ʟᴇᴠᴇʟ ᴜᴘ ɴᴏᴛɪꜰ*"));
     }
 
     #[test]
     fn the_switch_reply_is_paired_with_the_write() {
         for arg in ["on", "off"] {
-            assert_eq!(run(json!({}), arg).mutations().len(), 1, "arg {arg}");
+            assert_eq!(run(serde_json::json!({}), arg).mutations().len(), 1, "arg {arg}");
         }
     }
 

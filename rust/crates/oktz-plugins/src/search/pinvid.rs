@@ -18,7 +18,6 @@
 use oktz_plugin_api::{Ctx, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::error_template;
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `config.APIkey?.firefly || "default"` (`pinvid.js:53`).
@@ -109,7 +108,7 @@ pub fn pinvid(ctx: Ctx) -> Reply {
 
     // `m.react("🕕")` di `:49` sudah jalan sebelum request.
     let Ok(res) = ctx.http.get(&api_url(query)) else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
 
     let body = res.json().unwrap_or(Value::Null);
@@ -129,7 +128,6 @@ pub fn pinvid(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -161,7 +159,7 @@ mod tests {
             let v = self
                 .body
                 .clone()
-                .ok_or_else(|| HttpError { message: "offline".into() })?;
+                .ok_or_else(|| oktz_plugin_api::HttpError { message: "offline".into() })?;
             Ok(HttpResponse {
                 status: 200,
                 body: HttpBody::Bytes {
@@ -253,7 +251,7 @@ mod tests {
 
     #[test]
     fn the_request_uses_the_default_key_and_encodes_the_query() {
-        let http = Stub::with(json!({ "status": false }));
+        let http = Stub::with(serde_json::json!({ "status": false }));
         let _ = run(http.clone(), "anime girls");
         assert_eq!(
             http.seen.lock().unwrap()[0],
@@ -264,11 +262,11 @@ mod tests {
     #[test]
     fn an_empty_or_failed_response_reports_not_found() {
         for body in [
-            json!({ "status": false, "data": [ { "video_url": "u" } ] }),
-            json!({ "status": true, "data": [] }),
-            json!({ "status": true }),
-            json!({}),
-            json!(null),
+            serde_json::json!({ "status": false, "data": [ { "video_url": "u" } ] }),
+            serde_json::json!({ "status": true, "data": [] }),
+            serde_json::json!({ "status": true }),
+            serde_json::json!({}),
+            serde_json::json!(null),
         ] {
             let r = run(Stub::with(body.clone()), "anime");
             assert_eq!(text_of(&r), "❌ Tidak ditemukan video untuk: anime", "body {body}");
@@ -278,7 +276,7 @@ mod tests {
 
     #[test]
     fn videos_that_cannot_be_sent_end_at_the_download_failure_branch() {
-        let body = json!({
+        let body = serde_json::json!({
             "status": true,
             "data": [ { "video_url": "https://v/1.m3u8" }, { "video_url": "https://v/2.mp4" } ],
         });
@@ -290,14 +288,14 @@ mod tests {
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "anime");
-        assert_eq!(text_of(&r), error_template(".", "pinvid"));
+        assert_eq!(text_of(&r), crate::common::error_template(".", "pinvid"));
         assert_eq!(reaction_of(&r), Some("☢"));
     }
 
     #[test]
     fn odd_and_very_long_queries_do_not_panic() {
         for input in ["<b>", "a|b", "🎬", "'\"", "a\u{202e}b", "%00"] {
-            let r = run(Stub::with(json!({ "status": false })), input);
+            let r = run(Stub::with(serde_json::json!({ "status": false })), input);
             assert!(text_of(&r).contains("Tidak ditemukan"), "input {input:?}");
         }
         let panjang = "a".repeat(5000);
@@ -307,11 +305,11 @@ mod tests {
     #[test]
     fn at_most_five_videos_are_considered() {
         let semua: Vec<Value> = (0..9)
-            .map(|i| json!({ "video_url": format!("https://v/{i}.mp4") }))
+            .map(|i| serde_json::json!({ "video_url": format!("https://v/{i}.mp4") }))
             .collect();
-        let videos = take_videos(&json!({ "data": semua }));
+        let videos = take_videos(&serde_json::json!({ "data": semua }));
         assert_eq!(videos.len(), 5);
-        assert!(take_videos(&json!({})).is_empty());
+        assert!(take_videos(&serde_json::json!({})).is_empty());
     }
 
     #[test]

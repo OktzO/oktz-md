@@ -1,7 +1,7 @@
 //! `plugins/fun/bucin.js` — kutipan bucin/romantis acak dari `bucin.json`.
 //!
 //! Bentuk balasan BERBEDA dari `dare.js`/`truth.js`: kutip di dalam code
-//! fence dan dua newline di ekor (`\`\`\`"${quote}"\`\`\`\n\n`), jadi plugin ini
+//! fence dan dua newline di ekor (````"${quote}"```\n\n`), jadi plugin ini
 //! tidak memakai `data_plugin!`.
 //!
 use oktz_plugin_api::{Ctx, Reply, plugin};

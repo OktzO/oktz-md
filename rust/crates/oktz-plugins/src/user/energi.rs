@@ -107,7 +107,6 @@ pub fn energi(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: serde_json::Value, mentioned: Vec<&str>, is_owner: bool) -> String {
         let ctx = Ctx {
@@ -163,10 +162,10 @@ mod tests {
     #[test]
     fn the_disabled_flag_wins_over_everything_and_marks_the_status() {
         for (user, status) in [
-            (json!({}), "Free (Energi OFF)"),
-            (json!({"energi": 5}), "Free (Energi OFF)"),
-            (json!({"energi": -1}), "Free (Energi OFF)"),
-            (json!({"isPremium": true}), "Premium (Energi OFF)"),
+            (serde_json::json!({}), "Free (Energi OFF)"),
+            (serde_json::json!({"energi": 5}), "Free (Energi OFF)"),
+            (serde_json::json!({"energi": -1}), "Free (Energi OFF)"),
+            (serde_json::json!({"isPremium": true}), "Premium (Energi OFF)"),
         ] {
             let out = render(&ctx_with(user.clone(), false), false);
             assert!(out.contains("*〔 ⚡ Energi 〕* ∞ Unlimited\n"), "{user}");
@@ -177,7 +176,7 @@ mod tests {
             assert!(out.ends_with("🔌 Sistem energi dinonaktifkan — semua command gratis"));
         }
         // Owner juga tidak lolos: `!energiEnabled` dicek lebih dulu.
-        assert!(render(&ctx_with(json!({}), true), false)
+        assert!(render(&ctx_with(serde_json::json!({}), true), false)
             .contains("*〔 💎 Status 〕* Owner (Energi OFF)\n"));
     }
 
@@ -185,7 +184,7 @@ mod tests {
     fn the_disabled_flag_is_the_only_thing_that_reaches_that_branch() {
         // `ENERGI_ENABLED` mengikat apa yang dilihat handler sungguhan; kalau
         // nilainya dibalik ke false, cabang OFF harus muncul di output nyata.
-        let out = render(&ctx_with(json!({"energi": 3}), false), ENERGI_ENABLED);
+        let out = render(&ctx_with(serde_json::json!({"energi": 3}), false), ENERGI_ENABLED);
         assert!(!out.contains("Energi OFF"));
         assert!(!out.contains("🔌 Sistem energi dinonaktifkan"));
         assert!(out.ends_with("⚠️ Energi hampir habis!\nGunakan `.buyenergi` untuk beli"));
@@ -195,22 +194,22 @@ mod tests {
 
     #[test]
     fn an_absent_balance_uses_the_config_tier() {
-        assert_eq!(final_energi(&ctx_with(json!(null), false), true, false), 99_999);
+        assert_eq!(final_energi(&ctx_with(serde_json::json!(null), false), true, false), 99_999);
         assert_eq!(
-            final_energi(&ctx_with(json!({"isPremium": true}), false), true, false),
+            final_energi(&ctx_with(serde_json::json!({"isPremium": true}), false), true, false),
             99_999_999
         );
     }
 
     #[test]
     fn a_stored_balance_overrides_the_tier_including_zero() {
-        assert_eq!(final_energi(&ctx_with(json!({"energi": 0}), false), true, false), 0);
+        assert_eq!(final_energi(&ctx_with(serde_json::json!({"energi": 0}), false), true, false), 0);
         assert_eq!(
-            final_energi(&ctx_with(json!({"energi": 42, "isPremium": true}), false), true, false),
+            final_energi(&ctx_with(serde_json::json!({"energi": 42, "isPremium": true}), false), true, false),
             42
         );
         assert_eq!(
-            final_energi(&ctx_with(json!({"energi": -1}), false), true, false),
+            final_energi(&ctx_with(serde_json::json!({"energi": -1}), false), true, false),
             UNLIMITED,
             "`-1` di store berarti unlimited, bukan saldo negatif"
         );
@@ -219,10 +218,10 @@ mod tests {
     #[test]
     fn owner_is_always_unlimited_regardless_of_tier() {
         assert_eq!(
-            final_energi(&ctx_with(json!({"energi": 7, "isPremium": true}), true), true, true),
+            final_energi(&ctx_with(serde_json::json!({"energi": 7, "isPremium": true}), true), true, true),
             UNLIMITED
         );
-        assert!(render(&ctx_with(json!({"energi": 7}), true), true)
+        assert!(render(&ctx_with(serde_json::json!({"energi": 7}), true), true)
             .contains("*〔 💎 Status 〕* Owner\n"));
     }
 
@@ -249,11 +248,11 @@ mod tests {
 
     #[test]
     fn low_balance_warns_only_the_owner_of_the_account() {
-        let low = render(&ctx_with(json!({"energi": 3}), false), true);
+        let low = render(&ctx_with(serde_json::json!({"energi": 3}), false), true);
         assert!(low.ends_with("⚠️ Energi hampir habis!\nGunakan `.buyenergi` untuk beli"));
 
         // Akun yang sama, tapi dilihat dari mention orang lain — `isSelf` mati.
-        let mut seen_by_other = ctx_with(json!({"energi": 3}), false);
+        let mut seen_by_other = ctx_with(serde_json::json!({"energi": 3}), false);
         seen_by_other.mentioned = vec!["628777@s.whatsapp.net".into()];
         let other = render(&seen_by_other, true);
         assert!(!other.contains("⚠️"), "branch `isSelf` hanya untuk target == sender");
@@ -263,14 +262,14 @@ mod tests {
 
     #[test]
     fn unlimited_reports_the_unlimited_line() {
-        assert!(render(&ctx_with(json!({"energi": -1}), false), true)
+        assert!(render(&ctx_with(serde_json::json!({"energi": -1}), false), true)
             .ends_with("✨ Energi unlimited aktif!"));
-        assert!(render(&ctx_with(json!({}), true), true).ends_with("✨ Energi unlimited aktif!"));
+        assert!(render(&ctx_with(serde_json::json!({}), true), true).ends_with("✨ Energi unlimited aktif!"));
     }
 
     #[test]
     fn a_healthy_balance_adds_no_footer_at_all() {
-        let out = run(json!({"energi": 50}), vec![], false);
+        let out = run(serde_json::json!({"energi": 50}), vec![], false);
         assert!(out.ends_with("*〔 💎 Status 〕* Free\n\n"));
         assert_eq!(out.matches('\n').count(), 6, "tanpa baris tambahan apa pun");
     }
@@ -280,7 +279,7 @@ mod tests {
         let ctx = Ctx {
             sender: "628111@s.whatsapp.net".into(),
             mentioned: vec!["628999@s.whatsapp.net".into()],
-            user_data: json!({"energi": 2}),
+            user_data: serde_json::json!({"energi": 2}),
             ..Default::default()
         };
         let out = render(&ctx, true);

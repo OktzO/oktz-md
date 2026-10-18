@@ -25,7 +25,7 @@ const ARTIKEL_ENDPOINT: &str = "https://artikel-islam.netlify.app/.netlify/funct
 
 const SYSTEM_ERROR: &str = "❌ Terjadi kesalahan pada sistem.";
 
-/// `arr.map(item => \`- ${item[key]}\`).join('\n')`.
+/// `arr.map(item => `- ${item[key]}`).join('\n')`.
 fn bullets(list: &[Value], key: &str) -> String {
     list.iter()
         .map(|item| format!("- {}", display(item.get(key))))
@@ -235,7 +235,6 @@ pub fn islami(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpGet, NoHttp};
-    use serde_json::json;
     use std::sync::Arc;
 
     fn run_with(http: Arc<dyn HttpGet>, command: &str, text: &str) -> Reply {
@@ -302,7 +301,7 @@ mod tests {
 
     #[test]
     fn asmaul_husna_lists_every_entry_in_order() {
-        let list = json!([
+        let list = serde_json::json!([
             { "index": 1, "latin": "Ar-Rahman", "arabic": "ar", "translation_id": "Yang Maha Pengasih", "translation_en": "The Most Gracious" },
             { "index": 2, "latin": "Ar-Rahim", "arabic": "ar", "translation_id": "Maha Penyayang", "translation_en": "The Most Merciful" }
         ]);
@@ -315,7 +314,7 @@ mod tests {
 
     #[test]
     fn niat_sholat_lists_when_empty_and_searches_case_insensitively() {
-        let list = json!([
+        let list = serde_json::json!([
             { "name": "Niat Sholat Subuh", "arabic": "n", "latin": "l", "terjemahan": "Subuh" },
             { "name": "Niat Sholat Maghrib", "arabic": "g", "latin": "l", "terjemahan": "Magrib" }
         ]);
@@ -346,7 +345,7 @@ mod tests {
 
     #[test]
     fn doa_lists_when_empty_and_searches_by_substring() {
-        let list = json!([
+        let list = serde_json::json!([
             { "doa": "Doa Sebelum Tidur", "ayat": "a", "latin": "l", "artinya": "b" },
             { "doa": "Doa Setelah Sholat", "ayat": "c", "latin": "l", "artinya": "e" }
         ]);
@@ -382,7 +381,7 @@ mod tests {
 
     #[test]
     fn surah_joins_verses_with_a_blank_line_and_counts_utf16_units() {
-        let ayat = json!([
+        let ayat = serde_json::json!([
             { "no": 1, "arab": "bismi", "latin": "bismi", "indo": "Dengan nama" },
             { "no": 2, "arab": "allah", "latin": "allah", "indo": "Allah" }
         ]);
@@ -409,7 +408,7 @@ mod tests {
 
     #[test]
     fn artikel_separates_success_empty_results_and_failure() {
-        let ok = json!({
+        let ok = serde_json::json!({
             "success": true,
             "data": { "data": [
                 { "title": "Puasa", "url": "https://a/1" },
@@ -422,11 +421,11 @@ mod tests {
         assert!(t.contains("2. *Zakat*\n🔗 https://a/2\n\n"), "{t}");
 
         assert_eq!(
-            artikel(&json!({ "success": true, "data": { "data": [] } }), "x"),
+            artikel(&serde_json::json!({ "success": true, "data": { "data": [] } }), "x"),
             "❌ Artikel tidak ditemukan."
         );
         assert_eq!(
-            artikel(&json!({ "success": false }), "x"),
+            artikel(&serde_json::json!({ "success": false }), "x"),
             "❌ Gagal mengambil data artikel."
         );
     }

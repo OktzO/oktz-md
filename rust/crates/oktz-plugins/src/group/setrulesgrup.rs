@@ -58,7 +58,6 @@ pub fn setrulesgrup(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use serde_json::Value;
-    use serde_json::json;
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -121,7 +120,7 @@ mod tests {
     #[test]
     fn a_blank_rules_text_shows_help_and_writes_nothing() {
         for msg in ["", "   ", "\n\t"] {
-            let r = run(json!({}), msg);
+            let r = run(serde_json::json!({}), msg);
             assert!(
                 text_of(&r).starts_with("📝 *sᴇᴛ ɢʀᴜᴘ ʀᴜʟᴇs*"),
                 "input {msg:?}"
@@ -132,18 +131,18 @@ mod tests {
 
     #[test]
     fn the_rules_are_trimmed_at_the_edges_but_keep_inner_newlines() {
-        let r = run(json!({}), "  1. Jangan spam\n2. Hormati sesama  ");
+        let r = run(serde_json::json!({}), "  1. Jangan spam\n2. Hormati sesama  ");
         assert_eq!(
             group_write(&r)["groupRules"],
-            json!("1. Jangan spam\n2. Hormati sesama")
+            serde_json::json!("1. Jangan spam\n2. Hormati sesama")
         );
     }
 
     #[test]
     fn a_multi_line_rules_block_round_trips_exactly() {
         let rules = "1. Jangan spam\n2. Hormati sesama\n3. Jangan share link";
-        let r = run(json!({"groupRules": "lama"}), rules);
-        assert_eq!(group_write(&r)["groupRules"], json!(rules));
+        let r = run(serde_json::json!({"groupRules": "lama"}), rules);
+        assert_eq!(group_write(&r)["groupRules"], serde_json::json!(rules));
     }
 
     #[test]
@@ -163,14 +162,14 @@ mod tests {
 
     #[test]
     fn the_success_reply_is_paired_with_the_write() {
-        let r = run(json!({}), "1. Jangan spam");
+        let r = run(serde_json::json!({}), "1. Jangan spam");
         assert!(text_of(&r).contains("berhasil diubah"));
         assert_eq!(r.mutations().len(), 1);
     }
 
     #[test]
     fn the_help_branch_never_touches_the_stored_rules() {
-        for g in [json!({"groupRules": "lama"}), json!({}), json!(null)] {
+        for g in [serde_json::json!({"groupRules": "lama"}), serde_json::json!({}), serde_json::json!(null)] {
             let r = run(g.clone(), "");
             assert!(r.mutations().is_empty(), "input {g}");
         }

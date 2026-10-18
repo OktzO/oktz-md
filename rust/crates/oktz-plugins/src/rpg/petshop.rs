@@ -1,7 +1,7 @@
 //! `plugins/rpg/petshop.js` — beli pet dari toko.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::int_field;
 use crate::rpg::jualan::{rpg_map, thousands_en};
@@ -113,7 +113,7 @@ pub fn petshop(ctx: Ctx) -> Reply {
     let mut rpg = rpg_map(&ctx);
     rpg.insert(
         "pet".into(),
-        json!({
+        serde_json::json!({
             "type": key,
             "name": pet_name(name),
             "level": 1,
@@ -135,7 +135,7 @@ pub fn petshop(ctx: Ctx) -> Reply {
     ))
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": koin - price, "rpg": rpg }),
+        data: serde_json::json!({ "koin": koin - price, "rpg": rpg }),
     })
 }
 
@@ -203,7 +203,7 @@ mod tests {
     #[test]
     fn the_shop_front_lists_every_animal_in_table_order_with_the_purse() {
         for args in [vec![], vec!["sell"], vec!["adopt"]] {
-            let t = text(run(&args, json!({"koin": 12_345})));
+            let t = text(run(&args, serde_json::json!({"koin": 12_345})));
             assert!(t.starts_with("Halo Petualang!"), "{args:?} -> {t}");
             let pos = |s: &str| t.find(s).expect(s);
             assert!(pos("🐱 Kucing") < pos("🐰 Kelinci"), "{args:?} -> {t}");
@@ -215,7 +215,7 @@ mod tests {
 
     #[test]
     fn buying_without_a_pet_name_asks_for_one() {
-        let t = text(run(&["buy"], json!({"koin": 9999})));
+        let t = text(run(&["buy"], serde_json::json!({"koin": 9999})));
         assert!(t.contains("Sebutin jenisnya dong!"), "{t}");
         assert!(t.contains("`.petshop buy cat`"), "{t}");
     }
@@ -224,7 +224,7 @@ mod tests {
     fn one_pet_per_adopter() {
         let t = text(run(
             &["buy", "cat"],
-            json!({"koin": 9999, "rpg": {"pet": {"type": "dog"}}}),
+            serde_json::json!({"koin": 9999, "rpg": {"pet": {"type": "dog"}}}),
         ));
         assert!(t.starts_with("Waduh kak, kamu kan udah punya peliharaan!"), "{t}");
         assert!(t.contains("`.breeding`"), "{t}");
@@ -233,31 +233,31 @@ mod tests {
     #[test]
     fn a_null_pet_still_counts_as_the_default_empty_bag() {
         // `if (user.rpg.pet)` — `null` falsy, jadi adopsi boleh jalan.
-        let r = run(&["buy", "cat"], json!({"koin": 9999, "rpg": {"pet": null}}));
+        let r = run(&["buy", "cat"], serde_json::json!({"koin": 9999, "rpg": {"pet": null}}));
         assert!(text_of(&r).contains("SELAMAT!"));
     }
 
     #[test]
     fn an_unknown_species_is_refused() {
-        let t = text(run(&["buy", "unicorn"], json!({"koin": 9999})));
+        let t = text(run(&["buy", "unicorn"], serde_json::json!({"koin": 9999})));
         assert!(t.contains("hewan jenis itu lagi kosong"), "{t}");
         assert!(t.contains("`.petshop`"), "{t}");
     }
 
     #[test]
     fn the_adoption_record_starts_at_the_hard_coded_defaults() {
-        let r = run(&["buy", "cat"], json!({"koin": 9999}));
+        let r = run(&["buy", "cat"], serde_json::json!({"koin": 9999}));
         let d = written(&r);
-        assert_eq!(d["koin"], json!(4999), "9999 - 5000");
+        assert_eq!(d["koin"], serde_json::json!(4999), "9999 - 5000");
         assert_eq!(
             d["rpg"]["pet"],
-            json!({"type": "cat", "name": "Kucing", "level": 1, "exp": 0, "hunger": 80, "stats": null})
+            serde_json::json!({"type": "cat", "name": "Kucing", "level": 1, "exp": 0, "hunger": 80, "stats": null})
         );
     }
 
     #[test]
     fn a_broke_adopter_keeps_their_purse() {
-        let r = run(&["buy", "dog"], json!({"koin": 5999}));
+        let r = run(&["buy", "dog"], serde_json::json!({"koin": 5999}));
         let t = text_of(&r);
         assert!(t.contains("Total biayanya Rp 6,000"), "{t}");
         assert!(t.contains("uang kakak cuma Rp 5,999"), "{t}");

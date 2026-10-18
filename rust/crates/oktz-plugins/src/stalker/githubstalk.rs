@@ -13,7 +13,6 @@ use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 use serde_json::Value;
 
 use super::npmstalk::{FIREFLY, NEXRAY, js_str, or_dash};
-use crate::common::error_template;
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `githubstalk.js:26-29` — kartu pakai saat `m.args[0]` kosong.
@@ -150,7 +149,7 @@ pub fn githubstalk(ctx: Ctx) -> Reply {
     }
 
     let Some(profil) = profil else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
 
     let teks = caption(&profil);
@@ -169,7 +168,6 @@ pub fn githubstalk(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -200,7 +198,7 @@ mod tests {
             self.seen.lock().unwrap().push(url.to_string());
             let mut b = self.balasan.lock().unwrap();
             if b.is_empty() {
-                return Err(HttpError {
+                return Err(oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 });
             }
@@ -343,7 +341,7 @@ mod tests {
         let r = githubstalk(dengan_kunci(Stub::gagal(), "t", "K"));
         assert_eq!(
             r.without_mutations().text_body(),
-            Some(error_template(".", "githubstalk").as_str())
+            Some(crate::common::error_template(".", "githubstalk").as_str())
         );
         assert_eq!(reaction_of(&r), Some("☢"));
     }
@@ -351,8 +349,8 @@ mod tests {
     #[test]
     fn nullish_hanya_menolong_null_dan_undefined() {
         assert_eq!(nullish(&Value::Null), "0");
-        assert_eq!(nullish(&json!(0)), "0", "nol bukan nullish");
-        assert_eq!(nullish(&json!(12)), "12");
-        assert_eq!(nullish(&json!("x")), "x");
+        assert_eq!(nullish(&serde_json::json!(0)), "0", "nol bukan nullish");
+        assert_eq!(nullish(&serde_json::json!(12)), "12");
+        assert_eq!(nullish(&serde_json::json!("x")), "x");
     }
 }

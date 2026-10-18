@@ -172,7 +172,6 @@ fn update_exp(ctx: &Ctx, amount: i64) -> (&'static str, Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: Value) -> Reply {
         let ctx = Ctx {
@@ -232,7 +231,7 @@ mod tests {
     #[test]
     fn every_pull_carries_a_rarity_line_a_hadiah_line_and_the_cooldown() {
         for _ in 0..300 {
-            let r = run(json!({}));
+            let r = run(serde_json::json!({}));
             let t = text_of(&r);
             assert!(t.contains(" *ɢᴀᴄʜᴀ ʀᴇsᴜʟᴛ*"), "{t}");
             assert!(t.contains("╭─────────────╮"), "{t}");
@@ -275,7 +274,7 @@ mod tests {
     fn a_koin_pull_only_touches_koin() {
         let mut saw_koin = false;
         for _ in 0..400 {
-            let r = run(json!({"koin": 1000, "exp": 77}));
+            let r = run(serde_json::json!({"koin": 1000, "exp": 77}));
             let Some(data) = r.mutations().first() else {
                 continue; // tarikan `limit` memang tidak menulis apa pun
             };
@@ -319,23 +318,23 @@ mod tests {
     fn an_unlimited_balance_or_exp_of_minus_one_is_left_alone() {
         // `user.koin === -1` → `updateKoin`/`updateExp` return -1 tanpa
         // menambah apa pun.
-        assert_eq!(update_koin(&Ctx { user_data: json!({"koin": -1}), ..Default::default() }, 500), ("koin", json!(-1)));
-        assert_eq!(update_exp(&Ctx { user_data: json!({"exp": -1}), ..Default::default() }, 500), ("exp", json!(-1)));
+        assert_eq!(update_koin(&Ctx { user_data: serde_json::json!({"koin": -1}), ..Default::default() }, 500), ("koin", serde_json::json!(-1)));
+        assert_eq!(update_exp(&Ctx { user_data: serde_json::json!({"exp": -1}), ..Default::default() }, 500), ("exp", serde_json::json!(-1)));
     }
 
     #[test]
     fn a_balance_is_clamped_at_the_stored_maximum() {
         let ctx = Ctx {
-            user_data: json!({"koin": MAX_KOIN - 1}),
+            user_data: serde_json::json!({"koin": MAX_KOIN - 1}),
             ..Default::default()
         };
         let (_, v) = update_koin(&ctx, 500);
-        assert_eq!(v, json!(MAX_KOIN));
+        assert_eq!(v, serde_json::json!(MAX_KOIN));
     }
 
     #[test]
     fn a_pull_writes_the_sender_and_nothing_else() {
-        let r = run(json!({"koin": 0, "exp": 0}));
+        let r = run(serde_json::json!({"koin": 0, "exp": 0}));
         match r.mutations() {
             // `switch` di JS tak punya `case "limit"`, jadi tarikan itu
             // sengaja tidak menulis apa pun.

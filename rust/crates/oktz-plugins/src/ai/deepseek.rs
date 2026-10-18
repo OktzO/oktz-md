@@ -12,9 +12,8 @@
 //! jatuh ke template error `catch` — bukan `❌ *DeepSeek Gagal*`.
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
-use crate::fun::tod::error_template;
 
 use super::aiassist::uuid_v4;
 
@@ -113,7 +112,7 @@ pub fn deepseek(ctx: Ctx) -> Reply {
         return Reply::text(help(&ctx.prefix));
     }
 
-    let body = json!({
+    let body = serde_json::json!({
         "message": text,
         "language": "auto",
         "model": "deepseek-v4-flash",
@@ -128,7 +127,7 @@ pub fn deepseek(ctx: Ctx) -> Reply {
     let raw = match ctx.http.post_json(ENDPOINT, &body) {
         Ok(r) => r.text(),
         Err(_) => {
-            return Reply::text(error_template(&ctx.prefix, &ctx.command))
+            return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
                 .with_reaction("☢");
         }
     };
@@ -178,7 +177,7 @@ mod tests {
         }
         fn respond(&self) -> Result<HttpResponse, HttpError> {
             let Some(text) = &self.resp else {
-                return Err(HttpError {
+                return Err(oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 });
             };
@@ -360,7 +359,7 @@ mod tests {
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "halo");
-        assert_eq!(body(&r), error_template(".", "deepseek"));
+        assert_eq!(body(&r), crate::common::error_template(".", "deepseek"));
         assert!(matches!(
             r.without_mutations(),
             Reply::Reaction { emoji, .. } if emoji == "☢"

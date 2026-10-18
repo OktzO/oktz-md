@@ -3,7 +3,7 @@
 //! Reaksi + pesan antara sebelum jeda `setTimeout` tidak masuk `Reply`.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::int_field;
 use crate::rpg::jualan::{
@@ -34,7 +34,7 @@ pub fn parkir(ctx: Ctx) -> Reply {
              Markir butuh *{STAMINA_COST} Stamina*, sisa stamina kamu *{stamina}*. Istirahat dulu di pos! 🏚️"
         ));
     }
-    rpg.insert("stamina".into(), json!(stamina - STAMINA_COST));
+    rpg.insert("stamina".into(), serde_json::json!(stamina - STAMINA_COST));
 
     let koin = int_field(&ctx, "koin");
     let old_exp = or_default(ctx.user_field("exp").and_then(Value::as_i64), 0);
@@ -52,7 +52,7 @@ pub fn parkir(ctx: Ctx) -> Reply {
         .with_reaction("🚨")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "koin": (koin - denda).max(0), "rpg": rpg }),
+            data: serde_json::json!({ "koin": (koin - denda).max(0), "rpg": rpg }),
         });
     }
 
@@ -72,7 +72,7 @@ pub fn parkir(ctx: Ctx) -> Reply {
         .with_reaction("🤑")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "koin": koin + jackpot, "exp": new_exp, "rpg": rpg }),
+            data: serde_json::json!({ "koin": koin + jackpot, "exp": new_exp, "rpg": rpg }),
         });
     }
 
@@ -91,7 +91,7 @@ pub fn parkir(ctx: Ctx) -> Reply {
     .with_reaction("✅")
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": koin + earning, "exp": new_exp, "rpg": rpg }),
+        data: serde_json::json!({ "koin": koin + earning, "exp": new_exp, "rpg": rpg }),
     })
 }
 
@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn standing_on_twelve_empty_stamina_is_refused() {
-        let r = run(json!({"rpg": {"stamina": 0}}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 0}}));
         let t = text_of(&r);
         assert!(t.starts_with("Kaki pegel kebanyakan berdiri!"), "{t}");
         assert!(t.contains("sisa stamina kamu *0*"), "{t}");
@@ -168,7 +168,7 @@ mod tests {
         let mut jackpot = 0;
         let mut biasa = 0;
         for _ in 0..6000 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 1000, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 1000, "exp": 0}));
             let d = written(&r);
             let koin = d["koin"].as_i64().unwrap();
             let t = text_of(&r);
@@ -186,7 +186,7 @@ mod tests {
                 assert!((3000..=10999).contains(&koin), "biasa {koin}");
                 assert_eq!(d["exp"].as_i64().unwrap(), (koin - 1000) / 20);
             }
-            assert_eq!(d["rpg"]["stamina"], json!(88));
+            assert_eq!(d["rpg"]["stamina"], serde_json::json!(88));
         }
         assert!(razia > 0 && jackpot > 0 && biasa > 0, "{razia}/{jackpot}/{biasa}");
     }
@@ -194,9 +194,9 @@ mod tests {
     #[test]
     fn a_razia_on_an_empty_purse_leaves_zero_not_a_negative_balance() {
         for _ in 0..6000 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
             if text_of(&r).starts_with("WADUH ADA RAZIA") {
-                assert_eq!(written(&r)["koin"], json!(0), "Math.max(0, ...)");
+                assert_eq!(written(&r)["koin"], serde_json::json!(0), "Math.max(0, ...)");
                 return;
             }
         }

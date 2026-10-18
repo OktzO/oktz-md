@@ -6,7 +6,7 @@
 //! Itu tidak konsisten, tapi itu yang ditulis plugin ini.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::rpg::heal::{apply_exp, inventory_map, or_default, rpg_map, user_level};
 
@@ -128,7 +128,7 @@ pub fn cooking(ctx: Ctx) -> Reply {
         if left <= 0 {
             inv.remove(*item);
         } else {
-            inv.insert((*item).to_string(), json!(left));
+            inv.insert((*item).to_string(), serde_json::json!(left));
         }
     }
 
@@ -138,15 +138,15 @@ pub fn cooking(ctx: Ctx) -> Reply {
 
     if gain_stamina != 0 {
         let cur = or_default(rpg.get("stamina").and_then(Value::as_i64), 100);
-        rpg.insert("stamina".into(), json!((cur + gain_stamina).min(max_stamina)));
+        rpg.insert("stamina".into(), serde_json::json!((cur + gain_stamina).min(max_stamina)));
     }
     if gain_health != 0 {
         let cur = or_default(rpg.get("health").and_then(Value::as_i64), 100);
-        rpg.insert("health".into(), json!((cur + gain_health).min(max_health)));
+        rpg.insert("health".into(), serde_json::json!((cur + gain_health).min(max_health)));
     }
     if gain_mana != 0 {
         let cur = or_default(rpg.get("mana").and_then(Value::as_i64), 50);
-        rpg.insert("mana".into(), json!((cur + gain_mana).min(max_mana)));
+        rpg.insert("mana".into(), serde_json::json!((cur + gain_mana).min(max_mana)));
     }
 
     let old_exp = or_default(ctx.user_field("exp").and_then(Value::as_i64), 0);
@@ -169,14 +169,13 @@ pub fn cooking(ctx: Ctx) -> Reply {
     .with_reaction("✅")
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "inventory": inv, "exp": new_exp, "rpg": rpg }),
+        data: serde_json::json!({ "inventory": inv, "exp": new_exp, "rpg": rpg }),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: Value, arg: &str) -> Reply {
         let ctx = Ctx {
@@ -227,7 +226,7 @@ mod tests {
 
     #[test]
     fn without_an_argument_the_whole_recipe_book_is_listed() {
-        let t_reply = run(json!({}), "");
+        let t_reply = run(serde_json::json!({}), "");
         let t = text_of(&t_reply);
         assert!(t.starts_with("Halo Master Chef!"), "{t}");
         for (key, name, ..) in RECIPES {
@@ -244,7 +243,7 @@ mod tests {
     #[test]
     fn an_unknown_recipe_is_refused_and_nothing_is_written() {
         for bad in ["nasi", "PIZZA!", "fried_rice"] {
-            let r = run(json!({ "inventory": { "wheat": 99 } }), bad);
+            let r = run(serde_json::json!({ "inventory": { "wheat": 99 } }), bad);
             assert!(text_of(&r).starts_with("Hayo, resep apaan tuh"), "arg {bad}");
             assert!(r.mutations().is_empty(), "arg {bad}");
         }
@@ -252,13 +251,13 @@ mod tests {
 
     #[test]
     fn a_recipe_name_is_case_insensitive() {
-        let r = run(json!({ "inventory": { "wheat": 2 }, "exp": 0 }), "BREAD");
+        let r = run(serde_json::json!({ "inventory": { "wheat": 2 }, "exp": 0 }), "BREAD");
         assert!(text_of(&r).starts_with("TADAA!"), "{}", text_of(&r));
     }
 
     #[test]
     fn every_short_material_is_listed_with_have_over_need() {
-        let r = run(json!({ "inventory": { "wheat": 2, "egg": 0 } }), "cake");
+        let r = run(serde_json::json!({ "inventory": { "wheat": 2, "egg": 0 } }), "cake");
         let t = text_of(&r);
         assert!(t.starts_with("Eits, bahan kamu belum lengkap"), "{t}");
         assert!(t.contains("• egg: 0/2"), "{t}");
@@ -269,9 +268,9 @@ mod tests {
 
     #[test]
     fn a_depleted_material_leaves_the_bag_and_a_surplus_stays() {
-        let r = run(json!({ "inventory": { "rice": 3, "egg": 1 }, "exp": 0 }), "friedrice");
+        let r = run(serde_json::json!({ "inventory": { "rice": 3, "egg": 1 }, "exp": 0 }), "friedrice");
         let inv = write_of(&r)["inventory"].as_object().unwrap().clone();
-        assert_eq!(inv["rice"], json!(1), "3 - 2");
+        assert_eq!(inv["rice"], serde_json::json!(1), "3 - 2");
         assert!(!inv.contains_key("egg"), "1 - 1 = 0 -> dihapus");
     }
 
@@ -279,14 +278,14 @@ mod tests {
     fn each_effect_stat_is_written_with_its_own_ceiling() {
         // smoothie: stamina 30, mana 20, health TIDAK disentuh.
         let r = run(
-            json!({ "inventory": { "strawberry": 3, "watermelon": 1 },
+            serde_json::json!({ "inventory": { "strawberry": 3, "watermelon": 1 },
                     "rpg": { "stamina": 80, "mana": 40, "health": 33 }, "exp": 0 }),
             "smoothie",
         );
         let rpg = write_of(&r)["rpg"].clone();
-        assert_eq!(rpg["stamina"], json!(100), "80 + 30, mentok 100");
-        assert_eq!(rpg["mana"], json!(53), "40 + 20, mentok 50 + 1*3 = 53");
-        assert_eq!(rpg["health"], json!(33), "smoothie tak punya efek health");
+        assert_eq!(rpg["stamina"], serde_json::json!(100), "80 + 30, mentok 100");
+        assert_eq!(rpg["mana"], serde_json::json!(53), "40 + 20, mentok 50 + 1*3 = 53");
+        assert_eq!(rpg["health"], serde_json::json!(33), "smoothie tak punya efek health");
     }
 
     /// `maxHealth = 100 + userLevel * 5` — BUKAN `100 + (level - 1) * 10`
@@ -294,16 +293,16 @@ mod tests {
     #[test]
     fn the_health_ceiling_scales_with_level() {
         let r = run(
-            json!({ "level": 10, "inventory": { "meat": 2, "herb": 1 },
+            serde_json::json!({ "level": 10, "inventory": { "meat": 2, "herb": 1 },
                     "rpg": { "health": 1 }, "exp": 0 }),
             "steak",
         );
-        assert_eq!(write_of(&r)["rpg"]["health"], json!(31), "1 + 30, mentok 100 + 10*5 = 150");
+        assert_eq!(write_of(&r)["rpg"]["health"], serde_json::json!(31), "1 + 30, mentok 100 + 10*5 = 150");
     }
 
     #[test]
     fn the_reply_lists_only_the_effects_that_recipe_actually_has() {
-        let r = run(json!({ "inventory": { "wheat": 2 }, "exp": 0 }), "bread");
+        let r = run(serde_json::json!({ "inventory": { "wheat": 2 }, "exp": 0 }), "bread");
         let t = text_of(&r);
         assert!(t.contains("• STAMINA: +10"), "{t}");
         assert!(t.contains("• HEALTH: +5"), "{t}");
@@ -313,8 +312,8 @@ mod tests {
 
     #[test]
     fn cooking_pays_the_recipe_exp() {
-        let r = run(json!({ "inventory": { "herb": 5, "diamond": 1, "gold": 2 }, "exp": 0 }), "elixir_food");
-        assert_eq!(write_of(&r)["exp"], json!(300));
+        let r = run(serde_json::json!({ "inventory": { "herb": 5, "diamond": 1, "gold": 2 }, "exp": 0 }), "elixir_food");
+        assert_eq!(write_of(&r)["exp"], serde_json::json!(300));
     }
 
     #[test]

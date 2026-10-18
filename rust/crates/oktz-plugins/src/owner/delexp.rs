@@ -1,7 +1,6 @@
 //! `plugins/owner/delexp.js` — kurangi exp user.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::json;
 
 use crate::common::{jid_number, parse_int};
 
@@ -133,7 +132,7 @@ pub fn delexp(ctx: Ctx) -> Reply {
         .with_reaction("✅")
         .with_mutation(Mutation::SetUser {
             jid: target,
-            data: json!({ "exp": new_exp }),
+            data: serde_json::json!({ "exp": new_exp }),
         })
 }
 
@@ -199,7 +198,7 @@ mod tests {
     #[test]
     fn no_amount_shows_help_and_writes_nothing() {
         for text in ["", "@628999", "abc"] {
-            let r = run(text, json!({}), Some(OTHER));
+            let r = run(text, serde_json::json!({}), Some(OTHER));
             assert!(text_of(&r).starts_with("⭐ *ᴅᴇʟ ᴇxᴘ*"), "input {text:?}");
             assert!(r.mutations().is_empty(), "input {text:?}");
         }
@@ -207,7 +206,7 @@ mod tests {
 
     #[test]
     fn a_bare_amount_subtracts_from_the_sender() {
-        let r = run("5000", json!({ "exp": 100_000 }), None);
+        let r = run("5000", serde_json::json!({ "exp": 100_000 }), None);
         assert_eq!(written(&r), (SENDER.to_string(), 95_000));
         let t = text_of(&r);
         assert!(t.contains("┃ 👤 ᴜsᴇʀ: @628111"), "{t}");
@@ -217,7 +216,7 @@ mod tests {
 
     #[test]
     fn subtracting_beyond_zero_clamps_at_zero() {
-        let r = run("5000", json!({ "exp": 10 }), None);
+        let r = run("5000", serde_json::json!({ "exp": 10 }), None);
         assert_eq!(written(&r).1, 0);
         assert!(text_of(&r).contains("┃ ⭐ sɪsᴀ: *0*"), "{}", text_of(&r));
     }
@@ -225,21 +224,21 @@ mod tests {
     #[test]
     fn an_unlimited_exp_user_is_left_alone() {
         // `user.exp === -1` → `updateExp` mengembalikan `-1` tanpa mengubah.
-        let r = run("5000", json!({ "exp": -1 }), None);
+        let r = run("5000", serde_json::json!({ "exp": -1 }), None);
         assert_eq!(written(&r).1, -1);
         assert!(text_of(&r).contains("┃ ⭐ sɪsᴀ: *0*"), "{}", text_of(&r));
     }
 
     #[test]
     fn a_user_absent_from_the_store_is_refused_and_writes_nothing() {
-        let r = run("5000", json!(null), None);
+        let r = run("5000", serde_json::json!(null), None);
         assert!(text_of(&r).contains("User tidak ditemukan di database"), "{}", text_of(&r));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn a_stored_row_without_the_field_counts_as_zero() {
-        let r = run("5000", json!({}), None);
+        let r = run("5000", serde_json::json!({}), None);
         assert_eq!(written(&r), (SENDER.to_string(), 0));
     }
 
@@ -247,7 +246,7 @@ mod tests {
     fn a_mention_becomes_the_target_but_its_row_is_unreadable() {
         // `ponytail:` row target di luar sender+roster tidak terbaca, jadi
         // guard "tidak ditemukan" dulu yang kena — bukan menulis ke sender.
-        let r = run("5000", json!({ "exp": 1000 }), Some(OTHER));
+        let r = run("5000", serde_json::json!({ "exp": 1000 }), Some(OTHER));
         assert!(text_of(&r).contains("User tidak ditemukan di database"), "{}", text_of(&r));
         assert!(r.mutations().is_empty(), "tidak boleh menulis");
     }
@@ -261,7 +260,7 @@ mod tests {
             chat: SENDER.into(),
             text: "5000".into(),
             args: vec!["5000".into()],
-            user_data: json!({ "exp": 1000 }),
+            user_data: serde_json::json!({ "exp": 1000 }),
             quoted: Some(oktz_plugin_api::QuotedMessage {
                 id: "q".into(),
                 sender: OTHER.into(),
@@ -280,7 +279,7 @@ mod tests {
 
     #[test]
     fn the_applied_reply_reacts_and_is_paired_with_the_write() {
-        let r = run("5000", json!({ "exp": 100 }), None);
+        let r = run("5000", serde_json::json!({ "exp": 100 }), None);
         match r.without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅"),
             other => panic!("harus Reaction, dapat {other:?}"),

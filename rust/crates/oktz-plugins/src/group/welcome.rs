@@ -19,7 +19,7 @@
 //!   `welcomeType` 2..8.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 /// `config.messages.ownerOnly` (`config.js:198`) — literal statis di config,
 /// sama seperti `CONFIG_PREFIX` di `common.rs`.
@@ -121,7 +121,7 @@ pub fn welcome(ctx: Ctx) -> Reply {
             }
             Reply::text(turned_on(&ctx.prefix)).with_mutation(Mutation::SetGroup {
                 jid: ctx.chat.clone(),
-                data: json!({ "welcome": true }),
+                data: serde_json::json!({ "welcome": true }),
             })
         }
         Some("off") => {
@@ -130,7 +130,7 @@ pub fn welcome(ctx: Ctx) -> Reply {
             }
             Reply::text(turned_off()).with_mutation(Mutation::SetGroup {
                 jid: ctx.chat.clone(),
-                data: json!({ "welcome": false }),
+                data: serde_json::json!({ "welcome": false }),
             })
         }
         _ => Reply::text(settings_text(&ctx.prefix, current)),
@@ -141,7 +141,6 @@ pub fn welcome(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::find;
-    use serde_json::json;
 
     fn run(group: Value, args: &[&str], is_owner: bool) -> Reply {
         let ctx = Ctx {
@@ -192,61 +191,61 @@ mod tests {
 
     #[test]
     fn turning_on_writes_the_group_flag() {
-        let r = run(json!({}), &["on"], false);
+        let r = run(serde_json::json!({}), &["on"], false);
         assert_eq!(text_of(&r), turned_on("."));
         assert_eq!(
             r.mutations(),
             &[Mutation::SetGroup {
                 jid: "120363@g.us".into(),
-                data: json!({ "welcome": true }),
+                data: serde_json::json!({ "welcome": true }),
             }]
         );
     }
 
     #[test]
     fn turning_on_twice_says_already_active_and_writes_nothing() {
-        let r = run(json!({ "welcome": true }), &["on"], false);
+        let r = run(serde_json::json!({ "welcome": true }), &["on"], false);
         assert_eq!(text_of(&r), already_active("."));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn turning_off_writes_the_group_flag() {
-        let r = run(json!({ "welcome": true }), &["off"], false);
+        let r = run(serde_json::json!({ "welcome": true }), &["off"], false);
         assert_eq!(text_of(&r), turned_off());
         assert_eq!(
             r.mutations(),
             &[Mutation::SetGroup {
                 jid: "120363@g.us".into(),
-                data: json!({ "welcome": false }),
+                data: serde_json::json!({ "welcome": false }),
             }]
         );
     }
 
     #[test]
     fn turning_off_twice_says_already_inactive_and_writes_nothing() {
-        let r = run(json!({}), &["off"], false);
+        let r = run(serde_json::json!({}), &["off"], false);
         assert_eq!(text_of(&r), already_inactive("."));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn without_args_it_shows_the_settings_with_the_live_status() {
-        let off = text_of(&run(json!({}), &[], false));
+        let off = text_of(&run(serde_json::json!({}), &[], false));
         assert!(off.starts_with("👋 *ᴡᴇʟᴄᴏᴍᴇ sᴇᴛᴛɪɴɢs*"), "{off}");
         assert!(off.contains("> Status: *❌ OFF*"), "{off}");
         assert!(off.contains("> `.welcome on all` → Global ON (owner)"), "{off}");
 
-        let on = text_of(&run(json!({ "welcome": true }), &[], false));
+        let on = text_of(&run(serde_json::json!({ "welcome": true }), &[], false));
         assert!(on.contains("> Status: *✅ ON*"), "{on}");
     }
 
     #[test]
     fn the_active_check_is_strict_equality_with_true() {
         // `"true"` (string) dan `1` tidak dihitung aktif, persis `=== true`.
-        for weird in [json!("true"), json!(1)] {
+        for weird in [serde_json::json!("true"), serde_json::json!(1)] {
             assert!(
-                text_of(&run(json!({ "welcome": weird }), &["on"], false)).contains("ᴀᴋᴛɪꜰ"),
+                text_of(&run(serde_json::json!({ "welcome": weird }), &["on"], false)).contains("ᴀᴋᴛɪꜰ"),
                 "harus tetap bisa dinyalakan: {weird}"
             );
         }
@@ -254,7 +253,7 @@ mod tests {
 
     #[test]
     fn global_on_for_an_owner_lands_on_the_js_catch_path() {
-        let r = run(json!({}), &["on", "all"], true);
+        let r = run(serde_json::json!({}), &["on", "all"], true);
         assert_eq!(reaction_of(&r), "☢");
         assert_eq!(
             text_of(&r),
@@ -265,7 +264,7 @@ mod tests {
 
     #[test]
     fn global_off_for_an_owner_lands_on_the_js_catch_path_too() {
-        let r = run(json!({}), &["off", "all"], true);
+        let r = run(serde_json::json!({}), &["off", "all"], true);
         assert_eq!(reaction_of(&r), "☢");
         assert!(r.mutations().is_empty());
     }
@@ -273,7 +272,7 @@ mod tests {
     #[test]
     fn global_branches_refuse_non_owners_before_touching_sock() {
         for args in [["on", "all"], ["off", "all"]] {
-            let r = run(json!({}), &args, false);
+            let r = run(serde_json::json!({}), &args, false);
             assert_eq!(text_of(&r), OWNER_ONLY);
             assert!(r.mutations().is_empty());
         }

@@ -9,7 +9,7 @@ use oktz_plugin_api::{Ctx, Reply, plugin};
 
 use crate::common::joined_strings;
 
-/// `(i + 1). \`${bannedUsers[i]}\`` — `${el}` di JS, jadi elemen non-string
+/// `(i + 1). `${bannedUsers[i]}`` — `${el}` di JS, jadi elemen non-string
 /// dirender sebagai teksnya, bukan `[object Object]` gaya JS yang sebenarnya.
 pub(crate) fn numbered(items: &[String]) -> Vec<String> {
     items
@@ -64,7 +64,6 @@ pub fn listban(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(settings: serde_json::Value, prefix: &str) -> String {
         let ctx = Ctx {
@@ -103,7 +102,7 @@ mod tests {
 
     #[test]
     fn an_empty_or_missing_list_shows_the_short_message() {
-        for settings in [json!({}), json!({"bannedUsers": []}), json!({"bannedUsers": "x"})] {
+        for settings in [serde_json::json!({}), serde_json::json!({"bannedUsers": []}), serde_json::json!({"bannedUsers": "x"})] {
             let out = run(settings.clone(), ".");
             assert!(out.starts_with("🚫 *ʟɪsᴛ ʙᴀɴɴᴇᴅ*"), "{settings}");
             assert!(out.contains("> Tidak ada user yang dibanned"), "{settings}");
@@ -113,12 +112,12 @@ mod tests {
 
     #[test]
     fn the_empty_message_carries_the_live_prefix() {
-        assert!(run(json!({}), "!").contains("`Gunakan: !ban <nomor>`"));
+        assert!(run(serde_json::json!({}), "!").contains("`Gunakan: !ban <nomor>`"));
     }
 
     #[test]
     fn entries_are_numbered_from_one_and_the_total_is_reported() {
-        let out = run(json!({"bannedUsers": ["6281", "6282", "6283"]}), ".");
+        let out = run(serde_json::json!({"bannedUsers": ["6281", "6282", "6283"]}), ".");
         assert!(out.contains("╭┈┈⬡「 ⛔ *ᴜsᴇʀs* 」"));
         assert!(out.contains("┃ 1. `6281`"));
         assert!(out.contains("┃ 2. `6282`"));
@@ -130,7 +129,7 @@ mod tests {
     fn nothing_is_written_by_a_read_only_command() {
         let ctx = Ctx {
             command: "listban".into(),
-            settings: json!({"bannedUsers": ["6281"]}),
+            settings: serde_json::json!({"bannedUsers": ["6281"]}),
             ..Default::default()
         };
         let r = (oktz_plugin_api::find("listban").unwrap().handler)(ctx);

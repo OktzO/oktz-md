@@ -4,7 +4,7 @@
 //! naik tanpa stats `rpg` ikut terisi ulang walau level naik.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::{int_field, now_ms};
 use crate::rpg::jualan::{exp_gain_only, or_default};
@@ -80,7 +80,7 @@ pub fn quest(ctx: Ctx) -> Reply {
 
         let mut quests = quest_map(user);
         if let Some(e) = quests.get_mut(id).and_then(Value::as_object_mut) {
-            e.insert("claimed".into(), json!(true));
+            e.insert("claimed".into(), serde_json::json!(true));
         }
         let koin = int_field(&ctx, "koin") + money;
         let old_exp = or_default(ctx.user_field("exp").and_then(Value::as_i64), 0);
@@ -96,7 +96,7 @@ pub fn quest(ctx: Ctx) -> Reply {
         ))
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({
+            data: serde_json::json!({
                 "koin": koin,
                 "exp": exp_gain_only(old_exp, exp_reward),
                 "quest": quests,
@@ -117,7 +117,7 @@ pub fn quest(ctx: Ctx) -> Reply {
         let mut quests = quest_map(user);
         quests.insert(
             id.clone(),
-            json!({ "progress": 0, "claimed": false, "takenAt": now_ms() }),
+            serde_json::json!({ "progress": 0, "claimed": false, "takenAt": now_ms() }),
         );
         return Reply::text(format!(
             "📜 *MISI DIAMBIL!* 📜\n\n\
@@ -129,7 +129,7 @@ pub fn quest(ctx: Ctx) -> Reply {
         ))
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "quest": quests }),
+            data: serde_json::json!({ "quest": quests }),
         });
     }
 
@@ -225,7 +225,7 @@ mod tests {
 
     #[test]
     fn the_board_lists_five_quests_with_their_rewards_and_a_take_hint() {
-        let r = run(&[], json!({}));
+        let r = run(&[], serde_json::json!({}));
         let t = text_of(&r);
         assert!(t.starts_with("📌 *PAPAN BOUNTY (MISI HARIAN)*"), "{t}");
         for (id, name, desc, target, money, exp) in QUESTS {
@@ -245,22 +245,22 @@ mod tests {
     #[test]
     fn the_board_reads_the_four_states_of_a_stored_quest() {
         for (stored, expected) in [
-            (json!({"progress": 1, "claimed": false}), "🏃 Sedang Dikerjakan (1/5)"),
-            (json!({"progress": 5, "claimed": false}), "🎁 Siap Claim"),
-            (json!({"progress": 5, "claimed": true}), "✅ Selesai"),
-            (json!({"progress": 0, "claimed": true}), "✅ Selesai"),
+            (serde_json::json!({"progress": 1, "claimed": false}), "🏃 Sedang Dikerjakan (1/5)"),
+            (serde_json::json!({"progress": 5, "claimed": false}), "🎁 Siap Claim"),
+            (serde_json::json!({"progress": 5, "claimed": true}), "✅ Selesai"),
+            (serde_json::json!({"progress": 0, "claimed": true}), "✅ Selesai"),
         ] {
-            let t = text(run(&[], json!({ "quest": { "mining5": stored } })));
+            let t = text(run(&[], serde_json::json!({ "quest": { "mining5": stored } })));
             assert!(t.contains(expected), "{stored} -> {t}");
         }
     }
 
     #[test]
     fn taking_a_quest_stamps_the_row_with_a_real_timestamp() {
-        let r = run(&["take", "hunt5"], json!({}));
+        let r = run(&["take", "hunt5"], serde_json::json!({}));
         let entry = &written(&r)["quest"]["hunt5"];
-        assert_eq!(entry["progress"], json!(0));
-        assert_eq!(entry["claimed"], json!(false));
+        assert_eq!(entry["progress"], serde_json::json!(0));
+        assert_eq!(entry["claimed"], serde_json::json!(false));
         assert!(entry["takenAt"].as_i64().unwrap() > 1_600_000_000_000);
         assert_eq!(written(&r).get("koin"), None, "take tidak membayar");
     }
@@ -269,7 +269,7 @@ mod tests {
     fn taking_the_same_quest_twice_is_refused() {
         let r = run(
             &["take", "hunt5"],
-            json!({"quest": {"hunt5": {"progress": 2, "claimed": false}}}),
+            serde_json::json!({"quest": {"hunt5": {"progress": 2, "claimed": false}}}),
         );
         assert_eq!(text_of(&r), "Kamu udah ngambil misi ini kak! Kerjain dulu yuk! ⚔️");
         assert!(r.mutations().is_empty());
@@ -277,22 +277,22 @@ mod tests {
 
     #[test]
     fn an_unknown_quest_id_cannot_be_taken_or_claimed() {
-        let r = run(&["take", "boss9"], json!({}));
+        let r = run(&["take", "boss9"], serde_json::json!({}));
         assert_eq!(text_of(&r), "Misi nggak ketemu! Liat daftar lengkapnya di `.quest`");
 
         // Row-nya ADA tapi id-nya tak dikenal di `QUESTS`: `!user.quest[id]`
         // lolos, jadi yang menolak adalah `QUESTS.find`.
-        let r = run(&["claim", "boss9"], json!({"quest": {"boss9": {"progress": 99}}}));
+        let r = run(&["claim", "boss9"], serde_json::json!({"quest": {"boss9": {"progress": 99}}}));
         assert_eq!(text_of(&r), "ID misinya salah kak! Cek lagi papan bounty ya! 🔍");
 
         // Row-nya tidak ada: guard pertama yang menolak.
-        let r = run(&["claim", "boss9"], json!({}));
+        let r = run(&["claim", "boss9"], serde_json::json!({}));
         assert_eq!(text_of(&r), "Hmm.. Misi itu nggak ada di daftar kamu kak! 📜❌");
     }
 
     #[test]
     fn claiming_needs_a_known_id_even_when_the_row_exists() {
-        let r = run(&["claim", "nope"], json!({"quest": {"nope": {"progress": 9}}}));
+        let r = run(&["claim", "nope"], serde_json::json!({"quest": {"nope": {"progress": 9}}}));
         assert_eq!(text_of(&r), "ID misinya salah kak! Cek lagi papan bounty ya! 🔍");
     }
 
@@ -300,7 +300,7 @@ mod tests {
     fn an_unfinished_quest_reports_the_real_progress() {
         let r = run(
             &["claim", "work10"],
-            json!({"quest": {"work10": {"progress": 4, "claimed": false}}}),
+            serde_json::json!({"quest": {"work10": {"progress": 4, "claimed": false}}}),
         );
         let t = text_of(&r);
         assert!(t.contains("Progress kamu: *4/10*"), "{t}");
@@ -311,18 +311,18 @@ mod tests {
     fn a_finished_quest_pays_once_and_flips_the_claim_flag() {
         let r = run(
             &["claim", "adventure3"],
-            json!({"koin": 500, "exp": 1000, "quest": {"adventure3": {"progress": 3, "claimed": false}}}),
+            serde_json::json!({"koin": 500, "exp": 1000, "quest": {"adventure3": {"progress": 3, "claimed": false}}}),
         );
         let d = written(&r);
-        assert_eq!(d["koin"], json!(15500), "500 + 15.000");
-        assert_eq!(d["exp"], json!(2500), "updateExp, bukan addExpWithLevelCheck");
+        assert_eq!(d["koin"], serde_json::json!(15500), "500 + 15.000");
+        assert_eq!(d["exp"], serde_json::json!(2500), "updateExp, bukan addExpWithLevelCheck");
         assert!(d.get("rpg").is_none(), "updateExp tidak mengisi rpg");
-        assert_eq!(d["quest"]["adventure3"]["claimed"], json!(true));
-        assert_eq!(d["quest"]["adventure3"]["progress"], json!(3), "progress tak diubah");
+        assert_eq!(d["quest"]["adventure3"]["claimed"], serde_json::json!(true));
+        assert_eq!(d["quest"]["adventure3"]["progress"], serde_json::json!(3), "progress tak diubah");
 
         let again = run(
             &["claim", "adventure3"],
-            json!({"quest": {"adventure3": {"progress": 3, "claimed": true}}}),
+            serde_json::json!({"quest": {"adventure3": {"progress": 3, "claimed": true}}}),
         );
         assert_eq!(text_of(&again), "Hadiah misi ini udah kamu ambil kak! 😒");
         assert!(again.mutations().is_empty());

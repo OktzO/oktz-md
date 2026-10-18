@@ -7,7 +7,7 @@
 //! tak dikenal; `?.split(" ")[1] || "Baby"` menutupnya di `nama` bayi.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::rpg::heal::{apply_exp, or_default, other_user, rpg_map};
 
@@ -172,7 +172,7 @@ pub fn breeding(ctx: Ctx) -> Reply {
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    storage.push(json!({
+    storage.push(serde_json::json!({
         "type": baby,
         "name": baby_name(baby),
         "level": 1,
@@ -208,7 +208,7 @@ pub fn breeding(ctx: Ctx) -> Reply {
     .with_reaction(if is_rare { "🎉" } else { "✅" })
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": koin - BREEDING_COST, "exp": new_exp, "rpg": rpg }),
+        data: serde_json::json!({ "koin": koin - BREEDING_COST, "exp": new_exp, "rpg": rpg }),
     })
 }
 
@@ -217,7 +217,6 @@ pub fn breeding(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::registry::{GroupRoster, Participant};
-    use serde_json::json;
 
     fn ctx_for(mentioned: &[&str], partner: Option<Value>, user: Value) -> Ctx {
         Ctx {
@@ -252,7 +251,7 @@ mod tests {
     }
 
     fn ready(tipe: &str, level: i64) -> Value {
-        json!({ "rpg": { "pet": { "type": tipe, "level": level } } })
+        serde_json::json!({ "rpg": { "pet": { "type": tipe, "level": level } } })
     }
 
     fn write_of(r: &Reply) -> Value {
@@ -288,7 +287,7 @@ mod tests {
 
     #[test]
     fn without_a_target_the_how_to_is_shown_and_nothing_is_written() {
-        let r = run(ctx_for(&[], None, json!({ "koin": 99_999 })));
+        let r = run(ctx_for(&[], None, serde_json::json!({ "koin": 99_999 })));
         let t = text_of(&r);
         assert!(t.starts_with("💕 *Peternakan & Kawin Silang*"), "{t}");
         assert!(t.contains("Biaya persalinan: *Rp 3.000*"), "{t}");
@@ -300,7 +299,7 @@ mod tests {
         let r = run(ctx_for(
             &["628111@s.whatsapp.net"],
             Some(ready("dog", 9)),
-            json!({ "rpg": { "pet": { "type": "cat", "level": 9 } }, "koin": 99_999 }),
+            serde_json::json!({ "rpg": { "pet": { "type": "cat", "level": 9 } }, "koin": 99_999 }),
         ));
         assert!(text_of(&r).starts_with("Hayo, mau kawin sama diri sendiri"));
         assert!(r.mutations().is_empty());
@@ -309,11 +308,11 @@ mod tests {
     #[test]
     fn the_caller_must_own_a_pet_first() {
         // `{}` truthy di JS — pet tanpa `level` tetap "punya pet".
-        let pet = json!(null);
+        let pet = serde_json::json!(null);
         let r = run(ctx_for(
             &["628222@s.whatsapp.net"],
             Some(ready("dog", 9)),
-            json!({ "rpg": { "pet": pet }, "koin": 99_999 }),
+            serde_json::json!({ "rpg": { "pet": pet }, "koin": 99_999 }),
         ));
         assert!(text_of(&r).starts_with("Kamu aja belum punya peliharaan"), "pet {pet}");
         assert!(r.mutations().is_empty());
@@ -321,11 +320,11 @@ mod tests {
 
     #[test]
     fn the_partner_must_own_a_pet_too() {
-        for partner in [None, Some(json!({})), Some(json!({ "rpg": {} }))] {
+        for partner in [None, Some(serde_json::json!({})), Some(serde_json::json!({ "rpg": {} }))] {
             let r = run(ctx_for(
                 &["628222@s.whatsapp.net"],
                 partner.clone(),
-                json!({ "rpg": { "pet": { "type": "cat", "level": 9 } }, "koin": 99_999 }),
+                serde_json::json!({ "rpg": { "pet": { "type": "cat", "level": 9 } }, "koin": 99_999 }),
             ));
             assert!(
                 text_of(&r).starts_with("Target yang kamu tag ternyata nggak punya peliharaan"),
@@ -343,7 +342,7 @@ mod tests {
             let r = run(ctx_for(
                 &["628222@s.whatsapp.net"],
                 Some(ready("dog", theirs)),
-                json!({ "rpg": { "pet": { "type": "cat", "level": mine } }, "koin": 99_999 }),
+                serde_json::json!({ "rpg": { "pet": { "type": "cat", "level": mine } }, "koin": 99_999 }),
             ));
             let t = text_of(&r);
             assert!(
@@ -359,7 +358,7 @@ mod tests {
         let r = run(ctx_for(
             &["628222@s.whatsapp.net"],
             Some(ready("dog", 9)),
-            json!({ "rpg": { "pet": { "type": "cat" } }, "koin": 99_999 }),
+            serde_json::json!({ "rpg": { "pet": { "type": "cat" } }, "koin": 99_999 }),
         ));
         assert!(text_of(&r).contains("Sekarang Level 1"), "{}", text_of(&r));
         assert!(r.mutations().is_empty());
@@ -373,17 +372,17 @@ mod tests {
             let r = run(ctx_for(
                 &["628222@s.whatsapp.net"],
                 Some(ready("cat", 9)),
-                json!({ "rpg": { "pet": { "type": "cat", "level": 9 } }, "koin": 10_000, "exp": 0 }),
+                serde_json::json!({ "rpg": { "pet": { "type": "cat", "level": 9 } }, "koin": 10_000, "exp": 0 }),
             ));
             let t = text_of(&r);
             assert!(t.starts_with("AWWW!! ADA KELAHIRAN BARU!"), "{t}");
             let data = write_of(&r);
-            assert_eq!(data["koin"], json!(7_000), "10.000 - 3.000");
+            assert_eq!(data["koin"], serde_json::json!(7_000), "10.000 - 3.000");
             let babies = data["rpg"]["petStorage"].as_array().unwrap();
             let baby = &babies[0];
-            assert_eq!(baby["level"], json!(1));
-            assert_eq!(baby["exp"], json!(0));
-            assert_eq!(baby["hunger"], json!(100));
+            assert_eq!(baby["level"], serde_json::json!(1));
+            assert_eq!(baby["exp"], serde_json::json!(0));
+            assert_eq!(baby["hunger"], serde_json::json!(100));
             assert_eq!(baby["stats"], Value::Null);
             assert!(baby["birthDate"].as_i64().unwrap() > 0);
             let exp_reward = data["exp"].as_i64().unwrap();
@@ -404,14 +403,14 @@ mod tests {
         let r = run(ctx_for(
             &["628222@s.whatsapp.net"],
             Some(ready("dog", 9)),
-            json!({ "rpg": { "pet": { "type": "dog", "level": 9 },
+            serde_json::json!({ "rpg": { "pet": { "type": "dog", "level": 9 },
                              "petStorage": [{ "type": "cat", "name": "Miko", "level": 4 }] },
                    "koin": 99_999, "exp": 0 }),
         ));
         let babies = write_of(&r)["rpg"]["petStorage"].as_array().unwrap().clone();
         assert_eq!(babies.len(), 2);
-        assert_eq!(babies[0]["name"], json!("Miko"), "baby lama tak boleh tertimpa");
-        assert_eq!(babies[1]["level"], json!(1));
+        assert_eq!(babies[0]["name"], serde_json::json!("Miko"), "baby lama tak boleh tertimpa");
+        assert_eq!(babies[1]["level"], serde_json::json!(1));
     }
 
     #[test]
@@ -420,7 +419,7 @@ mod tests {
             let r = run(ctx_for(
                 &["628222@s.whatsapp.net"],
                 Some(ready("dog", 9)),
-                json!({ "rpg": { "pet": { "type": "cat", "level": 9 } }, "koin": koin }),
+                serde_json::json!({ "rpg": { "pet": { "type": "cat", "level": 9 } }, "koin": koin }),
             ));
             assert!(text_of(&r).starts_with("Uang kamu nggak cukup"), "koin {koin}");
             assert!(r.mutations().is_empty(), "koin {koin}");

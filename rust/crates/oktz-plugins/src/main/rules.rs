@@ -73,12 +73,11 @@ pub fn rules(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(setting: Option<serde_json::Value>, prefix: &str) -> String {
         let settings = match setting {
-            Some(v) => json!({ "botRules": v }),
-            None => json!({}),
+            Some(v) => serde_json::json!({ "botRules": v }),
+            None => serde_json::json!({}),
         };
         let ctx = Ctx {
             prefix: prefix.into(),
@@ -125,7 +124,7 @@ mod tests {
     #[test]
     fn a_custom_string_is_used_verbatim() {
         assert_eq!(
-            run(Some(json!("Aturan kustom dari owner")), "."),
+            run(Some(serde_json::json!("Aturan kustom dari owner")), "."),
             "Aturan kustom dari owner",
             "custom string tidak boleh di-render ulang"
         );
@@ -133,7 +132,7 @@ mod tests {
 
     #[test]
     fn a_custom_array_becomes_a_numbered_list() {
-        let out = run(Some(json!(["Satu", "Dua", 7])), ".");
+        let out = run(Some(serde_json::json!(["Satu", "Dua", 7])), ".");
         assert_eq!(out, "📜 *PERATURAN OKTZ BOT*\n\n1. Satu\n2. Dua\n3. 7\n");
     }
 
@@ -141,11 +140,11 @@ mod tests {
     fn the_fallback_branch_renders_the_built_in_rules_with_the_live_prefix() {
         for setting in [
             None,
-            Some(json!({})),
-            Some(json!("")),
-            Some(json!("   ")),
-            Some(json!([])),
-            Some(json!(7)),
+            Some(serde_json::json!({})),
+            Some(serde_json::json!("")),
+            Some(serde_json::json!("   ")),
+            Some(serde_json::json!([])),
+            Some(serde_json::json!(7)),
         ] {
             let out = run(setting.clone(), ".");
             assert!(
@@ -182,7 +181,7 @@ mod tests {
     #[test]
     fn the_plugin_only_reads() {
         let ctx = Ctx {
-            settings: json!({"botRules": ["a"]}),
+            settings: serde_json::json!({"botRules": ["a"]}),
             ..Default::default()
         };
         let r = (oktz_plugin_api::find("rules").unwrap().handler)(ctx);

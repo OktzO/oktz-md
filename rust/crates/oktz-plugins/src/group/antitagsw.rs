@@ -65,7 +65,6 @@ pub fn antitagsw(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -123,7 +122,7 @@ mod tests {
 
     #[test]
     fn no_argument_reports_status_and_writes_nothing() {
-        let r = run(json!({}), "");
+        let r = run(serde_json::json!({}), "");
         assert!(
             text_of(&r).contains("> Status: *❌ Nonaktif*"),
             "{}",
@@ -135,31 +134,31 @@ mod tests {
 
     #[test]
     fn only_the_exact_string_on_counts_as_active() {
-        assert!(text_of(&run(json!({"antitagsw": "on"}), "")).contains("✅ Aktif"));
-        assert!(text_of(&run(json!({"antitagsw": true}), "")).contains("❌ Nonaktif"));
+        assert!(text_of(&run(serde_json::json!({"antitagsw": "on"}), "")).contains("✅ Aktif"));
+        assert!(text_of(&run(serde_json::json!({"antitagsw": true}), "")).contains("❌ Nonaktif"));
     }
 
     #[test]
     fn on_and_off_write_a_string_and_do_not_react() {
-        let on = run(json!({}), "on");
+        let on = run(serde_json::json!({}), "on");
         assert_eq!(text_of(&on), ON);
-        assert_eq!(written(&on), &json!({ "antitagsw": "on" }));
+        assert_eq!(written(&on), &serde_json::json!({ "antitagsw": "on" }));
         assert!(!matches!(on.without_mutations(), Reply::Reaction { .. }));
 
-        let off = run(json!({"antitagsw": "on"}), "off");
+        let off = run(serde_json::json!({"antitagsw": "on"}), "off");
         assert_eq!(text_of(&off), OFF);
-        assert_eq!(written(&off), &json!({ "antitagsw": "off" }));
+        assert_eq!(written(&off), &serde_json::json!({ "antitagsw": "off" }));
     }
 
     #[test]
     fn an_unknown_action_is_refused_and_nothing_is_written() {
-        let r = run(json!({}), "mungkin");
+        let r = run(serde_json::json!({}), "mungkin");
         assert_eq!(text_of(&r), BAD_ACTION);
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn the_action_is_lowercased_before_matching() {
-        assert_eq!(written(&run(json!({}), "Off")), &json!({ "antitagsw": "off" }));
+        assert_eq!(written(&run(serde_json::json!({}), "Off")), &serde_json::json!({ "antitagsw": "off" }));
     }
 }

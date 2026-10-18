@@ -73,7 +73,7 @@ pub(crate) const CREDITS: [(&str, &str, &str); 61] = [
     ("Open Source Community", "Libraries & Tools", "🌐"),
 ];
 
-/// `credits.map((c, i) => \`*${i + 1}*. *${c.name}* [ ${c.icon} ${c.role} ]\`)`.
+/// `credits.map((c, i) => `*${i + 1}*. *${c.name}* [ ${c.icon} ${c.role} ]`)`.
 pub(crate) fn credit_lines() -> Vec<String> {
     CREDITS
         .iter()

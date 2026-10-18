@@ -3,7 +3,7 @@
 //! Reaksi + pesan antara sebelum jeda `setTimeout` tidak masuk `Reply`.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::rpg::jualan::{
     apply_exp, coalesce, or_default, roll_incl, rpg_int, rpg_map,
@@ -98,12 +98,12 @@ pub fn training(ctx: Ctx) -> Reply {
             ctx.prefix
         ));
     }
-    rpg.insert("stamina".into(), json!(stamina - cost));
+    rpg.insert("stamina".into(), serde_json::json!(stamina - cost));
 
     let bonus = roll_incl(min, max);
     let current = or_default(rpg_int(&rpg, stat), base_stat(stat));
     let next = current + bonus;
-    rpg.insert(stat.to_string(), json!(next));
+    rpg.insert(stat.to_string(), serde_json::json!(next));
 
     let old_exp = or_default(ctx.user_field("exp").and_then(Value::as_i64), 0);
     let new_exp = apply_exp(&mut rpg, old_exp, exp_gain);
@@ -120,7 +120,7 @@ pub fn training(ctx: Ctx) -> Reply {
     .with_reaction("💪")
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "exp": new_exp, "rpg": rpg }),
+        data: serde_json::json!({ "exp": new_exp, "rpg": rpg }),
     })
 }
 
@@ -179,7 +179,7 @@ mod tests {
 
     #[test]
     fn the_board_shows_the_five_backfilled_stats_and_the_menu() {
-        let r = run(&[], json!({}));
+        let r = run(&[], serde_json::json!({}));
         let t = text_of(&r);
         assert!(t.starts_with("🏋️ *ᴛʀᴀɪɴɪɴɢ sʏsᴛᴇᴍ*"), "{t}");
         assert!(t.contains("> ⚔️ Attack: *10*\n> 🛡️ Defense: *5*\n> ❤️ Health: *100*"), "{t}");
@@ -193,7 +193,7 @@ mod tests {
 
     #[test]
     fn a_zero_stat_is_backfilled_because_the_board_uses_or() {
-        let r = run(&[], json!({"rpg": {"attack": 0, "stamina": 0}}));
+        let r = run(&[], serde_json::json!({"rpg": {"attack": 0, "stamina": 0}}));
         let t = text_of(&r);
         assert!(t.contains("> ⚔️ Attack: *10*"), "`|| 10` mengembalikan 0 ke 10: {t}");
         assert!(t.contains("> ⚡ Stamina: *0*"), "`?? 100` tidak ada di baris ini: {t}");
@@ -201,7 +201,7 @@ mod tests {
 
     #[test]
     fn an_unknown_discipline_is_rejected() {
-        let r = run(&["swim"], json!({"rpg": {"stamina": 100}}));
+        let r = run(&["swim"], serde_json::json!({"rpg": {"stamina": 100}}));
         let t = text_of(&r);
         assert!(t.starts_with("❌ Training tidak ditemukan!"), "{t}");
         assert!(t.contains("`.training` untuk melihat daftar."), "{t}");
@@ -212,7 +212,7 @@ mod tests {
     fn every_discipline_adds_a_bonus_inside_its_own_band_and_costs_its_stamina() {
         for (key, name, stat, min, max, exp_gain, cost) in TRAINING {
             for _ in 0..200 {
-                let r = run(&[key], json!({"rpg": {"stamina": 100}, "exp": 0}));
+                let r = run(&[key], serde_json::json!({"rpg": {"stamina": 100}, "exp": 0}));
                 let d = data(&r);
                 let t = text_of(&r);
                 assert!(t.contains(&format!("> 🏋️ Training: *{name}*")), "{t}");
@@ -222,9 +222,9 @@ mod tests {
                     .unwrap_or_else(|| panic!("tidak ada baris {stat}: {t}"));
                 let (from, to) = parse_arrow(line);
                 assert!((min..=max).contains(&(to - from)), "{key}: bonus {to} - {from}");
-                assert_eq!(d["rpg"][stat], json!(to), "{key}: stat harus sama dengan baris");
-                assert_eq!(d["rpg"]["stamina"], json!(100 - cost), "{key}");
-                assert_eq!(d["exp"], json!(exp_gain), "{key}");
+                assert_eq!(d["rpg"][stat], serde_json::json!(to), "{key}: stat harus sama dengan baris");
+                assert_eq!(d["rpg"]["stamina"], serde_json::json!(100 - cost), "{key}");
+                assert_eq!(d["exp"], serde_json::json!(exp_gain), "{key}");
             }
         }
     }
@@ -240,7 +240,7 @@ mod tests {
 
     #[test]
     fn the_first_session_starts_from_the_table_default_not_zero() {
-        let r = run(&["defense"], json!({"rpg": {"stamina": 100}, "exp": 0}));
+        let r = run(&["defense"], serde_json::json!({"rpg": {"stamina": 100}, "exp": 0}));
         let d = data(&r);
         let defense = d["rpg"]["defense"].as_i64().unwrap();
         assert!((6..=7).contains(&defense), "5 + bonus 1..2 = {defense}");
@@ -250,7 +250,7 @@ mod tests {
     fn an_exhausted_bar_blocks_the_session_and_keeps_the_stat() {
         let r = run(
             &["health"],
-            json!({"rpg": {"stamina": 24, "health": 200}}),
+            serde_json::json!({"rpg": {"stamina": 24, "health": 200}}),
         );
         let t = text_of(&r);
         assert!(t.starts_with("⚡ *sᴛᴀᴍɪɴᴀ ᴋᴜʀᴀɴɢ*"), "{t}");

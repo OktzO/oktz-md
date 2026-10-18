@@ -9,7 +9,7 @@
 //! profil tidak ditemukan, `✅` setelah caption terkirim, `☢` saat gagal.
 
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use super::npmstalk::{NEXRAY, js_str, or_dash};
 use crate::tools::phisingataubukan::encode_uri_component;
@@ -59,7 +59,7 @@ pub(crate) fn pilih_gambar(image: &Value) -> String {
 
 /// `pintereststalk.js:48-63` — caption.
 pub(crate) fn caption(r: &Value, username: &str) -> String {
-    let s = r.get("stats").cloned().unwrap_or_else(|| json!({}));
+    let s = r.get("stats").cloned().unwrap_or_else(|| serde_json::json!({}));
     let txt = format!(
         "📌 *PINTEREST STALK - PROFILE INFO* 📌\n\nHalo! Ini dia hasil pencarian profil untuk username *@{u}*:\n\n👤 *INFO PROFIL*\n  - Nama Lengkap: *{n}*\n  - Username: @{u}\n  - Bio: {b}\n  - Tipe Akun: {t}\n  - Akun Dibuat: {c}\n\n📊 *STATISTIK*\n  - Pengikut (Followers): {f}\n  - Diikuti (Following): {g}\n  - Total Pin: {p}\n  - Total Board: {bd}\n\n🔗 *LINK PROFIL*\n  - {url}\n\nSuka mengumpulkan inspirasi dari Pinterest ya? Pamerin ke temanmu yuk! 🚀",
         u = username,
@@ -186,7 +186,7 @@ mod tests {
                     },
                     headers: Vec::new(),
                 }),
-                None => Err(HttpError {
+                None => Err(oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 }),
             }
@@ -230,7 +230,7 @@ mod tests {
 
     #[test]
     fn url_dan_user_agent_sesuai_js() {
-        let http = Stub::body(json!({"status": false}));
+        let http = Stub::body(serde_json::json!({"status": false}));
         pintereststalk(ctx(http.clone(), "dims"));
         let p = http.seen.lock().unwrap();
         assert_eq!(
@@ -243,9 +243,9 @@ mod tests {
     #[test]
     fn profil_tidak_ditemukan_memberi_reaksi_sil_tan() {
         for body in [
-            json!({ "status": false }),
-            json!({ "status": true }),
-            json!({ "status": true, "result": null }),
+            serde_json::json!({ "status": false }),
+            serde_json::json!({ "status": true }),
+            serde_json::json!({ "status": true, "result": null }),
         ] {
             let r = pintereststalk(ctx(Stub::body(body.clone()), "dims"));
             assert_eq!(r.without_mutations().text_body(), Some(not_found("dims").as_str()), "body {body}");
@@ -255,7 +255,7 @@ mod tests {
 
     #[test]
     fn caption_menyalin_semua_blok_dan_statistik_kosong_jadi_nol() {
-        let r = json!({
+        let r = serde_json::json!({
             "username": "dims", "full_name": "Dims", "bio": "hi",
             "account_type": "BUSINESS", "created_at": "2020-01-01",
             "stats": { "followers": 12, "following": 0, "pins": 30, "boards": 4 },
@@ -271,7 +271,7 @@ mod tests {
         assert!(txt.ends_with("Pamerin ke temanmu yuk! 🚀"));
 
         // Field profil kosong jadi `-`, statistik hilang jadi `0`.
-        let kosong = json!({ "username": "u" });
+        let kosong = serde_json::json!({ "username": "u" });
         let txt = caption(&kosong, "u");
         assert!(txt.contains("  - Nama Lengkap: *-*"));
         assert!(txt.contains("  - Pengikut (Followers): 0"));
@@ -280,27 +280,27 @@ mod tests {
 
     #[test]
     fn gambar_memilih_kandidat_pertama_yang_truthy() {
-        assert_eq!(pilih_gambar(&json!({})), "");
+        assert_eq!(pilih_gambar(&serde_json::json!({})), "");
         assert_eq!(
-            pilih_gambar(&json!({"original": "o", "large": "l"})),
+            pilih_gambar(&serde_json::json!({"original": "o", "large": "l"})),
             "o"
         );
         assert_eq!(
-            pilih_gambar(&json!({"original": "", "large": "l"})),
+            pilih_gambar(&serde_json::json!({"original": "", "large": "l"})),
             "l",
             "string kosong dilewati"
         );
         assert_eq!(
-            pilih_gambar(&json!({"medium": "m"})),
+            pilih_gambar(&serde_json::json!({"medium": "m"})),
             "m",
             "medium dipakai saat original dan large kosong"
         );
-        assert_eq!(pilih_gambar(&json!({"small": "s"})), "s");
+        assert_eq!(pilih_gambar(&serde_json::json!({"small": "s"})), "s");
     }
 
     #[test]
     fn jalur_berhasil_mengirim_gambar_lalu_reaksi_centang() {
-        let http = Stub::body(json!({
+        let http = Stub::body(serde_json::json!({
             "status": true,
             "result": {
                 "username": "dims", "full_name": "Dims",
@@ -330,7 +330,7 @@ mod tests {
 
     #[test]
     fn tanpa_gambar_mengirim_teks_lalu_reaksi_centang() {
-        let http = Stub::body(json!({
+        let http = Stub::body(serde_json::json!({
             "status": true,
             "result": { "username": "dims", "image": {} }
         }));

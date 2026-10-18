@@ -58,3 +58,5 @@ pub mod templateplugin;
 pub mod unban;
 pub mod unblock;
 pub mod welcomeall;
+
+// Ditambahkan scripts/pasang-modul.mjs.

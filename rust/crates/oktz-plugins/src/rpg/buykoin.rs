@@ -111,7 +111,7 @@ pub fn buykoin(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(user: Value, arg: &str) -> Reply {
         let ctx = Ctx {
@@ -167,8 +167,8 @@ mod tests {
     #[test]
     fn no_argument_shows_the_exchange_rate_and_current_balances() {
         for (user, exp_s, koin_s) in [
-            (json!({}), "0", "0"),
-            (json!({"exp": 25000, "koin": 1000}), "25.000", "1.000"),
+            (serde_json::json!({}), "0", "0"),
+            (serde_json::json!({"exp": 25000, "koin": 1000}), "25.000", "1.000"),
         ] {
             let r = run(user.clone(), "");
             let t = text_of(&r);
@@ -182,10 +182,10 @@ mod tests {
 
     #[test]
     fn a_successful_exchange_writes_both_exp_and_koin() {
-        let r = run(json!({"exp": 10000, "koin": 500}), "1000");
+        let r = run(serde_json::json!({"exp": 10000, "koin": 500}), "1000");
         let data = write_of(&r);
-        assert_eq!(data["exp"], json!(8000), "10000 - 1000*2");
-        assert_eq!(data["koin"], json!(1500), "500 + 1000");
+        assert_eq!(data["exp"], serde_json::json!(8000), "10000 - 1000*2");
+        assert_eq!(data["koin"], serde_json::json!(1500), "500 + 1000");
         assert!(text_of(&r).contains("Tukar Berhasil!"));
         assert!(text_of(&r).contains("> 🚄 EXP: *-2.000*"));
         assert!(text_of(&r).contains("> 💰 Koin: *+1.000*"));
@@ -195,10 +195,10 @@ mod tests {
     fn all_and_max_convert_every_remaining_exp_flooring_the_division() {
         for word in ["all", "max"] {
             // 10001 EXP -> floor(10001/2) = 5000 koin, sisa 1 EXP.
-            let r = run(json!({"exp": 10001, "koin": 0}), word);
+            let r = run(serde_json::json!({"exp": 10001, "koin": 0}), word);
             let data = write_of(&r);
-            assert_eq!(data["exp"], json!(1), "sisa 1 EXP, arg {word}");
-            assert_eq!(data["koin"], json!(5000), "arg {word}");
+            assert_eq!(data["exp"], serde_json::json!(1), "sisa 1 EXP, arg {word}");
+            assert_eq!(data["koin"], serde_json::json!(5000), "arg {word}");
         }
     }
 
@@ -206,9 +206,9 @@ mod tests {
     fn an_odd_exp_leaves_a_stranded_point_that_all_cannot_reach() {
         // 9999 EXP -> floor(9999/2) = 4999 koin, sisa 1 EXP. `.buykoin all`
         // kedua kalinya harus gagal, bukan memenuhi 1 EXP.
-        let first = run(json!({"exp": 9999, "koin": 0}), "all");
-        assert_eq!(write_of(&first)["exp"], json!(1));
-        let second = run(json!({"exp": 1, "koin": 0}), "all");
+        let first = run(serde_json::json!({"exp": 9999, "koin": 0}), "all");
+        assert_eq!(write_of(&first)["exp"], serde_json::json!(1));
+        let second = run(serde_json::json!({"exp": 1, "koin": 0}), "all");
         assert_eq!(
             text_of(&second),
             "❌ Masukkan jumlah koin yang valid!",
@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     fn insufficient_exp_is_reported_with_the_maximum_possible() {
-        let r = run(json!({"exp": 100, "koin": 0}), "100");
+        let r = run(serde_json::json!({"exp": 100, "koin": 0}), "100");
         let t = text_of(&r);
         assert!(t.starts_with("❌ *EXP tidak cukup!*"), "{t}");
         assert!(t.contains("Dibutuhkan: *200* EXP"), "{t}");
@@ -230,16 +230,16 @@ mod tests {
 
     #[test]
     fn an_exact_balance_is_enough_and_is_consumed_to_zero() {
-        let r = run(json!({"exp": 2000, "koin": 0}), "1000");
+        let r = run(serde_json::json!({"exp": 2000, "koin": 0}), "1000");
         let data = write_of(&r);
-        assert_eq!(data["exp"], json!(0));
-        assert_eq!(data["koin"], json!(1000));
+        assert_eq!(data["exp"], serde_json::json!(0));
+        assert_eq!(data["koin"], serde_json::json!(1000));
     }
 
     #[test]
     fn a_zero_or_negative_or_unparsable_amount_is_rejected() {
         for bad in ["0", "-5", "abc"] {
-            let r = run(json!({"exp": 100000}), bad);
+            let r = run(serde_json::json!({"exp": 100000}), bad);
             assert_eq!(
                 text_of(&r),
                 "❌ Masukkan jumlah koin yang valid!",
@@ -253,11 +253,11 @@ mod tests {
     fn no_argument_at_all_shows_info_because_args_is_empty() {
         // `amountStr = args[0]` undefined -> cabang info. Token whitespace
         // bukan "tanpa argumen" di JS karena router sudah memecahnya.
-        let r = run(json!({"exp": 100000}), "");
+        let r = run(serde_json::json!({"exp": 100000}), "");
         assert!(text_of(&r).starts_with("💱 *Buy Koin*"));
         assert!(r.mutations().is_empty());
 
-        let r = run(json!({"exp": 100000}), "  ");
+        let r = run(serde_json::json!({"exp": 100000}), "  ");
         assert_eq!(
             text_of(&r),
             "❌ Masukkan jumlah koin yang valid!",
@@ -270,10 +270,10 @@ mod tests {
         // `parseInt("1.5.2")` = 1, `parseInt("12abc")` = 12 — bukan NaN.
         // Jadi string ini justru MENJUAL 1 koin, bukan ditolak.
         for (arg, expected_koin) in [("1.5.2", 1), ("10abc", 10), ("7px", 7)] {
-            let r = run(json!({"exp": 100000, "koin": 0}), arg);
+            let r = run(serde_json::json!({"exp": 100000, "koin": 0}), arg);
             assert_eq!(
                 write_of(&r)["koin"],
-                json!(expected_koin),
+                serde_json::json!(expected_koin),
                 "parseInt({arg:?}) harus jadi {expected_koin}"
             );
         }
@@ -282,15 +282,15 @@ mod tests {
     #[test]
     fn parse_int_accepts_a_numeric_prefix_but_stops_at_the_first_letter() {
         // `parseInt("1000abc")` = 1000 di JS.
-        let r = run(json!({"exp": 100000, "koin": 0}), "1000abc");
+        let r = run(serde_json::json!({"exp": 100000, "koin": 0}), "1000abc");
         let data = write_of(&r);
-        assert_eq!(data["exp"], json!(98000));
-        assert_eq!(data["koin"], json!(1000));
+        assert_eq!(data["exp"], serde_json::json!(98000));
+        assert_eq!(data["koin"], serde_json::json!(1000));
     }
 
     #[test]
     fn a_user_with_no_stored_row_still_gets_the_info_branch_without_panicking() {
-        for user in [json!(null), json!({}), json!({"exp": null})] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"exp": null})] {
             let r = run(user.clone(), "");
             assert!(text_of(&r).starts_with("💱 *Buy Koin*"), "input {user}");
             assert!(r.mutations().is_empty());
@@ -299,14 +299,14 @@ mod tests {
 
     #[test]
     fn an_empty_store_cannot_buy_anything_with_all() {
-        let r = run(json!({}), "all");
+        let r = run(serde_json::json!({}), "all");
         assert_eq!(text_of(&r), "❌ Masukkan jumlah koin yang valid!");
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn the_success_reply_is_paired_with_the_write() {
-        let r = run(json!({"exp": 10000}), "1");
+        let r = run(serde_json::json!({"exp": 10000}), "1");
         match r.without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "💱"),
             other => panic!("harus Reaction, dapat {other:?}"),

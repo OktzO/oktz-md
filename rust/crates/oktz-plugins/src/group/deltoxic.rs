@@ -70,7 +70,6 @@ pub fn deltoxic(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use serde_json::Value;
-    use serde_json::json;
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -128,61 +127,61 @@ mod tests {
     fn an_empty_word_shows_help_even_when_the_list_is_populated() {
         // Tidak seperti `delantilink`, plugin ini tidak pernah menampilkan
         // daftar — tanpa argumen selalu help.
-        let r = run(json!({"toxicWords": ["a", "b"]}), "");
+        let r = run(serde_json::json!({"toxicWords": ["a", "b"]}), "");
         assert!(text_of(&r).starts_with("🗑️ *ᴅᴇʟ ᴛᴏxɪᴄ*"));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn a_word_present_in_the_list_is_removed() {
-        let r = run(json!({"toxicWords": ["satu", "dua", "tiga"]}), "dua");
-        assert_eq!(list_write(&r), &vec![json!("satu"), json!("tiga")]);
+        let r = run(serde_json::json!({"toxicWords": ["satu", "dua", "tiga"]}), "dua");
+        assert_eq!(list_write(&r), &vec![serde_json::json!("satu"), serde_json::json!("tiga")]);
         assert!(text_of(&r).contains("`2` kata"), "{}", text_of(&r));
     }
 
     #[test]
     fn removing_the_only_word_leaves_an_empty_array() {
-        let r = run(json!({"toxicWords": ["saja"]}), "saja");
+        let r = run(serde_json::json!({"toxicWords": ["saja"]}), "saja");
         assert!(list_write(&r).is_empty());
         assert!(text_of(&r).contains("`0` kata"));
     }
 
     #[test]
     fn a_missing_word_is_reported_and_nothing_is_written() {
-        let r = run(json!({"toxicWords": ["satu"]}), "lain");
+        let r = run(serde_json::json!({"toxicWords": ["satu"]}), "lain");
         assert_eq!(text_of(&r), not_found("lain"));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn removing_from_an_empty_list_reports_not_found() {
-        let r = run(json!({}), "apa");
+        let r = run(serde_json::json!({}), "apa");
         assert_eq!(text_of(&r), not_found("apa"));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn the_word_is_lowercased_before_the_lookup() {
-        let r = run(json!({"toxicWords": ["kata"]}), "KATA");
+        let r = run(serde_json::json!({"toxicWords": ["kata"]}), "KATA");
         assert_eq!(list_write(&r).len(), 0);
     }
 
     #[test]
     fn multi_token_input_is_joined_with_spaces_before_lookup() {
-        let r = run(json!({"toxicWords": ["kata kasar"]}), "Kata  Kasar");
+        let r = run(serde_json::json!({"toxicWords": ["kata kasar"]}), "Kata  Kasar");
         assert!(list_write(&r).is_empty());
     }
 
     #[test]
     fn matching_is_whole_string_not_substring() {
-        let r = run(json!({"toxicWords": ["kata_kasar"]}), "kasar");
+        let r = run(serde_json::json!({"toxicWords": ["kata_kasar"]}), "kasar");
         assert!(text_of(&r).starts_with("❌ *ɢᴀɢᴀʟ*"));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn the_removed_reply_reacts_and_is_paired_with_the_write() {
-        let r = run(json!({"toxicWords": ["x"]}), "x");
+        let r = run(serde_json::json!({"toxicWords": ["x"]}), "x");
         match r.without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅"),
             other => panic!("harus Reaction, dapat {other:?}"),

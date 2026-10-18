@@ -108,7 +108,7 @@ mod tests {
     use super::*;
     use oktz_plugin_api::QuotedKind;
     use oktz_plugin_api::registry::{GroupRoster, Participant};
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     const ME: &str = "628111@s.whatsapp.net";
     const THEM: &str = "628222@s.whatsapp.net";
@@ -236,10 +236,10 @@ mod tests {
     #[test]
     fn the_normal_branch_reports_a_mutual_partnership() {
         let ctx = Ctx {
-            user_data: json!({ "fun": { "pasangan": THEM } }),
+            user_data: serde_json::json!({ "fun": { "pasangan": THEM } }),
             roster: roster(&[
-                (ME, json!({ "fun": { "pasangan": THEM } })),
-                (THEM, json!({ "fun": { "pasangan": ME } })),
+                (ME, serde_json::json!({ "fun": { "pasangan": THEM } })),
+                (THEM, serde_json::json!({ "fun": { "pasangan": ME } })),
             ]),
             ..base()
         };
@@ -255,8 +255,8 @@ mod tests {
     #[test]
     fn a_one_sided_pair_is_reported_as_hanging() {
         let ctx = Ctx {
-            user_data: json!({ "fun": { "pasangan": THEM } }),
-            roster: roster(&[(THEM, json!({ "fun": { "pasangan": "999@s.whatsapp.net" } }))]),
+            user_data: serde_json::json!({ "fun": { "pasangan": THEM } }),
+            roster: roster(&[(THEM, serde_json::json!({ "fun": { "pasangan": "999@s.whatsapp.net" } }))]),
             ..base()
         };
         let (emoji, text) = text_and_reaction(&run(ctx.clone()));
@@ -268,7 +268,7 @@ mod tests {
 
     #[test]
     fn without_a_partner_it_says_so_and_mentions_nobody() {
-        for data in [json!({}), json!({ "fun": {} }), json!({ "fun": { "pasangan": null } })] {
+        for data in [serde_json::json!({}), serde_json::json!({ "fun": {} }), serde_json::json!({ "fun": { "pasangan": null } })] {
             let ctx = Ctx {
                 user_data: data.clone(),
                 ..base()
@@ -294,8 +294,8 @@ mod tests {
     fn a_mentioned_target_is_named_and_mentioned() {
         let ctx = Ctx {
             mentioned: vec![THEM.into()],
-            roster: roster(&[(THEM, json!({ "fun": { "pasangan": ME } }))]),
-            user_data: json!({ "fun": { "pasangan": THEM } }),
+            roster: roster(&[(THEM, serde_json::json!({ "fun": { "pasangan": ME } }))]),
+            user_data: serde_json::json!({ "fun": { "pasangan": THEM } }),
             ..base()
         };
         let (_, text) = text_and_reaction(&run(ctx.clone()));
@@ -323,8 +323,8 @@ mod tests {
     #[test]
     fn the_plugin_only_reads_never_writes() {
         let ctx = Ctx {
-            user_data: json!({ "fun": { "pasangan": THEM } }),
-            roster: roster(&[(THEM, json!({ "fun": { "pasangan": ME } }))]),
+            user_data: serde_json::json!({ "fun": { "pasangan": THEM } }),
+            roster: roster(&[(THEM, serde_json::json!({ "fun": { "pasangan": ME } }))]),
             ..base()
         };
         assert!(run(ctx.clone()).mutations().is_empty());

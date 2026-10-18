@@ -93,3 +93,5 @@ pub mod unmutegc;
 pub mod unmutemember;
 pub mod warn;
 pub mod welcome;
+
+// Ditambahkan scripts/pasang-modul.mjs.

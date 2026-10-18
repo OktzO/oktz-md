@@ -38,7 +38,6 @@ pub fn resetrulesgrup(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use serde_json::Value;
-    use serde_json::json;
 
     fn run(group: Value) -> Reply {
         let ctx = Ctx {
@@ -94,7 +93,7 @@ mod tests {
     #[test]
     fn it_always_writes_even_when_nothing_was_set() {
         // Tidak ada pemeriksaan state di JS — reset tetap menulis.
-        for g in [json!(null), json!({}), json!({"groupRules": null}), json!({"groupRules": "lama"})] {
+        for g in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"groupRules": null}), serde_json::json!({"groupRules": "lama"})] {
             let r = run(g.clone());
             assert_eq!(group_write(&r)["groupRules"], Value::Null, "input {g}");
             assert!(text_of(&r).contains("berhasil direset"), "input {g}");
@@ -103,7 +102,7 @@ mod tests {
 
     #[test]
     fn only_group_rules_is_written() {
-        let r = run(json!({"groupRules": "lama", "game": true}));
+        let r = run(serde_json::json!({"groupRules": "lama", "game": true}));
         let data = group_write(&r);
         assert_eq!(data.as_object().unwrap().len(), 1);
         assert_eq!(data["groupRules"], Value::Null);
@@ -120,7 +119,7 @@ mod tests {
 
     #[test]
     fn the_success_reply_is_always_paired_with_the_write() {
-        for g in [json!({}), json!({"groupRules": "x"})] {
+        for g in [serde_json::json!({}), serde_json::json!({"groupRules": "x"})] {
             let label = g.to_string();
             let r = run(g.clone());
             assert!(text_of(&r).contains("berhasil direset ke default"));

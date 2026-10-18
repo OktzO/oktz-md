@@ -13,9 +13,8 @@
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
 use serde_json::Value;
-use serde_json::json;
 
-use crate::common::{error_template, js_truthy, now_ms};
+use crate::common::{js_truthy, now_ms};
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `config.APIkey?.neoxr || ''` — lihat catatan `ponytail:` di
@@ -111,7 +110,7 @@ pub(crate) fn render_list(query: &str, items: &[Value]) -> String {
 
 /// Sesi yang ditulis ke `user.compare_session` (`comparation.js:76-83`).
 pub(crate) fn session_value(device_type: &str, items: &[Value], time_ms: i64) -> Value {
-    json!({
+    serde_json::json!({
         "step": 1,
         "type": device_type,
         "results": items,
@@ -159,7 +158,7 @@ pub fn advance_comparation(ctx: Ctx) -> Reply {
     }
 
     let Some(resp) = ctx.http.get(&search_url(&query, &device_type)).ok() else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
     let res = resp.json().unwrap_or(Value::Null);
 
@@ -172,7 +171,7 @@ pub fn advance_comparation(ctx: Ctx) -> Reply {
         .with_reaction("✅")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "compare_session": session_value(&device_type, kept, now_ms()) }),
+            data: serde_json::json!({ "compare_session": session_value(&device_type, kept, now_ms()) }),
         })
 }
 
@@ -206,7 +205,7 @@ mod tests {
     impl HttpGet for Stub {
         fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
             self.seen.lock().unwrap().push(url.to_string());
-            let body = self.body.clone().ok_or_else(|| HttpError {
+            let body = self.body.clone().ok_or_else(|| oktz_plugin_api::HttpError {
                 message: "offline".into(),
             })?;
             Ok(HttpResponse {
@@ -240,7 +239,7 @@ mod tests {
             sender: "628111@s.whatsapp.net".into(),
             chat: "628111@s.whatsapp.net".into(),
             text: text.into(),
-            args: text.split_whitespace().collect(),
+            args: text.split_whitespace().map(str::to_string).collect(),
             http,
             ..Default::default()
         };
@@ -375,9 +374,9 @@ mod tests {
     #[test]
     fn the_list_is_numbered_uppercased_and_capped_at_ten() {
         let items: Vec<Value> = (0..14)
-            .map(|i| json!({"label": format!("Device {i}")}))
+            .map(|i| serde_json::json!({"label": format!("Device {i}")}))
             .collect();
-        let res = json!({"status": true, "data": items});
+        let res = serde_json::json!({"status": true, "data": items});
         let items = items_of(&res).unwrap();
         let out = render_list("s24 pro", &items[..items.len().min(10)]);
         assert!(
@@ -392,7 +391,7 @@ mod tests {
 
     #[test]
     fn a_missing_label_is_interpolated_as_undefined() {
-        let res = json!({"status": true, "data": [{"name": "x"}]});
+        let res = serde_json::json!({"status": true, "data": [{"name": "x"}]});
         let items = items_of(&res).unwrap();
         assert!(render_list("q", &items).contains("*1.* undefined\n"));
     }
@@ -417,7 +416,7 @@ mod tests {
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::empty(), "samsung s24");
-        assert_eq!(body_of(&r), error_template(".", "bandingkan-device"));
+        assert_eq!(body_of(&r), crate::common::error_template(".", "bandingkan-device"));
         assert_eq!(reaction_of(&r), Some("☢"));
         assert!(r.mutations().is_empty(), "sesi tidak boleh ditulis saat gagal");
     }

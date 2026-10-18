@@ -84,7 +84,7 @@ pub fn automedia(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(args: &[&str], group: Value) -> Reply {
         let ctx = Ctx {
@@ -143,12 +143,12 @@ mod tests {
     #[test]
     fn no_argument_reports_the_stored_flag() {
         for (stored, label) in [
-            (json!(true), "✅ Aktif"),
-            (json!(false), "❌ Nonaktif"),
+            (serde_json::json!(true), "✅ Aktif"),
+            (serde_json::json!(false), "❌ Nonaktif"),
             // `{}` truthy di JS — objek kosong bukan "tidak ada".
-            (json!({}), "✅ Aktif"),
+            (serde_json::json!({}), "✅ Aktif"),
         ] {
-            let r = run(&[], json!({ "automedia": stored }));
+            let r = run(&[], serde_json::json!({ "automedia": stored }));
             assert!(body(&r).contains(&format!("> Status: {label}\n")), "{stored}: {}", body(&r));
             assert!(body(&r).contains("> `.automedia on` - aktifkan"), "{}", body(&r));
             assert!(r.mutations().is_empty(), "{stored} tidak boleh ditulis ulang");
@@ -164,33 +164,33 @@ mod tests {
     #[test]
     fn every_on_spelling_writes_true_once() {
         for arg in ["on", "1", "aktif", "ON", "Aktif"] {
-            let r = run(&[arg], json!({}));
+            let r = run(&[arg], serde_json::json!({}));
             assert_eq!(
                 body(&r),
                 "🎬 *ᴀᴜᴛᴏᴍᴇᴅɪᴀ*\n\n> ✅ Berhasil diaktifkan!\n> Sticker akan otomatis jadi gambar/video",
                 "arg {arg}"
             );
-            assert_eq!(group_write(&r), &json!({"automedia": true}), "arg {arg}");
+            assert_eq!(group_write(&r), &serde_json::json!({"automedia": true}), "arg {arg}");
         }
     }
 
     #[test]
     fn every_off_spelling_writes_false_once() {
         for arg in ["off", "0", "nonaktif", "OFF"] {
-            let r = run(&[arg], json!({ "automedia": true }));
+            let r = run(&[arg], serde_json::json!({ "automedia": true }));
             assert_eq!(
                 body(&r),
                 "🎬 *ᴀᴜᴛᴏᴍᴇᴅɪᴀ*\n\n> ❌ Berhasil dinonaktifkan!",
                 "arg {arg}"
             );
-            assert_eq!(group_write(&r), &json!({"automedia": false}), "arg {arg}");
+            assert_eq!(group_write(&r), &serde_json::json!({"automedia": false}), "arg {arg}");
         }
     }
 
     #[test]
     fn repeating_the_current_state_reports_it_and_writes_nothing() {
         for (arg, on) in [("on", true), ("off", false)] {
-            let r = run(&[arg], json!({ "automedia": on }));
+            let r = run(&[arg], serde_json::json!({ "automedia": on }));
             let expected = if on { "Sudah aktif!" } else { "Sudah nonaktif!" };
             assert_eq!(body(&r), format!("🎬 *ᴀᴜᴛᴏᴍᴇᴅɪᴀ*\n\n> {expected}"), "arg {arg}");
             assert!(r.mutations().is_empty(), "arg {arg} tidak boleh menulis");
@@ -200,7 +200,7 @@ mod tests {
     #[test]
     fn an_unknown_keyword_falls_through_to_the_usage_line() {
         for arg in ["males", "nyala", "yes"] {
-            let r = run(&[arg], json!({}));
+            let r = run(&[arg], serde_json::json!({}));
             assert_eq!(body(&r), "❌ Gunakan: `.automedia on/off`", "arg {arg}");
             assert!(r.mutations().is_empty(), "arg {arg}");
         }
@@ -211,19 +211,19 @@ mod tests {
         // `?? false` hanya menutup null/undefined; `if (current)` tetap pakai
         // kebenaran JS, jadi `"off"` dianggap aktif.
         assert!(!enabled(&Ctx {
-            group_data: json!({"automedia": false}),
+            group_data: serde_json::json!({"automedia": false}),
             ..Default::default()
         }));
         assert!(!enabled(&Ctx {
-            group_data: json!({"automedia": 0}),
+            group_data: serde_json::json!({"automedia": 0}),
             ..Default::default()
         }));
         assert!(enabled(&Ctx {
-            group_data: json!({"automedia": "off"}),
+            group_data: serde_json::json!({"automedia": "off"}),
             ..Default::default()
         }));
         assert!(enabled(&Ctx {
-            group_data: json!({"automedia": {}}),
+            group_data: serde_json::json!({"automedia": {}}),
             ..Default::default()
         }));
     }

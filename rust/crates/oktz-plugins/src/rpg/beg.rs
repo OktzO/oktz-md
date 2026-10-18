@@ -6,7 +6,7 @@
 //! (`money === 0`) memanggil `db.save()` tanpa perubahan apa pun.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::rpg::heal::{apply_exp, or_default, rpg_map};
 use crate::tools::kalkulatormbg::thousands_id;
@@ -63,9 +63,9 @@ pub fn beg(ctx: Ctx) -> Reply {
 
     let data = if money > 0 {
         let old_exp = or_default(ctx.user_field("exp").and_then(Value::as_i64), 0);
-        json!({ "koin": koin + money, "exp": apply_exp(&mut rpg, old_exp, exp), "rpg": rpg })
+        serde_json::json!({ "koin": koin + money, "exp": apply_exp(&mut rpg, old_exp, exp), "rpg": rpg })
     } else if money < 0 {
-        json!({ "koin": (koin + money).max(0) })
+        serde_json::json!({ "koin": (koin + money).max(0) })
     } else {
         // `db.save()` tanpa perubahan — tak ada yang perlu ditulis.
         return Reply::text(text);
@@ -80,7 +80,6 @@ pub fn beg(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: Value) -> Reply {
         let ctx = Ctx {
@@ -148,7 +147,7 @@ mod tests {
     fn every_pull_lands_in_one_of_the_three_branches() {
         let (mut win, mut robbed, mut nothing) = (0, 0, 0);
         for _ in 0..900 {
-            let r = run(json!({ "koin": 1_000, "exp": 0 }));
+            let r = run(serde_json::json!({ "koin": 1_000, "exp": 0 }));
             let t = text_of(&r);
             assert!(
                 t.starts_with("🙏 *ɴɢᴇᴍɪs sᴜᴋsᴇs*")
@@ -163,7 +162,7 @@ mod tests {
                 assert!(t.contains("> 💰 Dapat: *+Rp "), "{t}");
             } else if t.contains("💸 Lost:") {
                 robbed += 1;
-                assert_eq!(write_of(&r)["koin"], json!(500), "1.000 - 500");
+                assert_eq!(write_of(&r)["koin"], serde_json::json!(500), "1.000 - 500");
                 assert!(
                     write_of(&r).get("exp").is_none(),
                     "cabang rugi tidak memanggil addExpWithLevelCheck"
@@ -185,7 +184,7 @@ mod tests {
         let allowed = [(100, 5), (500, 10), (1000, 20), (2000, 50)];
         let mut seen = std::collections::BTreeSet::new();
         for _ in 0..900 {
-            let r = run(json!({ "koin": 0, "exp": 0 }));
+            let r = run(serde_json::json!({ "koin": 0, "exp": 0 }));
             if !text_of(&r).starts_with("🙏") {
                 continue;
             }
@@ -200,16 +199,16 @@ mod tests {
     #[test]
     fn a_robbery_never_drives_the_purse_below_zero() {
         for _ in 0..900 {
-            let r = run(json!({ "koin": 100 }));
+            let r = run(serde_json::json!({ "koin": 100 }));
             if text_of(&r).contains("💸 Lost:") {
-                assert_eq!(write_of(&r)["koin"], json!(0), "Math.max(0, 100 - 500)");
+                assert_eq!(write_of(&r)["koin"], serde_json::json!(0), "Math.max(0, 100 - 500)");
             }
         }
     }
 
     #[test]
     fn a_missing_user_row_never_panics() {
-        for user in [json!(null), json!({}), json!({ "koin": null })] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({ "koin": null })] {
             let r = run(user.clone());
             assert!(!text_of(&r).is_empty(), "input {user}");
         }

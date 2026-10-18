@@ -106,7 +106,6 @@ pub fn harilibur(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
 
-    use serde_json::json;
 
     fn run() -> Reply {
         let ctx = Ctx {
@@ -163,7 +162,7 @@ mod tests {
 
     #[test]
     fn both_lists_render_with_their_own_titles() {
-        let result = json!({"mendatang": {
+        let result = serde_json::json!({"mendatang": {
             "hari_libur": [{"date": "2026-01-01", "event": "Tahun Baru", "daysUntil": 3}],
             "event_nasional": [{"date": "2026-06-01", "event": "Pilkada", "daysUntil": 200}],
         }});
@@ -180,9 +179,9 @@ mod tests {
     #[test]
     fn each_list_is_capped_at_five_entries() {
         let items: Vec<_> = (0..8)
-            .map(|i| json!({"date": format!("2026-01-0{}", i + 1), "event": format!("E{i}"), "daysUntil": i}))
+            .map(|i| serde_json::json!({"date": format!("2026-01-0{}", i + 1), "event": format!("E{i}"), "daysUntil": i}))
             .collect();
-        let result = json!({"mendatang": {"hari_libur": items.clone()}});
+        let result = serde_json::json!({"mendatang": {"hari_libur": items.clone()}});
         let out = render(&result).unwrap();
         for i in 0..5 {
             assert!(out.contains(&format!("E{i}")), "E{i} hilang: {out}");
@@ -197,7 +196,7 @@ mod tests {
 
     #[test]
     fn an_empty_list_drops_its_title_and_its_trailing_blank_line() {
-        let result = json!({"mendatang": {"hari_libur": [], "event_nasional": []}});
+        let result = serde_json::json!({"mendatang": {"hari_libur": [], "event_nasional": []}});
         assert_eq!(
             render(&result).unwrap(),
             "📅 *HARI LIBUR & NASIONAL MENDATANG* 📅"
@@ -207,15 +206,15 @@ mod tests {
     #[test]
     fn a_missing_mendatang_is_an_error_not_an_empty_caption() {
         // `r.mendatang.hari_libur` melempar TypeError di JS → cabang catch.
-        assert!(render(&json!({})).is_err());
-        assert_eq!(render(&json!({})).unwrap_err(), FAILED);
+        assert!(render(&serde_json::json!({})).is_err());
+        assert_eq!(render(&serde_json::json!({})).unwrap_err(), FAILED);
     }
 
     #[test]
     fn a_nasional_only_list_ends_without_a_trailing_blank_line() {
         // `caption += "\n"` hanya ada di blok hari libur, jadi blok nasional
         // sebagai blok terakhir tidak menambah baris kosong.
-        let result = json!({"mendatang": {"event_nasional": [
+        let result = serde_json::json!({"mendatang": {"event_nasional": [
             {"date": "2026-06-01", "event": "Pilkada", "daysUntil": 200}
         ]}});
         assert_eq!(

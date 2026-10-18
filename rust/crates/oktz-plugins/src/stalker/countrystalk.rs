@@ -11,10 +11,9 @@
 //! membulatkan ke tiga angka desimal untuk angka pecahan; itu ikut.
 
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use super::npmstalk::{js_str, or_dash};
-use crate::common::error_template;
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `countrystalk.js:20` — pesan tanpa negara.
@@ -170,7 +169,7 @@ pub fn countrystalk(ctx: Ctx) -> Reply {
     let api_key = ctx.config().api_keys.neoxr.clone();
     let query = encode_uri_component(&text);
     let Ok(res) = ctx.http.get(&api_url(&query, &api_key)) else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
 
     let body = res.json().unwrap_or(Value::Null);
@@ -232,7 +231,7 @@ mod tests {
                     },
                     headers: Vec::new(),
                 }),
-                None => Err(HttpError {
+                None => Err(oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 }),
             }
@@ -309,12 +308,12 @@ mod tests {
 
     #[test]
     fn locale_id_mengikuti_pemisah_id_id() {
-        assert_eq!(locale_id(&json!(1234567)), "1.234.567");
-        assert_eq!(locale_id(&json!(1000)), "1.000");
-        assert_eq!(locale_id(&json!(999)), "999");
-        assert_eq!(locale_id(&json!(0.5)), "0,5");
-        assert_eq!(locale_id(&json!(1234.5678)), "1.234,568");
-        assert_eq!(locale_id(&json!(-1234)), "-1.234");
+        assert_eq!(locale_id(&serde_json::json!(1234567)), "1.234.567");
+        assert_eq!(locale_id(&serde_json::json!(1000)), "1.000");
+        assert_eq!(locale_id(&serde_json::json!(999)), "999");
+        assert_eq!(locale_id(&serde_json::json!(0.5)), "0,5");
+        assert_eq!(locale_id(&serde_json::json!(1234.5678)), "1.234,568");
+        assert_eq!(locale_id(&serde_json::json!(-1234)), "-1.234");
     }
 
     #[test]
@@ -330,10 +329,10 @@ mod tests {
     fn body_tidak_lengkap_menghasilkan_pesan_tidak_ditemukan() {
         for body in [
             Value::Null,
-            json!({}),
-            json!({ "status": false }),
-            json!({ "status": true }),
-            json!({ "status": true, "data": null }),
+            serde_json::json!({}),
+            serde_json::json!({ "status": false }),
+            serde_json::json!({ "status": true }),
+            serde_json::json!({ "status": true, "data": null }),
         ] {
             let r = countrystalk(ctx(Stub::body(body.clone()), "x"));
             assert_eq!(r.without_mutations().text_body(), Some(not_found("x").as_str()), "body {body}");
@@ -343,7 +342,7 @@ mod tests {
 
     #[test]
     fn caption_menyalin_sembilan_baris_dan_bendera_opsional() {
-        let c = json!({
+        let c = serde_json::json!({
             "names": { "common": "Indonesia", "official": "Republic of Indonesia" },
             "population": 275501339,
             "capitals": [{ "name": "Jakarta" }],
@@ -368,20 +367,20 @@ mod tests {
         assert!(txt.ends_with("\n*Bendera:* 🇮🇩"));
 
         // Tanpa bendera, baris terakhir tidak ditambahkan.
-        let tanpa = json!({ "names": { "common": "X" } });
+        let tanpa = serde_json::json!({ "names": { "common": "X" } });
         assert!(!caption(&tanpa, "x").contains("Bendera"));
     }
 
     #[test]
     fn nama_kosong_jatuh_ke_teks_yang_diketik_user() {
-        let c = json!({ "names": {} });
+        let c = serde_json::json!({ "names": {} });
         assert!(caption(&c, "input user")
             .starts_with("🌍 *INFORMASI NEGARA: INPUT USER* 🌍"));
     }
 
     #[test]
     fn jalur_berhasil_mengirim_bendera_lalu_reaksi_centang() {
-        let http = Stub::body(json!({
+        let http = Stub::body(serde_json::json!({
             "status": true,
             "data": { "names": { "common": "Indonesia" }, "flag": { "url_png": "https://cdn/id.png" } }
         }));
@@ -404,7 +403,7 @@ mod tests {
 
     #[test]
     fn tanpa_bendera_mengirim_teks_dan_kegagalan_jaringan_membungkus_error() {
-        let http = Stub::body(json!({ "status": true, "data": { "names": { "common": "X" } } }));
+        let http = Stub::body(serde_json::json!({ "status": true, "data": { "names": { "common": "X" } } }));
         let r = countrystalk(ctx(http, "x"));
         assert!(matches!(
             r.without_mutations(),
@@ -413,7 +412,7 @@ mod tests {
         let r = countrystalk(ctx(Stub::gagal(), "x"));
         assert_eq!(
             r.without_mutations().text_body(),
-            Some(error_template(".", "country").as_str())
+            Some(crate::common::error_template(".", "country").as_str())
         );
         assert_eq!(reaction_of(&r), Some("☢"));
     }

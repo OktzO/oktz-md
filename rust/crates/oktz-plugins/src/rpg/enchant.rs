@@ -5,7 +5,7 @@
 //! berhasil atau gagal — `user.koin -= cost` jalan SEBELUM lemparan.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::rpg::heal::{apply_exp, inventory_map, math_random, or_default, rpg_map};
 
@@ -128,11 +128,11 @@ pub fn enchant(ctx: Ctx) -> Reply {
             .and_then(Value::as_object)
             .cloned()
             .unwrap_or_default();
-        enchants.insert(key.clone(), json!(level + 1));
+        enchants.insert(key.clone(), serde_json::json!(level + 1));
         rpg.insert("enchants".into(), Value::Object(enchants));
         // `user.rpg[item.stat] = (user.rpg[item.stat] || 0) + item.bonus`
         let cur = or_default(rpg.get(stat).and_then(Value::as_i64), 0);
-        rpg.insert(stat.to_string(), json!(cur + bonus));
+        rpg.insert(stat.to_string(), serde_json::json!(cur + bonus));
 
         let old_exp = or_default(ctx.user_field("exp").and_then(Value::as_i64), 0);
         let new_exp = apply_exp(&mut rpg, old_exp, SUCCESS_EXP);
@@ -150,7 +150,7 @@ pub fn enchant(ctx: Ctx) -> Reply {
         .with_reaction("🎉")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "koin": koin - cost, "exp": new_exp, "rpg": rpg }),
+            data: serde_json::json!({ "koin": koin - cost, "exp": new_exp, "rpg": rpg }),
         });
     }
 
@@ -166,14 +166,13 @@ pub fn enchant(ctx: Ctx) -> Reply {
     .with_reaction("💔")
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": koin - cost }),
+        data: serde_json::json!({ "koin": koin - cost }),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: Value, arg: &str) -> Reply {
         let ctx = Ctx {
@@ -227,7 +226,7 @@ mod tests {
 
     #[test]
     fn without_an_argument_the_catalogue_lists_every_row_with_its_level() {
-        let t_reply = run(json!({ "rpg": { "enchants": { "sword": 3 } } }), "");
+        let t_reply = run(serde_json::json!({ "rpg": { "enchants": { "sword": 3 } } }), "");
         let t = text_of(&t_reply);
         assert!(t.starts_with("✨ *ᴇɴᴄʜᴀɴᴛ - ᴅᴘɢʀᴀᴅᴇ ᴇǫᴜɪᴘ*"), "{t}");
         for (key, name, stat, bonus, cost, rate) in ENCHANTABLE {
@@ -247,7 +246,7 @@ mod tests {
 
     #[test]
     fn an_unknown_item_is_refused() {
-        let r = run(json!({ "inventory": { "sword": 1 }, "koin": 99_999 }), "potion");
+        let r = run(serde_json::json!({ "inventory": { "sword": 1 }, "koin": 99_999 }), "potion");
         let t = text_of(&r);
         assert!(t.starts_with("❌ Item tidak bisa di-enchant!"), "{t}");
         assert!(t.contains("`.enchant` untuk melihat daftar"), "{t}");
@@ -257,7 +256,7 @@ mod tests {
     #[test]
     fn the_item_has_to_be_owned_first() {
         for owned in [0, -1] {
-            let r = run(json!({ "inventory": { "sword": owned }, "koin": 99_999 }), "sword");
+            let r = run(serde_json::json!({ "inventory": { "sword": owned }, "koin": 99_999 }), "sword");
             assert!(text_of(&r).starts_with("❌ Kamu tidak punya ⚔️ Pedang!"), "owned {owned}");
             assert!(r.mutations().is_empty(), "owned {owned}");
         }
@@ -266,7 +265,7 @@ mod tests {
     #[test]
     fn a_maxed_item_cannot_be_enchanted_again() {
         let r = run(
-            json!({ "inventory": { "sword": 1 }, "rpg": { "enchants": { "sword": 10 } },
+            serde_json::json!({ "inventory": { "sword": 1 }, "rpg": { "enchants": { "sword": 10 } },
                     "koin": 99_999 }),
             "sword",
         );
@@ -278,7 +277,7 @@ mod tests {
     fn the_cost_scales_with_the_current_level_and_blocks_an_empty_purse() {
         // level 2 -> cost = 500 * 3 = 1.500.
         let r = run(
-            json!({ "inventory": { "sword": 1 }, "rpg": { "enchants": { "sword": 2 } },
+            serde_json::json!({ "inventory": { "sword": 1 }, "rpg": { "enchants": { "sword": 2 } },
                     "koin": 1_499 }),
             "sword",
         );
@@ -294,7 +293,7 @@ mod tests {
         let mut won = 0;
         for _ in 0..600 {
             let r = run(
-                json!({ "inventory": { "sword": 1 }, "rpg": { "enchants": { "sword": 0 },
+                serde_json::json!({ "inventory": { "sword": 1 }, "rpg": { "enchants": { "sword": 0 },
                                                                  "attack": 10 },
                         "koin": 10_000, "exp": 0 }),
                 "sword",
@@ -308,10 +307,10 @@ mod tests {
             }
             won += 1;
             let t = text_of(&r);
-            assert_eq!(data["koin"], json!(9_500), "500 * (0 + 1)");
-            assert_eq!(data["exp"], json!(150));
-            assert_eq!(data["rpg"]["enchants"]["sword"], json!(1));
-            assert_eq!(data["rpg"]["attack"], json!(15), "10 + bonus 5");
+            assert_eq!(data["koin"], serde_json::json!(9_500), "500 * (0 + 1)");
+            assert_eq!(data["exp"], serde_json::json!(150));
+            assert_eq!(data["rpg"]["enchants"]["sword"], serde_json::json!(1));
+            assert_eq!(data["rpg"]["attack"], serde_json::json!(15), "10 + bonus 5");
             assert!(t.contains("📊 Level: *0 → 1*"), "{t}");
             assert!(t.contains("💰 Cost: *-500*"), "{t}");
             assert!(t.contains("✨ EXP: *+150*"), "{t}");
@@ -336,7 +335,7 @@ mod tests {
         let mut lost = 0;
         for _ in 0..600 {
             let r = run(
-                json!({ "inventory": { "sword": 1 }, "rpg": { "enchants": { "sword": 9 },
+                serde_json::json!({ "inventory": { "sword": 1 }, "rpg": { "enchants": { "sword": 9 },
                                                                  "attack": 10 },
                         "koin": 10_000, "exp": 0 }),
                 "sword",
@@ -348,7 +347,7 @@ mod tests {
             lost += 1;
             let data = write_of(&r);
             // level 9 -> cost 500 * 10 = 5.000, rate max(20, 70 - 45) = 25%.
-            assert_eq!(data["koin"], json!(5_000));
+            assert_eq!(data["koin"], serde_json::json!(5_000));
             assert!(data.get("exp").is_none(), "gagal tak dapat exp");
             assert!(data.get("rpg").is_none(), "gagal tak menyentuh rpg");
             assert!(t.contains("Rate: 25%"), "{t}");
@@ -370,7 +369,7 @@ mod tests {
     #[test]
     fn other_enchant_levels_are_left_untouched_by_a_failed_roll() {
         let r = run(
-            json!({ "inventory": { "sword": 1 }, "rpg": { "enchants": { "bow": 4 } },
+            serde_json::json!({ "inventory": { "sword": 1 }, "rpg": { "enchants": { "bow": 4 } },
                     "koin": 10_000 }),
             "sword",
         );
@@ -378,7 +377,7 @@ mod tests {
         if t.starts_with("💔") {
             assert!(write_of(&r).get("rpg").is_none(), "gagal tak boleh menulis rpg");
         } else {
-            assert_eq!(write_of(&r)["rpg"]["enchants"]["bow"], json!(4), "level bow tak boleh hilang");
+            assert_eq!(write_of(&r)["rpg"]["enchants"]["bow"], serde_json::json!(4), "level bow tak boleh hilang");
         }
     }
 }

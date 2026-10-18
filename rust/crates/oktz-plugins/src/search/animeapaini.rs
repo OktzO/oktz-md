@@ -19,7 +19,7 @@ use oktz_plugin_api::{
 };
 use serde_json::Value;
 
-use crate::common::{error_template, js_truthy};
+use crate::common::{js_truthy};
 
 /// `animeapaini.js:52` — endpoint cek anime.
 const ENDPOINT: &str = "https://my.izuka-api.xyz/api/anime/anime-checker";
@@ -241,7 +241,7 @@ pub fn animeapaini(ctx: Ctx) -> Reply {
         .call(&HttpCall::post(ENDPOINT).multipart(vec![image_part(buffer)]))
         .ok()
     else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
 
     let data = resp.json().unwrap_or(Value::Null);
@@ -249,7 +249,7 @@ pub fn animeapaini(ctx: Ctx) -> Reply {
         return Reply::text(NOT_FOUND).with_reaction("❌");
     }
     let Some(matched) = first_match(&data) else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
     let result = data.get("result").unwrap_or(&Value::Null);
 
@@ -267,7 +267,6 @@ mod tests {
         HttpBody, HttpError, HttpGet, HttpResponse, IncomingMedia, MediaError, MediaFetch,
         MediaOrigin, NoMediaFetch,
     };
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug)]
@@ -310,7 +309,7 @@ mod tests {
         }
         fn call(&self, req: &HttpCall) -> Result<HttpResponse, HttpError> {
             self.seen.lock().unwrap().push(req.clone());
-            let body = self.body.clone().ok_or_else(|| HttpError {
+            let body = self.body.clone().ok_or_else(|| oktz_plugin_api::HttpError {
                 message: "offline".into(),
             })?;
             Ok(HttpResponse {
@@ -525,7 +524,7 @@ mod tests {
 
     #[test]
     fn the_caption_falls_back_to_the_match_object() {
-        let data = json!({
+        let data = serde_json::json!({
             "status": true,
             "result": {
                 "full_matches": [{
@@ -554,7 +553,7 @@ mod tests {
 
     #[test]
     fn an_adult_flag_flips_only_the_dewasa_line() {
-        let data = json!({
+        let data = serde_json::json!({
             "status": true,
             "result": {"is_adult": 1, "full_matches": [{"anilist": {"id": 1, "siteUrl": "u"}}]}
         });
@@ -571,21 +570,21 @@ mod tests {
         assert_eq!(parse_float(""), None);
 
         assert_eq!(
-            similarity_of(&json!({"similarity": "92.5%"}), &json!({})),
+            similarity_of(&serde_json::json!({"similarity": "92.5%"}), &serde_json::json!({})),
             "92.50"
         );
         assert_eq!(
-            similarity_of(&json!({"similarity": "bukan angka"}), &json!({})),
+            similarity_of(&serde_json::json!({"similarity": "bukan angka"}), &serde_json::json!({})),
             "bukan angka",
             "`parseFloat` NaN -> nilai aslinya ikut tampil"
         );
         assert_eq!(
-            similarity_of(&json!({"similarity": 0}), &json!({})),
+            similarity_of(&serde_json::json!({"similarity": 0}), &serde_json::json!({})),
             "0",
             "0 falsy -> bukan sumber, `match.similarity` juga tidak ada"
         );
         assert_eq!(
-            similarity_of(&json!({}), &json!({"similarity": 0.875})),
+            similarity_of(&serde_json::json!({}), &serde_json::json!({"similarity": 0.875})),
             "87.50"
         );
     }
@@ -612,7 +611,7 @@ mod tests {
             r#"{"status": true, "result": {"full_matches": "ab"}}"#,
         ] {
             let r = run(Api::new(body), true, None);
-            assert_eq!(body_of(&r), error_template(".", "animeapaini"), "{body}");
+            assert_eq!(body_of(&r), crate::common::error_template(".", "animeapaini"), "{body}");
             assert_eq!(reaction_of(&r), Some("☢"), "{body}");
         }
     }
@@ -635,7 +634,9 @@ mod tests {
 
     #[test]
     fn without_an_image_source_the_answer_is_plain_text() {
-        let data = json!({
+        // Bagian pertama: `match.image` dipakai kalau preview kosong (JS
+        // `resObj.image_preview || match.image`).
+        let data = serde_json::json!({
             "status": true,
             "result": {"full_matches": [{"anilist": {"id": 1, "siteUrl": "https://anilist.co/anime/1"}, "image": "https://cdn/scene.jpg"}]}
         });
@@ -647,10 +648,16 @@ mod tests {
             "preview kosong -> pakai `match.image`"
         );
         let r = run(Api::new(&data.to_string()), true, None);
-        assert!(!r.has_media());
+        // JS: `if (resObj.image_preview || match.image)` -> kirim sebagai
+        // gambar meski preview kosong; `match.image` yang dipakai.
+        assert_eq!(
+            r.media_source(),
+            Some(&MediaSource::url("https://cdn/scene.jpg")),
+            "match.image harus dipakai kalau preview kosong"
+        );
         assert_eq!(reaction_of(&r), Some("✅"));
         assert_eq!(
-            image_of(&json!({}), &json!({})),
+            image_of(&serde_json::json!({}), &serde_json::json!({})),
             None,
             "tanpa gambar, teks biasa yang terkirim"
         );

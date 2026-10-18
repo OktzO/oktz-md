@@ -11,7 +11,6 @@
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::error_template;
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `ytstalk.js:25-27` — kartu pakai saat `m.args[0]` kosong.
@@ -98,7 +97,7 @@ pub fn ytstalk(ctx: Ctx) -> Reply {
     }
 
     let Ok(res) = ctx.http.get(&api_url(&username, &api_key)) else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
     let body = res.json().unwrap_or(Value::Null);
     // `!res.data?.status || !res.data?.data` — dua-duanya menghasilkan teks
@@ -121,16 +120,13 @@ pub fn ytstalk(ctx: Ctx) -> Reply {
 
 /// Bentuk `status: true` yang dipakai test.
 #[cfg(test)]
-use serde_json::json;
-
-#[cfg(test)]
 fn caption_of(body: &Value) -> String {
     caption(&body["data"], "mrbeast")
 }
 
 #[cfg(test)]
 fn contoh() -> Value {
-    json!({
+    serde_json::json!({
         "status": true,
         "data": {
             "name": "MrBeast",
@@ -148,7 +144,6 @@ fn contoh() -> Value {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -186,7 +181,7 @@ mod tests {
                     },
                     headers: Vec::new(),
                 }),
-                None => Err(HttpError {
+                None => Err(oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 }),
             }
@@ -296,7 +291,7 @@ mod tests {
         assert!(txt.contains("📝 *Deskripsi:*\nChannel resmi"));
         assert!(txt.ends_with("\n\n🔗 https://youtube.com/@mrbeast"));
 
-        let kosong = json!({ "name": "x", "verified": false });
+        let kosong = serde_json::json!({ "name": "x", "verified": false });
         let txt = caption(&kosong, "u");
         assert!(txt.contains("✅ *Verified:* Tidak"));
         assert!(txt.contains("📝 *Deskripsi:*\n-"));
@@ -304,11 +299,11 @@ mod tests {
 
     #[test]
     fn string_nilai_json_meniru_to_string_js() {
-        assert_eq!(js_str(&json!("teks")), "teks");
-        assert_eq!(js_str(&json!(42)), "42");
-        assert_eq!(js_str(&json!(true)), "true");
+        assert_eq!(js_str(&serde_json::json!("teks")), "teks");
+        assert_eq!(js_str(&serde_json::json!(42)), "42");
+        assert_eq!(js_str(&serde_json::json!(true)), "true");
         assert_eq!(js_str(&Value::Null), "null");
-        assert_eq!(js_str(&json!({"a": 1})), "[object Object]");
+        assert_eq!(js_str(&serde_json::json!({"a": 1})), "[object Object]");
     }
 
     #[test]
@@ -342,9 +337,9 @@ mod tests {
     #[test]
     fn status_false_atau_data_kosong_menghasilkan_teks_channel_tidak_ditemukan() {
         for body in [
-            json!({ "status": false, "data": { "name": "x" } }),
-            json!({ "status": true }),
-            json!({ "status": true, "data": null }),
+            serde_json::json!({ "status": false, "data": { "name": "x" } }),
+            serde_json::json!({ "status": true }),
+            serde_json::json!({ "status": true, "data": null }),
             Value::Null,
         ] {
             let r = run_dengan_kunci(Stub::body(body.clone()), "mrbeast");

@@ -94,7 +94,7 @@ pub fn selfthisgc(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(settings: Value) -> Reply {
         let ctx = Ctx {
@@ -156,21 +156,21 @@ mod tests {
 
     #[test]
     fn a_group_already_in_self_mode_is_left_alone() {
-        let r = run(json!({"selfGroups": ["120363@g.us"]}));
+        let r = run(serde_json::json!({"selfGroups": ["120363@g.us"]}));
         assert!(text_of(&r).starts_with("ℹ️ *ɢʀᴜᴘ ɪɴɪ sᴜᴅᴀʜ ᴍᴏᴅᴇ sᴇʟꜰ*"));
         assert!(r.mutations().is_empty(), "sudah self = tidak ada yang ditulis");
     }
 
     #[test]
     fn the_chat_is_added_to_self_groups_when_absent() {
-        let r = run(json!({"selfGroups": ["a@g.us"]}));
+        let r = run(serde_json::json!({"selfGroups": ["a@g.us"]}));
         assert_eq!(list_of(&setting_of(&r, "selfGroups")), ["a@g.us", "120363@g.us"]);
         assert!(text_of(&r).starts_with("🔒 *ᴍᴏᴅᴇ sᴇʟꜰ ᴀᴋᴛɪꜰ*"));
     }
 
     #[test]
     fn the_chat_is_removed_from_public_groups_at_the_same_time() {
-        let r = run(json!({"publicGroups": ["a@g.us", "120363@g.us"]}));
+        let r = run(serde_json::json!({"publicGroups": ["a@g.us", "120363@g.us"]}));
         assert_eq!(
             list_of(&setting_of(&r, "publicGroups")),
             ["a@g.us"],
@@ -181,9 +181,9 @@ mod tests {
     #[test]
     fn both_settings_are_always_written_together() {
         for s in [
-            json!({}),
-            json!({"selfGroups": []}),
-            json!({"publicGroups": ["120363@g.us"]}),
+            serde_json::json!({}),
+            serde_json::json!({"selfGroups": []}),
+            serde_json::json!({"publicGroups": ["120363@g.us"]}),
         ] {
             assert_eq!(run(s.clone()).mutations().len(), 2, "input {s}");
         }
@@ -191,14 +191,14 @@ mod tests {
 
     #[test]
     fn an_absent_setting_becomes_an_empty_list_not_a_missing_key() {
-        let r = run(json!({}));
+        let r = run(serde_json::json!({}));
         assert_eq!(list_of(&setting_of(&r, "selfGroups")), ["120363@g.us"]);
         assert!(list_of(&setting_of(&r, "publicGroups")).is_empty());
     }
 
     #[test]
     fn other_groups_in_both_lists_are_preserved() {
-        let r = run(json!({
+        let r = run(serde_json::json!({
             "selfGroups": ["x@g.us"],
             "publicGroups": ["y@g.us", "120363@g.us", "z@g.us"],
         }));
@@ -214,14 +214,14 @@ mod tests {
     fn a_non_array_setting_reads_as_an_empty_list() {
         // `db.setting("selfGroups") || []` — string/object bukan array, dan
         // `.includes` di JS akan berperilaku aneh. Yang aman: perlakukan sebagai kosong.
-        let r = run(json!({"selfGroups": "bukan-array", "publicGroups": 5}));
+        let r = run(serde_json::json!({"selfGroups": "bukan-array", "publicGroups": 5}));
         assert_eq!(list_of(&setting_of(&r, "selfGroups")), ["120363@g.us"]);
         assert!(list_of(&setting_of(&r, "publicGroups")).is_empty());
     }
 
     #[test]
     fn the_change_reacts_with_a_padlock() {
-        match run(json!({})).without_mutations() {
+        match run(serde_json::json!({})).without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "🔒"),
             other => panic!("harus Reaction, dapat {other:?}"),
         }
@@ -229,7 +229,7 @@ mod tests {
 
     #[test]
     fn the_reply_names_the_counterpart_command_with_the_live_prefix() {
-        assert!(text_of(&run(json!({}))).contains(".publicthisgc"));
+        assert!(text_of(&run(serde_json::json!({}))).contains(".publicthisgc"));
         assert!(already_self("~").contains("~publicthisgc"));
     }
 

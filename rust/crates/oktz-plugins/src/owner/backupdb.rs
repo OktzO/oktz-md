@@ -19,7 +19,7 @@ pub(crate) const BACKUP_CONTENTS: [&str; 6] = [
     "📋 backup_metadata.json (info schema)",
 ];
 
-/// `backupContents.map(c => \`┃ ${c}\`).join('\n')` di dalam kepala/ekor pesan.
+/// `backupContents.map(c => `┃ ${c}`).join('\n')` di dalam kepala/ekor pesan.
 pub(crate) fn contents_list() -> String {
     BACKUP_CONTENTS
         .iter()

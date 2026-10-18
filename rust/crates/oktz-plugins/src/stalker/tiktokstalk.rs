@@ -12,10 +12,9 @@
 //! gagal reaksi terakhir yang ikut adalah `☢`.
 
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use super::npmstalk::{FIREFLY, NEXRAY, js_str, or_dash, short_num};
-use crate::common::error_template;
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `tiktokstalk.js:38-41` — kartu pakai; username sudah dibuang `@` pertama.
@@ -82,9 +81,9 @@ pub(crate) fn dari_nexray(r: &Value) -> Profil {
         avatar: r["avatar"].clone(),
         bio: r["bio"].clone(),
         verified: r["verified"] == Value::Bool(true)
-            || r["verified"] == json!("Verified"),
+            || r["verified"] == serde_json::json!("Verified"),
         private: r["private"] == Value::Bool(true)
-            || r["private"] == json!("Yes"),
+            || r["private"] == serde_json::json!("Yes"),
         followers: nullish(&s["raw_followers"], &s["followers"]).clone(),
         following: nullish(&s["raw_following"], &s["following"]).clone(),
         likes: nullish(&s["raw_likes"], &s["likes"]).clone(),
@@ -174,7 +173,7 @@ pub fn tiktokstalk(ctx: Ctx) -> Reply {
     }
 
     let Some(profil) = profil else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
 
     let teks = caption(&profil);
@@ -219,7 +218,7 @@ mod tests {
             self.seen.lock().unwrap().push(url.to_string());
             let mut b = self.balasan.lock().unwrap();
             if b.is_empty() {
-                return Err(HttpError {
+                return Err(oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 });
             }
@@ -301,13 +300,13 @@ mod tests {
 
     #[test]
     fn firefly_membangun_link_dari_username_dan_membaca_boolean() {
-        let d = json!({
+        let d = serde_json::json!({
             "username": "u", "nickname": "Nick", "avatar": "https://cdn/a.png",
             "signature": "bio", "verified": 1, "private": 0,
             "stats": {"followers": 1500, "following": 200, "hearts": 1_500_000, "videos": 42}
         });
         let p = dari_firefly(&d);
-        assert_eq!(p.link, json!("https://tiktok.com/@u"));
+        assert_eq!(p.link, serde_json::json!("https://tiktok.com/@u"));
         assert!(p.verified, "1 truthy di JS");
         assert!(!p.private, "0 falsy di JS");
         let txt = caption(&p);
@@ -321,7 +320,7 @@ mod tests {
 
     #[test]
     fn nexray_membaca_string_verified_dan_private() {
-        let r = json!({
+        let r = serde_json::json!({
             "username": "u", "name": "N", "avatar": "", "bio": "b",
             "verified": "Verified", "private": "No",
             "stats": {"raw_followers": 3000000000u64, "followers": 3, "likes": 10, "videos": 1},
@@ -330,8 +329,8 @@ mod tests {
         let p = dari_nexray(&r);
         assert!(p.verified, "\"Verified\" dihitung benar");
         assert!(!p.private, "\"No\" bukan benar");
-        assert_eq!(p.followers, json!(3000000000u64), "raw_ menang");
-        assert_eq!(p.likes, json!(10), "raw_ null jadi yang biasa");
+        assert_eq!(p.followers, serde_json::json!(3000000000u64), "raw_ menang");
+        assert_eq!(p.likes, serde_json::json!(10), "raw_ null jadi yang biasa");
         let txt = caption(&p);
         assert!(txt.contains("👥 *Followers:* 3B"));
         assert!(txt.contains("🔒 *Private:* Tidak"));
@@ -339,10 +338,10 @@ mod tests {
 
     #[test]
     fn stats_hilang_tidak_menggagalkan_hasil() {
-        let p = dari_firefly(&json!({ "username": "u" }));
+        let p = dari_firefly(&serde_json::json!({ "username": "u" }));
         assert_eq!(p.followers, Value::Null);
         assert!(caption(&p).contains("👥 *Followers:* 0"));
-        let p = dari_nexray(&json!({ "username": "u" }));
+        let p = dari_nexray(&serde_json::json!({ "username": "u" }));
         assert_eq!(p.likes, Value::Null);
         assert!(caption(&p).contains("❤️ *Likes:* 0"));
     }
@@ -366,7 +365,7 @@ mod tests {
         let r = tiktokstalk(dengan_kunci(Stub::gagal(), "u", "K"));
         assert_eq!(
             r.without_mutations().text_body(),
-            Some(error_template(".", "tiktokstalk").as_str())
+            Some(crate::common::error_template(".", "tiktokstalk").as_str())
         );
         assert_eq!(reaction_of(&r), Some("☢"));
     }

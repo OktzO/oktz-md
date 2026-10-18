@@ -170,7 +170,6 @@ pub fn liststok(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(settings: serde_json::Value, text: &str) -> String {
         let ctx = Ctx {
@@ -190,11 +189,11 @@ mod tests {
     }
 
     fn fisik(stock: serde_json::Value) -> serde_json::Value {
-        json!({"name": "Kaos", "type": "fisik", "stock": stock})
+        serde_json::json!({"name": "Kaos", "type": "fisik", "stock": stock})
     }
 
     fn digital(items: serde_json::Value, stock: i64) -> serde_json::Value {
-        json!({"name": "Netflix", "type": "digital", "stock": stock, "stockItems": items})
+        serde_json::json!({"name": "Netflix", "type": "digital", "stock": stock, "stockItems": items})
     }
 
     #[test]
@@ -221,7 +220,7 @@ mod tests {
 
     #[test]
     fn an_absent_or_empty_product_list_says_there_is_nothing_yet() {
-        for s in [json!({}), json!({"storeProducts": []}), json!({"storeProducts": null})] {
+        for s in [serde_json::json!({}), serde_json::json!({"storeProducts": []}), serde_json::json!({"storeProducts": null})] {
             let out = run(s.clone(), "");
             assert!(out.contains("📭 *Belum ada produk.*"), "input {s}");
             assert!(out.contains(".addproduk"));
@@ -230,7 +229,7 @@ mod tests {
 
     #[test]
     fn a_missing_argument_lists_every_product() {
-        let out = run(json!({"storeProducts": [fisik(json!(5)), digital(json!([]), 0)]}), "");
+        let out = run(serde_json::json!({"storeProducts": [fisik(serde_json::json!(5)), digital(serde_json::json!([]), 0)]}), "");
         assert!(out.starts_with("📋 *DAFTAR STOK PRODUK*"));
         assert!(out.contains("📦 *1.* Kaos — 5 pcs ✅"));
         assert!(
@@ -242,13 +241,13 @@ mod tests {
 
     #[test]
     fn an_unlimited_physical_product_is_always_marked_in_stock() {
-        let out = run(json!({"storeProducts": [fisik(json!(-1))]}), "");
+        let out = run(serde_json::json!({"storeProducts": [fisik(serde_json::json!(-1))]}), "");
         assert!(out.contains("♾️ ✅"), "unlimited tidak pernah ⚠️: {out}");
     }
 
     #[test]
     fn a_non_numeric_or_out_of_range_number_falls_back_to_the_index() {
-        let set = json!({"storeProducts": [fisik(json!(1)), digital(json!([]), 0)]});
+        let set = serde_json::json!({"storeProducts": [fisik(serde_json::json!(1)), digital(serde_json::json!([]), 0)]});
         for bad in ["", "abc", "0", "3", "99", "-1"] {
             let out = run(set.clone(), bad);
             assert!(
@@ -260,7 +259,7 @@ mod tests {
 
     #[test]
     fn a_physical_product_reports_its_total_in_pcs() {
-        let out = run(json!({"storeProducts": [fisik(json!(7))]}), "1");
+        let out = run(serde_json::json!({"storeProducts": [fisik(serde_json::json!(7))]}), "1");
         assert!(out.contains("📊 Tipe: *Fisik*"));
         assert!(out.contains("📦 Total: *7 pcs*"));
         assert!(out.contains("`.addstok <nomor> <jumlah>`"));
@@ -268,13 +267,13 @@ mod tests {
 
     #[test]
     fn a_physical_product_with_minus_one_is_unlimited() {
-        let out = run(json!({"storeProducts": [fisik(json!(-1))]}), "1");
+        let out = run(serde_json::json!({"storeProducts": [fisik(serde_json::json!(-1))]}), "1");
         assert!(out.contains("📦 Total: *♾️ Unlimited*"));
     }
 
     #[test]
     fn a_digital_product_without_items_points_at_the_add_commands() {
-        let out = run(json!({"storeProducts": [digital(json!([]), 0)]}), "1");
+        let out = run(serde_json::json!({"storeProducts": [digital(serde_json::json!([]), 0)]}), "1");
         assert!(out.contains("🔑 *Stok: Netflix*"));
         assert!(out.contains("📭 Belum ada stok item yang ditambahkan."));
         assert!(out.contains(".addstok <nomor>|<detail>"));
@@ -282,8 +281,8 @@ mod tests {
 
     #[test]
     fn digital_items_are_numbered_from_one_with_a_truncated_preview() {
-        let items = json!([{"detail": "akun1@mail.com\npass1"}, {"detail": "short"}]);
-        let out = run(json!({"storeProducts": [digital(items, 2)]}), "1");
+        let items = serde_json::json!([{"detail": "akun1@mail.com\npass1"}, {"detail": "short"}]);
+        let out = run(serde_json::json!({"storeProducts": [digital(items, 2)]}), "1");
         assert!(out.contains("📊 Total: *2* akun"));
         assert!(
             out.contains("`1.` akun1@mail.com pass1"),
@@ -296,7 +295,7 @@ mod tests {
     fn a_detail_longer_than_forty_characters_is_truncated_with_an_ellipsis() {
         let long = "x".repeat(60);
         let out = run(
-            json!({"storeProducts": [digital(json!([{"detail": long}]), 1)]}),
+            serde_json::json!({"storeProducts": [digital(serde_json::json!([{"detail": long}]), 1)]}),
             "1",
         );
         let line = out.lines().find(|l| l.starts_with("`1.`")).unwrap();
@@ -311,9 +310,9 @@ mod tests {
     #[test]
     fn more_than_thirty_items_are_summarised_not_listed() {
         let items: Vec<_> = (0..35)
-            .map(|i| json!({"detail": format!("item{i}")}))
+            .map(|i| serde_json::json!({"detail": format!("item{i}")}))
             .collect();
-        let out = run(json!({"storeProducts": [digital(json!(items), 35)]}), "1");
+        let out = run(serde_json::json!({"storeProducts": [digital(serde_json::json!(items), 35)]}), "1");
         assert!(out.contains("`30.` item29"));
         assert!(
             !out.contains("`31.`"),
@@ -325,8 +324,8 @@ mod tests {
 
     #[test]
     fn exactly_thirty_items_get_no_summary_line() {
-        let items: Vec<_> = (0..30).map(|i| json!({"detail": format!("i{i}")})).collect();
-        let out = run(json!({"storeProducts": [digital(json!(items), 30)]}), "1");
+        let items: Vec<_> = (0..30).map(|i| serde_json::json!({"detail": format!("i{i}")})).collect();
+        let out = run(serde_json::json!({"storeProducts": [digital(serde_json::json!(items), 30)]}), "1");
         assert!(out.contains("`30.` i29"));
         assert!(!out.contains("item lainnya"), "tepat 30 tidak perlu ringkasan");
     }
@@ -338,7 +337,7 @@ mod tests {
             command: "liststok".into(),
             text: "1".into(),
             args: vec!["1".into()],
-            settings: json!({"storeProducts": [digital(json!([{"detail": "a"}]), 1)]}),
+            settings: serde_json::json!({"storeProducts": [digital(serde_json::json!([{"detail": "a"}]), 1)]}),
             ..Default::default()
         };
         let r = (oktz_plugin_api::find("liststok").unwrap().handler)(ctx);
@@ -350,15 +349,15 @@ mod tests {
 
     #[test]
     fn the_helper_contracts_hold_independently() {
-        assert!(is_fisik(&json!({"type": "fisik"})));
-        assert!(!is_fisik(&json!({"type": "digital"})));
-        assert!(!is_fisik(&json!({})), "type undefined = digital");
-        assert_eq!(stock_display(&fisik(json!(3))), "3 pcs");
-        assert_eq!(stock_display(&fisik(json!(-1))), "♾️");
-        assert_eq!(stock_display(&digital(json!([{"detail": "a"}]), 1)), "1 akun");
-        assert_eq!(stock_display(&digital(json!(null), 0)), "0 akun");
-        assert_eq!(icon(&fisik(json!(0))), "⚠️");
-        assert_eq!(icon(&fisik(json!(1))), "✅");
-        assert_eq!(icon(&digital(json!([]), 0)), "⚠️");
+        assert!(is_fisik(&serde_json::json!({"type": "fisik"})));
+        assert!(!is_fisik(&serde_json::json!({"type": "digital"})));
+        assert!(!is_fisik(&serde_json::json!({})), "type undefined = digital");
+        assert_eq!(stock_display(&fisik(serde_json::json!(3))), "3 pcs");
+        assert_eq!(stock_display(&fisik(serde_json::json!(-1))), "♾️");
+        assert_eq!(stock_display(&digital(serde_json::json!([{"detail": "a"}]), 1)), "1 akun");
+        assert_eq!(stock_display(&digital(serde_json::json!(null), 0)), "0 akun");
+        assert_eq!(icon(&fisik(serde_json::json!(0))), "⚠️");
+        assert_eq!(icon(&fisik(serde_json::json!(1))), "✅");
+        assert_eq!(icon(&digital(serde_json::json!([]), 0)), "⚠️");
     }
 }

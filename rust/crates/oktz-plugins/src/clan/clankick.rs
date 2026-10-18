@@ -1,7 +1,7 @@
 //! `plugins/clan/clankick.js` — leader mengeluarkan member dari clan.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::clan::clancreate::{
     MAX_MEMBERS, clans, emblem, field_str, members, members_value, save_clans,
@@ -89,7 +89,7 @@ pub fn clankick(ctx: Ctx) -> Reply {
     .with_mutation(Mutation::SetUser {
         jid: target,
         // `db.setUser(target, { clanId: null })` — `null`, bukan `delete`.
-        data: json!({ "clanId": Value::Null }),
+        data: serde_json::json!({ "clanId": Value::Null }),
     })
 }
 
@@ -111,13 +111,13 @@ mod tests {
             args: Vec::new(),
             mentioned: mention.map(str::to_string).into_iter().collect(),
             user_data: user,
-            settings: json!({ crate::clan::clancreate::CLANS_KEY: clans }),
+            settings: serde_json::json!({ crate::clan::clancreate::CLANS_KEY: clans }),
             ..Default::default()
         }
     }
 
     fn clan(leader: &str, members: Value) -> Value {
-        json!({
+        serde_json::json!({
             "id": "DRG",
             "name": "Dragon",
             "emblem": "🐉",
@@ -175,18 +175,18 @@ mod tests {
     #[test]
     fn the_guard_order_matches_js() {
         // Tanpa clan → pesan "belum punya clan".
-        let r = run(ctx_of(json!({}), Some("628999@s.whatsapp.net"), json!({})));
+        let r = run(ctx_of(serde_json::json!({}), Some("628999@s.whatsapp.net"), serde_json::json!({})));
         assert_eq!(text_of(&r), "❌ Kamu belum punya clan");
 
         // Clan hilang → "tidak ditemukan".
-        let r = run(ctx_of(json!({"clanId": "HILANG"}), Some("628999@s.whatsapp.net"), json!({})));
+        let r = run(ctx_of(serde_json::json!({"clanId": "HILANG"}), Some("628999@s.whatsapp.net"), serde_json::json!({})));
         assert_eq!(text_of(&r), "❌ Clan tidak ditemukan");
 
         // Bukan leader → refused, sebelum cek target.
         let r = run(ctx_of(
-            json!({"clanId": "DRG"}),
+            serde_json::json!({"clanId": "DRG"}),
             Some("628999@s.whatsapp.net"),
-            json!({ "DRG": clan("628000@s.whatsapp.net", json!(["628999@s.whatsapp.net"])) }),
+            serde_json::json!({ "DRG": clan("628000@s.whatsapp.net", serde_json::json!(["628999@s.whatsapp.net"])) }),
         ));
         assert_eq!(text_of(&r), "❌ Hanya leader yang bisa kick");
         assert!(r.mutations().is_empty());
@@ -195,9 +195,9 @@ mod tests {
     #[test]
     fn the_leader_without_a_target_sees_the_help_card() {
         let r = run(ctx_of(
-            json!({"clanId": "DRG"}),
+            serde_json::json!({"clanId": "DRG"}),
             None,
-            json!({ "DRG": clan(SENDER, json!([SENDER])) }),
+            serde_json::json!({ "DRG": clan(SENDER, serde_json::json!([SENDER])) }),
         ));
         assert_eq!(text_of(&r), help());
         assert!(r.mutations().is_empty());
@@ -205,12 +205,12 @@ mod tests {
 
     #[test]
     fn kicking_yourself_or_a_non_member_is_refused() {
-        let base = json!({ "DRG": clan(SENDER, json!([SENDER, "628999@s.whatsapp.net"])) });
-        let self_kick = run(ctx_of(json!({"clanId": "DRG"}), Some(SENDER), base.clone()));
+        let base = serde_json::json!({ "DRG": clan(SENDER, serde_json::json!([SENDER, "628999@s.whatsapp.net"])) });
+        let self_kick = run(ctx_of(serde_json::json!({"clanId": "DRG"}), Some(SENDER), base.clone()));
         assert_eq!(text_of(&self_kick), "❌ Tidak bisa kick diri sendiri");
         assert!(self_kick.mutations().is_empty());
 
-        let stranger = run(ctx_of(json!({"clanId": "DRG"}), Some("628777@s.whatsapp.net"), base));
+        let stranger = run(ctx_of(serde_json::json!({"clanId": "DRG"}), Some("628777@s.whatsapp.net"), base));
         assert_eq!(text_of(&stranger), "❌ User bukan member clan ini");
         assert!(stranger.mutations().is_empty());
     }
@@ -229,13 +229,13 @@ mod tests {
                 from_me: false,
             }),
             ..ctx_of(
-                json!({"clanId": "DRG"}),
+                serde_json::json!({"clanId": "DRG"}),
                 None,
-                json!({ "DRG": clan(SENDER, json!([SENDER, "628999@s.whatsapp.net"])) }),
+                serde_json::json!({ "DRG": clan(SENDER, serde_json::json!([SENDER, "628999@s.whatsapp.net"])) }),
             )
         };
         let r = run(ctx.clone());
-        assert_eq!(kept_of(&r), json!([SENDER]));
+        assert_eq!(kept_of(&r), serde_json::json!([SENDER]));
         let (jid, cleared) = cleared_of(&r);
         assert_eq!(jid, "628999@s.whatsapp.net");
         assert_eq!(cleared, Value::Null, "`clanId: null`, bukan delete key");
@@ -251,11 +251,11 @@ mod tests {
     #[test]
     fn kicking_the_last_remaining_member_empties_the_list() {
         let r = run(ctx_of(
-            json!({"clanId": "DRG"}),
+            serde_json::json!({"clanId": "DRG"}),
             Some("628999@s.whatsapp.net"),
-            json!({ "DRG": clan(SENDER, json!(["628999@s.whatsapp.net"])) }),
+            serde_json::json!({ "DRG": clan(SENDER, serde_json::json!(["628999@s.whatsapp.net"])) }),
         ));
-        assert_eq!(kept_of(&r), json!([]));
+        assert_eq!(kept_of(&r), serde_json::json!([]));
         assert!(text_of(&r).contains("Sisa members: 0/50"), "{}", text_of(&r));
     }
 
@@ -264,9 +264,9 @@ mod tests {
         // `clan.leader !== m.sender` di JS membandingkan string penuh; JID
         // `628111:3@s.whatsapp.net` tidak dianggap leader yang sama.
         let r = run(ctx_of(
-            json!({"clanId": "DRG"}),
+            serde_json::json!({"clanId": "DRG"}),
             Some("628999@s.whatsapp.net"),
-            json!({ "DRG": clan("628111:3@s.whatsapp.net", json!(["628999@s.whatsapp.net"])) }),
+            serde_json::json!({ "DRG": clan("628111:3@s.whatsapp.net", serde_json::json!(["628999@s.whatsapp.net"])) }),
         ));
         assert_eq!(text_of(&r), "❌ Hanya leader yang bisa kick");
     }

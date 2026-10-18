@@ -11,7 +11,7 @@
 use oktz_plugin_api::{Ctx, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::{error_template, js_truthy};
+use crate::common::{js_truthy};
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `config.APIkey?.neoxr || ''` — lihat catatan `ponytail:` di
@@ -23,7 +23,7 @@ const NEOXR_APIKEY: &str = "";
 pub(crate) fn missing_key(env_name: &str, command: &str) -> String {
     format!(
         "❌ *API Key belum diset!*\n\n\
-         > Command \\`{command}\\` butuh \\`{env_name}\\` di \\`.env\\`\n\
+         > Command `{command}` butuh `{env_name}` di `.env`\n\
          > Saat ini belum ada, jadi tidak bisa dipanggil."
     )
 }
@@ -42,8 +42,8 @@ pub(crate) fn help(prefix: &str) -> String {
         "🎸 *ᴄʜᴏʀᴅs sᴇᴀʀᴄʜ*\n\n\
          > Cari chord/kunci gitar lagu\n\n\
          > Contoh:\n\
-         \\`{prefix}chords komang\\`\n\
-         \\`{prefix}chord perjalanan terindah\\`"
+         `{prefix}chords komang`\n\
+         `{prefix}chord perjalanan terindah`"
     )
 }
 
@@ -108,12 +108,12 @@ pub fn chords(ctx: Ctx) -> Reply {
     // Nexray tidak punya endpoint chord (dicek live di `chords.js:38`), jadi
     // tidak ada fallback: tanpa key plugin berhenti di sini.
     if NEOXR_APIKEY.is_empty() {
-        return Reply::text(missing_key("APIKEY_NEOXR", &format!("{}.chords", ctx.prefix)))
+        return Reply::text(missing_key("APIKEY_NEOXR", &format!("{}chords", ctx.prefix)))
             .with_reaction("❌");
     }
 
     let Some(resp) = ctx.http.get(&api_url(text)).ok() else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
 
     match chord_text(&resp.json().unwrap_or(Value::Null)) {
@@ -126,7 +126,6 @@ pub fn chords(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug)]
@@ -145,7 +144,7 @@ mod tests {
     impl HttpGet for Stub {
         fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
             self.seen.lock().unwrap().push(url.to_string());
-            Err(HttpError {
+            Err(oktz_plugin_api::HttpError {
                 message: "offline".into(),
             })
         }
@@ -171,7 +170,7 @@ mod tests {
             sender: "628111@s.whatsapp.net".into(),
             chat: "628111@s.whatsapp.net".into(),
             text: text.into(),
-            args: text.split_whitespace().collect(),
+            args: text.split_whitespace().map(str::to_string).collect(),
             http,
             ..Default::default()
         };
@@ -257,7 +256,7 @@ mod tests {
 
     #[test]
     fn a_filled_chord_comes_back_unchanged() {
-        let data = json!({"status": true, "data": {"chord": "[C]Am\nAm  yang_ku"}});
+        let data = serde_json::json!({"status": true, "data": {"chord": "[C]Am\nAm  yang_ku"}});
         assert_eq!(
             chord_text(&data).as_deref(),
             Some("[C]Am\nAm  yang_ku"),
@@ -268,12 +267,12 @@ mod tests {
     #[test]
     fn a_falsy_status_or_missing_chord_is_not_found() {
         for data in [
-            json!({"status": false, "data": {"chord": "[C]"}}),
-            json!({"status": true, "data": {}}),
-            json!({"status": true, "data": {"chord": ""}}),
-            json!({"status": true, "data": {"chord": null}}),
-            json!({"data": {"chord": "[C]"}}),
-            json!({"status": true}),
+            serde_json::json!({"status": false, "data": {"chord": "[C]"}}),
+            serde_json::json!({"status": true, "data": {}}),
+            serde_json::json!({"status": true, "data": {"chord": ""}}),
+            serde_json::json!({"status": true, "data": {"chord": null}}),
+            serde_json::json!({"data": {"chord": "[C]"}}),
+            serde_json::json!({"status": true}),
             Value::Null,
         ] {
             assert_eq!(chord_text(&data), None, "{data}");

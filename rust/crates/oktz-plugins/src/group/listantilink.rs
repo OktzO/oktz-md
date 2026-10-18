@@ -66,7 +66,6 @@ pub fn listantilink(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn ctx_with(group: serde_json::Value) -> Ctx {
         Ctx {
@@ -112,7 +111,7 @@ mod tests {
 
     #[test]
     fn absent_group_data_shows_only_the_seven_defaults() {
-        let out = run(json!(null));
+        let out = run(serde_json::json!(null));
         assert!(out.starts_with("🔗 *ᴅᴀꜰᴛᴀʀ ᴀɴᴛɪʟɪɴᴋ*\n\n"));
         assert!(!out.contains("➕ *ᴄᴜsᴛᴏᴍ*"));
         assert!(out.contains("┃ 1. `chat.whatsapp.com`\n"));
@@ -123,7 +122,7 @@ mod tests {
 
     #[test]
     fn empty_custom_list_omits_the_custom_block() {
-        let out = run(json!({"antilinkList": []}));
+        let out = run(serde_json::json!({"antilinkList": []}));
         assert!(!out.contains("➕ *ᴄᴜsᴛᴏᴍ*"));
         assert!(out.contains("> Custom: *0* link"));
     }
@@ -133,14 +132,14 @@ mod tests {
         // `groupData.antilinkList || []`: string bukan array masih punya
         // `.length > 0`, jadi JS masuk cabang custom lalu `.forEach` meledak.
         // `group_list` mengembalikan slice kosong — tidak panic.
-        let out = run(json!({"antilinkList": "bukan-array"}));
+        let out = run(serde_json::json!({"antilinkList": "bukan-array"}));
         assert!(!out.contains("➕ *ᴄᴜsᴛᴏᴍ*"));
         assert!(out.contains("> Custom: *0* link"));
     }
 
     #[test]
     fn custom_links_are_numbered_from_one_after_the_defaults() {
-        let out = run(json!({"antilinkList": ["spam.example", "iklan.example"]}));
+        let out = run(serde_json::json!({"antilinkList": ["spam.example", "iklan.example"]}));
         assert!(out.contains("╭┈┈⬡「 ➕ *ᴄᴜsᴛᴏᴍ* 」\n┃ 1. `spam.example`\n┃ 2. `iklan.example`\n╰┈┈┈┈┈┈┈┈⬡"));
         assert!(out.contains("> Default: *7* link\n> Custom: *2* link"));
         // Blok default tetap lengkap dan tidak ikut ter-nomor ulang.
@@ -150,14 +149,14 @@ mod tests {
 
     #[test]
     fn the_two_blocks_close_with_the_javascript_box_chars() {
-        let out = run(json!({"antilinkList": ["x.example"]}));
+        let out = run(serde_json::json!({"antilinkList": ["x.example"]}));
         assert_eq!(out.matches("╰┈┈┈┈┈┈┈┈⬡").count(), 2);
         assert_eq!(out.matches("╭┈┈⬡").count(), 2);
     }
 
     #[test]
     fn prefix_is_interpolated_from_the_context() {
-        let mut ctx = ctx_with(json!({"antilinkList": []}));
+        let mut ctx = ctx_with(serde_json::json!({"antilinkList": []}));
         ctx.prefix = "!".into();
         let out = render(&ctx);
         assert!(out.ends_with("`!delantilink <link>` untuk hapus"));

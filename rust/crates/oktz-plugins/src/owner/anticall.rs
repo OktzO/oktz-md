@@ -90,7 +90,6 @@ pub fn anticall(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
 
-    use serde_json::json;
 
     fn run(prefix: &str, text: &str, settings: Value) -> Reply {
         let ctx = Ctx {
@@ -147,23 +146,23 @@ mod tests {
     fn on_writes_true_and_off_writes_false() {
         let r = run(".", "on", Value::Null);
         assert_eq!(text_of(&r), ON);
-        assert_eq!(stored(&r), &json!(true));
+        assert_eq!(stored(&r), &serde_json::json!(true));
 
         let r = run(".", "off", Value::Null);
         assert_eq!(text_of(&r), OFF);
-        assert_eq!(stored(&r), &json!(false));
+        assert_eq!(stored(&r), &serde_json::json!(false));
     }
 
     #[test]
     fn the_option_is_lowercased_and_trimmed_before_it_is_compared() {
         let r = run(".", "  ON  ", Value::Null);
-        assert_eq!(stored(&r), &json!(true));
+        assert_eq!(stored(&r), &serde_json::json!(true));
         let r = run(".", "\tOff\t", Value::Null);
-        assert_eq!(stored(&r), &json!(false));
+        assert_eq!(stored(&r), &serde_json::json!(false));
         // `m.text?.toLowerCase()?.trim()` — newline di ujung ikut hilang,
         // jadi "on\n" tetap option sah, bukan input tak dikenal.
         let r = run(".", "on\n", Value::Null);
-        assert_eq!(stored(&r), &json!(true));
+        assert_eq!(stored(&r), &serde_json::json!(true));
     }
 
     #[test]
@@ -184,7 +183,7 @@ mod tests {
     #[test]
     fn a_blank_option_reports_status_and_writes_nothing() {
         for text in ["", "   ", "\n\t"] {
-            let r = run("!", text, json!({KEY: true}));
+            let r = run("!", text, serde_json::json!({KEY: true}));
             assert_eq!(
                 text_of(&r),
                 "📞 *Anti Call*\n\n\
@@ -208,19 +207,19 @@ mod tests {
             "{}",
             text_of(&r)
         );
-        let r = run(".", "", json!({KEY: null}));
+        let r = run(".", "", serde_json::json!({KEY: null}));
         assert!(text_of(&r).contains("Status: *Nonaktif ❌*"));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn a_stored_value_is_read_back_as_the_status() {
-        for truthy in [json!(true), json!(1), json!("ya"), json!({})] {
-            let r = run(".", "", json!({KEY: truthy.clone()}));
+        for truthy in [serde_json::json!(true), serde_json::json!(1), serde_json::json!("ya"), serde_json::json!({})] {
+            let r = run(".", "", serde_json::json!({KEY: truthy.clone()}));
             assert!(text_of(&r).contains("Status: *Aktif ✅*"), "{truthy}");
         }
-        for falsy in [json!(false), json!(0), json!("")] {
-            let r = run(".", "", json!({KEY: falsy.clone()}));
+        for falsy in [serde_json::json!(false), serde_json::json!(0), serde_json::json!("")] {
+            let r = run(".", "", serde_json::json!({KEY: falsy.clone()}));
             assert!(text_of(&r).contains("Status: *Nonaktif ❌*"), "{falsy}");
         }
     }

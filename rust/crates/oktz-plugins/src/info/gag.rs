@@ -108,7 +108,6 @@ pub fn gag(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
 
-    use serde_json::json;
 
     fn run() -> Reply {
         let ctx = Ctx {
@@ -167,15 +166,15 @@ mod tests {
     #[test]
     fn an_empty_or_missing_section_disappears_entirely() {
         assert_eq!(format_stock(None, "⚙️ Gear Stock"), "");
-        assert_eq!(format_stock(Some(&json!([])), "⚙️ Gear Stock"), "");
-        assert_eq!(format_stock(Some(&json!({})), "⚙️ Gear Stock"), "");
-        assert_eq!(format_stock(Some(&json!(null)), "⚙️ Gear Stock"), "");
-        assert_eq!(format_stock(Some(&json!(5)), "⚙️ Gear Stock"), "");
+        assert_eq!(format_stock(Some(&serde_json::json!([])), "⚙️ Gear Stock"), "");
+        assert_eq!(format_stock(Some(&serde_json::json!({})), "⚙️ Gear Stock"), "");
+        assert_eq!(format_stock(Some(&serde_json::json!(null)), "⚙️ Gear Stock"), "");
+        assert_eq!(format_stock(Some(&serde_json::json!(5)), "⚙️ Gear Stock"), "");
     }
 
     #[test]
     fn a_section_renders_one_line_per_item_with_a_blank_line_after() {
-        let arr = json!([{"name": "watering_can", "value": 3}, {"name": "hoe", "value": 0}]);
+        let arr = serde_json::json!([{"name": "watering_can", "value": 3}, {"name": "hoe", "value": 0}]);
         assert_eq!(
             format_stock(Some(&arr), "⚙️ Gear Stock"),
             "*⚙️ Gear Stock*\n- watering_can: 3\n- hoe: 0\n\n"
@@ -184,7 +183,7 @@ mod tests {
 
     #[test]
     fn every_section_of_the_js_payload_appears_in_the_caption() {
-        let result = json!({
+        let result = serde_json::json!({
             "gearStock": [{"name": "g1", "value": 1}],
             "eggStock": [{"name": "e1", "value": 2}],
             "eventStock": [{"name": "v1", "value": 3}],
@@ -222,9 +221,9 @@ mod tests {
     #[test]
     fn the_last_seen_list_is_capped_at_five_entries() {
         let seen: Vec<_> = (0..9)
-            .map(|i| json!({"name": format!("s{i}"), "seen": "now"}))
+            .map(|i| serde_json::json!({"name": format!("s{i}"), "seen": "now"}))
             .collect();
-        let out = render(&json!({"lastSeen": seen}));
+        let out = render(&serde_json::json!({"lastSeen": seen}));
         for i in 0..5 {
             assert!(out.contains(&format!("- s{i}: now")), "s{i} hilang: {out}");
         }
@@ -238,7 +237,7 @@ mod tests {
 
     #[test]
     fn a_payload_without_last_seen_skips_the_block_entirely() {
-        let out = render(&json!({"gearStock": [{"name": "g", "value": 1}]}));
+        let out = render(&serde_json::json!({"gearStock": [{"name": "g", "value": 1}]}));
         assert!(!out.contains("Last Seen"), "{out}");
         assert_eq!(
             out, "🌱 *GROW A GARDEN INFO* 🌱\n\n*⚙️ Gear Stock*\n- g: 1",
@@ -250,12 +249,12 @@ mod tests {
     fn a_missing_field_is_interpolated_the_way_javascript_does_it() {
         assert_eq!(interp(None), "undefined");
         assert_eq!(interp(Some(&Value::Null)), "null");
-        assert_eq!(interp(Some(&json!("x"))), "x");
-        assert_eq!(interp(Some(&json!(7))), "7");
+        assert_eq!(interp(Some(&serde_json::json!("x"))), "x");
+        assert_eq!(interp(Some(&serde_json::json!(7))), "7");
     }
 
     #[test]
     fn a_result_object_with_no_sections_still_produces_the_header() {
-        assert_eq!(render(&json!({})), "🌱 *GROW A GARDEN INFO* 🌱");
+        assert_eq!(render(&serde_json::json!({})), "🌱 *GROW A GARDEN INFO* 🌱");
     }
 }

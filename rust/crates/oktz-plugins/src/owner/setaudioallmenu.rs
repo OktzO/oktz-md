@@ -86,7 +86,7 @@ pub fn setaudioallmenu(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(text: &str, settings: Value) -> Reply {
         let ctx = Ctx {
@@ -146,17 +146,17 @@ mod tests {
 
     #[test]
     fn an_empty_argument_shows_the_legend_with_the_stored_style() {
-        let __balasan = run("", json!({"allmenuAudioStyle": 3}));
+        let __balasan = run("", serde_json::json!({"allmenuAudioStyle": 3}));
         let t = body(&__balasan);
         assert!(t.starts_with("⚠️ *PENGATURAN AUDIO ALL MENU*"), "{t}");
         assert!(t.contains("Saat ini All Menu menggunakan varian: *3*"), "{t}");
-        assert!(run("", json!({})).mutations().is_empty());
+        assert!(run("", serde_json::json!({})).mutations().is_empty());
     }
 
     #[test]
     fn a_falsy_stored_style_is_displayed_as_one() {
         // `db.setting(...) || 1` — `0` dan `null` jadi 1.
-        for s in [json!({"allmenuAudioStyle": 0}), json!({"allmenuAudioStyle": null})] {
+        for s in [serde_json::json!({"allmenuAudioStyle": 0}), serde_json::json!({"allmenuAudioStyle": null})] {
             assert!(
                 body(&run("", s.clone())).contains("menggunakan varian: *1*"),
                 "{s}"
@@ -167,19 +167,19 @@ mod tests {
     #[test]
     fn a_style_in_range_is_stored_as_a_number() {
         for n in 1..=4 {
-            let r = run(&n.to_string(), json!({}));
+            let r = run(&n.to_string(), serde_json::json!({}));
             let t = body(&r);
             assert!(t.starts_with("✅ *BERHASIL*"), "varian {n}: {t}");
             assert!(t.contains(&format!("*Varian {n}*")), "{t}");
             assert!(t.contains("mengetik *.allmenu*."), "{t}");
-            assert_eq!(written(&r), json!(n));
+            assert_eq!(written(&r), serde_json::json!(n));
         }
     }
 
     #[test]
     fn a_style_out_of_range_is_rejected_without_writing() {
         for input in ["0", "5", "-1", "99"] {
-            let r = run(input, json!({}));
+            let r = run(input, serde_json::json!({}));
             assert!(body(&r).starts_with("❌ *GAGAL*"), "input {input}: {}", body(&r));
             assert!(
                 body(&r).contains("harus berupa angka 1 sampai 4"),
@@ -194,7 +194,7 @@ mod tests {
         // `parseInt` JS: hanya yang benar-benar bukan angka yang ditolak —
         // `"1-4"` bukan salah satunya, dia mulai dari `1`.
         for input in ["abc", "x2", "--3", "e4", "+"] {
-            let r = run(input, json!({}));
+            let r = run(input, serde_json::json!({}));
             assert!(body(&r).starts_with("❌ *GAGAL*"), "input {input}: {}", body(&r));
             assert!(r.mutations().is_empty(), "input {input}");
         }
@@ -203,9 +203,9 @@ mod tests {
     #[test]
     fn a_leading_number_wins_like_parse_int_does() {
         // `parseInt("2 apa pun")` = 2 di JS, bukan NaN.
-        let r = run("2 apa pun", json!({}));
+        let r = run("2 apa pun", serde_json::json!({}));
         assert!(body(&r).contains("*Varian 2*"), "{}", body(&r));
-        assert_eq!(written(&r), json!(2));
+        assert_eq!(written(&r), serde_json::json!(2));
     }
 
     #[test]
@@ -213,19 +213,19 @@ mod tests {
         // `parseInt("1-4")` = 1 dan `parseInt("3px")` = 3 — keduanya sah,
         // meski kelihatannya bukan angka bulat utuh.
         for (input, style) in [("1-4", 1), ("3px", 3), ("  4  ", 4)] {
-            let r = run(input, json!({}));
+            let r = run(input, serde_json::json!({}));
             assert!(
                 body(&r).contains(&format!("*Varian {style}*")),
                 "input {input:?}: {}",
                 body(&r)
             );
-            assert_eq!(written(&r), json!(style), "input {input:?}");
+            assert_eq!(written(&r), serde_json::json!(style), "input {input:?}");
         }
     }
 
     #[test]
     fn a_successful_write_is_paired_with_the_success_reaction() {
-        let r = run("4", json!({}));
+        let r = run("4", serde_json::json!({}));
         match r.without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅"),
             other => panic!("harus Reaction, dapat {other:?}"),

@@ -67,7 +67,6 @@ pub fn setwelcome(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use serde_json::Value;
-    use serde_json::json;
 
     fn run(group: Value, text: &str) -> Reply {
         let args: Vec<String> = text.split_whitespace().map(str::to_string).collect();
@@ -130,7 +129,7 @@ mod tests {
 
     #[test]
     fn an_empty_message_shows_the_placeholder_help_and_writes_nothing() {
-        for g in [json!(null), json!({}), json!({"welcomeMsg": "lama"})] {
+        for g in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"welcomeMsg": "lama"})] {
             let r = run(g.clone(), "");
             assert!(text_of(&r).starts_with("📝 *sᴇᴛ ᴡᴇʟᴄᴏᴍᴇ*"), "input {g}");
             assert!(text_of(&r).contains("{user}"), "placeholder harus disebut");
@@ -143,18 +142,18 @@ mod tests {
     fn the_help_branch_does_not_depend_on_the_stored_group_row() {
         // Store yang sudah punya `welcomeMsg` tetap masuk cabang help kalau
         // argumen kosong — pemeriksaan ada di argumen, bukan di store.
-        let r = run(json!({"welcomeMsg": "Halo lama"}), "");
+        let r = run(serde_json::json!({"welcomeMsg": "Halo lama"}), "");
         assert!(text_of(&r).starts_with("📝 *sᴇᴛ ᴡᴇʟᴄᴏᴍᴇ*"));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn a_message_stores_welcome_msg_and_turns_welcome_on() {
-        let r = run(json!({}), "Halo {user}, selamat datang!");
+        let r = run(serde_json::json!({}), "Halo {user}, selamat datang!");
         let data = group_write(&r);
-        assert_eq!(data["welcomeMsg"], json!("Halo {user}, selamat datang!"));
+        assert_eq!(data["welcomeMsg"], serde_json::json!("Halo {user}, selamat datang!"));
         assert_eq!(
-            data["welcome"], json!(true),
+            data["welcome"], serde_json::json!(true),
             "`welcome: true` ikut ditulis, bukan hanya welcomeMsg"
         );
         assert!(text_of(&r).starts_with("✅ Welcome berhasil di set menjadi *"));
@@ -171,7 +170,7 @@ mod tests {
         // Reply mengutip teks yang disimpan; kalau reply dan write berbeda,
         // admin melihat satu pesan sementara tersimpan yang lain.
         let msg = " Halo   {user}  ";
-        let r = run(json!({}), msg);
+        let r = run(serde_json::json!({}), msg);
         let stored = group_write(&r)["welcomeMsg"].as_str().unwrap().to_string();
         assert_eq!(stored, msg, "JS tidak trim teks yang tersimpan");
         assert!(
@@ -183,7 +182,7 @@ mod tests {
     #[test]
     fn the_write_is_paired_with_the_success_reply() {
         // Reply "berhasil diset" tanpa mutasi = klaim palsu.
-        let r = run(json!({}), "Halo");
+        let r = run(serde_json::json!({}), "Halo");
         assert!(text_of(&r).contains("berhasil di set"));
         assert_eq!(r.mutations().len(), 1);
     }
@@ -193,8 +192,8 @@ mod tests {
         // `if (!text)` di JS — `" "` itu truthy, jadi masuk cabang tulis dan
         // `welcomeMsg` berisi spasi. `is_empty()` (bukan `trim().is_empty()`)
         // yang menjaga itu; memakai trim di sini akan mengubahnya jadi help.
-        let r = run(json!({}), " ");
-        assert_eq!(group_write(&r)["welcomeMsg"], json!(" "));
+        let r = run(serde_json::json!({}), " ");
+        assert_eq!(group_write(&r)["welcomeMsg"], serde_json::json!(" "));
         assert!(text_of(&r).contains("berhasil di set"));
     }
 }

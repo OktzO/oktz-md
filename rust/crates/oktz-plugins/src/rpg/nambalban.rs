@@ -3,7 +3,7 @@
 //! Reaksi + pesan antara sebelum jeda `setTimeout` tidak masuk `Reply`.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::int_field;
 use crate::rpg::jualan::{
@@ -34,7 +34,7 @@ pub fn nambalban(ctx: Ctx) -> Reply {
              Nambal butuh *{STAMINA_COST} Stamina*, sisa stamina kamu *{stamina}*. Minum es teh dulu! 🧊"
         ));
     }
-    rpg.insert("stamina".into(), json!(stamina - STAMINA_COST));
+    rpg.insert("stamina".into(), serde_json::json!(stamina - STAMINA_COST));
 
     let koin = int_field(&ctx, "koin");
     let old_exp = or_default(ctx.user_field("exp").and_then(Value::as_i64), 0);
@@ -42,7 +42,7 @@ pub fn nambalban(ctx: Ctx) -> Reply {
     if math_random() < 0.15 {
         let health_loss = 15;
         let health = coalesce(rpg_int(&rpg, "health"), 100);
-        rpg.insert("health".into(), json!((health - health_loss).max(0)));
+        rpg.insert("health".into(), serde_json::json!((health - health_loss).max(0)));
         return Reply::text(format!(
             "DUAAAAR! BANNYA MELEDAK! 💥😭\n\n\
              Kamu mompa kerasa kenceng dan ban truk itu meledak di depan muka!\n\
@@ -54,7 +54,7 @@ pub fn nambalban(ctx: Ctx) -> Reply {
         .with_reaction("💥")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "rpg": rpg }),
+            data: serde_json::json!({ "rpg": rpg }),
         });
     }
 
@@ -73,7 +73,7 @@ pub fn nambalban(ctx: Ctx) -> Reply {
     .with_reaction("✅")
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": koin + earning, "exp": new_exp, "rpg": rpg }),
+        data: serde_json::json!({ "koin": koin + earning, "exp": new_exp, "rpg": rpg }),
     })
 }
 
@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn zero_stamina_is_reported_and_nothing_is_written() {
-        let r = run(json!({"rpg": {"stamina": 0}}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 0}}));
         assert!(text_of(&r).contains("sisa stamina kamu *0*"));
         assert!(r.mutations().is_empty());
     }
@@ -142,15 +142,15 @@ mod tests {
     #[test]
     fn an_exhausted_bar_costs_fourteen_stamina() {
         for _ in 0..300 {
-            let r = run(json!({"rpg": {"stamina": 14}, "koin": 0, "exp": 0}));
-            assert_eq!(written(&r)["rpg"]["stamina"], json!(0));
+            let r = run(serde_json::json!({"rpg": {"stamina": 14}, "koin": 0, "exp": 0}));
+            assert_eq!(written(&r)["rpg"]["stamina"], serde_json::json!(0));
         }
     }
 
     #[test]
     fn the_pay_branch_matches_its_experience_and_money_ranges() {
         for _ in 0..300 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
             let d = written(&r);
             if text_of(&r).starts_with("DUAAAAR") {
                 continue;
@@ -166,12 +166,12 @@ mod tests {
     fn the_blowout_costs_fifteen_health_and_pays_nothing() {
         let mut seen = false;
         for _ in 0..4000 {
-            let r = run(json!({"rpg": {"stamina": 100, "health": 100}, "koin": 5000}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100, "health": 100}, "koin": 5000}));
             let d = written(&r);
             if text_of(&r).starts_with("DUAAAAR") {
                 seen = true;
-                assert_eq!(d["rpg"]["stamina"], json!(86));
-                assert_eq!(d["rpg"]["health"], json!(85));
+                assert_eq!(d["rpg"]["stamina"], serde_json::json!(86));
+                assert_eq!(d["rpg"]["health"], serde_json::json!(85));
                 assert!(d.get("koin").is_none(), "pendapatan 0, tidak ditulis");
                 assert!(d.get("exp").is_none(), "tanpa exp");
                 break;
@@ -183,10 +183,10 @@ mod tests {
     #[test]
     fn health_loss_is_clamped_at_zero() {
         for _ in 0..4000 {
-            let r = run(json!({"rpg": {"stamina": 100, "health": 3}, "koin": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100, "health": 3}, "koin": 0}));
             let d = written(&r);
             if text_of(&r).starts_with("DUAAAAR") {
-                assert_eq!(d["rpg"]["health"], json!(0), "Math.max(0, 3 - 15)");
+                assert_eq!(d["rpg"]["health"], serde_json::json!(0), "Math.max(0, 3 - 15)");
                 return;
             }
         }

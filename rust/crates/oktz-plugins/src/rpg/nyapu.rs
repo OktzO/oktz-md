@@ -3,7 +3,7 @@
 //! Reaksi + pesan antara sebelum jeda `setTimeout` tidak masuk `Reply`.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::int_field;
 use crate::rpg::jualan::{
@@ -34,7 +34,7 @@ pub fn nyapu(ctx: Ctx) -> Reply {
              Nyapu butuh *{STAMINA_COST} Stamina*, sisa stamina kamu *{stamina}*. Istirahat di bawah pohon dulu! 🌳"
         ));
     }
-    rpg.insert("stamina".into(), json!(stamina - STAMINA_COST));
+    rpg.insert("stamina".into(), serde_json::json!(stamina - STAMINA_COST));
 
     let koin = int_field(&ctx, "koin");
     let old_exp = or_default(ctx.user_field("exp").and_then(Value::as_i64), 0);
@@ -54,7 +54,7 @@ pub fn nyapu(ctx: Ctx) -> Reply {
         .with_reaction("💍")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "koin": koin + gold_found, "rpg": rpg }),
+            data: serde_json::json!({ "koin": koin + gold_found, "rpg": rpg }),
         });
     }
 
@@ -73,7 +73,7 @@ pub fn nyapu(ctx: Ctx) -> Reply {
     .with_reaction("✅")
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": koin + earning, "exp": new_exp, "rpg": rpg }),
+        data: serde_json::json!({ "koin": koin + earning, "exp": new_exp, "rpg": rpg }),
     })
 }
 
@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn a_tired_sweeper_is_refused_without_a_write() {
-        let r = run(json!({"rpg": {"stamina": 0}}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 0}}));
         assert!(text_of(&r).contains("sisa stamina kamu *0*"));
         assert!(r.mutations().is_empty());
     }
@@ -142,22 +142,22 @@ mod tests {
     #[test]
     fn every_sweep_costs_ten_stamina() {
         for _ in 0..200 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
-            assert_eq!(written(&r)["rpg"]["stamina"], json!(90));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            assert_eq!(written(&r)["rpg"]["stamina"], serde_json::json!(90));
         }
     }
 
     #[test]
     fn the_wage_branch_pays_and_trains_in_step() {
         for _ in 0..300 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
             let d = written(&r);
             if text_of(&r).starts_with("HOKI PARAH") {
                 continue;
             }
             let koin = d["koin"].as_i64().unwrap();
             assert!((3000..=10999).contains(&koin), "gaji {koin}");
-            assert_eq!(d["exp"], json!(koin / 20));
+            assert_eq!(d["exp"], serde_json::json!(koin / 20));
         }
     }
 
@@ -165,7 +165,7 @@ mod tests {
     fn the_ring_pays_more_than_a_whole_week_of_wages_and_gives_no_exp() {
         let mut seen = false;
         for _ in 0..4000 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 777}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 777}));
             let d = written(&r);
             if text_of(&r).starts_with("HOKI PARAH") {
                 seen = true;

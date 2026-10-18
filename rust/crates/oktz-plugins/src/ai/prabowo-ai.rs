@@ -8,7 +8,6 @@
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
-use crate::fun::tod::error_template;
 
 use super::aiassist::{AiFailure, clip, failed, unlimited_ai};
 
@@ -52,7 +51,7 @@ pub fn prabowo_ai(ctx: Ctx) -> Reply {
         Err(AiFailure::Rejected(e)) => {
             Reply::text(failed("Prabowo AI Error", &e)).with_reaction("☢")
         }
-        Err(AiFailure::Transport) => Reply::text(error_template(&ctx.prefix, &ctx.command))
+        Err(AiFailure::Transport) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
             .with_reaction("☢"),
     }
 }
@@ -85,7 +84,7 @@ mod tests {
         }
         fn respond(&self) -> Result<HttpResponse, HttpError> {
             let Some(text) = &self.resp else {
-                return Err(HttpError {
+                return Err(oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 });
             };
@@ -201,7 +200,7 @@ mod tests {
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "halo");
-        assert_eq!(body(&r), error_template(".", "prabowo-ai"));
+        assert_eq!(body(&r), crate::common::error_template(".", "prabowo-ai"));
         assert!(matches!(
             r.without_mutations(),
             Reply::Reaction { emoji, .. } if emoji == "☢"

@@ -152,7 +152,7 @@ mod tests {
     use crate::common::date_long;
     use oktz_plugin_api::QuotedKind;
     use oktz_plugin_api::QuotedMessage;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     const ME: &str = "628111@s.whatsapp.net";
 
@@ -250,7 +250,7 @@ mod tests {
     fn the_normal_branch_lists_every_role_the_number_holds() {
         let ctx = Ctx {
             mentioned: vec!["628111@s.whatsapp.net".into()],
-            settings: json!({
+            settings: serde_json::json!({
                 "owner": ["628111"],
                 "partner": ["628111"],
                 "premium": ["628111"]
@@ -279,7 +279,7 @@ mod tests {
     #[test]
     fn a_stored_user_appends_energi_koin_and_level() {
         let ctx = Ctx {
-            user_data: json!({"energi": -1, "koin": -1, "level": 12}),
+            user_data: serde_json::json!({"energi": -1, "koin": -1, "level": 12}),
             ..base()
         };
         let (text, _) = text_of(&run(ctx.clone()));
@@ -291,7 +291,7 @@ mod tests {
     #[test]
     fn missing_store_fields_use_the_js_defaults() {
         let ctx = Ctx {
-            user_data: json!({"koin": 12500}),
+            user_data: serde_json::json!({"koin": 12500}),
             ..base()
         };
         let (text, _) = text_of(&run(ctx.clone()));
@@ -312,8 +312,8 @@ mod tests {
     #[test]
     fn the_plugin_only_reads() {
         let ctx = Ctx {
-            settings: json!({"owner": ["628111"]}),
-            user_data: json!({"level": 3}),
+            settings: serde_json::json!({"owner": ["628111"]}),
+            user_data: serde_json::json!({"level": 3}),
             ..base()
         };
         assert!(run(ctx.clone()).mutations().is_empty());

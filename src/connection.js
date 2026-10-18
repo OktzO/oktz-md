@@ -51,6 +51,9 @@ import {
   shouldRenderQr,
   shouldUseQrFallback,
 } from "./lib/qr-fallback.js";
+import { createMessageStore } from "./lib/message-store.js";
+import { createLibraryLogRouter } from "./lib/library-log.js";
+import { getGroupMetadata } from "./lib/group-meta.js";
 import { isSwGcCandidate } from "./lib/group-protection.js";
 const groupCache = new NodeCache({ stdTTL: 5 * 60, useClones: false, maxKeys: 500 });
 const processedMessages = new NodeCache({ stdTTL: 30, useClones: false, maxKeys: 5000 });
@@ -228,90 +231,7 @@ try {
   sharp.concurrency(1);
 } catch {}
 
-const store = {
-  messages: new Map(),
-  chats: new Map(),
-  contacts: {},
-  bind(ev) {
-    ev.on("messages.upsert", ({ messages: msgs }) => {
-      for (const msg of msgs) {
-        const jid = msg.key?.remoteJid;
-        if (!jid) continue;
-        if (!this.messages.has(jid)) {
-          if (this.messages.size >= 300) {
-            const firstKey = this.messages.keys().next().value;
-            if (firstKey) this.messages.delete(firstKey);
-          }
-          this.messages.set(jid, new Map());
-        }
-        const chat = this.messages.get(jid);
-        if (msg.key?.id) {
-          chat.set(msg.key.id, msg);
-          if (chat.size > 30) {
-            const keys = [...chat.keys()];
-            for (let i = 0; i < keys.length - 25; i++) chat.delete(keys[i]);
-          }
-        }
-        if (msg.key?.participantAlt && msg.key?.participant) {
-          const alt = decodeAndNormalize(msg.key.participantAlt);
-          const primary = decodeAndNormalize(msg.key.participant);
-          if (alt && primary && !isLid(alt) && !isLidConverted(alt)) {
-            cacheLidJid(primary, alt);
-          }
-        }
-        if (msg.key?.remoteJidAlt && msg.key?.remoteJid) {
-          const alt = decodeAndNormalize(msg.key.remoteJidAlt);
-          const primary = decodeAndNormalize(msg.key.remoteJid);
-          if (alt && primary && !isLid(alt) && !isLidConverted(alt)) {
-            cacheLidJid(primary, alt);
-          }
-        }
-        if (!this.chats.has(jid)) {
-          if (this.chats.size >= 300) {
-            const firstChatKey = this.chats.keys().next().value;
-            if (firstChatKey) this.chats.delete(firstChatKey);
-          }
-          this.chats.set(jid, { id: jid });
-        }
-        if (msg.pushName && jid.endsWith("@s.whatsapp.net")) {
-          const contactKeys = Object.keys(this.contacts);
-          if (contactKeys.length >= 500) {
-            delete this.contacts[contactKeys[0]];
-          }
-          this.contacts[jid] = { ...this.contacts[jid], notify: msg.pushName };
-        }
-      }
-    });
-    ev.on("chats.upsert", (chats) => {
-      for (const chat of chats) {
-        if (chat.id) {
-          if (this.chats.size >= 300 && !this.chats.has(chat.id)) {
-            const firstChatKey = this.chats.keys().next().value;
-            if (firstChatKey) this.chats.delete(firstChatKey);
-          }
-          this.chats.set(chat.id, chat);
-        }
-      }
-    });
-    ev.on("contacts.upsert", (contacts) => {
-      for (const contact of contacts) {
-        if (contact.id) {
-          const contactKeys = Object.keys(this.contacts);
-          if (contactKeys.length >= 500 && !this.contacts[contact.id]) {
-            delete this.contacts[contactKeys[0]];
-          }
-          this.contacts[contact.id] = {
-            ...this.contacts[contact.id],
-            ...contact,
-          };
-        }
-      }
-    });
-  },
-  async loadMessage(jid, id) {
-    return this.messages.get(jid)?.get(id) || undefined;
-  },
-};
+const store = createMessageStore();
 
 /**
  * @typedef {Object} ConnectionState
@@ -430,8 +350,8 @@ function createLibraryLogger(report) {
     { level: "error", serializers },
     {
       write(line) {
-        const { level, msg } = parsePinoLine(line);
-        emit(level, msg);
+        const { level, msg, detail } = parsePinoLine(line);
+        emit(level, msg, detail);
       },
     },
   );
@@ -480,17 +400,23 @@ function parsePinoLine(line) {
       // record pino menyimpan level sebagai angka (50), bukan label
       level: pino.levels.labels[rec.level] ?? rec.level ?? "error",
       msg: `${rec.msg ?? ""}${extra}`,
+      detail,
     };
   } catch {
-    return { level: "error", msg: line };
+    return { level: "error", msg: line, detail: "" };
   }
 }
 
 function defaultLibraryLogReport(level, text) {
-  colors.logger.error("library", `${level}: ${text}`);
+  const fn =
+    typeof colors.logger[level] === "function"
+      ? colors.logger[level]
+      : colors.logger.error;
+  fn("library", `${level}: ${text}`);
 }
 
-const libraryLogger = createLibraryLogger();
+const libraryLogRouter = createLibraryLogRouter({ report: defaultLibraryLogReport });
+const libraryLogger = createLibraryLogger(libraryLogRouter.report);
 
 
 /**
@@ -687,24 +613,21 @@ async function startConnection(options = {}) {
     syncFullHistory: false,
     markOnlineOnConnect: false,
     generateHighQualityLinkPreview: false,
+    enableRecentMessageCache: true,
     shouldIgnoreJid: (jid) => (jid ? jid.includes("meta_ai") : false),
     keepAliveIntervalMs: resolveKeepAlive({
       configured: config.session?.keepAliveIntervalMs,
     }).intervalMs,
     getMessage: async (key) => {
-      if (store) {
-        const msg = store.messages.get(key.remoteJid)?.get(key.id);
-        return msg?.message || undefined;
-      }
-      return undefined;
+      return store.getMessageContent(key?.id);
     },
     cachedGroupMetadata: async (jid) => {
       const cached = groupCache.get(jid);
       if (cached) return cached;
       try {
-        const fresh = await sock.groupMetadata(jid);
-        groupCache.set(jid, fresh);
-        return fresh;
+        const fresh = await getGroupMetadata(sock, jid, { waitMs: 3000 });
+        if (fresh) groupCache.set(jid, fresh);
+        return fresh || undefined;
       } catch {
         return undefined;
       }
@@ -1470,9 +1393,11 @@ async function startConnection(options = {}) {
         continue;
       }
 
-      const msgId = msg.key?.id;
-      if (msgId && messageDedup.has(msgId)) continue;
-      if (msgId) messageDedup.set(msgId, true);
+      const dedupKey = msg.key?.id
+        ? `${msg.key?.remoteJid || ""}\u0000${msg.key.id}`
+        : null;
+      if (dedupKey && messageDedup.has(dedupKey)) continue;
+      if (dedupKey) messageDedup.set(dedupKey, true);
 
       let msgTimestamp = 0;
       if (msg.messageTimestamp) {

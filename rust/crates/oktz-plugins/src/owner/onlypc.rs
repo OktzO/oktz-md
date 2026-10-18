@@ -80,7 +80,7 @@ pub fn onlypc(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(settings: Value, text: &str) -> Reply {
         let args: Vec<String> = text.split_whitespace().map(str::to_string).collect();
@@ -140,9 +140,9 @@ mod tests {
     #[test]
     fn no_argument_reports_status_and_writes_nothing() {
         for (settings, expected) in [
-            (json!({}), "Nonaktif ❌"),
-            (json!({"onlyPc": false}), "Nonaktif ❌"),
-            (json!({"onlyPc": true}), "Aktif ✅"),
+            (serde_json::json!({}), "Nonaktif ❌"),
+            (serde_json::json!({"onlyPc": false}), "Nonaktif ❌"),
+            (serde_json::json!({"onlyPc": true}), "Aktif ✅"),
         ] {
             let r = run(settings.clone(), "");
             assert!(text_of(&r).contains(expected), "input {settings}");
@@ -153,26 +153,26 @@ mod tests {
 
     #[test]
     fn a_non_boolean_setting_reads_as_the_js_default() {
-        let r = run(json!({"onlyPc": 7}), "");
+        let r = run(serde_json::json!({"onlyPc": 7}), "");
         assert!(text_of(&r).contains("Nonaktif ❌"));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn on_writes_onlypc_true_and_forces_onlygc_false() {
-        let r = run(json!({"onlyPc": false, "onlyGc": true}), "on");
+        let r = run(serde_json::json!({"onlyPc": false, "onlyGc": true}), "on");
         assert_eq!(r.mutations().len(), 2);
-        assert_eq!(setting_of(&r, "onlyPc"), Some(json!(true)));
-        assert_eq!(setting_of(&r, "onlyGc"), Some(json!(false)));
+        assert_eq!(setting_of(&r, "onlyPc"), Some(serde_json::json!(true)));
+        assert_eq!(setting_of(&r, "onlyGc"), Some(serde_json::json!(false)));
         assert_eq!(reaction_of(&r), Some("✅"));
         assert_eq!(text_of(&r), ON_MSG);
     }
 
     #[test]
     fn off_writes_only_onlypc_false() {
-        let r = run(json!({"onlyPc": true, "onlyGc": true}), "off");
+        let r = run(serde_json::json!({"onlyPc": true, "onlyGc": true}), "off");
         assert_eq!(r.mutations().len(), 1);
-        assert_eq!(setting_of(&r, "onlyPc"), Some(json!(false)));
+        assert_eq!(setting_of(&r, "onlyPc"), Some(serde_json::json!(false)));
         assert_eq!(setting_of(&r, "onlyGc"), None);
         assert_eq!(reaction_of(&r), Some("❌"));
         assert_eq!(text_of(&r), OFF_MSG);
@@ -181,7 +181,7 @@ mod tests {
     #[test]
     fn an_unknown_option_is_rejected_and_writes_nothing() {
         for bad in ["onx", "private", "2"] {
-            let r = run(json!({}), bad);
+            let r = run(serde_json::json!({}), bad);
             assert!(text_of(&r).starts_with("❌ *Opsi Tidak Valid*"));
             assert!(r.mutations().is_empty());
         }
@@ -189,10 +189,10 @@ mod tests {
 
     #[test]
     fn keyword_matching_is_case_insensitive() {
-        assert_eq!(setting_of(&run(json!({}), "ON"), "onlyPc"), Some(json!(true)));
+        assert_eq!(setting_of(&run(serde_json::json!({}), "ON"), "onlyPc"), Some(serde_json::json!(true)));
         assert_eq!(
-            setting_of(&run(json!({}), "OFF"), "onlyPc"),
-            Some(json!(false))
+            setting_of(&run(serde_json::json!({}), "OFF"), "onlyPc"),
+            Some(serde_json::json!(false))
         );
     }
 

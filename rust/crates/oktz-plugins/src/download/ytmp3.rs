@@ -426,7 +426,6 @@ pub fn ytmp3(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug)]
@@ -456,7 +455,7 @@ mod tests {
             let text = self
                 .body
                 .clone()
-                .map_err(|()| HttpError { message: "offline".into() })?
+                .map_err(|()| oktz_plugin_api::HttpError { message: "offline".into() })?
                 .to_string();
             Ok(HttpResponse {
                 status: 200,
@@ -508,7 +507,7 @@ mod tests {
     }
 
     fn ok_body() -> Value {
-        json!({
+        serde_json::json!({
             "status": true,
             "result": {
                 "title": "Lagu Contoh",
@@ -619,7 +618,7 @@ mod tests {
     fn the_reported_format_wins_over_the_requested_one() {
         // `media-format.js` ada karena aggregator menjawab `webm` untuk slot
         // mp3; nama berkas dan mimetype harus mengikuti yang dilaporkan host.
-        let isi = json!({
+        let isi = serde_json::json!({
             "download_url": "https://cdn.example/a?mime=audio%2Fwebm",
             "mime": "audio/webm"
         });
@@ -631,7 +630,7 @@ mod tests {
 
     #[test]
     fn the_mime_query_parameter_is_read_when_no_field_reports_a_format() {
-        let isi = json!({"url": "https://x.googlevideo.com/v?mime=audio%2Fogg%3B+codecs%3Dopus&id=1"});
+        let isi = serde_json::json!({"url": "https://x.googlevideo.com/v?mime=audio%2Fogg%3B+codecs%3Dopus&id=1"});
         let audio = normalize(&isi).unwrap();
         assert_eq!(audio.format, "ogg");
         assert_eq!(mimetype_for(&audio.format), "audio/ogg");
@@ -639,8 +638,8 @@ mod tests {
 
     #[test]
     fn an_unknown_format_token_falls_back_to_mp3() {
-        assert_eq!(format_from_token(Some(&json!("360"))), None);
-        assert_eq!(format_from_token(Some(&json!(".MP3"))), Some("mp3".into()));
+        assert_eq!(format_from_token(Some(&serde_json::json!("360"))), None);
+        assert_eq!(format_from_token(Some(&serde_json::json!(".MP3"))), Some("mp3".into()));
         assert_eq!(format_from_token(Some(&Value::Null)), None);
         assert_eq!(format_from_token(None), None);
     }
@@ -648,12 +647,12 @@ mod tests {
     #[test]
     fn a_response_without_a_download_url_reports_the_failure_message() {
         for body in [
-            json!({ "status": false, "msg": "gagal" }),
-            json!({ "status": true, "result": {} }),
-            json!({ "status": true, "result": { "download_url": "" } }),
-            json!({ "status": true, "result": { "download_url": "ftp://x/a.mp3" } }),
-            json!({ "status": true }),
-            json!([]),
+            serde_json::json!({ "status": false, "msg": "gagal" }),
+            serde_json::json!({ "status": true, "result": {} }),
+            serde_json::json!({ "status": true, "result": { "download_url": "" } }),
+            serde_json::json!({ "status": true, "result": { "download_url": "ftp://x/a.mp3" } }),
+            serde_json::json!({ "status": true }),
+            serde_json::json!([]),
         ] {
             let r = run(Stub::body(body.clone()), "https://youtube.com/watch?v=xxx");
             assert_eq!(text_of(&r), GAGAL, "body {body}");

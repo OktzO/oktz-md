@@ -1,7 +1,6 @@
 //! `plugins/owner/botmode.js` — mode bot global atau per grup.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::json;
 
 use crate::common::js_truthy;
 
@@ -125,13 +124,13 @@ pub fn botmode(ctx: Ctx) -> Reply {
         // `storeConfig.products` di-default ke array kosong supaya `store`
         // bisa langsung dipakai; field store lain tetap diwarisi karena
         // `Mutation::SetGroup` menyatu per field.
-        let mut data = json!({ "botMode": mode });
+        let mut data = serde_json::json!({ "botMode": mode });
         if mode == "store" {
-            data["storeConfig"] = json!({
+            data["storeConfig"] = serde_json::json!({
                 "products": ctx
                     .group_field("storeConfig.products")
                     .cloned()
-                    .unwrap_or_else(|| json!([])),
+                    .unwrap_or_else(|| serde_json::json!([])),
             });
         }
         reply.with_mutation(Mutation::SetGroup {
@@ -141,7 +140,7 @@ pub fn botmode(ctx: Ctx) -> Reply {
     } else {
         reply.with_mutation(Mutation::SetSetting {
             key: "botMode".into(),
-            value: json!(mode),
+            value: serde_json::json!(mode),
         })
     }
 }
@@ -220,7 +219,7 @@ mod tests {
 
     #[test]
     fn no_argument_lists_every_mode_and_writes_nothing() {
-        let r = run("", false, json!({}), json!({}));
+        let r = run("", false, serde_json::json!({}), serde_json::json!({}));
         let t = text_of(&r);
         assert!(t.contains("┃ ㊗ ɢʟᴏʙᴀʟ: *ALL*"), "{t}");
         for (key, desc) in MODE_DESCRIPTIONS {
@@ -232,7 +231,7 @@ mod tests {
 
     #[test]
     fn the_current_mode_is_the_only_one_marked_active() {
-        let r = run("", false, json!({}), json!({ "botMode": "store" }));
+        let r = run("", false, serde_json::json!({}), serde_json::json!({ "botMode": "store" }));
         let t = text_of(&r);
         assert_eq!(t.matches(" ✅").count(), 1, "tepat satu mode aktif: {t}");
         assert!(t.contains("┃ ㊗ *STORE* ✅"), "{t}");
@@ -242,7 +241,7 @@ mod tests {
     fn an_unset_global_mode_defaults_to_all() {
         assert_eq!(global_mode(&Ctx::default()), "all");
         let ctx = Ctx {
-            settings: json!({ "botMode": "" }),
+            settings: serde_json::json!({ "botMode": "" }),
             ..Default::default()
         };
         assert_eq!(global_mode(&ctx), "all", "string kosong ikut ||");
@@ -251,7 +250,7 @@ mod tests {
     #[test]
     fn an_unknown_mode_is_refused_and_writes_nothing() {
         for bad in ["nope", "1", "stor"] {
-            let r = run(bad, false, json!({}), json!({}));
+            let r = run(bad, false, serde_json::json!({}), serde_json::json!({}));
             assert!(text_of(&r).starts_with("❌ *ᴍᴏᴅᴇ ᴛɪᴅᴀᴋ ᴠᴀʟɪᴅ*"), "input {bad:?}");
             assert!(text_of(&r).contains("md, cpanel, store, pushkontak, otp, all"));
             assert!(r.mutations().is_empty(), "input {bad:?}");
@@ -260,51 +259,51 @@ mod tests {
 
     #[test]
     fn a_private_chat_writes_the_global_setting() {
-        let r = run("store", false, json!({}), json!({}));
-        assert_eq!(setting(&r), json!("store"));
+        let r = run("store", false, serde_json::json!({}), serde_json::json!({}));
+        assert_eq!(setting(&r), serde_json::json!("store"));
         assert!(text_of(&r).contains("> _Mode global diubah._"), "{}", text_of(&r));
         assert!(!text_of(&r).contains("Manual mode"), "catatan store hanya di grup");
     }
 
     #[test]
     fn a_group_writes_the_group_record_instead() {
-        let r = run("md", true, json!({}), json!({}));
-        assert_eq!(group_write(&r), json!({ "botMode": "md" }));
+        let r = run("md", true, serde_json::json!({}), serde_json::json!({}));
+        assert_eq!(group_write(&r), serde_json::json!({ "botMode": "md" }));
         assert!(text_of(&r).contains("> _Mode grup ini juga diubah._"), "{}", text_of(&r));
     }
 
     #[test]
     fn store_mode_in_a_group_adds_the_manual_note_and_seeds_products() {
-        let r = run("store", true, json!({}), json!({}));
+        let r = run("store", true, serde_json::json!({}), serde_json::json!({}));
         assert!(text_of(&r).contains("📋 *Manual mode*"), "{}", text_of(&r));
-        assert_eq!(group_write(&r)["storeConfig"], json!({ "products": [] }));
+        assert_eq!(group_write(&r)["storeConfig"], serde_json::json!({ "products": [] }));
     }
 
     #[test]
     fn an_existing_product_list_survives_a_store_mode_write() {
-        let group = json!({ "storeConfig": { "products": [{ "name": "S&K" }] } });
-        let r = run("store", true, group, json!({}));
+        let group = serde_json::json!({ "storeConfig": { "products": [{ "name": "S&K" }] } });
+        let r = run("store", true, group, serde_json::json!({}));
         assert_eq!(
             group_write(&r)["storeConfig"]["products"],
-            json!([{ "name": "S&K" }])
+            serde_json::json!([{ "name": "S&K" }])
         );
     }
 
     #[test]
     fn a_group_status_shows_inherit_when_no_group_mode_is_stored() {
-        let r = run("", true, json!({ "botMode": null }), json!({ "botMode": "md" }));
+        let r = run("", true, serde_json::json!({ "botMode": null }), serde_json::json!({ "botMode": "md" }));
         assert!(text_of(&r).contains("┃ ㊗ ɢʀᴜᴘ: *INHERIT*"), "{}", text_of(&r));
         assert!(text_of(&r).contains("┃ ㊗ *MD* ✅"), "mode global yang aktif");
     }
 
     #[test]
     fn the_mode_argument_is_lowercased_before_matching() {
-        assert_eq!(setting(&run("STORE", false, json!({}), json!({}))), json!("store"));
+        assert_eq!(setting(&run("STORE", false, serde_json::json!({}), serde_json::json!({}))), serde_json::json!("store"));
     }
 
     #[test]
     fn the_applied_reply_reacts_and_is_paired_with_the_write() {
-        let r = run("all", false, json!({}), json!({}));
+        let r = run("all", false, serde_json::json!({}), serde_json::json!({}));
         match r.without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅"),
             other => panic!("harus Reaction, dapat {other:?}"),

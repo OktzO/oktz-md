@@ -97,7 +97,7 @@ pub fn setbirthday(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(user: Value, arg: &str) -> Reply {
         let ctx = Ctx {
@@ -160,7 +160,7 @@ mod tests {
 
     #[test]
     fn no_argument_shows_the_format_and_writes_nothing() {
-        for user in [json!(null), json!({}), json!({"birthday": "01-01"})] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"birthday": "01-01"})] {
             let r = run(user.clone(), "");
             assert!(text_of(&r).starts_with("🎂 *sᴇᴛ ʙɪʀᴛʜᴅᴀʏ*"), "input {user}");
             assert!(text_of(&r).contains(".setbirthday DD-MM"), "{}", text_of(&r));
@@ -170,26 +170,26 @@ mod tests {
 
     #[test]
     fn a_stored_birthday_is_shown_in_the_help_branch() {
-        let r = run(json!({"birthday": "25-12"}), "");
+        let r = run(serde_json::json!({"birthday": "25-12"}), "");
         assert!(text_of(&r).contains("> Birthday kamu: *25-12*"));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn a_valid_date_is_stored_zero_padded() {
-        assert_eq!(stored(&run(json!({}), "25-12")), "25-12");
-        assert_eq!(stored(&run(json!({}), "1-1")), "01-01", "padStart(2,'0')");
-        assert_eq!(stored(&run(json!({}), "05-09")), "05-09");
+        assert_eq!(stored(&run(serde_json::json!({}), "25-12")), "25-12");
+        assert_eq!(stored(&run(serde_json::json!({}), "1-1")), "01-01", "padStart(2,'0')");
+        assert_eq!(stored(&run(serde_json::json!({}), "05-09")), "05-09");
     }
 
     #[test]
     fn a_slash_separator_is_also_accepted_and_normalised_to_a_dash() {
-        assert_eq!(stored(&run(json!({}), "07/03")), "07-03");
+        assert_eq!(stored(&run(serde_json::json!({}), "07/03")), "07-03");
     }
 
     #[test]
     fn the_confirm_reply_names_the_day_the_month_and_mentions_the_sender() {
-        let r = run(json!({}), "25-12");
+        let r = run(serde_json::json!({}), "25-12");
         let t = text_of(&r);
         assert!(t.starts_with("✅ *ʙɪʀᴛʜᴅᴀʏ ᴅɪsɪᴍᴘᴀɴ!*"), "{t}");
         assert!(t.contains("┃ 📅 Tanggal: *25 Desember*"), "{t}");
@@ -200,7 +200,7 @@ mod tests {
     #[test]
     fn an_invalid_month_is_rejected_before_the_day_is_checked() {
         for bad in ["25-00", "25-13", "01-99"] {
-            let r = run(json!({}), bad);
+            let r = run(serde_json::json!({}), bad);
             assert_eq!(text_of(&r), "❌ Bulan tidak valid! (1-12)", "input {bad}");
             assert!(r.mutations().is_empty(), "input {bad}");
         }
@@ -209,7 +209,7 @@ mod tests {
     #[test]
     fn a_day_beyond_the_month_length_is_rejected() {
         for bad in ["32-01", "31-04", "31-06", "31-09", "00-01"] {
-            let r = run(json!({}), bad);
+            let r = run(serde_json::json!({}), bad);
             assert!(
                 text_of(&r).starts_with("❌ Tanggal tidak valid"),
                 "input {bad}: {}",
@@ -223,14 +223,14 @@ mod tests {
     fn february_always_allows_29_because_javascript_ignores_the_year() {
         // `daysInMonth[1] = 29` tanpa lookup tahun — 29-02 diterima setiap
         // tahun, termasuk tahun bukan tahun kabisat.
-        assert_eq!(stored(&run(json!({}), "29-02")), "29-02");
-        assert_eq!(stored(&run(json!({}), "28-02")), "28-02");
+        assert_eq!(stored(&run(serde_json::json!({}), "29-02")), "29-02");
+        assert_eq!(stored(&run(serde_json::json!({}), "28-02")), "28-02");
     }
 
     #[test]
     fn a_malformed_date_is_rejected() {
         for bad in ["abc", "25", "25-12-01", "255-12", "25_12", "-12", "25-"] {
-            let r = run(json!({}), bad);
+            let r = run(serde_json::json!({}), bad);
             assert!(text_of(&r).starts_with("❌ Format salah!"), "input {bad}: {}", text_of(&r));
             assert!(r.mutations().is_empty(), "input {bad}");
         }
@@ -238,7 +238,7 @@ mod tests {
 
     #[test]
     fn the_format_error_carries_the_live_prefix() {
-        let r = run(json!({}), "abc");
+        let r = run(serde_json::json!({}), "abc");
         assert!(
             text_of(&r).contains("Contoh: .setbirthday 25-12"),
             "{}",
@@ -248,7 +248,7 @@ mod tests {
 
     #[test]
     fn the_success_reply_is_paired_with_the_write() {
-        let r = run(json!({}), "25-12");
+        let r = run(serde_json::json!({}), "25-12");
         assert!(text_of(&r).contains("ᴅɪsɪᴍᴘᴀɴ"));
         assert_eq!(r.mutations().len(), 1);
     }

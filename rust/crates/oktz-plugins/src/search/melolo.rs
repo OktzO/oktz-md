@@ -213,7 +213,6 @@ pub fn melolo(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(text: &str) -> Reply {
         let ctx = Ctx {
@@ -301,10 +300,10 @@ mod tests {
         assert_eq!(DEFAULT_MAX, 90);
         assert_eq!(trim_text(None, DEFAULT_MAX), "-");
         assert_eq!(trim_text(Some(&Value::Null), DEFAULT_MAX), "-");
-        assert_eq!(trim_text(Some(&json!(12)), DEFAULT_MAX), "12");
-        assert_eq!(trim_text(Some(&json!(true)), DEFAULT_MAX), "true");
+        assert_eq!(trim_text(Some(&serde_json::json!(12)), DEFAULT_MAX), "12");
+        assert_eq!(trim_text(Some(&serde_json::json!(true)), DEFAULT_MAX), "true");
         assert_eq!(
-            trim_text(Some(&json!({"a": 1})), DEFAULT_MAX),
+            trim_text(Some(&serde_json::json!({"a": 1})), DEFAULT_MAX),
             "[object Object]",
             "String(obj) di JS"
         );
@@ -325,7 +324,7 @@ mod tests {
 
     #[test]
     fn groups_flatten_and_keep_their_section_name() {
-        let data = json!({
+        let data = serde_json::json!({
             "trending": [ { "title": "A", "url": "https://a", "image": "https://i/1" } ],
             "new": [
                 { "title": "B", "url": "https://b", "rating": "9.1", "episodes": "Eps 1-10" },
@@ -348,9 +347,9 @@ mod tests {
     #[test]
     fn a_missing_or_scalar_payload_normalizes_to_nothing() {
         assert!(normalize_results(&Value::Null).is_empty());
-        assert!(normalize_results(&json!("teks")).is_empty());
-        assert!(normalize_results(&json!([])).is_empty());
-        assert!(normalize_results(&json!({})).is_empty());
+        assert!(normalize_results(&serde_json::json!("teks")).is_empty());
+        assert!(normalize_results(&serde_json::json!([])).is_empty());
+        assert!(normalize_results(&serde_json::json!({})).is_empty());
     }
 
     #[test]
@@ -373,7 +372,7 @@ mod tests {
                 episodes: "-".into(),
             },
         ];
-        let usage = json!({ "cost": 5, "remaining": 0 });
+        let usage = serde_json::json!({ "cost": 5, "remaining": 0 });
         let t = caption(&items, "fantasy", Some(&usage));
         assert!(t.starts_with("🎭 *MELOLO DRAMA*\n\n🌿 *Category:* fantasy\n📦 *Total:* 2\n💳 *Cost:* 5\n🔋 *Sisa Credit:* 0\n\n"), "{t}");
         assert!(t.contains("*1.* Drama Satu\n   ├ 📂 trending\n   ├ ⭐ 8.5\n   ├ 📝 Eps 1-20\n   └ https://m/1\n"), "{t}");
@@ -434,7 +433,7 @@ mod tests {
         // Bentuk `Reply` yang akan dipakai setelah kapabilitas ada: teks biasa
         // kalau tidak ada gambar. Diuji lewat komponennya supaya tidak
         // mengarang variant yang tidak ada.
-        let items = normalize_results(&json!({ "s": [ { "title": "x" } ] }));
+        let items = normalize_results(&serde_json::json!({ "s": [ { "title": "x" } ] }));
         assert_eq!(cover(&items), None);
     }
 }

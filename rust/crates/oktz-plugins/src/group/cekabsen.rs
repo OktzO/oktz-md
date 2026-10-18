@@ -73,7 +73,6 @@ pub fn cekabsen(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     const SENDER: &str = "628111@s.whatsapp.net";
     const OWNER: &str = "628999@s.whatsapp.net";
@@ -106,7 +105,7 @@ mod tests {
     }
 
     fn session(peserta: Vec<&str>) -> Value {
-        json!({
+        serde_json::json!({
             CHAT: {
                 "keterangan": "Absen Harian",
                 "createdBy": OWNER,
@@ -180,7 +179,7 @@ mod tests {
 
     #[test]
     fn a_session_without_created_at_shows_a_dash_instead_of_panicking() {
-        let r = run(Some(json!({ CHAT: { "keterangan": "x", "createdBy": OWNER } })));
+        let r = run(Some(serde_json::json!({ CHAT: { "keterangan": "x", "createdBy": OWNER } })));
         assert!(text_of(&r).contains("⏰ Dimulai: -"), "{}", text_of(&r));
     }
 

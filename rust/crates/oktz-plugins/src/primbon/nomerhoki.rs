@@ -114,7 +114,6 @@ pub fn nomerhoki(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse, NoHttp};
-    use serde_json::json;
     use std::sync::Arc;
 
     #[derive(Debug)]
@@ -167,7 +166,7 @@ mod tests {
     /// `data` harus TRUTHY supaya lolos `!data?.data` — objek kosong `{}` di JS
     /// falsy, jadi tidak bisa dipakai di sini.
     fn payload_with_status(status: Value) -> Value {
-        json!({
+        serde_json::json!({
             "status": true,
             "data": {
                 "nomor": "628123",
@@ -227,7 +226,7 @@ mod tests {
     #[test]
     fn a_good_payload_renders_the_tree_and_the_hoki_verdict() {
         let r = run_with(
-            Arc::new(Stub(json!({
+            Arc::new(Stub(serde_json::json!({
                 "status": true,
                 "data": {
                     "nomor": "6281234567890",
@@ -261,7 +260,7 @@ mod tests {
     /// (`0`, `""`, `null`, field hilang) semuanya memilih TIDAK HOKI.
     #[test]
     fn a_falsy_analysis_status_prints_tidak_hoki() {
-        for status in [json!(false), json!(0), json!(""), json!(null)] {
+        for status in [serde_json::json!(false), serde_json::json!(0), serde_json::json!(""), serde_json::json!(null)] {
             let r = run_with(
                 Arc::new(Stub(payload_with_status(status.clone()))),
                 &["628123"],
@@ -272,7 +271,7 @@ mod tests {
             );
         }
         // `status` bernilai objek kosong: `{}` falsy di JS, jadi bukan HOKI.
-        let r = run_with(Arc::new(Stub(payload_with_status(json!({})))), &["628123"]);
+        let r = run_with(Arc::new(Stub(payload_with_status(serde_json::json!({})))), &["628123"]);
         let t = reply_text(&r);
         assert!(
             t.ends_with("> Status: ❌ TIDAK HOKI"),
@@ -287,12 +286,12 @@ mod tests {
     fn a_missing_parent_object_falls_into_the_error_template() {
         // `data` non-kosong supaya lolos `!data?.data` dulu.
         for data in [
-            json!({ "nomor": "628123" }),
-            json!({ "energi_positif": { "total": 1, "details": {} } }),
-            json!({ "energi_positif": null }),
+            serde_json::json!({ "nomor": "628123" }),
+            serde_json::json!({ "energi_positif": { "total": 1, "details": {} } }),
+            serde_json::json!({ "energi_positif": null }),
         ] {
             let r = run_with(
-                Arc::new(Stub(json!({ "status": true, "data": data }))),
+                Arc::new(Stub(serde_json::json!({ "status": true, "data": data }))),
                 &["628123"],
             );
             assert!(
@@ -305,7 +304,7 @@ mod tests {
 
     #[test]
     fn a_falsy_top_level_status_or_data_gives_the_failure_message() {
-        for body in [json!({ "data": {} }), json!({ "status": true }), json!({})] {
+        for body in [serde_json::json!({ "data": {} }), serde_json::json!({ "status": true }), serde_json::json!({})] {
             let r = run_with(Arc::new(Stub(body)), &["628123"]);
             assert_eq!(
                 reply_text(&r),

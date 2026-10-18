@@ -63,7 +63,6 @@ mod tests {
 
     use crate::group::mulaiabsen::{ABSENSI, DEFAULT_PESAN};
     use oktz_plugin_api::{SessionStore, new_session_store};
-    use serde_json::json;
 
     const CHAT: &str = "120363@g.us";
 
@@ -84,7 +83,7 @@ mod tests {
         let s = new_session_store();
         s.lock()
             .unwrap()
-            .insert(ABSENSI.to_string(), json!({ CHAT: entry }));
+            .insert(ABSENSI.to_string(), serde_json::json!({ CHAT: entry }));
         s
     }
 
@@ -126,7 +125,7 @@ mod tests {
         assert_eq!(text_of(&run(s.clone())), NO_SESSION);
 
         let s = new_session_store();
-        s.lock().unwrap().insert(ABSENSI.to_string(), json!({}));
+        s.lock().unwrap().insert(ABSENSI.to_string(), serde_json::json!({}));
         let r = run(s.clone());
         assert_eq!(text_of(&r), NO_SESSION);
         assert_eq!(
@@ -138,7 +137,7 @@ mod tests {
 
     #[test]
     fn a_closed_session_reports_keterangan_and_head_count_then_disappears() {
-        let s = with_session(json!({
+        let s = with_session(serde_json::json!({
             "keterangan": "Rapat Mingguan",
             "peserta": ["628111@s.whatsapp.net", "628222@s.whatsapp.net"]
         }));
@@ -156,7 +155,7 @@ mod tests {
 
     #[test]
     fn an_empty_session_still_closes_with_zero_attendees() {
-        let s = with_session(json!({"keterangan": DEFAULT_PESAN, "peserta": []}));
+        let s = with_session(serde_json::json!({"keterangan": DEFAULT_PESAN, "peserta": []}));
         let r = run(s.clone());
         assert!(text_of(&r).contains("👥 Total hadir: 0"), "{}", text_of(&r));
         assert!(session_of(&s).is_none());
@@ -167,7 +166,7 @@ mod tests {
         let s = new_session_store();
         s.lock().unwrap().insert(
             ABSENSI.to_string(),
-            json!({
+            serde_json::json!({
                 CHAT: {"keterangan": "a", "peserta": []},
                 "120364@g.us": {"keterangan": "b", "peserta": []}
             }),
@@ -182,7 +181,7 @@ mod tests {
 
     #[test]
     fn a_session_without_keterangan_prints_the_js_undefined() {
-        let s = with_session(json!({"peserta": []}));
+        let s = with_session(serde_json::json!({"peserta": []}));
         let r = run(s.clone());
         assert!(text_of(&r).contains("📝 undefined"), "{}", text_of(&r));
     }

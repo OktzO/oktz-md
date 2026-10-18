@@ -99,7 +99,7 @@ pub fn banchat(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(command: &str, group: Value) -> Reply {
         let ctx = Ctx {
@@ -138,7 +138,7 @@ mod tests {
     }
 
     fn quoted(r: &Reply) -> bool {
-        matches!(r.without_mutations(), Reply::TextQuoted { .. })
+        matches!(r.without_mutations().tanpa_reaksi(), Reply::TextQuoted { .. })
     }
 
     #[test]
@@ -186,7 +186,7 @@ mod tests {
 
     #[test]
     fn banning_writes_true_and_mentions_the_owner() {
-        let r = run("banchat", json!({ "name": "Grup Diskusi" }));
+        let r = run("banchat", serde_json::json!({ "name": "Grup Diskusi" }));
         let text = body(&r);
         assert_eq!(text, banned("Grup Diskusi", "628111"));
         for part in [
@@ -197,15 +197,15 @@ mod tests {
         ] {
             assert!(text.contains(part), "kurang {part:?} → {text}");
         }
-        assert_eq!(write(&r), &json!({"isBanned": true}));
+        assert_eq!(write(&r), &serde_json::json!({"isBanned": true}));
         assert_eq!(mentions(&r), ["628111@s.whatsapp.net"]);
         assert!(!quoted(&r), "JS m.reply tanpa opsi quoted");
     }
 
     #[test]
     fn a_group_that_is_already_banned_is_left_alone() {
-        for truthy in [json!(true), json!(1), json!("ya"), json!({})] {
-            let r = run("bangroup", json!({ "isBanned": truthy.clone() }));
+        for truthy in [serde_json::json!(true), serde_json::json!(1), serde_json::json!("ya"), serde_json::json!({})] {
+            let r = run("bangroup", serde_json::json!({ "isBanned": truthy.clone() }));
             assert_eq!(body(&r), already_banned(), "isBanned={truthy}");
             assert!(r.mutations().is_empty(), "isBanned={truthy}");
         }
@@ -213,7 +213,7 @@ mod tests {
 
     #[test]
     fn unbanning_a_banned_group_writes_false_and_quotes_the_command() {
-        let r = run("unbanchat", json!({ "name": "Grup Diskusi", "isBanned": true }));
+        let r = run("unbanchat", serde_json::json!({ "name": "Grup Diskusi", "isBanned": true }));
         let text = body(&r);
         assert_eq!(text, unbanned("Grup Diskusi", "628111"));
         for part in [
@@ -223,21 +223,21 @@ mod tests {
         ] {
             assert!(text.contains(part), "kurang {part:?} → {text}");
         }
-        assert_eq!(write(&r), &json!({"isBanned": false}));
+        assert_eq!(write(&r), &serde_json::json!({"isBanned": false}));
         assert_eq!(mentions(&r), ["628111@s.whatsapp.net"]);
         assert!(quoted(&r), "JS kirim dengan opsi quoted");
     }
 
     #[test]
     fn unbanning_a_group_that_is_not_banned_writes_nothing() {
-        let r = run("unbangroup", json!({}));
+        let r = run("unbangroup", serde_json::json!({}));
         assert_eq!(body(&r), already_open());
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn a_group_row_without_a_name_falls_back_to_unknown() {
-        for stored in [json!({}), json!({ "name": "" })] {
+        for stored in [serde_json::json!({}), serde_json::json!({ "name": "" })] {
             let r = run("banchat", stored);
             assert!(body(&r).contains("┃ 📛 ɢʀᴜᴘ: *Unknown*"), "{}", body(&r));
         }

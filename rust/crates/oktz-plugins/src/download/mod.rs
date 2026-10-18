@@ -19,3 +19,5 @@ pub mod threaddl;
 pub mod videy;
 pub mod ytmp3;
 pub mod ytmp4;
+
+// Ditambahkan scripts/pasang-modul.mjs.

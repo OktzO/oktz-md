@@ -9,7 +9,7 @@
 //! `checkAndNotifyLevelUp` yang butuh canvas + `sock.sendMedia`.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 /// `MAX_EXP` (`level.js:226`, `database.js:668`).
 pub(crate) const MAX_EXP: i64 = 9_000_000_000;
@@ -94,13 +94,13 @@ pub(crate) fn apply_exp(rpg: &mut Map<String, Value>, old_exp: i64, gain: i64) -
         let max_health = 100 + (new_level - 1) * 10;
         let max_mana = 100 + (new_level - 1) * 5;
         let max_stamina = 100 + (new_level - 1) * 5;
-        rpg.insert("level".into(), json!(new_level));
-        rpg.insert("maxHealth".into(), json!(max_health));
-        rpg.insert("maxMana".into(), json!(max_mana));
-        rpg.insert("maxStamina".into(), json!(max_stamina));
-        rpg.insert("health".into(), json!(max_health));
-        rpg.insert("mana".into(), json!(max_mana));
-        rpg.insert("stamina".into(), json!(max_stamina));
+        rpg.insert("level".into(), serde_json::json!(new_level));
+        rpg.insert("maxHealth".into(), serde_json::json!(max_health));
+        rpg.insert("maxMana".into(), serde_json::json!(max_mana));
+        rpg.insert("maxStamina".into(), serde_json::json!(max_stamina));
+        rpg.insert("health".into(), serde_json::json!(max_health));
+        rpg.insert("mana".into(), serde_json::json!(max_mana));
+        rpg.insert("stamina".into(), serde_json::json!(max_stamina));
     }
     new_exp
 }
@@ -178,8 +178,8 @@ pub fn heal(ctx: Ctx) -> Reply {
 
     let new_health = (health + 30).min(max_health);
     let new_stamina = (stamina + 50).min(max_stamina);
-    rpg.insert("health".into(), json!(new_health));
-    rpg.insert("stamina".into(), json!(new_stamina));
+    rpg.insert("health".into(), serde_json::json!(new_health));
+    rpg.insert("stamina".into(), serde_json::json!(new_stamina));
 
     Reply::text(format!(
         "Hooammm... seger banget abis tidur! 🥱🌞\n\n\
@@ -191,14 +191,13 @@ pub fn heal(ctx: Ctx) -> Reply {
     .with_reaction("🛌")
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "rpg": rpg }),
+        data: serde_json::json!({ "rpg": rpg }),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: Value) -> Reply {
         let ctx = Ctx {
@@ -256,18 +255,18 @@ mod tests {
     /// salah satu saja belum pulih tetap boleh istirahat.
     #[test]
     fn a_body_that_is_only_half_recovered_still_gets_a_nap() {
-        let r = run(json!({"rpg": {"health": 100, "maxHealth": 100,
+        let r = run(serde_json::json!({"rpg": {"health": 100, "maxHealth": 100,
                                    "stamina": 20, "maxStamina": 100}}));
         assert!(text_of(&r).starts_with("Hooammm"), "{}", text_of(&r));
-        assert_eq!(rpg_of(&r)["stamina"], json!(70));
+        assert_eq!(rpg_of(&r)["stamina"], serde_json::json!(70));
     }
 
     #[test]
     fn a_fully_recovered_body_is_refused_and_nothing_is_written() {
         for user in [
-            json!(null),
-            json!({}),
-            json!({"rpg": {"health": 100, "maxHealth": 100,
+            serde_json::json!(null),
+            serde_json::json!({}),
+            serde_json::json!({"rpg": {"health": 100, "maxHealth": 100,
                            "stamina": 100, "maxStamina": 100}}),
         ] {
             let r = run(user.clone());
@@ -279,16 +278,16 @@ mod tests {
     #[test]
     fn recovery_is_capped_at_the_stored_maximum() {
         // maxHealth 500 tapi health 480: +30 tidak boleh melewati 500.
-        let r = run(json!({"rpg": {"health": 480, "maxHealth": 500,
+        let r = run(serde_json::json!({"rpg": {"health": 480, "maxHealth": 500,
                                    "stamina": 90, "maxStamina": 100}}));
         let rpg = rpg_of(&r);
-        assert_eq!(rpg["health"], json!(500));
-        assert_eq!(rpg["stamina"], json!(100));
+        assert_eq!(rpg["health"], serde_json::json!(500));
+        assert_eq!(rpg["stamina"], serde_json::json!(100));
     }
 
     #[test]
     fn the_reply_names_the_old_and_the_new_value() {
-        let r = run(json!({"rpg": {"health": 40, "maxHealth": 100,
+        let r = run(serde_json::json!({"rpg": {"health": 40, "maxHealth": 100,
                                    "stamina": 30, "maxStamina": 100}}));
         let t = text_of(&r);
         assert!(t.contains("❤️ Health: 40 📈 *70*"), "{t}");
@@ -299,7 +298,7 @@ mod tests {
     fn zero_valued_stats_fall_back_to_one_hundred_because_of_or() {
         // `user.rpg.health || 100` — 0 bukan berarti habis, tapi belum pernah
         // diisi juga bukan; JS menimpanya dengan 100.
-        let r = run(json!({"rpg": {"health": 0, "stamina": 0}}));
+        let r = run(serde_json::json!({"rpg": {"health": 0, "stamina": 0}}));
         assert!(
             r.mutations().is_empty(),
             "0 -> 100 di kedua sisi, jadi tubuh dianggap seger"
@@ -308,11 +307,11 @@ mod tests {
 
     #[test]
     fn unrelated_rpg_fields_survive_the_write() {
-        let r = run(json!({"rpg": {"bank": 5000, "pet": {"type": "dog"},
+        let r = run(serde_json::json!({"rpg": {"bank": 5000, "pet": {"type": "dog"},
                                    "health": 10}}));
         let rpg = rpg_of(&r);
-        assert_eq!(rpg["bank"], json!(5000));
-        assert_eq!(rpg["pet"], json!({"type": "dog"}));
+        assert_eq!(rpg["bank"], serde_json::json!(5000));
+        assert_eq!(rpg["pet"], serde_json::json!({"type": "dog"}));
     }
 
     // -- helper bersama batch ini ------------------------------------------
@@ -320,19 +319,19 @@ mod tests {
     #[test]
     fn apply_exp_only_rewrites_stats_when_the_level_actually_moves() {
         let mut rpg = Map::new();
-        rpg.insert("stamina".into(), json!(40));
+        rpg.insert("stamina".into(), serde_json::json!(40));
         let same = apply_exp(&mut rpg, 0, 500);
         assert_eq!(same, 500);
         assert_eq!(rpg.len(), 1, "level belum naik -> stats tak boleh ditimpa");
-        assert_eq!(rpg["stamina"], json!(40));
+        assert_eq!(rpg["stamina"], serde_json::json!(40));
 
         let mut rpg = Map::new();
         let crossed = apply_exp(&mut rpg, 9_000, 2_000);
         assert_eq!(crossed, 11_000);
-        assert_eq!(rpg["level"], json!(2));
-        assert_eq!(rpg["maxHealth"], json!(110));
-        assert_eq!(rpg["health"], json!(110));
-        assert_eq!(rpg["maxStamina"], json!(105));
+        assert_eq!(rpg["level"], serde_json::json!(2));
+        assert_eq!(rpg["maxHealth"], serde_json::json!(110));
+        assert_eq!(rpg["health"], serde_json::json!(110));
+        assert_eq!(rpg["maxStamina"], serde_json::json!(105));
     }
 
     #[test]
@@ -357,7 +356,7 @@ mod tests {
                     jid: "628222@s.whatsapp.net".into(),
                     is_admin: false,
                     is_owner: false,
-                    data: json!({"koin": 42, "rpg": {"health": 55}}),
+                    data: serde_json::json!({"koin": 42, "rpg": {"health": 55}}),
                 }],
                 is_bot_admin: false,
             },
@@ -366,7 +365,7 @@ mod tests {
         assert_eq!(other_rpg_int(&ctx, "628222@s.whatsapp.net", "health"), 55);
         assert_eq!(
             other_user(&ctx, "628222@s.whatsapp.net").unwrap()["koin"],
-            json!(42)
+            serde_json::json!(42)
         );
         assert!(other_user(&ctx, "628999@s.whatsapp.net").is_none());
     }

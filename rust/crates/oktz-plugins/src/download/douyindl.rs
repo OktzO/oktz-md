@@ -205,7 +205,6 @@ pub fn douyindl(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug)]
@@ -235,7 +234,7 @@ mod tests {
             let text = self
                 .body
                 .clone()
-                .map_err(|()| HttpError { message: "offline".into() })?;
+                .map_err(|()| oktz_plugin_api::HttpError { message: "offline".into() })?;
             Ok(HttpResponse {
                 status: 200,
                 body: HttpBody::Bytes {
@@ -279,7 +278,7 @@ mod tests {
     }
 
     fn ok_body() -> Value {
-        json!({
+        serde_json::json!({
             "status": true,
             "result": {
                 "title": "Contoh Video",
@@ -390,7 +389,7 @@ mod tests {
 
     #[test]
     fn a_missing_platform_falls_back_to_douyin() {
-        let body = json!({
+        let body = serde_json::json!({
             "status": true,
             "result": { "media": [{ "type": "video", "url": "https://cdn.example/v.mp4" }] }
         });
@@ -403,11 +402,11 @@ mod tests {
         // `normalize` menolak respons tanpa URL video (`capabilities/douyin.js:106`)
         // supaya plugin tidak mengirim apa-apa lalu tetap memberi centang hijau.
         for body in [
-            json!({ "status": false, "msg": "gagal" }),
-            json!({ "status": true, "result": { "media": [] } }),
-            json!({ "status": true, "result": { "media": [{ "type": "video", "url": "ftp://x" }] } }),
-            json!({ "status": true, "result": {} }),
-            json!({}),
+            serde_json::json!({ "status": false, "msg": "gagal" }),
+            serde_json::json!({ "status": true, "result": { "media": [] } }),
+            serde_json::json!({ "status": true, "result": { "media": [{ "type": "video", "url": "ftp://x" }] } }),
+            serde_json::json!({ "status": true, "result": {} }),
+            serde_json::json!({}),
         ] {
             let r = run(Stub::body(body.clone()), "https://v.douyin.com/x");
             assert_eq!(text_of(&r), FAILED, "body {body}");

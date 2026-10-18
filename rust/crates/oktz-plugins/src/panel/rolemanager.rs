@@ -259,7 +259,7 @@ pub fn rolemanager(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn ctx_of(command: &str, settings: Value, sender: &str, is_owner: bool) -> Ctx {
         Ctx {
@@ -343,7 +343,7 @@ mod tests {
 
     #[test]
     fn an_empty_role_list_says_nothing_is_registered() {
-        let r = run("listceov2", json!({}), "628111@s.whatsapp.net", false);
+        let r = run("listceov2", serde_json::json!({}), "628111@s.whatsapp.net", false);
         assert!(
             body(&r).starts_with("📋 *ᴅᴀꜰᴛᴀʀ CEO V2*\n\n> Belum ada ceo terdaftar."),
             "{}",
@@ -356,7 +356,7 @@ mod tests {
     fn a_populated_role_list_is_numbered_with_the_total() {
         let r = run(
             "listceov2",
-            json!({"cpanelRoles": {"ceo_v2": ["628111", "628222"]}}),
+            serde_json::json!({"cpanelRoles": {"ceo_v2": ["628111", "628222"]}}),
             "628999@s.whatsapp.net",
             false,
         );
@@ -369,7 +369,7 @@ mod tests {
 
     #[test]
     fn an_owner_without_a_target_gets_the_usage_card() {
-        let r = run("addownerv1", json!({}), "628111@s.whatsapp.net", true);
+        let r = run("addownerv1", serde_json::json!({}), "628111@s.whatsapp.net", true);
         // Owner tetap butuh target: guard `!targetUser` di JS jalan untuk semua.
         let t = body(&r);
         assert!(t.starts_with("⚠️ *ᴄᴀʀᴀ ᴘᴀᴋᴀɪ*"), "{t}");
@@ -379,7 +379,7 @@ mod tests {
 
     #[test]
     fn a_plain_number_argument_is_accepted_as_the_target() {
-        let mut ctx = ctx_of("addownerv1", json!({}), "628111@s.whatsapp.net", true);
+        let mut ctx = ctx_of("addownerv1", serde_json::json!({}), "628111@s.whatsapp.net", true);
         ctx.text = "628555".into();
         let r = (oktz_plugin_api::find("addownerv1").unwrap().handler)(ctx);
         let t = body(&r);
@@ -399,7 +399,7 @@ mod tests {
 
     #[test]
     fn a_mention_is_the_target_when_nothing_is_quoted() {
-        let mut ctx = ctx_of("addceov2", json!({}), "628111@s.whatsapp.net", true);
+        let mut ctx = ctx_of("addceov2", serde_json::json!({}), "628111@s.whatsapp.net", true);
         ctx.mentioned = vec!["628777@s.whatsapp.net".into()];
         let r = (oktz_plugin_api::find("addceov2").unwrap().handler)(ctx);
         assert!(body(&r).contains("ɴᴏᴍᴏʀ: `628777`"), "{}", body(&r));
@@ -409,7 +409,7 @@ mod tests {
     fn a_manager_cannot_touch_owner_role() {
         let r = run(
             "addownerv1",
-            json!({"cpanelRoles": {"ceo_v1": ["628111"]}}),
+            serde_json::json!({"cpanelRoles": {"ceo_v1": ["628111"]}}),
             "628111@s.whatsapp.net",
             false,
         );
@@ -423,8 +423,8 @@ mod tests {
     #[test]
     fn a_reseller_and_a_stranger_both_have_no_managing_power() {
         for (settings, sender, expected) in [
-            (json!({"cpanelRoles": {"reseller_v1": ["628111"]}}), "628111@s.whatsapp.net", "*Reseller*"),
-            (json!({}), "628111@s.whatsapp.net", "*Tidak ada*"),
+            (serde_json::json!({"cpanelRoles": {"reseller_v1": ["628111"]}}), "628111@s.whatsapp.net", "*Reseller*"),
+            (serde_json::json!({}), "628111@s.whatsapp.net", "*Tidak ada*"),
         ] {
             let r = run("addceov1", settings, sender, false);
             let t = body(&r);
@@ -439,7 +439,7 @@ mod tests {
     // (lihat test sebelumnya) dan target `owner` (lihat `a_manager_cannot_touch_owner_role`).
     #[test]
     fn a_ceo_can_manage_any_non_owner_role_on_its_own_server() {
-        let settings = json!({"cpanelRoles": {"ceo_v1": ["628111"], "ceo_v2": ["628111"]}});
+        let settings = serde_json::json!({"cpanelRoles": {"ceo_v1": ["628111"], "ceo_v2": ["628111"]}});
         for cmd in ["addresellerv1", "addceov1"] {
             let mut ctx = ctx_of(cmd, settings.clone(), "628111@s.whatsapp.net", false);
             ctx.text = "628555".into();
@@ -453,7 +453,7 @@ mod tests {
     fn adding_a_number_that_already_has_a_role_on_that_server_is_refused() {
         let mut ctx = ctx_of(
             "addceov2",
-            json!({"cpanelRoles": {"owner_v2": ["628111"]}}),
+            serde_json::json!({"cpanelRoles": {"owner_v2": ["628111"]}}),
             "628999@s.whatsapp.net",
             true,
         );
@@ -467,7 +467,7 @@ mod tests {
 
     #[test]
     fn deleting_a_registered_number_removes_it_from_the_list() {
-        let settings = json!({"cpanelRoles": {"ceo_v2": ["628111", "628222"]}});
+        let settings = serde_json::json!({"cpanelRoles": {"ceo_v2": ["628111", "628222"]}});
         let mut ctx = ctx_of("delceov2", settings, "628111@s.whatsapp.net", true);
         ctx.text = "628111".into();
         let r = (oktz_plugin_api::find("delceov2").unwrap().handler)(ctx);
@@ -482,7 +482,7 @@ mod tests {
     fn deleting_an_unregistered_number_says_so() {
         let mut ctx = ctx_of(
             "delceov2",
-            json!({"cpanelRoles": {"ceo_v2": ["628111"]}}),
+            serde_json::json!({"cpanelRoles": {"ceo_v2": ["628111"]}}),
             "628111@s.whatsapp.net",
             true,
         );
@@ -497,7 +497,7 @@ mod tests {
         // CEO di V1 tidak berarti boleh menambah reseller di V2.
         let r = run(
             "addresellerv2",
-            json!({"cpanelRoles": {"ceo_v1": ["628111"]}}),
+            serde_json::json!({"cpanelRoles": {"ceo_v1": ["628111"]}}),
             "628111@s.whatsapp.net",
             false,
         );

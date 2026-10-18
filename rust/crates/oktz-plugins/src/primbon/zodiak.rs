@@ -95,7 +95,6 @@ pub fn zodiak(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse, NoHttp};
-    use serde_json::json;
     use std::sync::Arc;
 
     #[derive(Debug)]
@@ -168,7 +167,7 @@ mod tests {
             assert!(t.contains("• aries"), "{arg:?}: {t}");
             assert!(t.contains("• pisces"), "{arg:?}: {t}");
             // Tidak ada reaksi: JS `return` sebelum `m.react`.
-            assert!(matches!(r.without_mutations(), Reply::Text { .. }));
+            assert!(matches!(r.without_mutations().tanpa_reaksi(), Reply::Text { .. }));
         }
     }
 
@@ -182,7 +181,7 @@ mod tests {
     #[test]
     fn a_good_payload_renders_every_labelled_field() {
         let r = run_with(
-            Arc::new(Stub(json!({
+            Arc::new(Stub(serde_json::json!({
                 "status": true,
                 "data": {
                     "zodiak": "Ramalan hari ini gemilang",
@@ -209,7 +208,7 @@ mod tests {
 
     #[test]
     fn a_falsy_status_or_data_gives_the_failure_message() {
-        for body in [json!({ "data": {} }), json!({ "status": true }), json!({ "status": 0, "data": 1 })] {
+        for body in [serde_json::json!({ "data": {} }), serde_json::json!({ "status": true }), serde_json::json!({ "status": 0, "data": 1 })] {
             let r = run_with(Arc::new(Stub(body)), Some("aries"));
             assert_eq!(
                 reply_text(&r),

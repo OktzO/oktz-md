@@ -19,7 +19,7 @@
 use oktz_plugin_api::{Ctx, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::{error_template, js_truthy};
+use crate::common::{js_truthy};
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `config.APIkey.neoxr` (`config.js`) = `process.env.APIKEY_NEOXR || ""`.
@@ -67,7 +67,7 @@ pub(crate) fn not_found(text: &str) -> String {
 
 /// `te(prefix, command, pushName)` (`src/lib/error.js:3-9`).
 pub(crate) fn error_reply(prefix: &str, command: &str) -> String {
-    error_template(prefix, command)
+    crate::common::error_template(prefix, command)
 }
 
 /// `android1.js:65-74` — caption daftar aplikasi.
@@ -149,7 +149,6 @@ pub fn android1(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug)]
@@ -176,7 +175,7 @@ mod tests {
     impl HttpGet for Stub {
         fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
             self.seen.lock().unwrap().push(url.to_string());
-            let body = self.body.clone().ok_or_else(|| HttpError {
+            let body = self.body.clone().ok_or_else(|| oktz_plugin_api::HttpError {
                 message: "offline".into(),
             })?;
             Ok(HttpResponse {
@@ -286,7 +285,7 @@ mod tests {
         );
         assert!(body.ends_with("> Pilih angka untuk download langsung"), "{body}");
         assert_eq!(reaction_of(&r), Some("✅"));
-        assert!(matches!(r.without_mutations(), Reply::Interactive { .. }));
+        assert!(matches!(r.without_mutations().tanpa_reaksi(), Reply::Interactive { .. }));
 
         assert_eq!(
             http.seen.lock().unwrap()[0],
@@ -297,9 +296,9 @@ mod tests {
     #[test]
     fn only_ten_apps_are_listed_and_counted() {
         let apps: Vec<Value> = (0..14)
-            .map(|i| json!({"name": format!("App {i}"), "developer": "D", "rating": 4}))
+            .map(|i| serde_json::json!({"name": format!("App {i}"), "developer": "D", "rating": 4}))
             .collect();
-        let body = format!("{{\"status\": true, \"data\": {}}}", json!(apps));
+        let body = format!("{{\"status\": true, \"data\": {}}}", serde_json::json!(apps));
         let out = body_of(&run(Stub::new(&body), "app"));
         assert!(out.contains("*10* aplikasi ditemukan"), "{out}");
         assert!(out.contains("*10.* App 9"), "{out}");
@@ -363,7 +362,7 @@ mod tests {
 
     #[test]
     fn the_list_helper_never_panics_on_strange_values() {
-        let apps = [json!("bukan objek"), json!(null), json!({"name": 7})];
+        let apps = [serde_json::json!("bukan objek"), serde_json::json!(null), serde_json::json!({"name": 7})];
         let out = format_list(&apps, "🚀 \u{0} utf8 ñ");
         assert!(out.contains("*3* aplikasi ditemukan"), "{out}");
     }

@@ -27,3 +27,5 @@ pub mod tod;
 pub mod top;
 pub mod truth;
 pub mod waifualbum;
+
+// Ditambahkan scripts/pasang-modul.mjs.

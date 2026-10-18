@@ -82,7 +82,6 @@ pub fn addantilink(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use serde_json::Value;
-    use serde_json::json;
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -138,7 +137,7 @@ mod tests {
 
     #[test]
     fn an_empty_link_shows_help_and_writes_nothing() {
-        for g in [json!(null), json!({}), json!({"antilinkList": ["a.com"]})] {
+        for g in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"antilinkList": ["a.com"]})] {
             let r = run(g.clone(), "");
             assert!(text_of(&r).starts_with("🔗 *ᴀᴅᴅ ᴀɴᴛɪʟɪɴᴋ*"), "input {g}");
             assert!(r.mutations().is_empty());
@@ -147,24 +146,24 @@ mod tests {
 
     #[test]
     fn a_new_link_is_appended_and_the_count_reported_matches_the_write() {
-        let r = run(json!({"antilinkList": ["a.com"]}), "tiktok.com");
+        let r = run(serde_json::json!({"antilinkList": ["a.com"]}), "tiktok.com");
         let list = list_write(&r);
         assert_eq!(list.len(), 2);
-        assert_eq!(list[0], json!("a.com"), "entri lama harus utuh");
-        assert_eq!(list[1], json!("tiktok.com"));
+        assert_eq!(list[0], serde_json::json!("a.com"), "entri lama harus utuh");
+        assert_eq!(list[1], serde_json::json!("tiktok.com"));
         assert!(text_of(&r).contains("> Total: *2* link"), "{}", text_of(&r));
     }
 
     #[test]
     fn an_absent_list_starts_from_empty_and_reports_one() {
-        let r = run(json!({}), "tiktok.com");
+        let r = run(serde_json::json!({}), "tiktok.com");
         assert_eq!(list_write(&r).len(), 1);
         assert!(text_of(&r).contains("> Total: *1* link"));
     }
 
     #[test]
     fn an_existing_link_is_refused_and_nothing_is_written() {
-        let r = run(json!({"antilinkList": ["tiktok.com"]}), "tiktok.com");
+        let r = run(serde_json::json!({"antilinkList": ["tiktok.com"]}), "tiktok.com");
         assert_eq!(text_of(&r), already_exists("tiktok.com"));
         assert!(r.mutations().is_empty(), "duplikat tidak boleh ditulis");
     }
@@ -173,13 +172,13 @@ mod tests {
     fn the_link_is_lowercased_before_the_duplicate_check() {
         // `m.text?.toLowerCase()` terjadi SEBELUM `includes`, jadi "TikTok.com"
         // dianggap duplikat dari "tiktok.com".
-        let r = run(json!({"antilinkList": ["tiktok.com"]}), "TikTok.com");
+        let r = run(serde_json::json!({"antilinkList": ["tiktok.com"]}), "TikTok.com");
         assert!(text_of(&r).starts_with("⚠️ Link"));
         assert!(r.mutations().is_empty());
 
         // Dan yang baru disimpan dalam huruf kecil.
-        let r = run(json!({}), "TikTok.COM");
-        assert_eq!(list_write(&r)[0], json!("tiktok.com"));
+        let r = run(serde_json::json!({}), "TikTok.COM");
+        assert_eq!(list_write(&r)[0], serde_json::json!("tiktok.com"));
     }
 
     #[test]
@@ -187,21 +186,21 @@ mod tests {
         // JS `m.text?.toLowerCase()` tanpa `.trim()` — spasi ikut tersimpan.
         // Menambah trim di sini akan membuatnya cocok dengan `delantilink`,
         // padahal di JS tidak.
-        let r = run(json!({}), "  spaced.com  ");
-        assert_eq!(list_write(&r)[0], json!("  spaced.com  "));
+        let r = run(serde_json::json!({}), "  spaced.com  ");
+        assert_eq!(list_write(&r)[0], serde_json::json!("  spaced.com  "));
     }
 
     #[test]
     fn a_non_string_entry_does_not_match_and_is_preserved_on_write() {
-        let g = json!({"antilinkList": [1, null, "x.com"]});
+        let g = serde_json::json!({"antilinkList": [1, null, "x.com"]});
         let r = run(g.clone(), "x.com");
         assert!(text_of(&r).starts_with("⚠️"), "string ke-3 tetap duplikat");
 
-        let r2 = run(json!({"antilinkList": [1, null]}), "x.com");
+        let r2 = run(serde_json::json!({"antilinkList": [1, null]}), "x.com");
         let list = list_write(&r2);
         assert_eq!(list.len(), 3);
-        assert_eq!(list[0], json!(1), "entri non-string harus ikut tersimpan");
-        assert_eq!(list[1], json!(null));
+        assert_eq!(list[0], serde_json::json!(1), "entri non-string harus ikut tersimpan");
+        assert_eq!(list[1], serde_json::json!(null));
     }
 
     #[test]
@@ -209,14 +208,14 @@ mod tests {
         // `groupData.antilinkList || []` — objek/string bukan array, lalu
         // `.includes` di JS akan berperilaku aneh. Yang aman dan konsisten dengan
         // store: perlakukan sebagai kosong.
-        let r = run(json!({"antilinkList": "bukan-array"}), "x.com");
+        let r = run(serde_json::json!({"antilinkList": "bukan-array"}), "x.com");
         assert_eq!(list_write(&r).len(), 1);
         assert!(text_of(&r).contains("Total: *1*"));
     }
 
     #[test]
     fn the_added_reply_points_at_listantilink_with_the_live_prefix() {
-        let r = run(json!({}), "x.com");
+        let r = run(serde_json::json!({}), "x.com");
         assert!(text_of(&r).contains("`.listantilink`"));
     }
 }

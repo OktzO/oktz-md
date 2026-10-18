@@ -5,7 +5,7 @@
 //! ber-emoji bisa beda satu poin. Limit 2..=15 dipakai apa adanya.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::rpg::jualan::{inventory_map, roll_incl, rpg_map};
 
@@ -62,19 +62,19 @@ pub(crate) fn level_up(pet: &mut Map<String, Value>, base: (i64, i64, i64), shou
         return String::new();
     }
     let level = num_or(pet, "level", 1) + 1;
-    pet.insert("level".into(), json!(level));
-    pet.insert("exp".into(), json!(num(pet, "exp") - needed));
+    pet.insert("level".into(), serde_json::json!(level));
+    pet.insert("exp".into(), serde_json::json!(num(pet, "exp") - needed));
     if !pet.get("stats").is_some_and(Value::is_object) {
         let mut stats = serde_json::Map::new();
-        stats.insert("attack".into(), json!(base.0));
-        stats.insert("defense".into(), json!(base.1));
-        stats.insert("luck".into(), json!(base.2));
+        stats.insert("attack".into(), serde_json::json!(base.0));
+        stats.insert("defense".into(), serde_json::json!(base.1));
+        stats.insert("luck".into(), serde_json::json!(base.2));
         pet.insert("stats".into(), Value::Object(stats));
     }
     let s = pet.get_mut("stats").and_then(Value::as_object_mut).unwrap();
     for (k, delta) in [("attack", 2), ("defense", 1), ("luck", 1)] {
         let v = s.get(k).and_then(Value::as_i64).unwrap_or(0) + delta;
-        s.insert(k.to_string(), json!(v));
+        s.insert(k.to_string(), serde_json::json!(v));
     }
     format!(
         "\n🎉 *{shout} Si {} LEVEL UP jadi Level {level}!* 🎉",
@@ -170,10 +170,10 @@ pub fn pet(ctx: Ctx) -> Reply {
             if left <= 0 {
                 inv.remove(key.as_str());
             } else {
-                inv.insert(key.clone(), json!(left));
+                inv.insert(key.clone(), serde_json::json!(left));
             }
-            pet.insert("hunger".into(), json!((num(&pet, "hunger") + hunger).min(100)));
-            pet.insert("exp".into(), json!(num(&pet, "exp") + food_exp));
+            pet.insert("hunger".into(), serde_json::json!((num(&pet, "hunger") + hunger).min(100)));
+            pet.insert("exp".into(), serde_json::json!(num(&pet, "exp") + food_exp));
             let msg = level_up(&mut pet, base, "WOHOO!");
             let full = num(&pet, "hunger");
 
@@ -186,7 +186,7 @@ pub fn pet(ctx: Ctx) -> Reply {
             ))
             .with_mutation(Mutation::SetUser {
                 jid: ctx.sender.clone(),
-                data: json!({ "rpg": rpg, "inventory": inv }),
+                data: serde_json::json!({ "rpg": rpg, "inventory": inv }),
             });
         }
         Some("train") => {
@@ -195,9 +195,9 @@ pub fn pet(ctx: Ctx) -> Reply {
                     "Tega bener nyuruh latihan pas lagi kelaparan! 😭\nSi {name} perutnya keroncongan tuh, kasih makan dulu!"
                 ));
             }
-            pet.insert("hunger".into(), json!((num(&pet, "hunger") - 15).max(0)));
+            pet.insert("hunger".into(), serde_json::json!((num(&pet, "hunger") - 15).max(0)));
             let gained = roll_incl(20, 39);
-            pet.insert("exp".into(), json!(num(&pet, "exp") + gained));
+            pet.insert("exp".into(), serde_json::json!(num(&pet, "exp") + gained));
             let msg = level_up(&mut pet, base, "MANTAP!");
             rpg.insert("pet".into(), Value::Object(pet));
 
@@ -209,7 +209,7 @@ pub fn pet(ctx: Ctx) -> Reply {
             ))
             .with_mutation(Mutation::SetUser {
                 jid: ctx.sender.clone(),
-                data: json!({ "rpg": rpg, "inventory": inv }),
+                data: serde_json::json!({ "rpg": rpg, "inventory": inv }),
             });
         }
         Some("rename") => {
@@ -221,14 +221,14 @@ pub fn pet(ctx: Ctx) -> Reply {
                 );
             }
             let old = name.clone();
-            pet.insert("name".into(), json!(new_name));
+            pet.insert("name".into(), serde_json::json!(new_name));
             rpg.insert("pet".into(), Value::Object(pet));
             return Reply::text(format!(
                 "Sipp! Akte kelahiran sudah diubah.\nSekarang panggil dia *{new_name}*! (Sebelumnya: {old}) ✨"
             ))
             .with_mutation(Mutation::SetUser {
                 jid: ctx.sender.clone(),
-                data: json!({ "rpg": rpg }),
+                data: serde_json::json!({ "rpg": rpg }),
             });
         }
         Some("evolve") => {
@@ -246,13 +246,13 @@ pub fn pet(ctx: Ctx) -> Reply {
             let Some(&(_, evolved_name, a, d, l, _)) = find_pet_type(next) else {
                 return Reply::text(format!("Evolusi ke *{next}* belum ada di databasenya."));
             };
-            pet.insert("type".into(), json!(next));
+            pet.insert("type".into(), serde_json::json!(next));
             pet.insert(
                 "stats".into(),
-                json!({ "attack": a, "defense": d, "luck": l }),
+                serde_json::json!({ "attack": a, "defense": d, "luck": l }),
             );
-            pet.insert("level".into(), json!(1));
-            pet.insert("exp".into(), json!(0));
+            pet.insert("level".into(), serde_json::json!(1));
+            pet.insert("exp".into(), serde_json::json!(0));
             rpg.insert("pet".into(), Value::Object(pet));
             return Reply::text(format!(
                 "CLLINGGG!! ✨🌟\n\n\
@@ -263,7 +263,7 @@ pub fn pet(ctx: Ctx) -> Reply {
             ))
             .with_mutation(Mutation::SetUser {
                 jid: ctx.sender.clone(),
-                data: json!({ "rpg": rpg }),
+                data: serde_json::json!({ "rpg": rpg }),
             });
         }
         _ => {}
@@ -351,7 +351,7 @@ mod tests {
     }
 
     fn with_pet(extra: Value) -> Value {
-        let mut pet = json!({
+        let mut pet = serde_json::json!({
             "type": "cat", "name": "Kucing", "level": 1, "exp": 0,
             "hunger": 50, "stats": Value::Null,
         });
@@ -360,7 +360,7 @@ mod tests {
                 p.insert(k.clone(), v.clone());
             }
         }
-        json!({ "rpg": { "pet": pet } })
+        serde_json::json!({ "rpg": { "pet": pet } })
     }
 
     #[test]
@@ -387,7 +387,7 @@ mod tests {
 
     #[test]
     fn without_a_pet_the_plugin_points_at_the_three_ways_to_get_one() {
-        for user in [json!({}), json!({"rpg": {}}), json!({"rpg": {"pet": null}})] {
+        for user in [serde_json::json!({}), serde_json::json!({"rpg": {}}), serde_json::json!({"rpg": {"pet": null}})] {
             let r = run(&["status"], user.clone());
             let t = text_of(&r);
             assert!(t.starts_with("Kamu belum punya hewan peliharaan kak!"), "{user}: {t}");
@@ -398,7 +398,7 @@ mod tests {
 
     #[test]
     fn the_id_card_backfills_the_stats_from_the_species_table() {
-        let r = run(&["status"], with_pet(json!({})));
+        let r = run(&["status"], with_pet(serde_json::json!({})));
         let t = text_of(&r);
         assert!(t.starts_with("🐾 *Buku Identitas Peliharaan*"), "{t}");
         assert!(t.contains("• Spesies: *🐱 Kucing*"), "{t}");
@@ -413,7 +413,7 @@ mod tests {
     fn a_final_form_hides_the_evolve_hint() {
         let t = text(run(
             &["status"],
-            with_pet(json!({"type": "dragon"})),
+            with_pet(serde_json::json!({"type": "dragon"})),
         ));
         assert!(t.contains("• Spesies: *🐉 Naga*"), "{t}");
         assert!(!t.contains("pet evolve"), "naga sudah final: {t}");
@@ -423,14 +423,14 @@ mod tests {
     fn an_unknown_action_prints_the_card_instead_of_falling_silent() {
         // `handler` di JS mengembalikan `undefined` untuk aksi tak dikenal yang
         // lolos daftar aksi — sama seperti tanpa-balas. Di sini tetap kartu.
-        let r = run(&["terbang"], with_pet(json!({})));
+        let r = run(&["terbang"], with_pet(serde_json::json!({})));
         assert!(text_of(&r).starts_with("🐾 *Buku Identitas Peliharaan*"));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn feeding_without_a_food_name_lists_the_larder() {
-        let r = run(&["feed"], with_pet(json!({})));
+        let r = run(&["feed"], with_pet(serde_json::json!({})));
         let t = text_of(&r);
         assert!(t.starts_with("Si Kucing lagi ngeliatin kamu sambil jilat bibir..."), "{t}");
         for (key, name, hunger, exp) in FOODS {
@@ -445,19 +445,19 @@ mod tests {
     fn feeding_needs_the_food_in_the_bag_and_a_hungry_pet() {
         let r = run(
             &["feed", "meat"],
-            json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "level": 1, "exp": 0, "hunger": 50}}, "inventory": {}}),
+            serde_json::json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "level": 1, "exp": 0, "hunger": 50}}, "inventory": {}}),
         );
         assert!(text_of(&r).contains("Kamu nggak punya *🍖 Daging* di tasmu!"), "{:?}", text_of(&r));
 
         let r = run(
             &["feed", "meat"],
-            json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "level": 1, "exp": 0, "hunger": 100}}, "inventory": {"meat": 3}}),
+            serde_json::json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "level": 1, "exp": 0, "hunger": 100}}, "inventory": {"meat": 3}}),
         );
         assert!(text_of(&r).contains("Perut si Kucing udah kepenuhan kak!"), "{:?}", text_of(&r));
 
         let r = run(
             &["feed", "batu"],
-            json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "hunger": 10}}, "inventory": {"batu": 1}}),
+            serde_json::json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "hunger": 10}}, "inventory": {"batu": 1}}),
         );
         assert!(text_of(&r).contains("jangan kasih makanan aneh-aneh"));
     }
@@ -466,12 +466,12 @@ mod tests {
     fn feeding_consumes_one_stack_and_never_leaves_a_zero_behind() {
         let r = run(
             &["feed", "bread"],
-            json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "level": 1, "exp": 0, "hunger": 10}}, "inventory": {"bread": 1, "fish": 4}}),
+            serde_json::json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "level": 1, "exp": 0, "hunger": 10}}, "inventory": {"bread": 1, "fish": 4}}),
         );
         let d = written(&r);
-        assert_eq!(d["inventory"], json!({"fish": 4}), "1 - 1 = 0 -> dihapus");
-        assert_eq!(d["rpg"]["pet"]["hunger"], json!(20), "10 + 10");
-        assert_eq!(d["rpg"]["pet"]["exp"], json!(5));
+        assert_eq!(d["inventory"], serde_json::json!({"fish": 4}), "1 - 1 = 0 -> dihapus");
+        assert_eq!(d["rpg"]["pet"]["hunger"], serde_json::json!(20), "10 + 10");
+        assert_eq!(d["rpg"]["pet"]["exp"], serde_json::json!(5));
         assert!(text_of(&r).contains("🍖 Perutnya keisi *+10* (20/100)"));
     }
 
@@ -479,10 +479,10 @@ mod tests {
     fn crossing_a_hundred_food_units_still_caps_the_pet_at_one_hundred() {
         let r = run(
             &["feed", "premium_food"],
-            json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "level": 1, "exp": 0, "hunger": 90}}, "inventory": {"premium_food": 9}}),
+            serde_json::json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "level": 1, "exp": 0, "hunger": 90}}, "inventory": {"premium_food": 9}}),
         );
         let d = written(&r);
-        assert_eq!(d["rpg"]["pet"]["hunger"], json!(100), "90 + 50 di-clamp");
+        assert_eq!(d["rpg"]["pet"]["hunger"], serde_json::json!(100), "90 + 50 di-clamp");
         assert!(text_of(&r).contains("(100/100)"));
     }
 
@@ -491,10 +491,10 @@ mod tests {
         for _ in 0..300 {
             let r = run(
                 &["train"],
-                json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "level": 1, "exp": 0, "hunger": 20}}}),
+                serde_json::json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "level": 1, "exp": 0, "hunger": 20}}}),
             );
             let p = &written(&r)["rpg"]["pet"];
-            assert_eq!(p["hunger"], json!(5), "20 - 15");
+            assert_eq!(p["hunger"], serde_json::json!(5), "20 - 15");
             let exp = p["exp"].as_i64().unwrap();
             assert!((20..=39).contains(&exp), "exp {exp}");
             assert!(text_of(&r).contains(&format!("✨ EXP Bertambah: *+{exp}*")));
@@ -505,7 +505,7 @@ mod tests {
     fn a_starving_pet_may_not_be_trained() {
         let r = run(
             &["train"],
-            json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "hunger": 19}}}),
+            serde_json::json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "hunger": 19}}}),
         );
         assert!(text_of(&r).contains("Tega bener nyuruh latihan pas lagi kelaparan!"));
         assert!(r.mutations().is_empty());
@@ -516,12 +516,12 @@ mod tests {
         // 95 exp + 10 dari ikan = 105 >= (1 * 100).
         let r = run(
             &["feed", "fish"],
-            json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "level": 1, "exp": 95, "hunger": 0, "stats": null}}, "inventory": {"fish": 1}}),
+            serde_json::json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "level": 1, "exp": 95, "hunger": 0, "stats": null}}, "inventory": {"fish": 1}}),
         );
         let p = &written(&r)["rpg"]["pet"];
-        assert_eq!(p["level"], json!(2));
-        assert_eq!(p["exp"], json!(5), "105 - 100");
-        assert_eq!(p["stats"], json!({"attack": 7, "defense": 4, "luck": 6}), "5+2 / 3+1 / 5+1");
+        assert_eq!(p["level"], serde_json::json!(2));
+        assert_eq!(p["exp"], serde_json::json!(5), "105 - 100");
+        assert_eq!(p["stats"], serde_json::json!({"attack": 7, "defense": 4, "luck": 6}), "5+2 / 3+1 / 5+1");
         assert!(text_of(&r).contains("Si Kucing LEVEL UP jadi Level 2!"));
     }
 
@@ -529,11 +529,11 @@ mod tests {
     fn an_existing_stats_block_is_bumped_not_reseeded() {
         let r = run(
             &["train"],
-            json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "level": 1, "exp": 95, "hunger": 20, "stats": {"attack": 50, "defense": 40, "luck": 30}}}}),
+            serde_json::json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "level": 1, "exp": 95, "hunger": 20, "stats": {"attack": 50, "defense": 40, "luck": 30}}}}),
         );
         assert_eq!(
             written(&r)["rpg"]["pet"]["stats"],
-            json!({"attack": 52, "defense": 41, "luck": 31})
+            serde_json::json!({"attack": 52, "defense": 41, "luck": 31})
         );
     }
 
@@ -541,19 +541,19 @@ mod tests {
     fn renaming_joins_the_remaining_arguments_and_checks_the_length() {
         let r = run(
             &["rename", "Oyen", "Merah"],
-            json!({"rpg": {"pet": {"type": "cat", "name": "Kucing"}}}),
+            serde_json::json!({"rpg": {"pet": {"type": "cat", "name": "Kucing"}}}),
         );
         let t = text_of(&r);
         assert!(t.contains("Sekarang panggil dia *Oyen Merah*!"), "{t}");
         assert!(t.contains("(Sebelumnya: Kucing)"), "{t}");
-        assert_eq!(written(&r)["rpg"]["pet"]["name"], json!("Oyen Merah"));
+        assert_eq!(written(&r)["rpg"]["pet"]["name"], serde_json::json!("Oyen Merah"));
 
         for args in [
             vec!["rename", "a"],
             vec!["rename"],
             vec!["rename", "abcdefghijklmnopq"],
         ] {
-            let r = run(&args, json!({"rpg": {"pet": {"type": "cat", "name": "Kucing"}}}));
+            let r = run(&args, serde_json::json!({"rpg": {"pet": {"type": "cat", "name": "Kucing"}}}));
             assert!(text_of(&r).contains("2-15 karakter"), "{args:?}");
             assert!(r.mutations().is_empty(), "{args:?}");
         }
@@ -563,25 +563,25 @@ mod tests {
     fn evolving_needs_level_ten_and_resets_the_progress() {
         let r = run(
             &["evolve"],
-            json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "level": 9, "exp": 400, "hunger": 50}}}),
+            serde_json::json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "level": 9, "exp": 400, "hunger": 50}}}),
         );
         assert!(text_of(&r).contains("Minimal *Level 10*"), "{:?}", text_of(&r));
 
         let r = run(
             &["evolve"],
-            json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "level": 10, "exp": 400, "hunger": 50, "stats": {"attack": 9, "defense": 9, "luck": 9}}}}),
+            serde_json::json!({"rpg": {"pet": {"type": "cat", "name": "Kucing", "level": 10, "exp": 400, "hunger": 50, "stats": {"attack": 9, "defense": 9, "luck": 9}}}}),
         );
         let p = &written(&r)["rpg"]["pet"];
-        assert_eq!(p["type"], json!("lion"));
-        assert_eq!(p["stats"], json!({"attack": 15, "defense": 10, "luck": 8}), "di-reset ke base singa");
-        assert_eq!(p["level"], json!(1));
-        assert_eq!(p["exp"], json!(0));
+        assert_eq!(p["type"], serde_json::json!("lion"));
+        assert_eq!(p["stats"], serde_json::json!({"attack": 15, "defense": 10, "luck": 8}), "di-reset ke base singa");
+        assert_eq!(p["level"], serde_json::json!(1));
+        assert_eq!(p["exp"], serde_json::json!(0));
         assert!(text_of(&r).contains("jadi *🦁 Singa* yang gagah!"));
     }
 
     #[test]
     fn an_unknown_species_is_reported_instead_of_crashing_the_handler() {
-        let r = run(&["status"], json!({"rpg": {"pet": {"type": "unicorn", "name": "Mane"}}}));
+        let r = run(&["status"], serde_json::json!({"rpg": {"pet": {"type": "unicorn", "name": "Mane"}}}));
         assert!(text_of(&r).contains("tidak dikenal databasenya"), "{:?}", text_of(&r));
         assert!(r.mutations().is_empty());
     }

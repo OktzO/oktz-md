@@ -2253,6 +2253,8 @@ mod tests_batch_g {
             "setname", "setpp", "setrules", "similarity", "sistemenergi",
             "stop", "stopbcpc", "templateplugin", "uinstalltema", "unban",
             "unblock", "welcomeall",
+        
+            "autoclear", "autoreply", "deploy", "ganti-games.jpg", "ganti-promote.jpg", "ganti-winner.jpg", "schedule",
         ];
         for m in oktz_plugin_api::all_plugins().iter().map(|p| &p.meta) {
             if m.is_owner && m.is_enabled {
@@ -4015,7 +4017,6 @@ mod tests_roster_state {
     use crate::common::tests_batch_s::ALREADY_PORTED;
     use oktz_plugin_api::registry::{GroupRoster, Participant};
     use oktz_plugin_api::find;
-    use serde_json::json;
 
     /// Plugin yang ditambahkan batch ini. Satu nama = satu file, jadi daftar
     /// ini sekaligus penanda apa yang harus ada di disk.
@@ -4111,11 +4112,12 @@ mod tests_roster_state {
     /// milik `cek/cekjodoh.js`; `download/capcutdl.js` alias `cc` milik
     /// array `name` di `group/clearchat.js`; dan `canvas/fakedana.js`,
     /// `fakegopay.js`, `fakeovo.js`, `nsfw/paptt.js` menaruh nama sendiri di
-    /// dalam daftar alias-nya.
-    pub(crate) const JS_COLLISIONS: [&str; 24] = [
+    /// dalam daftar alias-nya. `search/movieku.js` memasang `film` sebagai
+    /// alias, padahal itu nama `search/film.js`.
+    pub(crate) const JS_COLLISIONS: [&str; 25] = [
         "asmaulhusna", "beli", "berburu", "block", "bucin", "cantik", "cc", "cekjodoh",
-        "cupu", "exp", "fakedana", "fakegopay", "fakeovo", "ganteng", "heapsnap", "kaya",
-        "mimpi", "ngemis", "noob", "paptt", "pintar", "pro", "unblock", "wibu",
+        "cupu", "exp", "fakedana", "fakegopay", "fakeovo", "film", "ganteng", "heapsnap",
+        "kaya", "mimpi", "ngemis", "noob", "paptt", "pintar", "pro", "unblock", "wibu",
     ];
 
     #[test]
@@ -4231,7 +4233,7 @@ mod tests_roster_state {
     #[test]
     fn int_field_reads_numbers_and_zeroes_everything_else() {
         let ctx = Ctx {
-            user_data: json!({"koin": 12, "exp": null, "s": "5", "f": 1.5}),
+            user_data: serde_json::json!({"koin": 12, "exp": null, "s": "5", "f": 1.5}),
             ..Default::default()
         };
         assert_eq!(int_field(&ctx, "koin"), 12);
@@ -4245,16 +4247,16 @@ mod tests_roster_state {
     #[test]
     fn joined_strings_keeps_strings_and_jsonifies_everything_else() {
         assert_eq!(
-            joined_strings(&[json!("a"), json!("b")]),
+            joined_strings(&[serde_json::json!("a"), serde_json::json!("b")]),
             vec!["a".to_string(), "b".to_string()]
         );
         assert_eq!(joined_strings(&[]), Vec::<String>::new());
-        assert_eq!(joined_strings(&[json!(7)]), vec!["7".to_string()]);
+        assert_eq!(joined_strings(&[serde_json::json!(7)]), vec!["7".to_string()]);
     }
 
     #[test]
     fn non_empty_map_entries_drops_empty_arrays_and_keeps_order() {
-        let v = json!({
+        let v = serde_json::json!({
             "b@s.whatsapp.net": [1],
             "a@s.whatsapp.net": [],
             "c@s.whatsapp.net": [1, 2]
@@ -4264,8 +4266,8 @@ mod tests_roster_state {
             out.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>(),
             ["b@s.whatsapp.net", "c@s.whatsapp.net"]
         );
-        assert_eq!(non_empty_map_entries(Some(&json!({}))).len(), 0);
-        assert_eq!(non_empty_map_entries(Some(&json!(null))).len(), 0);
+        assert_eq!(non_empty_map_entries(Some(&serde_json::json!({}))).len(), 0);
+        assert_eq!(non_empty_map_entries(Some(&serde_json::json!(null))).len(), 0);
         assert_eq!(non_empty_map_entries(None).len(), 0);
     }
 
@@ -4345,8 +4347,8 @@ mod tests_roster_state {
                     is_group: true,
                     text: "25-12".into(),
                     args: vec!["25-12".into()],
-                    user_data: json!({"koin": 10, "exp": 20_000, "energi": 3, "birthday": "25-12"}),
-                    group_data: json!({"intro": "hi @user", "groupRules": "r", "chatStats": {"628111@s.whatsapp.net": {"count": 1}}}),
+                    user_data: serde_json::json!({"koin": 10, "exp": 20_000, "energi": 3, "birthday": "25-12"}),
+                    group_data: serde_json::json!({"intro": "hi @user", "groupRules": "r", "chatStats": {"628111@s.whatsapp.net": {"count": 1}}}),
                     roster: roster(vec![p_participant()]),
                     ..Default::default()
                 },

@@ -6,7 +6,6 @@
 //! sama: `koin` dan `rpg.bank`.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::json;
 
 use crate::rpg::heal::{or_default, rpg_int, rpg_map};
 use crate::tools::kalkulatormbg::thousands_id;
@@ -98,7 +97,7 @@ pub fn bank(ctx: Ctx) -> Reply {
             bank_reply("deposit", amount, current_balance - amount, new_bank).with_mutation(
                 Mutation::SetUser {
                     jid: ctx.sender.clone(),
-                    data: json!({ "koin": current_balance - amount, "rpg": { "bank": new_bank } }),
+                    data: serde_json::json!({ "koin": current_balance - amount, "rpg": { "bank": new_bank } }),
                 },
             )
         }
@@ -119,7 +118,7 @@ pub fn bank(ctx: Ctx) -> Reply {
             bank_reply("withdraw", amount, new_balance, current_bank - amount).with_mutation(
                 Mutation::SetUser {
                     jid: ctx.sender.clone(),
-                    data: json!({ "koin": new_balance, "rpg": { "bank": current_bank - amount } }),
+                    data: serde_json::json!({ "koin": new_balance, "rpg": { "bank": current_bank - amount } }),
                 },
             )
         }
@@ -131,7 +130,7 @@ pub fn bank(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(user: Value, args: &[&str]) -> Reply {
         let ctx = Ctx {
@@ -189,7 +188,7 @@ mod tests {
     #[test]
     fn an_unknown_action_falls_through_to_the_service_menu() {
         for args in [vec![], vec!["transfer"], vec!["tarik!"]] {
-            let r = run(json!({ "koin": 1_000, "rpg": { "bank": 200 } }), &args);
+            let r = run(serde_json::json!({ "koin": 1_000, "rpg": { "bank": 200 } }), &args);
             let t = text_of(&r);
             assert!(t.starts_with("Halo kak! Selamat datang di Bank RPG!"), "args {args:?}: {t}");
             assert!(t.contains("💰 Uang Dompet: *Rp 1.000*"), "{t}");
@@ -200,7 +199,7 @@ mod tests {
 
     #[test]
     fn a_missing_user_row_reads_as_zero_everywhere() {
-        for user in [json!(null), json!({}), json!({ "rpg": {} })] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({ "rpg": {} })] {
             let t_reply = run(user.clone(), &[]);
             let t = text_of(&t_reply);
             assert!(t.contains("💰 Uang Dompet: *Rp 0*"), "input {user}");
@@ -210,10 +209,10 @@ mod tests {
 
     #[test]
     fn a_deposit_moves_money_from_the_purse_into_the_bank() {
-        let r = run(json!({ "koin": 30_000, "rpg": { "bank": 5_000 } }), &["deposit", "10000"]);
+        let r = run(serde_json::json!({ "koin": 30_000, "rpg": { "bank": 5_000 } }), &["deposit", "10000"]);
         let data = write_of(&r);
-        assert_eq!(data["koin"], json!(20_000));
-        assert_eq!(data["rpg"]["bank"], json!(15_000));
+        assert_eq!(data["koin"], serde_json::json!(20_000));
+        assert_eq!(data["rpg"]["bank"], serde_json::json!(15_000));
         let t = text_of(&r);
         assert!(t.contains("✅ Deposit berhasil: *Rp 10.000*"), "{t}");
         assert!(t.contains("💳 Saldo Tabungan: *Rp 15.000*"), "{t}");
@@ -221,10 +220,10 @@ mod tests {
 
     #[test]
     fn a_withdrawal_is_the_exact_mirror() {
-        let r = run(json!({ "koin": 30_000, "rpg": { "bank": 5_000 } }), &["withdraw", "2000"]);
+        let r = run(serde_json::json!({ "koin": 30_000, "rpg": { "bank": 5_000 } }), &["withdraw", "2000"]);
         let data = write_of(&r);
-        assert_eq!(data["koin"], json!(32_000));
-        assert_eq!(data["rpg"]["bank"], json!(3_000));
+        assert_eq!(data["koin"], serde_json::json!(32_000));
+        assert_eq!(data["rpg"]["bank"], serde_json::json!(3_000));
         let t = text_of(&r);
         assert!(t.contains("✅ Penarikan: *Rp 2.000*"), "{t}");
         assert!(t.contains("💰 Uang Cash: *Rp 32.000*"), "{t}");
@@ -235,21 +234,21 @@ mod tests {
         // Rekening harus berisi dana: `currentBank < amount` menolak penarikan
         // tanpa mutasi, jadi bank 0 tidak bisa dipakai di sini.
         for (full, short) in [("deposit", "depo"), ("withdraw", "tarik")] {
-            let a = run(json!({ "koin": 5_000, "rpg": { "bank": 2_000 } }), &[full, "1000"]);
-            let b = run(json!({ "koin": 5_000, "rpg": { "bank": 2_000 } }), &[short, "1000"]);
+            let a = run(serde_json::json!({ "koin": 5_000, "rpg": { "bank": 2_000 } }), &[full, "1000"]);
+            let b = run(serde_json::json!({ "koin": 5_000, "rpg": { "bank": 2_000 } }), &[short, "1000"]);
             assert_eq!(write_of(&a), write_of(&b), "{full} vs {short}");
         }
     }
 
     #[test]
     fn all_deposits_the_whole_purse_and_all_withdraws_the_whole_bank() {
-        let dep = run(json!({ "koin": 7_500 }), &["deposit", "all"]);
-        assert_eq!(write_of(&dep)["koin"], json!(0));
-        assert_eq!(write_of(&dep)["rpg"]["bank"], json!(7_500));
+        let dep = run(serde_json::json!({ "koin": 7_500 }), &["deposit", "all"]);
+        assert_eq!(write_of(&dep)["koin"], serde_json::json!(0));
+        assert_eq!(write_of(&dep)["rpg"]["bank"], serde_json::json!(7_500));
 
-        let wd = run(json!({ "koin": 10, "rpg": { "bank": 4_200 } }), &["withdraw", "all"]);
-        assert_eq!(write_of(&wd)["koin"], json!(4_210));
-        assert_eq!(write_of(&wd)["rpg"]["bank"], json!(0));
+        let wd = run(serde_json::json!({ "koin": 10, "rpg": { "bank": 4_200 } }), &["withdraw", "all"]);
+        assert_eq!(write_of(&wd)["koin"], serde_json::json!(4_210));
+        assert_eq!(write_of(&wd)["rpg"]["bank"], serde_json::json!(0));
     }
 
     /// `parseInt` menerima awalan angka, dan `NaN`/`0` ditolak.
@@ -257,7 +256,7 @@ mod tests {
     fn a_bad_or_non_positive_amount_is_refused_on_both_sides() {
         for bad in ["abc", "0", "-5", "px"] {
             for action in ["deposit", "withdraw"] {
-                let r = run(json!({ "koin": 9_000, "rpg": { "bank": 9_000 } }), &[action, bad]);
+                let r = run(serde_json::json!({ "koin": 9_000, "rpg": { "bank": 9_000 } }), &[action, bad]);
                 let t = text_of(&r);
                 assert!(t.starts_with("Hayo kak, masukin jumlah koin"), "{action} {bad}: {t}");
                 assert!(r.mutations().is_empty(), "{action} {bad}");
@@ -267,14 +266,14 @@ mod tests {
 
     #[test]
     fn depositing_more_than_the_purse_is_refused() {
-        let r = run(json!({ "koin": 1_000, "rpg": { "bank": 0 } }), &["deposit", "5000"]);
+        let r = run(serde_json::json!({ "koin": 1_000, "rpg": { "bank": 0 } }), &["deposit", "5000"]);
         assert!(text_of(&r).starts_with("Eits, uang *cash* kamu nggak cukup"));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn withdrawing_more_than_the_balance_is_refused() {
-        let r = run(json!({ "koin": 1_000, "rpg": { "bank": 10 } }), &["withdraw", "500"]);
+        let r = run(serde_json::json!({ "koin": 1_000, "rpg": { "bank": 10 } }), &["withdraw", "500"]);
         assert!(text_of(&r).starts_with("Yahh kak, saldo tabungan kamu nggak cukup"));
         assert!(r.mutations().is_empty());
     }
@@ -282,8 +281,8 @@ mod tests {
     #[test]
     fn a_full_deposit_uses_the_purse_not_the_bank_as_its_ceiling() {
         // `all` untuk withdraw mengambil `currentBank`, bukan `currentBalance`.
-        let r = run(json!({ "koin": 90_000, "rpg": { "bank": 25 } }), &["withdraw", "all"]);
-        assert_eq!(write_of(&r)["rpg"]["bank"], json!(0));
-        assert_eq!(write_of(&r)["koin"], json!(90_025));
+        let r = run(serde_json::json!({ "koin": 90_000, "rpg": { "bank": 25 } }), &["withdraw", "all"]);
+        assert_eq!(write_of(&r)["rpg"]["bank"], serde_json::json!(0));
+        assert_eq!(write_of(&r)["koin"], serde_json::json!(90_025));
     }
 }

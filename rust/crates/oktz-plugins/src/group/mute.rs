@@ -63,7 +63,6 @@ pub fn mute(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
 
-    use serde_json::json;
 
     fn run(group: serde_json::Value) -> Reply {
         let ctx = Ctx {
@@ -118,19 +117,19 @@ mod tests {
 
     #[test]
     fn muting_writes_the_flag_and_names_the_group() {
-        let r = run(json!({"name": "Grup Diskusi"}));
+        let r = run(serde_json::json!({"name": "Grup Diskusi"}));
         assert_eq!(
             text_of(&r),
             "✅ Grup *Grup Diskusi* berhasil di-mute oleh @628111\n\n\
              Hanya admin yang bisa mengirim pesan.\n\
              Ketik *.unmute* untuk membuka kembali."
         );
-        assert_eq!(group_write(&r), &json!({"mute": true}));
+        assert_eq!(group_write(&r), &serde_json::json!({"mute": true}));
     }
 
     #[test]
     fn the_sender_is_mentioned_not_the_group() {
-        let r = run(json!({"name": "G"}));
+        let r = run(serde_json::json!({"name": "G"}));
         match r.without_mutations() {
             Reply::Text { mentions, .. } => assert_eq!(mentions, &["628111@s.whatsapp.net".to_string()]),
             other => panic!("harus Text, dapat {other:?}"),
@@ -139,8 +138,8 @@ mod tests {
 
     #[test]
     fn a_group_that_is_already_muted_is_left_alone() {
-        for truthy in [json!(true), json!(1), json!("ya"), json!({})] {
-            let r = run(json!({ "mute": truthy.clone() }));
+        for truthy in [serde_json::json!(true), serde_json::json!(1), serde_json::json!("ya"), serde_json::json!({})] {
+            let r = run(serde_json::json!({ "mute": truthy.clone() }));
             assert_eq!(text_of(&r), ALREADY_MUTED, "input mute={truthy}");
             assert!(r.mutations().is_empty(), "tidak boleh menulis ulang: {truthy}");
         }
@@ -149,15 +148,15 @@ mod tests {
     #[test]
     fn a_falsy_stored_flag_still_lets_the_mute_through() {
         // `if (group.mute)` di JS = `!m0`, jadi `false`/`0`/`""`/`null` lolos.
-        for falsy in [json!(false), json!(0), json!(""), json!(null)] {
-            let r = run(json!({ "mute": falsy.clone() }));
-            assert_eq!(group_write(&r), &json!({"mute": true}), "input mute={falsy}");
+        for falsy in [serde_json::json!(false), serde_json::json!(0), serde_json::json!(""), serde_json::json!(null)] {
+            let r = run(serde_json::json!({ "mute": falsy.clone() }));
+            assert_eq!(group_write(&r), &serde_json::json!({"mute": true}), "input mute={falsy}");
         }
     }
 
     #[test]
     fn a_group_row_without_a_name_falls_back_instead_of_printing_undefined() {
-        let r = run(json!({}));
+        let r = run(serde_json::json!({}));
         assert!(
             text_of(&r).starts_with(&format!("✅ Grup *{NO_GROUP_NAME}* berhasil di-mute")),
             "{}",

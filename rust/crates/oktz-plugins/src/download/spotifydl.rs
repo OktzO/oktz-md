@@ -134,7 +134,6 @@ pub fn spotifydl(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug)]
@@ -164,7 +163,7 @@ mod tests {
             let text = self
                 .body
                 .clone()
-                .map_err(|()| HttpError { message: "offline".into() })?;
+                .map_err(|()| oktz_plugin_api::HttpError { message: "offline".into() })?;
             Ok(HttpResponse {
                 status: 200,
                 body: HttpBody::Bytes {
@@ -208,7 +207,7 @@ mod tests {
     }
 
     fn ok_body() -> Value {
-        json!({
+        serde_json::json!({
             "status": true,
             "result": {
                 "title": "Indonesia Raya",
@@ -283,7 +282,7 @@ mod tests {
 
     #[test]
     fn missing_artist_and_title_fall_back_to_spotify_and_audio() {
-        let body = json!({ "status": true, "result": { "url": "https://cdn.example/a.mp3" } });
+        let body = serde_json::json!({ "status": true, "result": { "url": "https://cdn.example/a.mp3" } });
         let r = run(Stub::body(body), "https://open.spotify.com/track/x");
         assert_eq!(text_of(&r), "Spotify - Audio.mp3");
     }
@@ -293,11 +292,11 @@ mod tests {
         // `adaNormalisasiGagal` (`spotifydl.js:48`): backend menjawab tapi
         // tidak ada yang bisa dikirim — track tidak ada atau terkunci region.
         for body in [
-            json!({ "status": false, "msg": "not found" }),
-            json!({ "status": true, "result": { "title": "x", "url": "ftp://x" } }),
-            json!({ "status": true, "result": {} }),
-            json!({ "status": true }),
-            json!({}),
+            serde_json::json!({ "status": false, "msg": "not found" }),
+            serde_json::json!({ "status": true, "result": { "title": "x", "url": "ftp://x" } }),
+            serde_json::json!({ "status": true, "result": {} }),
+            serde_json::json!({ "status": true }),
+            serde_json::json!({}),
         ] {
             let r = run(Stub::body(body.clone()), "https://open.spotify.com/track/x");
             assert_eq!(text_of(&r), NO_DOWNLOAD, "body {body}");
@@ -318,7 +317,7 @@ mod tests {
 
     #[test]
     fn download_url_from_the_other_field_name_is_also_accepted() {
-        let body = json!({
+        let body = serde_json::json!({
             "status": true,
             "result": { "download_url": "https://cdn.example/b.mp3", "title": "T" }
         });

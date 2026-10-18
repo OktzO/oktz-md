@@ -7,7 +7,6 @@
 //! sendiri, bukan `common.rs`, karena `common.rs` milik batch lain.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::json;
 
 use crate::common::parse_int;
 
@@ -137,7 +136,7 @@ pub fn capenergi(ctx: Ctx) -> Reply {
         &ctx,
         "capenergi",
         commands,
-        json!(cost),
+        serde_json::json!(cost),
         success_block(cost),
         "_Pengaturan tersimpan ke dalam database dan langsung berlaku._",
     )
@@ -206,7 +205,7 @@ mod tests {
     #[test]
     fn fewer_than_two_arguments_shows_help_and_writes_nothing() {
         for text in ["", "5", "   "] {
-            let r = run(text, json!({}));
+            let r = run(text, serde_json::json!({}));
             assert!(text_of(&r).starts_with("⚙️ *SISTEM CAP ENERGI*"), "input {text:?}");
             assert!(r.mutations().is_empty(), "input {text:?}");
         }
@@ -215,7 +214,7 @@ mod tests {
     #[test]
     fn a_non_numeric_or_negative_cost_is_refused() {
         for text in ["hd abc", "hd -1"] {
-            let r = run(text, json!({}));
+            let r = run(text, serde_json::json!({}));
             assert_eq!(text_of(&r), BAD_COST, "input {text:?}");
             assert!(r.mutations().is_empty(), "input {text:?}");
         }
@@ -224,8 +223,8 @@ mod tests {
     #[test]
     fn a_known_feature_is_written_under_its_canonical_name() {
         // Alias `baik` → plugin `cekbaik`; yang ditulis bukan aliasnya.
-        let r = run("baik 5", json!({}));
-        assert_eq!(stored(&r)["cekbaik"], json!(5));
+        let r = run("baik 5", serde_json::json!({}));
+        assert_eq!(stored(&r)["cekbaik"], serde_json::json!(5));
         let t = text_of(&r);
         assert!(t.contains("Berhasil diubah jadi 5 Energi:"), "{t}");
         assert!(t.contains("- cekbaik"), "{t}");
@@ -233,8 +232,8 @@ mod tests {
 
     #[test]
     fn an_unknown_feature_lands_in_the_failed_list_and_writes_nothing_for_it() {
-        let r = run("tidakada 3", json!({}));
-        assert_eq!(stored(&r), json!({}));
+        let r = run("tidakada 3", serde_json::json!({}));
+        assert_eq!(stored(&r), serde_json::json!({}));
         let t = text_of(&r);
         assert!(t.contains("Gagal (Tidak ditemukan):"), "{t}");
         assert!(t.contains("- tidakada"), "{t}");
@@ -242,39 +241,39 @@ mod tests {
 
     #[test]
     fn a_zero_cost_is_valid_and_makes_the_feature_free() {
-        let r = run("baik 0", json!({}));
-        assert_eq!(stored(&r)["cekbaik"], json!(0));
+        let r = run("baik 0", serde_json::json!({}));
+        assert_eq!(stored(&r)["cekbaik"], serde_json::json!(0));
     }
 
     #[test]
     fn several_features_share_one_cost() {
-        let r = run("baik cekgacha 2", json!({}));
+        let r = run("baik cekgacha 2", serde_json::json!({}));
         let s = stored(&r);
-        assert_eq!(s["cekbaik"], json!(2));
-        assert_eq!(s["cekgacha"], json!(2));
+        assert_eq!(s["cekbaik"], serde_json::json!(2));
+        assert_eq!(s["cekgacha"], serde_json::json!(2));
     }
 
     #[test]
     fn existing_overrides_are_preserved() {
-        let settings = json!({ "capenergi": { "cekbaik": 9, "cekgacha": 2 } });
+        let settings = serde_json::json!({ "capenergi": { "cekbaik": 9, "cekgacha": 2 } });
         let __balasan = run("cekcantik 4", settings);
         let s = stored(&__balasan);
-        assert_eq!(s["cekbaik"], json!(9), "override lain tidak hilang");
-        assert_eq!(s["cekgacha"], json!(2));
-        assert_eq!(s["cekcantik"], json!(4));
+        assert_eq!(s["cekbaik"], serde_json::json!(9), "override lain tidak hilang");
+        assert_eq!(s["cekgacha"], serde_json::json!(2));
+        assert_eq!(s["cekcantik"], serde_json::json!(4));
     }
 
     #[test]
     fn a_non_object_setting_is_replaced_rather_than_merged() {
         // `db.setting("capenergi") || {}` tidak dijamin objek di JS; Rust
         // memakai objek kosong supaya tidak menimpa data lain diam-diam.
-        let r = run("baik 5", json!({ "capenergi": 5 }));
-        assert_eq!(stored(&r), json!({ "cekbaik": 5 }));
+        let r = run("baik 5", serde_json::json!({ "capenergi": 5 }));
+        assert_eq!(stored(&r), serde_json::json!({ "cekbaik": 5 }));
     }
 
     #[test]
     fn the_success_reply_reacts_and_is_paired_with_the_write() {
-        let r = run("baik 5", json!({}));
+        let r = run("baik 5", serde_json::json!({}));
         match r.without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅"),
             other => panic!("harus Reaction, dapat {other:?}"),

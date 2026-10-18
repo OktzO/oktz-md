@@ -14,7 +14,6 @@
 
 use oktz_plugin_api::{Ctx, HttpCall, Reply, plugin};
 
-use crate::common::error_template;
 
 /// `pin.js:30-35` — kartu pakai.
 pub(crate) fn help(prefix: &str) -> String {
@@ -99,14 +98,13 @@ pub fn pin(ctx: Ctx) -> Reply {
             Reply::text(GAGAL_MEMUAT).with_reaction("❌")
         }
         // `pin.js:127-131` — `m.pushName` tidak ada di `Ctx`, jadi "User".
-        Err(()) => Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
+        Err(()) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(text: &str) -> Reply {
         let ctx = Ctx {
@@ -177,7 +175,7 @@ mod tests {
     #[test]
     fn a_query_reaches_the_error_branch_while_the_resolver_is_missing() {
         let r = run("Zhao Lusi");
-        assert_eq!(text_of(&r), error_template(".", "pin"));
+        assert_eq!(text_of(&r), crate::common::error_template(".", "pin"));
         assert_eq!(reaction_of(&r), Some("☢"));
     }
 
@@ -192,8 +190,8 @@ mod tests {
     #[test]
     fn pin_urls_are_collected_dropping_blanks_and_capped_at_ten() {
         let pins: Vec<serde_json::Value> = (0..13)
-            .map(|i| json!({ "image": format!("https://i.pinimg.com/{i}.jpg") }))
-            .chain([json!({ "image": "" }), json!({}), json!({ "image": null })])
+            .map(|i| serde_json::json!({ "image": format!("https://i.pinimg.com/{i}.jpg") }))
+            .chain([serde_json::json!({ "image": "" }), serde_json::json!({}), serde_json::json!({ "image": null })])
             .collect();
         let urls = pick_images(&pins);
         assert_eq!(urls.len(), 10, "slice(0, 10) sebelum filter kedua");
@@ -204,8 +202,8 @@ mod tests {
     #[test]
     fn an_empty_or_scalar_pin_list_yields_no_urls() {
         assert!(pick_images(&[]).is_empty());
-        assert!(pick_images(&[json!({})]).is_empty());
-        assert!(pick_images(&[json!({ "image": 42 })]).is_empty());
+        assert!(pick_images(&[serde_json::json!({})]).is_empty());
+        assert!(pick_images(&[serde_json::json!({ "image": 42 })]).is_empty());
     }
 
     #[test]

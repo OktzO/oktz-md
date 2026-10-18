@@ -34,7 +34,6 @@ mod tests {
     use crate::game::wwkill::{
         NOT_IN_GAME, Refusal, game_fixture, in_night, night_ctx, plan, player,
     };
-    use serde_json::json;
 
     const GUARD: &str = "628111@s.whatsapp.net";
     const OTHER: &str = "628999@s.whatsapp.net";
@@ -42,7 +41,7 @@ mod tests {
     fn game() -> serde_json::Value {
         game_fixture(
             "night",
-            json!([
+            serde_json::json!([
                 player(GUARD, 1, "guardian", true, false),
                 player(OTHER, 3, "villager", true, false),
             ]),
@@ -102,9 +101,9 @@ mod tests {
         assert!(t.contains("🛡️ *TARGET DILINDUNGI*"), "{t}");
         assert!(t.contains("Melindungi: @628999"), "{t}");
         let g = ctx.session_get(crate::game::wwkill::GAMES_KEY).unwrap();
-        assert_eq!(g["120363@g.us"]["nightActions"]["protect"], json!(OTHER));
+        assert_eq!(g["120363@g.us"]["nightActions"]["protect"], serde_json::json!(OTHER));
         assert!(g["120363@g.us"]["nightActions"].get("kill").is_none());
-        assert_eq!(g["120363@g.us"]["players"][0]["skillUsed"], json!(true));
+        assert_eq!(g["120363@g.us"]["players"][0]["skillUsed"], serde_json::json!(true));
         match r.without_mutations() {
             Reply::Text { mentions, .. } => assert_eq!(mentions, &[OTHER.to_string()]),
             other => panic!("harus Text, dapat {other:?}"),
@@ -134,7 +133,7 @@ mod tests {
     fn a_non_guardian_role_falls_through_to_the_no_ability_message() {
         let g = game_fixture(
             "night",
-            json!([
+            serde_json::json!([
                 player(GUARD, 1, "werewolf", true, false),
                 player(OTHER, 3, "villager", true, false),
             ]),

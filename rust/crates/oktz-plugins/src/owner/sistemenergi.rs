@@ -77,7 +77,7 @@ pub fn sistemenergi(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(settings: Value, text: &str) -> Reply {
         let args: Vec<String> = text.split_whitespace().map(str::to_string).collect();
@@ -140,14 +140,14 @@ mod tests {
         // pernah di-set berarti AKTIF. Default `false` di sini akan
         // mengarang "unlimited" untuk instalasi yang tidak pernah menyetel.
         assert!(current_enabled(&Ctx::default()));
-        assert!(text_of(&run(json!({}), "")).contains("AKTIF 🔋"));
+        assert!(text_of(&run(serde_json::json!({}), "")).contains("AKTIF 🔋"));
     }
 
     #[test]
     fn status_reflects_a_stored_false_without_reading_the_pipeline_default() {
         for (settings, expected) in [
-            (json!({"energi": false}), "NONAKTIF (UNLIMITED) ♾️"),
-            (json!({"energi": true}), "AKTIF 🔋"),
+            (serde_json::json!({"energi": false}), "NONAKTIF (UNLIMITED) ♾️"),
+            (serde_json::json!({"energi": true}), "AKTIF 🔋"),
         ] {
             let r = run(settings.clone(), "");
             assert!(text_of(&r).contains(expected), "input {settings}");
@@ -157,7 +157,7 @@ mod tests {
 
     #[test]
     fn no_argument_shows_status_and_writes_nothing() {
-        let r = run(json!({"energi": true}), "");
+        let r = run(serde_json::json!({"energi": true}), "");
         assert!(text_of(&r).starts_with("🎛️ *KONTROL SISTEM ENERGI*"));
         assert!(r.mutations().is_empty());
     }
@@ -167,7 +167,7 @@ mod tests {
         // `m.args[0]?.toLowerCase()` sudah ada di JS, jadi huruf besar TIDAK
         // termasuk di sini — `ON` sah. Yang tidak sah adalah kata lain.
         for bad in ["aktif", "1", "yes", "enable", "onn"] {
-            let r = run(json!({}), bad);
+            let r = run(serde_json::json!({}), bad);
             assert!(
                 text_of(&r).starts_with("🎛️ *KONTROL SISTEM ENERGI*"),
                 "input {bad} harus jatuh ke cabang status"
@@ -180,34 +180,34 @@ mod tests {
     fn the_mode_argument_is_lowercased_before_comparison() {
         for arg in ["ON", "On", "oN"] {
             assert_eq!(
-                stored(&run(json!({}), arg)),
-                Some(json!(true)),
+                stored(&run(serde_json::json!({}), arg)),
+                Some(serde_json::json!(true)),
                 "arg {arg} harus dikenali sebagai on"
             );
         }
         for arg in ["OFF", "Off"] {
-            assert_eq!(stored(&run(json!({}), arg)), Some(json!(false)), "arg {arg}");
+            assert_eq!(stored(&run(serde_json::json!({}), arg)), Some(serde_json::json!(false)), "arg {arg}");
         }
     }
 
     #[test]
     fn on_and_off_write_their_own_boolean() {
-        assert_eq!(stored(&run(json!({}), "on")), Some(json!(true)));
-        assert_eq!(stored(&run(json!({}), "off")), Some(json!(false)));
+        assert_eq!(stored(&run(serde_json::json!({}), "on")), Some(serde_json::json!(true)));
+        assert_eq!(stored(&run(serde_json::json!({}), "off")), Some(serde_json::json!(false)));
     }
 
     #[test]
     fn the_applied_reply_names_the_direction_actually_written() {
-        assert!(text_of(&run(json!({}), "on")).contains("di-*HIDUPKAN*"));
-        assert!(text_of(&run(json!({}), "off")).contains("di-*MATIKAN*"));
-        assert!(text_of(&run(json!({}), "off")).contains("NONAKTIF (UNLIMITED) ♾️"));
+        assert!(text_of(&run(serde_json::json!({}), "on")).contains("di-*HIDUPKAN*"));
+        assert!(text_of(&run(serde_json::json!({}), "off")).contains("di-*MATIKAN*"));
+        assert!(text_of(&run(serde_json::json!({}), "off")).contains("NONAKTIF (UNLIMITED) ♾️"));
     }
 
     #[test]
     fn the_applied_reply_is_paired_with_the_write_it_claims() {
         for arg in ["on", "off"] {
             assert!(
-                !run(json!({}), arg).mutations().is_empty(),
+                !run(serde_json::json!({}), arg).mutations().is_empty(),
                 "arg {arg}: reply 'berhasil diubah' tanpa mutasi = klaim palsu"
             );
         }
@@ -217,7 +217,7 @@ mod tests {
     fn both_reactions_are_emitted_in_the_js_order() {
         // `m.react('🕕')` lalu `m.react('✅')` — `with_reaction` dirangkai
         // dua kali, jadi `Reaction` terluar adalah yang kedua.
-        match run(json!({}), "on").without_mutations() {
+        match run(serde_json::json!({}), "on").without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅"),
             other => panic!("harus Reaction, dapat {other:?}"),
         }

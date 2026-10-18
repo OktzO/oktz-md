@@ -11,7 +11,6 @@
 use oktz_plugin_api::{Ctx, Reply, plugin};
 use serde_json::Value;
 
-use crate::fun::tod::error_template;
 
 /// `cocofundl.js:31` — `/cocofun\.com/i`, tidak dikunci ke host.
 pub(crate) fn is_cocofun_url(url: &str) -> bool {
@@ -90,7 +89,7 @@ pub fn cocofundl(ctx: Ctx) -> Reply {
     let data = match fetch_cocofun(url) {
         Ok(data) => data,
         Err(()) => {
-            return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("🕕");
+            return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("🕕");
         }
     };
 
@@ -110,7 +109,6 @@ pub fn cocofundl(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(text: &str) -> Reply {
         let ctx = Ctx {
@@ -176,21 +174,21 @@ mod tests {
         // Tanpa `result` → "Gagal mengambil video"; `result` ada tapi URL-nya
         // kosong → "Video tidak ditemukan".
         for data in [
-            json!({ "status": false, "result": { "no_watermark": "https://cdn/v.mp4" } }),
-            json!({ "status": true }),
-            json!({ "status": true, "result": null }),
-            json!({}),
+            serde_json::json!({ "status": false, "result": { "no_watermark": "https://cdn/v.mp4" } }),
+            serde_json::json!({ "status": true }),
+            serde_json::json!({ "status": true, "result": null }),
+            serde_json::json!({}),
         ] {
             assert!(!accepted(&data), "{data} seharusnya ditolak");
         }
-        assert_eq!(video_url(&json!({})), "");
+        assert_eq!(video_url(&serde_json::json!({})), "");
 
         for result in [
-            json!({ "no_watermark": "", "watermark": "" }),
-            json!({}),
-            json!({ "no_watermark": null, "watermark": null }),
+            serde_json::json!({ "no_watermark": "", "watermark": "" }),
+            serde_json::json!({}),
+            serde_json::json!({ "no_watermark": null, "watermark": null }),
         ] {
-            let data = json!({ "status": true, "result": result });
+            let data = serde_json::json!({ "status": true, "result": result });
             assert!(accepted(&data));
             assert_eq!(video_url(&data), "", "{data}");
         }
@@ -199,14 +197,14 @@ mod tests {
     #[test]
     fn the_watermarked_url_is_only_the_second_choice() {
         assert_eq!(
-            video_url(&json!({
+            video_url(&serde_json::json!({
                 "status": true,
                 "result": { "no_watermark": "https://cdn/a.mp4", "watermark": "https://cdn/b.mp4" }
             })),
             "https://cdn/a.mp4"
         );
         assert_eq!(
-            video_url(&json!({
+            video_url(&serde_json::json!({
                 "status": true,
                 "result": { "no_watermark": "", "watermark": "https://cdn/b.mp4" }
             })),
@@ -217,7 +215,7 @@ mod tests {
     #[test]
     fn the_scraper_failure_branch_is_the_error_template() {
         let r = run("https://www.cocofun.com/share/post/xxx");
-        assert_eq!(text_of(&r), error_template(".", "cfdl"));
+        assert_eq!(text_of(&r), crate::common::error_template(".", "cfdl"));
         assert!(
             matches!(r.without_mutations(), Reply::Reaction { emoji, .. } if emoji == "🕕"),
             "reaksi jam harus tetap ada di cabang catch"

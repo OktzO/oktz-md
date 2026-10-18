@@ -12,7 +12,7 @@
 //! terjadi di JS ketika cheerio tidak menemukan satu pun `<li>`.
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::download::douyindl::query_encode;
 
@@ -225,7 +225,7 @@ pub(crate) fn parse_detail_spec(html: &str) -> Vec<Value> {
                 }
                 None
             };
-            specs.push(json!({
+            specs.push(serde_json::json!({
                 "name": cell("ttl").unwrap_or_default(),
                 "value": cell("nfo").unwrap_or_default(),
             }));
@@ -233,7 +233,7 @@ pub(crate) fn parse_detail_spec(html: &str) -> Vec<Value> {
         // `if (category)` (catalog.js:105) — kategori kosong dibuang, daftar
         // spesifikasi yang kosong TIDAK.
         if !category.is_empty() {
-            out.push(json!({ "category": category, "specifications": specs }));
+            out.push(serde_json::json!({ "category": category, "specifications": specs }));
         }
     }
     out
@@ -383,7 +383,7 @@ mod tests {
                 // Key = prefix URL halaman, value = HTML; request dicocokkan dari awal URL.
                 .find(|(u, _)| url.starts_with(u.as_str()))
                 .map(|(_, b)| b.clone())
-                .ok_or_else(|| HttpError {
+                .ok_or_else(|| oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 })?;
             Ok(HttpResponse {
@@ -580,9 +580,9 @@ mod tests {
     fn detail_categories_stop_at_eight_and_specs_at_five() {
         let cats: Vec<Value> = (0..10)
             .map(|i| {
-                json!({
+                serde_json::json!({
                     "category": format!("Kat{i}"),
-                    "specifications": (0..7).map(|s| json!({"name": format!("S{s}"), "value": s.to_string()})).collect::<Vec<_>>(),
+                    "specifications": (0..7).map(|s| serde_json::json!({"name": format!("S{s}"), "value": s.to_string()})).collect::<Vec<_>>(),
                 })
             })
             .collect();

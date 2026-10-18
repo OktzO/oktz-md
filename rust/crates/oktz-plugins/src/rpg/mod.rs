@@ -59,3 +59,9 @@ pub mod use_item;
 pub mod weekly;
 pub mod woodcut;
 pub mod work;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod slot;
+pub mod stamina;
+
+// Ditambahkan scripts/pasang-modul.mjs.

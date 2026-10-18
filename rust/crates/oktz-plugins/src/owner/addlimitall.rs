@@ -4,7 +4,6 @@
 //! `#[plugin(name = ...)]` supaya router tetap menemukan command yang sama.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::json;
 
 use crate::common::parse_int;
 
@@ -77,7 +76,7 @@ pub fn addlimitall(ctx: Ctx) -> Reply {
             .unwrap_or(DEFAULT_ENERGI);
         writes.push(Mutation::SetUser {
             jid,
-            data: json!({ "energi": next_energy(current, amount) }),
+            data: serde_json::json!({ "energi": next_energy(current, amount) }),
         });
         success += 1;
     }
@@ -109,7 +108,7 @@ mod tests {
             jid: jid.into(),
             is_admin: false,
             is_owner: false,
-            data: json!({ "energi": energi }),
+            data: serde_json::json!({ "energi": energi }),
         }
     }
 
@@ -173,7 +172,7 @@ mod tests {
     #[test]
     fn a_missing_or_non_positive_amount_is_rejected_before_any_write() {
         let roster = GroupRoster {
-            participants: vec![member("1@s.whatsapp.net", json!(10))],
+            participants: vec![member("1@s.whatsapp.net", serde_json::json!(10))],
             is_bot_admin: false,
         };
         for msg in ["", "0", "-5", "abc"] {
@@ -194,8 +193,8 @@ mod tests {
     fn every_member_gets_one_write_and_the_count_matches() {
         let roster = GroupRoster {
             participants: vec![
-                member("628111@s.whatsapp.net", json!(10)),
-                member("628222@s.whatsapp.net", json!(0)),
+                member("628111@s.whatsapp.net", serde_json::json!(10)),
+                member("628222@s.whatsapp.net", serde_json::json!(0)),
             ],
             is_bot_admin: false,
         };
@@ -215,8 +214,8 @@ mod tests {
     fn a_participant_without_digits_is_skipped_and_not_counted() {
         let roster = GroupRoster {
             participants: vec![
-                member("@lid", json!(5)),
-                member("628111@s.whatsapp.net", json!(10)),
+                member("@lid", serde_json::json!(5)),
+                member("628111@s.whatsapp.net", serde_json::json!(10)),
             ],
             is_bot_admin: false,
         };
@@ -228,7 +227,7 @@ mod tests {
     #[test]
     fn an_unlimited_member_keeps_minus_one() {
         let roster = GroupRoster {
-            participants: vec![member("628111@s.whatsapp.net", json!(-1))],
+            participants: vec![member("628111@s.whatsapp.net", serde_json::json!(-1))],
             is_bot_admin: false,
         };
         assert_eq!(writes(&run("50", roster)), [("628111@s.whatsapp.net".to_string(), -1)]);
@@ -237,7 +236,7 @@ mod tests {
     #[test]
     fn the_energy_floor_is_zero() {
         let roster = GroupRoster {
-            participants: vec![member("628111@s.whatsapp.net", json!(-20))],
+            participants: vec![member("628111@s.whatsapp.net", serde_json::json!(-20))],
             is_bot_admin: false,
         };
         // `Math.max(0, -20 + 50)` = 30 — Amount di plugin ini selalu positif,
@@ -252,7 +251,7 @@ mod tests {
                 jid: "628111@s.whatsapp.net".into(),
                 is_admin: false,
                 is_owner: false,
-                data: json!({}),
+                data: serde_json::json!({}),
             }],
             is_bot_admin: false,
         };
@@ -262,7 +261,7 @@ mod tests {
     #[test]
     fn the_final_reaction_is_the_one_from_the_js_order() {
         let roster = GroupRoster {
-            participants: vec![member("628111@s.whatsapp.net", json!(10))],
+            participants: vec![member("628111@s.whatsapp.net", serde_json::json!(10))],
             is_bot_admin: false,
         };
         match run("50", roster).without_mutations() {

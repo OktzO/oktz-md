@@ -45,7 +45,7 @@ pub fn stopbcpc(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(entries: &[(&str, Value)]) -> Reply {
         let mut map = std::collections::HashMap::new();
@@ -96,12 +96,12 @@ mod tests {
             sessions: oktz_plugin_api::new_session_store(),
             ..Default::default()
         };
-        ctx.session_set(STATUS_KEY, json!(true));
+        ctx.session_set(STATUS_KEY, serde_json::json!(true));
         let r = (oktz_plugin_api::find("stopbcpc").unwrap().handler)(ctx.clone());
         assert_eq!(r.text_body(), Some(STOPPING));
         assert_eq!(
             ctx.session_get(STOP_KEY),
-            Some(json!(true)),
+            Some(serde_json::json!(true)),
             "bcpc.js yang di-port harus membaca key ini"
         );
     }
@@ -121,12 +121,12 @@ mod tests {
     #[test]
     fn the_status_flag_is_read_with_js_truthiness() {
         for (stored, running) in [
-            (json!(true), true),
-            (json!(1), true),
-            (json!("ya"), true),
-            (json!(false), false),
-            (json!(0), false),
-            (json!(""), false),
+            (serde_json::json!(true), true),
+            (serde_json::json!(1), true),
+            (serde_json::json!("ya"), true),
+            (serde_json::json!(false), false),
+            (serde_json::json!(0), false),
+            (serde_json::json!(""), false),
         ] {
             let ctx = Ctx {
                 command: "stopbcpc".into(),
@@ -141,7 +141,7 @@ mod tests {
     #[test]
     fn unrelated_session_keys_do_not_make_it_look_busy() {
         assert_eq!(
-            run(&[("sesiBCPC", json!(true))]).text_body(),
+            run(&[("sesiBCPC", serde_json::json!(true))]).text_body(),
             Some(NOT_RUNNING)
         );
     }

@@ -36,7 +36,6 @@ pub fn rulesgrup(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(group: serde_json::Value) -> String {
         let ctx = Ctx {
@@ -78,7 +77,7 @@ mod tests {
 
     #[test]
     fn absent_group_data_sends_the_full_default_rules() {
-        for g in [json!(null), json!({}), json!({"groupRules": ""}), json!({"groupRules": 5})] {
+        for g in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"groupRules": ""}), serde_json::json!({"groupRules": 5})] {
             let out = run(g.clone());
             assert_eq!(out, DEFAULT_GROUP_RULES, "input {g}");
         }
@@ -103,7 +102,7 @@ mod tests {
 
     #[test]
     fn a_custom_rule_replaces_the_default_verbatim() {
-        let out = run(json!({"groupRules": "1. Jangan spam\n2. Sopan"}));
+        let out = run(serde_json::json!({"groupRules": "1. Jangan spam\n2. Sopan"}));
         assert_eq!(out, "1. Jangan spam\n2. Sopan");
     }
 
@@ -113,7 +112,7 @@ mod tests {
             prefix: ".".into(),
             chat: "120363@g.us".into(),
             sender: "628111@s.whatsapp.net".into(),
-            group_data: json!({"groupRules": "x"}),
+            group_data: serde_json::json!({"groupRules": "x"}),
             ..Default::default()
         };
         match (oktz_plugin_api::find("rulesgrup").unwrap().handler)(ctx) {

@@ -9,3 +9,5 @@ pub mod hapusstok;
 pub mod list;
 pub mod listproduk;
 pub mod liststok;
+
+// Ditambahkan scripts/pasang-modul.mjs.

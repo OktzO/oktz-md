@@ -116,7 +116,6 @@ pub fn pakustad(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{QuotedKind, QuotedMessage};
-    use serde_json::json;
 
     const ME: &str = "628111@s.whatsapp.net";
 
@@ -278,12 +277,12 @@ mod tests {
     // dibaca plugin; jalur sebenarnya tidak terjangkau selama kunci kosong.
     #[test]
     fn the_success_shape_needs_results_url() {
-        let body = json!({ "results": { "url": "https://cdn.example/ustadz.png" } });
+        let body = serde_json::json!({ "results": { "url": "https://cdn.example/ustadz.png" } });
         assert_eq!(
             body.pointer("/results/url").and_then(Value::as_str),
             Some("https://cdn.example/ustadz.png")
         );
-        let kosong = json!({});
+        let kosong = serde_json::json!({});
         assert!(kosong.pointer("/results/url").is_none());
     }
 }

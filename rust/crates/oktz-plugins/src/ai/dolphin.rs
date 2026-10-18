@@ -7,9 +7,8 @@
 //! dikirim (`HttpGet` tidak punya setter header per-request).
 
 use oktz_plugin_api::{Ctx, HttpGet, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
-use crate::fun::tod::error_template;
 
 const ENDPOINT: &str = "https://chat.dphn.ai/api/chat";
 
@@ -48,7 +47,7 @@ fn split_template(text: &str) -> (Option<&'static str>, &str) {
 /// `JSON.parse(l.substring(6))`. Parse yang gagal melempar keluar dari
 /// `.map` di JS — jadi di sini juga jadi `Err`, bukan dilewati diam-diam.
 fn dolphin_ai(http: &dyn HttpGet, question: &str, template: &str) -> Result<String, String> {
-    let body = json!({
+    let body = serde_json::json!({
         "messages": [{ "role": "user", "content": question }],
         "model": "dolphinserver:24B",
         "template": template,
@@ -119,7 +118,7 @@ pub fn dolphin(ctx: Ctx) -> Reply {
 
     match dolphin_ai(&*ctx.http, question, template.unwrap_or("logical")) {
         Ok(answer) => Reply::text(answer).with_reaction("✅"),
-        Err(_) => Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
+        Err(_) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
     }
 }
 
@@ -150,7 +149,7 @@ mod tests {
         }
         fn respond(&self) -> Result<HttpResponse, HttpError> {
             let Some(text) = &self.resp else {
-                return Err(HttpError {
+                return Err(oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 });
             };
@@ -322,7 +321,7 @@ mod tests {
     fn a_stream_without_content_is_the_same_error_the_js_throws() {
         let http = Stub::ok("data: {\"choices\":[]}\n\n");
         let r = run(http.clone(), "x");
-        assert_eq!(body(&r), error_template(".", "dolphin"));
+        assert_eq!(body(&r), crate::common::error_template(".", "dolphin"));
         assert!(matches!(
             r.without_mutations(),
             Reply::Reaction { emoji, .. } if emoji == "☢"
@@ -332,6 +331,6 @@ mod tests {
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "halo");
-        assert_eq!(body(&r), error_template(".", "dolphin"));
+        assert_eq!(body(&r), crate::common::error_template(".", "dolphin"));
     }
 }

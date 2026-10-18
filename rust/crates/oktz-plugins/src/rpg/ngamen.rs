@@ -3,7 +3,7 @@
 //! Reaksi + pesan antara sebelum jeda `setTimeout` tidak masuk `Reply`.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::int_field;
 use crate::rpg::jualan::{
@@ -44,7 +44,7 @@ pub fn ngamen(ctx: Ctx) -> Reply {
              Ngamen butuh *{STAMINA_COST} Stamina*, sisa stamina kamu *{stamina}*. Minum es teh dulu gih! ☕"
         ));
     }
-    rpg.insert("stamina".into(), json!(stamina - STAMINA_COST));
+    rpg.insert("stamina".into(), serde_json::json!(stamina - STAMINA_COST));
 
     let (loc_name, min, max) = LOCATIONS[crate::common::random_index(LOCATIONS.len())];
     let earning = roll_incl(min, max);
@@ -65,7 +65,7 @@ pub fn ngamen(ctx: Ctx) -> Reply {
     .with_reaction("✅")
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": koin + earning, "exp": new_exp, "rpg": rpg }),
+        data: serde_json::json!({ "koin": koin + earning, "exp": new_exp, "rpg": rpg }),
     })
 }
 
@@ -135,7 +135,7 @@ mod tests {
 
     #[test]
     fn an_empty_stamina_bar_is_refused_without_a_write() {
-        let r = run(json!({"rpg": {"stamina": 9}}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 9}}));
         let t = text_of(&r);
         assert!(t.starts_with("Suara serak, tenggorokan kering!"), "{t}");
         assert!(t.contains("sisa stamina kamu *9*"), "{t}");
@@ -146,7 +146,7 @@ mod tests {
     fn the_chosen_location_bounds_the_tariff_it_pays() {
         let mut seen = [false; 5];
         for _ in 0..2000 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
             let t = text_of(&r);
             let (_, min, max) = LOCATIONS
                 .iter()
@@ -155,7 +155,7 @@ mod tests {
                 .unwrap_or_else(|| panic!("lokasi tak dikenal: {t}"));
             let got = earning_of(t);
             assert!((min..=max).contains(&got), "{t}");
-            assert_eq!(written(&r)["exp"], json!(got / 20));
+            assert_eq!(written(&r)["exp"], serde_json::json!(got / 20));
             for (i, (name, _, _)) in LOCATIONS.iter().enumerate() {
                 seen[i] |= t.contains(&format!("Lokasi: *{name}*"));
             }
@@ -165,7 +165,7 @@ mod tests {
 
     #[test]
     fn the_existing_balance_is_added_to_and_never_replaced() {
-        let r = run(json!({"rpg": {"stamina": 100}, "koin": 5000, "exp": 0}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 5000, "exp": 0}));
         let d = written(&r);
         let koin = d["koin"].as_i64().unwrap();
         assert_eq!(koin - earning_of(text_of(&r)), 5000);
@@ -174,8 +174,8 @@ mod tests {
     #[test]
     fn every_ten_stamina_the_busker_costs() {
         for _ in 0..200 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
-            assert_eq!(written(&r)["rpg"]["stamina"], json!(90));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            assert_eq!(written(&r)["rpg"]["stamina"], serde_json::json!(90));
         }
     }
 }

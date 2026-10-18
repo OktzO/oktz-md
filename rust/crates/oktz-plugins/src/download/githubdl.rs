@@ -12,7 +12,6 @@
 use oktz_plugin_api::{Ctx, Reply, plugin};
 use serde_json::Value;
 
-use crate::fun::tod::error_template;
 
 /// `githubdl.js:36-42` — kartu pakai, delimiter markdown-nya backtick.
 pub(crate) fn help(prefix: &str) -> String {
@@ -150,7 +149,7 @@ pub fn githubdl(ctx: Ctx) -> Reply {
     };
     // `await res.json()` melempar kalau body bukan JSON → `catch` plugin.
     let Some(repo_data) = response.json() else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
     let default_branch = repo_data
         .get("default_branch")
@@ -174,7 +173,7 @@ pub fn githubdl(ctx: Ctx) -> Reply {
             Reply::text(zip_filename(&repo, &branch)).with_reaction("✅")
         }
         Ok(_) => Reply::text(bad_branch(&branch, &default_branch)).with_reaction("❌"),
-        Err(_) => Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
+        Err(_) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
     }
 }
 
@@ -192,7 +191,6 @@ mod tests {
     use oktz_plugin_api::HttpGet;
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug)]
@@ -207,7 +205,7 @@ mod tests {
             Arc::new(Stub {
                 repo: Ok((
                     200,
-                    json!({ "default_branch": "develop" }).to_string(),
+                    serde_json::json!({ "default_branch": "develop" }).to_string(),
                 )),
                 zip: Ok(zip_status),
                 seen: Mutex::new(Vec::new()),
@@ -229,7 +227,7 @@ mod tests {
         }
         fn zip_offline() -> Arc<Stub> {
             Arc::new(Stub {
-                repo: Ok((200, json!({ "default_branch": "develop" }).to_string())),
+                repo: Ok((200, serde_json::json!({ "default_branch": "develop" }).to_string())),
                 zip: Err(()),
                 seen: Mutex::new(Vec::new()),
             })
@@ -242,9 +240,9 @@ mod tests {
             let (status, text) = if url.starts_with("https://api.github.com/repos/") {
                 self.repo
                     .clone()
-                    .map_err(|()| HttpError { message: "offline".into() })?
+                    .map_err(|()| oktz_plugin_api::HttpError { message: "offline".into() })?
             } else {
-                (self.zip.map_err(|()| HttpError {
+                (self.zip.map_err(|()| oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 })?, String::new())
             };
@@ -422,7 +420,7 @@ mod tests {
     #[test]
     fn a_body_that_is_not_json_reports_the_system_error() {
         let r = run(Stub::repo_not_json(), &["niceplugin", "NiceBot"]);
-        assert_eq!(text_of(&r), error_template(".", "githubdl"));
+        assert_eq!(text_of(&r), crate::common::error_template(".", "githubdl"));
         assert!(
             matches!(r.without_mutations(), Reply::Reaction { emoji, .. } if emoji == "☢"),
             "harus bereaksi ☢"
@@ -432,6 +430,6 @@ mod tests {
     #[test]
     fn a_transport_failure_on_the_zip_check_reports_the_system_error() {
         let r = run(Stub::zip_offline(), &["niceplugin", "NiceBot"]);
-        assert_eq!(text_of(&r), error_template(".", "githubdl"));
+        assert_eq!(text_of(&r), crate::common::error_template(".", "githubdl"));
     }
 }

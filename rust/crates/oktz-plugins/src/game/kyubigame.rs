@@ -5,7 +5,7 @@
 //! yang memanggilnya. Yang dipindah di sini `handler`.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 pub(crate) const SESSION_TIMEOUT_MS: i64 = 5 * 60 * 1000;
 
@@ -116,11 +116,11 @@ pub fn kyubigame(ctx: Ctx) -> Reply {
         ("stamina", 100),
         ("maxStamina", 100),
     ] {
-        block.insert(key.into(), json!(default_field(rpg, key, default)));
+        block.insert(key.into(), serde_json::json!(default_field(rpg, key, default)));
     }
     block.insert(
         "kyubigame_session".into(),
-        json!({ "stage": "lobi", "time": crate::common::now_ms() }),
+        serde_json::json!({ "stage": "lobi", "time": crate::common::now_ms() }),
     );
 
     let mut data = serde_json::Map::new();
@@ -138,7 +138,6 @@ pub fn kyubigame(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     const SENDER: &str = "628111@s.whatsapp.net";
 
@@ -203,7 +202,7 @@ mod tests {
 
     #[test]
     fn a_fresh_user_gets_the_lobby_and_a_lobi_session() {
-        let r = run(json!({}));
+        let r = run(serde_json::json!({}));
         let t = text_of(&r);
         assert!(t.starts_with("⛩️ *LOBI SHINOBI*"), "{t}");
         assert!(t.contains("> Level: *1*"), "{t}");
@@ -212,24 +211,24 @@ mod tests {
         assert!(t.contains("🔒 *3.* ☁️ Padang Petir (Butuh Lv 10)"), "{t}");
 
         let data = written(&r);
-        assert_eq!(data["rpg"]["kyubigame_session"]["stage"], json!("lobi"));
+        assert_eq!(data["rpg"]["kyubigame_session"]["stage"], serde_json::json!("lobi"));
         assert!(data["rpg"]["kyubigame_session"]["time"].as_i64().unwrap() > 0);
-        assert_eq!(data["rpg"]["attack"], json!(10));
-        assert_eq!(data["inventory"], json!({}));
+        assert_eq!(data["rpg"]["attack"], serde_json::json!(10));
+        assert_eq!(data["inventory"], serde_json::json!({}));
     }
 
     #[test]
     fn existing_rpg_values_survive_and_zero_falls_back_to_the_default() {
-        let r = run(json!({"rpg": {"attack": 77, "stamina": 0}}));
+        let r = run(serde_json::json!({"rpg": {"attack": 77, "stamina": 0}}));
         let data = written(&r);
-        assert_eq!(data["rpg"]["attack"], json!(77));
-        assert_eq!(data["rpg"]["stamina"], json!(100));
+        assert_eq!(data["rpg"]["attack"], serde_json::json!(77));
+        assert_eq!(data["rpg"]["stamina"], serde_json::json!(100));
     }
 
     #[test]
     fn a_live_mission_blocks_a_second_run() {
         let now = crate::common::now_ms();
-        let r = run(json!({"rpg": {"kyubigame_session": {"stage": "encounter", "time": now}}}));
+        let r = run(serde_json::json!({"rpg": {"kyubigame_session": {"stage": "encounter", "time": now}}}));
         assert_eq!(text_of(&r), ACTIVE);
         assert!(r.mutations().is_empty());
     }
@@ -237,9 +236,9 @@ mod tests {
     #[test]
     fn an_expired_mission_is_replaced_by_a_fresh_lobi_session() {
         let stale = crate::common::now_ms() - SESSION_TIMEOUT_MS - 1;
-        let r = run(json!({"rpg": {"kyubigame_session": {"stage": "encounter", "time": stale}}}));
+        let r = run(serde_json::json!({"rpg": {"kyubigame_session": {"stage": "encounter", "time": stale}}}));
         assert!(text_of(&r).starts_with("⛩️ *LOBI SHINOBI*"), "{}", text_of(&r));
-        assert_eq!(written(&r)["rpg"]["kyubigame_session"]["stage"], json!("lobi"));
+        assert_eq!(written(&r)["rpg"]["kyubigame_session"]["stage"], serde_json::json!("lobi"));
     }
 
     #[test]
@@ -262,32 +261,32 @@ mod tests {
         // membuktikan cabang "masih aktif" benar-benar dipilih, dengan
         // margin 1 menit supaya jam tidak bisa ikut menentukan hasilnya.
         let fresh = crate::common::now_ms() - SESSION_TIMEOUT_MS + 60_000;
-        let r = run(json!({"rpg": {"kyubigame_session": {"stage": "lobi", "time": fresh}}}));
+        let r = run(serde_json::json!({"rpg": {"kyubigame_session": {"stage": "lobi", "time": fresh}}}));
         assert_eq!(text_of(&r), ACTIVE);
     }
 
     #[test]
     fn a_session_without_a_timestamp_is_treated_as_expired() {
-        let r = run(json!({"rpg": {"kyubigame_session": {}}}));
+        let r = run(serde_json::json!({"rpg": {"kyubigame_session": {}}}));
         assert!(text_of(&r).starts_with("⛩️ *LOBI SHINOBI*"), "{}", text_of(&r));
     }
 
     #[test]
     fn the_lock_line_follows_the_level_threshold_per_location() {
-        let t = owned(run(json!({"level": 5})));
+        let t = owned(run(serde_json::json!({"level": 5})));
         assert!(t.contains("🔓 *2.* 🌳 Hutan Kematian (Lv 5+)"), "{t}");
         assert!(t.contains("🔒 *3.* ☁️ Padang Petir"), "{t}");
 
-        let t = owned(run(json!({"level": 50})));
+        let t = owned(run(serde_json::json!({"level": 50})));
         assert!(t.contains("🔓 *7.* 🦊 Kurama's Cage (Lv 50+)"), "{t}");
     }
 
     #[test]
     fn level_zero_becomes_one_and_a_negative_level_hits_the_guard() {
-        let t = owned(run(json!({"level": 0})));
+        let t = owned(run(serde_json::json!({"level": 0})));
         assert!(t.contains("> Level: *1*"), "{t}");
 
-        let r = run(json!({"level": -3}));
+        let r = run(serde_json::json!({"level": -3}));
         assert_eq!(text_of(&r), too_low(-3));
         assert!(r.mutations().is_empty());
     }
@@ -300,10 +299,10 @@ mod tests {
 
     #[test]
     fn a_null_rpg_object_is_handled_without_panicking() {
-        for user in [json!(null), json!({}), json!({"rpg": null}), json!({"rpg": 7})] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"rpg": null}), serde_json::json!({"rpg": 7})] {
             let r = run(user.clone());
             assert!(text_of(&r).starts_with("⛩️ *LOBI SHINOBI*"), "input {user}");
-            assert_eq!(written(&r)["rpg"]["health"], json!(100), "input {user}");
+            assert_eq!(written(&r)["rpg"]["health"], serde_json::json!(100), "input {user}");
         }
     }
 }

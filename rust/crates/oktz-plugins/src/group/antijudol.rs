@@ -99,7 +99,6 @@ pub fn antijudol(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -155,7 +154,7 @@ mod tests {
 
     #[test]
     fn no_argument_reports_status_and_mode_without_writing() {
-        let r = run(json!({}), "");
+        let r = run(serde_json::json!({}), "");
         assert!(text_of(&r).contains("> Status: *OFF*"), "{}", text_of(&r));
         assert!(text_of(&r).contains("> Mode: *REMOVE*"), "{}", text_of(&r));
         assert!(r.mutations().is_empty());
@@ -163,73 +162,73 @@ mod tests {
 
     #[test]
     fn stored_status_and_mode_are_read_as_strings_not_booleans() {
-        let r = run(json!({"antijudol": "on", "antijudolMode": "kick"}), "");
+        let r = run(serde_json::json!({"antijudol": "on", "antijudolMode": "kick"}), "");
         assert!(text_of(&r).contains("> Status: *ON*"), "{}", text_of(&r));
         assert!(text_of(&r).contains("> Mode: *KICK*"), "{}", text_of(&r));
     }
 
     #[test]
     fn on_writes_only_the_status_flag() {
-        let r = run(json!({}), "on");
+        let r = run(serde_json::json!({}), "on");
         assert_eq!(text_of(&r), ON);
-        assert_eq!(written(&r), &json!({ "antijudol": "on" }));
+        assert_eq!(written(&r), &serde_json::json!({ "antijudol": "on" }));
     }
 
     #[test]
     fn off_writes_only_the_status_flag() {
-        let r = run(json!({"antijudol": "on"}), "off");
+        let r = run(serde_json::json!({"antijudol": "on"}), "off");
         assert_eq!(text_of(&r), OFF);
-        assert_eq!(written(&r), &json!({ "antijudol": "off" }));
+        assert_eq!(written(&r), &serde_json::json!({ "antijudol": "off" }));
     }
 
     #[test]
     fn metode_kick_turns_detection_on_and_records_the_mode() {
-        let r = run(json!({}), "metode kick");
+        let r = run(serde_json::json!({}), "metode kick");
         assert_eq!(text_of(&r), MODE_KICK);
         assert_eq!(
             written(&r),
-            &json!({ "antijudol": "on", "antijudolMode": "kick" })
+            &serde_json::json!({ "antijudol": "on", "antijudolMode": "kick" })
         );
     }
 
     #[test]
     fn metode_accepts_delete_as_a_synonym_of_remove() {
-        let r = run(json!({}), "metode delete");
+        let r = run(serde_json::json!({}), "metode delete");
         assert_eq!(text_of(&r), MODE_DELETE);
         assert_eq!(
             written(&r),
-            &json!({ "antijudol": "on", "antijudolMode": "remove" })
+            &serde_json::json!({ "antijudol": "on", "antijudolMode": "remove" })
         );
     }
 
     #[test]
     fn the_bare_kick_shortcut_matches_metode_kick() {
-        let bare = run(json!({}), "kick");
-        let prefixed = run(json!({}), "metode kick");
+        let bare = run(serde_json::json!({}), "kick");
+        let prefixed = run(serde_json::json!({}), "metode kick");
         assert_eq!(text_of(&bare), text_of(&prefixed));
         assert_eq!(written(&bare), written(&prefixed));
     }
 
     #[test]
     fn an_unknown_method_is_refused_and_nothing_is_written() {
-        let r = run(json!({}), "metode lempar");
+        let r = run(serde_json::json!({}), "metode lempar");
         assert_eq!(text_of(&r), BAD_METHOD);
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn an_unrecognised_option_is_refused_and_nothing_is_written() {
-        let r = run(json!({}), "tolong");
+        let r = run(serde_json::json!({}), "tolong");
         assert_eq!(text_of(&r), BAD_OPTION);
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn options_are_matched_after_lowercase_and_trim() {
-        let r = run(json!({}), "  METODE   KICK  ");
+        let r = run(serde_json::json!({}), "  METODE   KICK  ");
         assert_eq!(
             written(&r),
-            &json!({ "antijudol": "on", "antijudolMode": "kick" })
+            &serde_json::json!({ "antijudol": "on", "antijudolMode": "kick" })
         );
     }
 }

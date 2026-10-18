@@ -14,9 +14,9 @@
 //! `ponytail:` `sock.sendMessage({ image: { url }, caption })` tidak punya
 //! masalah apa pun di sini — `Reply::image` membawa URL sebagai
 //! `MediaSource::Url`, sama seperti wire-nya.
+#![allow(clippy::needless_lifetimes)]
 
 use oktz_plugin_api::{Ctx, HttpCall, MediaSource, Reply, plugin};
-use serde_json::Value;
 
 use crate::tools::phisingataubukan::encode_uri_component;
 
@@ -37,8 +37,8 @@ pub(crate) fn help(prefix: &str) -> String {
         "📱 *FITUR PENCARIAN SPESIFIKASI HP*\n\n\
          Fitur ini membantumu mencari spesifikasi lengkap dari sebuah *smartphone* menggunakan *database* terpercaya dari Carisinyal.\n\n\
          *CARA PENGGUNAAN:*\n\
-         - Ketik \\`{prefix}spekhp <nama hp>\\`\n\
-         - Contoh: \\`{prefix}spekhp oppo a3s\\`\n\n\
+         - Ketik `{prefix}spekhp <nama hp>`\n\
+         - Contoh: `{prefix}spekhp oppo a3s`\n\n\
          _Sistem akan secara otomatis mencari ponsel yang paling sesuai dengan kata kuncimu dan menampilkan rincian spesifikasinya lengkap dengan gambarnya!_"
     )
 }
@@ -463,13 +463,6 @@ mod tests {
                 seen: Mutex::new(Vec::new()),
             })
         }
-        fn offline(list: &str) -> Arc<Stub> {
-            Arc::new(Stub {
-                list: Some(list.to_string()),
-                detail: None,
-                seen: Mutex::new(Vec::new()),
-            })
-        }
         fn empty() -> Arc<Stub> {
             Arc::new(Stub {
                 list: None,
@@ -487,7 +480,7 @@ mod tests {
             } else {
                 self.detail.clone()
             };
-            let body = body.ok_or_else(|| HttpError {
+            let body = body.ok_or_else(|| oktz_plugin_api::HttpError {
                 message: "offline".into(),
             })?;
             Ok(HttpResponse {
@@ -499,7 +492,7 @@ mod tests {
                 headers: vec![],
             })
         }
-        fn post_json(&self, _: &str, _: &Value) -> Result<HttpResponse, HttpError> {
+        fn post_json(&self, _: &str, _: &serde_json::Value) -> Result<HttpResponse, HttpError> {
             unimplemented!("cuma GET")
         }
         fn post_form(&self, _: &str, _: &str) -> Result<HttpResponse, HttpError> {
@@ -521,7 +514,7 @@ mod tests {
             sender: "628111@s.whatsapp.net".into(),
             chat: "628111@s.whatsapp.net".into(),
             text: text.into(),
-            args: text.split_whitespace().collect(),
+            args: text.split_whitespace().map(str::to_string).collect(),
             http,
             ..Default::default()
         };
@@ -677,7 +670,9 @@ mod tests {
     #[test]
     fn an_empty_spec_table_still_renders_every_heading() {
         let c = format_caption("HP Tanpa Data", &Specs::default());
-        assert_eq!(c, format!("📱 *SPESIFIKASI {}*\n\n🖥️ *LAYAR*\n\n⚙️ *PERFORMA & MEMORI*\n\n📸 *KAMERA UTAMA*\n\n🔋 *BATERAI*\n\n📡 *KONEKTIVITAS & LAINNYA*\n\n🔗 *Sumber:* Carisinyal", "HP Tanpa Data"));
+        // JS `carisinyal.js:156` men-uppercase judul, dan baris 159 menambah
+        // satu `\n` kosong sebelum heading LAYAR meski data kosong.
+        assert_eq!(c, format!("📱 *SPESIFIKASI {}*\n\n\n🖥️ *LAYAR*\n\n⚙️ *PERFORMA & MEMORI*\n\n📸 *KAMERA UTAMA*\n\n🔋 *BATERAI*\n\n📡 *KONEKTIVITAS & LAINNYA*\n\n🔗 *Sumber:* Carisinyal", "HP TANPA DATA"));
     }
 
     #[test]
@@ -730,7 +725,7 @@ mod tests {
 
     #[test]
     fn a_dead_search_page_reports_the_failure_message() {
-        let http = Stub::offline(DAFTAR);
+        let http = Stub::empty();
         let r = run(http.clone(), "oppo");
         assert_eq!(body_of(&r), FETCH_FAILED);
         assert_eq!(reaction_of(&r), Some("❌"));

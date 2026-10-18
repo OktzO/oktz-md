@@ -83,7 +83,7 @@ pub fn levelup(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(user: Value, arg: &str) -> Reply {
         let ctx = Ctx {
@@ -140,7 +140,7 @@ mod tests {
     fn the_default_when_the_flag_is_absent_is_on() {
         // `user.settings.levelupNotif !== false` — undefined !== false.
         assert!(current_enabled(&Ctx::default()));
-        for user in [json!(null), json!({}), json!({"settings": {}})] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"settings": {}})] {
             assert!(text_of(&run(user.clone(), "")).contains("ON ✅"), "input {user}");
             assert!(run(user.clone(), "").mutations().is_empty());
         }
@@ -148,7 +148,7 @@ mod tests {
 
     #[test]
     fn an_explicit_false_turns_it_off() {
-        let user = json!({"settings": {"levelupNotif": false}});
+        let user = serde_json::json!({"settings": {"levelupNotif": false}});
         assert!(!current_enabled(&Ctx {
             user_data: user.clone(),
             ..Default::default()
@@ -158,21 +158,21 @@ mod tests {
 
     #[test]
     fn on_and_off_write_their_own_boolean() {
-        assert_eq!(settings_of(&run(json!({}), "on"))["levelupNotif"], json!(true));
+        assert_eq!(settings_of(&run(serde_json::json!({}), "on"))["levelupNotif"], serde_json::json!(true));
         assert_eq!(
-            settings_of(&run(json!({"settings": {"levelupNotif": false}}), "off"))["levelupNotif"],
-            json!(false)
+            settings_of(&run(serde_json::json!({"settings": {"levelupNotif": false}}), "off"))["levelupNotif"],
+            serde_json::json!(false)
         );
     }
 
     #[test]
     fn the_other_settings_fields_are_preserved() {
-        let user = json!({"settings": {"rpgLevelupNotif": false, "lain": 7}});
+        let user = serde_json::json!({"settings": {"rpgLevelupNotif": false, "lain": 7}});
         let __balasan = run(user.clone(), "on");
         let s = settings_of(&__balasan);
-        assert_eq!(s["rpgLevelupNotif"], json!(false), "field lain harus utuh");
-        assert_eq!(s["lain"], json!(7));
-        assert_eq!(s["levelupNotif"], json!(true));
+        assert_eq!(s["rpgLevelupNotif"], serde_json::json!(false), "field lain harus utuh");
+        assert_eq!(s["lain"], serde_json::json!(7));
+        assert_eq!(s["levelupNotif"], serde_json::json!(true));
     }
 
     #[test]
@@ -180,7 +180,7 @@ mod tests {
         // `!user.settings` hanya berlaku untuk null/undefined; kalau `settings`
         // sudah berisi string, JS akan menambah properti ke String (diam).
         // Yang aman dan konsisten: perlakukan sebagai objek kosong.
-        let __balasan = run(json!({"settings": "bukan-objek"}), "on");
+        let __balasan = run(serde_json::json!({"settings": "bukan-objek"}), "on");
         let s = settings_of(&__balasan);
         assert!(s.is_object(), "{s}");
         assert_eq!(s.as_object().unwrap().len(), 1);
@@ -188,7 +188,7 @@ mod tests {
 
     #[test]
     fn no_argument_shows_status_and_writes_nothing() {
-        for user in [json!({}), json!({"settings": {"levelupNotif": true}})] {
+        for user in [serde_json::json!({}), serde_json::json!({"settings": {"levelupNotif": true}})] {
             let r = run(user.clone(), "");
             assert!(text_of(&r).starts_with("🔔 *ʟᴇᴠᴇʟ ᴜᴘ ɴᴏᴛɪꜰ*"), "input {user}");
             assert!(r.mutations().is_empty(), "input {user}");
@@ -198,7 +198,7 @@ mod tests {
     #[test]
     fn an_unknown_option_shows_status_and_writes_nothing() {
         for bad in ["maybe", "1", "ON!", "yes"] {
-            let r = run(json!({}), bad);
+            let r = run(serde_json::json!({}), bad);
             assert!(text_of(&r).starts_with("🔔 *ʟᴇᴠᴇʟ ᴜᴘ ɴᴏᴛɪꜰ*"), "input {bad}");
             assert!(r.mutations().is_empty(), "input {bad}");
         }
@@ -206,17 +206,17 @@ mod tests {
 
     #[test]
     fn the_switch_replies_name_the_direction_that_was_written() {
-        assert!(text_of(&run(json!({}), "on")).contains("*ON* ✅"));
-        assert!(text_of(&run(json!({}), "off")).contains("*OFF* ❌"));
-        assert!(text_of(&run(json!({}), "on")).starts_with("✅ *ʟᴇᴠᴇʟ ᴜᴘ ɴᴏᴛɪꜰ*"));
-        assert!(text_of(&run(json!({}), "off")).starts_with("❌ *ʟᴇᴠᴇʟ ᴜᴘ ɴᴏᴛɪꜰ*"));
+        assert!(text_of(&run(serde_json::json!({}), "on")).contains("*ON* ✅"));
+        assert!(text_of(&run(serde_json::json!({}), "off")).contains("*OFF* ❌"));
+        assert!(text_of(&run(serde_json::json!({}), "on")).starts_with("✅ *ʟᴇᴠᴇʟ ᴜᴘ ɴᴏᴛɪꜰ*"));
+        assert!(text_of(&run(serde_json::json!({}), "off")).starts_with("❌ *ʟᴇᴠᴇʟ ᴜᴘ ɴᴏᴛɪꜰ*"));
     }
 
     #[test]
     fn the_switch_reply_is_paired_with_the_write() {
         for arg in ["on", "off"] {
             assert_eq!(
-                run(json!({}), arg).mutations().len(),
+                run(serde_json::json!({}), arg).mutations().len(),
                 1,
                 "arg {arg}: reply tanpa mutasi = status palsu"
             );

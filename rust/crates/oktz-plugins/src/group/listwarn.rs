@@ -104,7 +104,6 @@ pub fn listwarn(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(group: serde_json::Value, mentioned: Vec<&str>) -> Reply {
         let ctx = Ctx {
@@ -155,7 +154,7 @@ mod tests {
 
     #[test]
     fn absent_group_data_takes_the_empty_branch() {
-        let r = run(json!(null), vec![]);
+        let r = run(serde_json::json!(null), vec![]);
         assert_eq!(text_of(&r), EMPTY_TARGET);
         assert!(mentions_of(&r).is_empty());
     }
@@ -163,7 +162,7 @@ mod tests {
     #[test]
     fn empty_warning_arrays_are_filtered_out_of_the_list() {
         let r = run(
-            json!({"warnings": {"628111@s.whatsapp.net": [], "628222@s.whatsapp.net": []}}),
+            serde_json::json!({"warnings": {"628111@s.whatsapp.net": [], "628222@s.whatsapp.net": []}}),
             vec![],
         );
         assert_eq!(text_of(&r), EMPTY_TARGET);
@@ -172,7 +171,7 @@ mod tests {
     #[test]
     fn listing_all_numbers_from_one_and_mentions_every_flagged_jid() {
         let r = run(
-            json!({"warnings": {
+            serde_json::json!({"warnings": {
                 "628111@s.whatsapp.net": [{"reason": "spam", "time": 0}, {"reason": "nagar", "time": 0}],
                 "628222@s.whatsapp.net": [{"reason": "toxic", "time": 0}]
             }}),
@@ -196,7 +195,7 @@ mod tests {
     #[test]
     fn max_warnings_zero_falls_back_to_three() {
         let r = run(
-            json!({"maxWarnings": 0, "warnings": {"628111@s.whatsapp.net": [{"reason": "x", "time": 0}]}}),
+            serde_json::json!({"maxWarnings": 0, "warnings": {"628111@s.whatsapp.net": [{"reason": "x", "time": 0}]}}),
             vec![],
         );
         assert!(text_of(&r).contains("*1/3* warning"), "0 falsy -> default 3");
@@ -204,7 +203,7 @@ mod tests {
 
     #[test]
     fn a_custom_max_warnings_is_used_in_both_branches() {
-        let group = json!({
+        let group = serde_json::json!({
             "maxWarnings": 5,
             "warnings": {"628111@s.whatsapp.net": [{"reason": "x", "time": 0}]}
         });
@@ -216,21 +215,21 @@ mod tests {
 
     #[test]
     fn a_mention_for_someone_without_warnings_says_so() {
-        let r = run(json!({"warnings": {"628222@s.whatsapp.net": [{"reason": "x", "time": 0}]}}), vec!["628333@s.whatsapp.net"]);
+        let r = run(serde_json::json!({"warnings": {"628222@s.whatsapp.net": [{"reason": "x", "time": 0}]}}), vec!["628333@s.whatsapp.net"]);
         assert_eq!(text_of(&r), "✅ @628333 tidak memiliki warning.");
         assert_eq!(mentions_of(&r), &["628333@s.whatsapp.net"]);
     }
 
     #[test]
     fn a_mention_with_no_warnings_map_at_all_still_says_so() {
-        let r = run(json!(null), vec!["628333@s.whatsapp.net"]);
+        let r = run(serde_json::json!(null), vec!["628333@s.whatsapp.net"]);
         assert_eq!(text_of(&r), "✅ @628333 tidak memiliki warning.");
     }
 
     #[test]
     fn a_mention_with_warnings_lists_them_with_reasons_and_dates() {
         let r = run(
-            json!({"warnings": {"628333@s.whatsapp.net": [
+            serde_json::json!({"warnings": {"628333@s.whatsapp.net": [
                 {"reason": "kasar", "time": 1_767_225_600_000i64},
                 {"reason": "spam", "time": 1_767_225_600_000i64}
             ]}}),
@@ -250,7 +249,7 @@ mod tests {
     #[test]
     fn mention_wins_over_the_all_users_list() {
         let r = run(
-            json!({"warnings": {
+            serde_json::json!({"warnings": {
                 "628222@s.whatsapp.net": [{"reason": "a", "time": 0}],
                 "628333@s.whatsapp.net": [{"reason": "b", "time": 0}]
             }}),
@@ -273,7 +272,7 @@ mod tests {
     #[test]
     fn a_warning_without_a_timestamp_still_renders_a_row() {
         let r = run(
-            json!({"warnings": {"628333@s.whatsapp.net": [{"reason": "x"}]}}),
+            serde_json::json!({"warnings": {"628333@s.whatsapp.net": [{"reason": "x"}]}}),
             vec!["628333@s.whatsapp.net"],
         );
         assert!(text_of(&r).contains("*1.* x\n   └ _01/01/1970_\n"));
@@ -281,7 +280,7 @@ mod tests {
 
     #[test]
     fn a_non_array_entry_is_treated_as_no_warnings() {
-        let r = run(json!({"warnings": {"628333@s.whatsapp.net": "bukan-array"}}), vec!["628333@s.whatsapp.net"]);
+        let r = run(serde_json::json!({"warnings": {"628333@s.whatsapp.net": "bukan-array"}}), vec!["628333@s.whatsapp.net"]);
         assert_eq!(text_of(&r), "✅ @628333 tidak memiliki warning.");
     }
 }

@@ -126,7 +126,6 @@ pub fn unban(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{QuotedKind, QuotedMessage};
-    use serde_json::json;
 
     fn run(args: &str, mentioned: &[&str], quoted_from: Option<&str>, settings: Value) -> Reply {
         let ctx = Ctx {
@@ -203,9 +202,9 @@ mod tests {
             "6281234567890",
             &[],
             None,
-            json!({"bannedUsers": ["628111111111", "6281234567890"]}),
+            serde_json::json!({"bannedUsers": ["628111111111", "6281234567890"]}),
         );
-        assert_eq!(stored_list(&r), vec![json!("628111111111")]);
+        assert_eq!(stored_list(&r), vec![serde_json::json!("628111111111")]);
         assert!(text_of(&r).contains("┃ ✅ sᴛᴀᴛᴜs: `Unbanned`"));
         assert!(text_of(&r).contains("┃ 📊 ᴛᴏᴛᴀʟ: `1` ᴜsᴇʀ"));
         assert_eq!(reaction_of(&r), "✅");
@@ -213,7 +212,7 @@ mod tests {
 
     #[test]
     fn a_mention_or_a_quote_can_supply_the_number() {
-        let list = json!({"bannedUsers": ["6289998887776"]});
+        let list = serde_json::json!({"bannedUsers": ["6289998887776"]});
         assert!(
             stored_list(&run(
                 "",
@@ -240,7 +239,7 @@ mod tests {
             "6280000000000",
             &[],
             Some("6289998887776@s.whatsapp.net"),
-            json!({"bannedUsers": ["6289998887776"]}),
+            serde_json::json!({"bannedUsers": ["6289998887776"]}),
         );
         assert!(
             stored_list(&r).is_empty(),
@@ -252,7 +251,7 @@ mod tests {
     #[test]
     fn a_number_outside_the_length_bounds_is_rejected_before_any_lookup() {
         for bad in ["", "628", "628123456789012345678"] {
-            let r = run(bad, &[], None, json!({"bannedUsers": ["6281234567890"]}));
+            let r = run(bad, &[], None, serde_json::json!({"bannedUsers": ["6281234567890"]}));
             assert!(text_of(&r).starts_with(NO_TARGET), "arg {bad:?}");
             assert!(r.mutations().is_empty(), "arg {bad:?}");
         }
@@ -264,7 +263,7 @@ mod tests {
             "6280000000000",
             &[],
             None,
-            json!({"bannedUsers": ["628111111111"]}),
+            serde_json::json!({"bannedUsers": ["628111111111"]}),
         );
         assert!(text_of(&r).starts_with(NOT_BANNED));
         assert!(text_of(&r).ends_with("` tidak dalam daftar banned"));
@@ -296,13 +295,13 @@ mod tests {
 
     #[test]
     fn suffix_matching_is_bidirectional() {
-        assert!(matches(&json!("6281234567890"), "6281234567890"));
+        assert!(matches(&serde_json::json!("6281234567890"), "6281234567890"));
         // nomor tersimpan boleh punya awalan/akhiran lain; yang dicari adalah
         // salah satunya sufiks yang lain, persis `findIndex` di JS.
-        assert!(matches(&json!("126281234567890"), "6281234567890"));
-        assert!(matches(&json!("234567890"), "6281234567890"));
-        assert!(matches(&json!("+62 812-3456-7890"), "6281234567890"));
-        assert!(!matches(&json!("6289999999999"), "6281234567890"));
+        assert!(matches(&serde_json::json!("126281234567890"), "6281234567890"));
+        assert!(matches(&serde_json::json!("234567890"), "6281234567890"));
+        assert!(matches(&serde_json::json!("+62 812-3456-7890"), "6281234567890"));
+        assert!(!matches(&serde_json::json!("6289999999999"), "6281234567890"));
     }
 
     // `"6281…".endsWith("")` = true di JS, jadi entri kosong di daftar banned
@@ -311,8 +310,8 @@ mod tests {
     // pernah menulis entri kosong.
     #[test]
     fn an_empty_entry_matches_everything_just_like_in_javascript() {
-        assert!(matches(&json!(""), "6281234567890"));
-        assert!(matches(&json!("   "), "6281234567890"));
+        assert!(matches(&serde_json::json!(""), "6281234567890"));
+        assert!(matches(&serde_json::json!("   "), "6281234567890"));
     }
 
     #[test]

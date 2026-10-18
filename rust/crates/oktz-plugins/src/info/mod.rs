@@ -10,3 +10,5 @@ pub mod howmuchenergy;
 pub mod jadwalbola;
 pub mod livescore;
 pub mod whatrolethis;
+
+// Ditambahkan scripts/pasang-modul.mjs.

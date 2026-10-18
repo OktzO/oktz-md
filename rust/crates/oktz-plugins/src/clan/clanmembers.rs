@@ -120,7 +120,6 @@ mod tests {
     use super::*;
     use oktz_plugin_api::Participant;
     use oktz_plugin_api::registry::GroupRoster;
-    use serde_json::json;
 
     const SENDER: &str = "628111@s.whatsapp.net";
     const LEADER: &str = "628999@s.whatsapp.net";
@@ -139,14 +138,14 @@ mod tests {
                 is_bot_admin: false,
             },
             user_data: user,
-            settings: json!({ crate::clan::clancreate::CLANS_KEY: clans }),
+            settings: serde_json::json!({ crate::clan::clancreate::CLANS_KEY: clans }),
             ..Default::default()
         };
         (oktz_plugin_api::find("clanmembers").unwrap().handler)(ctx)
     }
 
     fn clan(members: Value) -> Value {
-        json!({
+        serde_json::json!({
             "id": "DRG",
             "name": "Dragon",
             "emblem": "🐉",
@@ -191,11 +190,11 @@ mod tests {
 
     #[test]
     fn the_guards_report_no_clan_and_missing_clan() {
-        let r = run(json!({}), json!({}), vec![]);
+        let r = run(serde_json::json!({}), serde_json::json!({}), vec![]);
         assert_eq!(text_of(&r), "❌ Kamu belum punya clan");
         assert!(r.mutations().is_empty());
 
-        let r = run(json!({"clanId": "HILANG"}), json!({}), vec![]);
+        let r = run(serde_json::json!({"clanId": "HILANG"}), serde_json::json!({}), vec![]);
         assert_eq!(text_of(&r), "❌ Clan tidak ditemukan");
         assert!(r.mutations().is_empty());
     }
@@ -203,8 +202,8 @@ mod tests {
     #[test]
     fn the_leader_gets_a_crown_and_everyone_else_a_bullet() {
         let r = run(
-            json!({"clanId": "DRG"}),
-            json!({ "DRG": clan(json!([LEADER, SENDER])) }),
+            serde_json::json!({"clanId": "DRG"}),
+            serde_json::json!({ "DRG": clan(serde_json::json!([LEADER, SENDER])) }),
             vec![],
         );
         let t = text_of(&r);
@@ -227,8 +226,8 @@ mod tests {
     #[test]
     fn the_leader_marker_follows_the_clan_leader_field_not_the_order() {
         let r = run(
-            json!({"clanId": "DRG"}),
-            json!({ "DRG": clan(json!([SENDER, LEADER])) }),
+            serde_json::json!({"clanId": "DRG"}),
+            serde_json::json!({ "DRG": clan(serde_json::json!([SENDER, LEADER])) }),
             vec![],
         );
         let t = text_of(&r);
@@ -241,9 +240,9 @@ mod tests {
     #[test]
     fn roster_and_sender_rows_supply_levels_and_koin() {
         let r = run(
-            json!({"clanId": "DRG", "level": 7, "koin": 25_000}),
-            json!({ "DRG": clan(json!([SENDER, LEADER])) }),
-            vec![participant(LEADER, json!({"rpg": {"level": 12}, "koin": 1234}))],
+            serde_json::json!({"clanId": "DRG", "level": 7, "koin": 25_000}),
+            serde_json::json!({ "DRG": clan(serde_json::json!([SENDER, LEADER])) }),
+            vec![participant(LEADER, serde_json::json!({"rpg": {"level": 12}, "koin": 1234}))],
         );
         let t = text_of(&r);
         assert!(t.contains("• @628111  Lv.7 · Rp 25.000"), "baris sender: {t}");
@@ -252,28 +251,28 @@ mod tests {
 
     #[test]
     fn rpg_level_wins_over_the_plain_level_field() {
-        let plain = json!({"level": 3, "rpg": {"level": 9}});
+        let plain = serde_json::json!({"level": 3, "rpg": {"level": 9}});
         assert_eq!(level_of(&plain), 9);
-        let only_rpg0 = json!({"level": 3, "rpg": {"level": 0}});
+        let only_rpg0 = serde_json::json!({"level": 3, "rpg": {"level": 0}});
         assert_eq!(level_of(&only_rpg0), 3, "`rpg.level = 0` falsy → `level`");
-        assert_eq!(level_of(&json!({})), 1);
-        assert_eq!(level_of(&json!({"level": "abc"})), 1);
+        assert_eq!(level_of(&serde_json::json!({})), 1);
+        assert_eq!(level_of(&serde_json::json!({"level": "abc"})), 1);
     }
 
     #[test]
     fn koin_falls_back_to_zero_for_missing_or_unparsable_values() {
-        assert_eq!(koin_of(&json!({})), "0");
-        assert_eq!(koin_of(&json!({"koin": null})), "0");
-        assert_eq!(koin_of(&json!({"koin": "abc"})), "0");
-        assert_eq!(koin_of(&json!({"koin": 0})), "0");
-        assert_eq!(koin_of(&json!({"koin": 1_234_567})), "1.234.567");
+        assert_eq!(koin_of(&serde_json::json!({})), "0");
+        assert_eq!(koin_of(&serde_json::json!({"koin": null})), "0");
+        assert_eq!(koin_of(&serde_json::json!({"koin": "abc"})), "0");
+        assert_eq!(koin_of(&serde_json::json!({"koin": 0})), "0");
+        assert_eq!(koin_of(&serde_json::json!({"koin": 1_234_567})), "1.234.567");
     }
 
     #[test]
     fn the_device_suffix_survives_in_the_display_number() {
         let r = run(
-            json!({"clanId": "DRG"}),
-            json!({ "DRG": clan(json!(["628999:3@s.whatsapp.net"])) }),
+            serde_json::json!({"clanId": "DRG"}),
+            serde_json::json!({ "DRG": clan(serde_json::json!(["628999:3@s.whatsapp.net"])) }),
             vec![],
         );
         assert!(text_of(&r).contains("@628999:3"), "{}", text_of(&r));

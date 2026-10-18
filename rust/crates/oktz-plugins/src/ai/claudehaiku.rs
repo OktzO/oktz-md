@@ -13,9 +13,8 @@
 //!    (pola hex yang sama, sumber acaknya `crate::common::roll`).
 
 use oktz_plugin_api::{Ctx, HttpGet, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
-use crate::fun::tod::error_template;
 
 use super::aiassist::{AiFailure, clip, failed, uuid_v4};
 
@@ -59,16 +58,16 @@ pub(crate) fn overchat_chat(
     prompt: &str,
     system: Option<&str>,
 ) -> Result<String, AiFailure> {
-    let mut messages = vec![json!({
+    let mut messages = vec![serde_json::json!({
         "id": uuid_v4(),
         "role": "user",
         "content": prompt,
     })];
     if let Some(s) = system {
-        messages.push(json!({ "id": uuid_v4(), "role": "system", "content": s }));
+        messages.push(serde_json::json!({ "id": uuid_v4(), "role": "system", "content": s }));
     }
 
-    let body = json!({
+    let body = serde_json::json!({
         "chatId": uuid_v4(),
         "model": model,
         "messages": messages,
@@ -127,7 +126,7 @@ pub fn claudehaiku(ctx: Ctx) -> Reply {
         Err(AiFailure::Rejected(e)) => {
             Reply::text(failed("Claude Haiku Gagal", &e)).with_reaction("☢")
         }
-        Err(AiFailure::Transport) => Reply::text(error_template(&ctx.prefix, &ctx.command))
+        Err(AiFailure::Transport) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
             .with_reaction("☢"),
     }
 }
@@ -159,7 +158,7 @@ mod tests {
         }
         fn respond(&self) -> Result<HttpResponse, HttpError> {
             let Some(text) = &self.resp else {
-                return Err(HttpError {
+                return Err(oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 });
             };
@@ -310,7 +309,7 @@ mod tests {
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "halo");
-        assert_eq!(body(&r), error_template(".", "claudehaiku"));
+        assert_eq!(body(&r), crate::common::error_template(".", "claudehaiku"));
         assert!(matches!(
             r.without_mutations(),
             Reply::Reaction { emoji, .. } if emoji == "☢"

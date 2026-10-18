@@ -42,7 +42,7 @@ pub fn energitoggle(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(command: &str) -> Reply {
         let ctx = Ctx {
@@ -107,13 +107,13 @@ mod tests {
     fn the_enable_names_write_true_and_the_rest_write_false() {
         for cmd in ["enableenergi", "onenergi"] {
             let r = run(cmd);
-            assert_eq!(stored_energi(&r), json!(true), "cmd {cmd}");
+            assert_eq!(stored_energi(&r), serde_json::json!(true), "cmd {cmd}");
             assert_eq!(text_of(&r), ON_MSG);
             assert_eq!(reaction_of(&r), "⚡");
         }
         for cmd in ["disableenergi", "offenergi"] {
             let r = run(cmd);
-            assert_eq!(stored_energi(&r), json!(false), "cmd {cmd}");
+            assert_eq!(stored_energi(&r), serde_json::json!(false), "cmd {cmd}");
             assert_eq!(text_of(&r), OFF_MSG);
             assert_eq!(reaction_of(&r), "🔌");
         }

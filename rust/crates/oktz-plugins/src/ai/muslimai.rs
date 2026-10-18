@@ -8,9 +8,8 @@
 //! cuma menampung satu emoji; reaksi akhir (`✅`/`☢`) yang dikirim.
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
-use crate::fun::tod::error_template;
 
 /// `muslimai.js:20`.
 const ENDPOINT: &str = "https://www.muslimai.io/api/chat";
@@ -81,9 +80,9 @@ pub fn muslimai(ctx: Ctx) -> Reply {
     // `_body` (`muslimai.js:28-33`) — `fetch`, bukan axios, jadi status HTTP
     // tidak diperiksa; `HttpGet` justru mengembalikan `Err` untuk >=400 dan
     // itu masuk `catch`, sama seperti `fetch` yang melempar untuk status itu.
-    let body = json!({ "query": text, "distinctId": DISTINCT_ID });
+    let body = serde_json::json!({ "query": text, "distinctId": DISTINCT_ID });
     let Ok(res) = ctx.http.post_json(ENDPOINT, &body) else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
 
     Reply::text(parse(&res.text())).with_reaction("✅")
@@ -118,7 +117,7 @@ mod tests {
         }
         fn respond(&self) -> Result<HttpResponse, HttpError> {
             let Some(text) = &self.resp else {
-                return Err(HttpError {
+                return Err(oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 });
             };
@@ -261,7 +260,7 @@ mod tests {
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "Apa itu sholat?");
-        assert_eq!(body(&r), error_template(".", "muslimai"));
+        assert_eq!(body(&r), crate::common::error_template(".", "muslimai"));
         assert!(matches!(
             r.without_mutations(),
             Reply::Reaction { emoji, .. } if emoji == "☢"

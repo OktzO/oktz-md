@@ -103,7 +103,6 @@ pub fn intro(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::registry::{GroupRoster, Participant};
-    use serde_json::json;
 
     fn roster(n: usize) -> GroupRoster {
         GroupRoster {
@@ -168,7 +167,7 @@ mod tests {
 
     #[test]
     fn absent_group_intro_falls_back_to_the_default_template() {
-        for g in [json!(null), json!({}), json!({"intro": ""})] {
+        for g in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"intro": ""})] {
             let reply = run(g.clone(), "628111@s.whatsapp.net", 3);
             let out = text_of(&reply);
             assert!(out.starts_with("halo kak @628111 🖐\n\nKenalan dulu yukk"), "{g}");
@@ -180,7 +179,7 @@ mod tests {
     #[test]
     fn a_custom_intro_replaces_the_default_entirely() {
         let reply = run(
-            json!({"intro": "Halo @user! Kamu member ke-@count."}),
+            serde_json::json!({"intro": "Halo @user! Kamu member ke-@count."}),
             "628111@s.whatsapp.net",
             7,
         );
@@ -227,9 +226,9 @@ mod tests {
 
     #[test]
     fn member_count_comes_from_the_roster_and_zero_for_an_empty_roster() {
-        let full = run(json!({"intro": "jumlah @count"}), "628111@s.whatsapp.net", 12);
+        let full = run(serde_json::json!({"intro": "jumlah @count"}), "628111@s.whatsapp.net", 12);
         assert_eq!(text_of(&full), "jumlah 12");
-        let empty = run(json!({"intro": "jumlah @count"}), "628111@s.whatsapp.net", 0);
+        let empty = run(serde_json::json!({"intro": "jumlah @count"}), "628111@s.whatsapp.net", 0);
         assert_eq!(
             text_of(&empty),
             "jumlah 0",
@@ -239,7 +238,7 @@ mod tests {
 
     #[test]
     fn sender_is_always_mentioned_and_numbered_without_the_server() {
-        let r = run(json!({"intro": "hai @user"}), "628111:3@s.whatsapp.net", 2);
+        let r = run(serde_json::json!({"intro": "hai @user"}), "628111:3@s.whatsapp.net", 2);
         assert_eq!(text_of(&r), "hai @628111:3");
         assert_eq!(mentions_of(&r), &["628111:3@s.whatsapp.net"]);
     }

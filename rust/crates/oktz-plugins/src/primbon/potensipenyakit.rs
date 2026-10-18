@@ -62,7 +62,6 @@ pub fn potensipenyakit(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse, NoHttp};
-    use serde_json::json;
     use std::sync::Arc;
 
     #[derive(Debug)]
@@ -131,7 +130,7 @@ mod tests {
     #[test]
     fn three_arguments_are_passed_through_verbatim() {
         let r = run_with(
-            Arc::new(Stub(json!({
+            Arc::new(Stub(serde_json::json!({
                 "status": true,
                 "data": { "sektor": "Timur", "elemen": "Air", "catatan": "istirahat" }
             }))),
@@ -145,7 +144,7 @@ mod tests {
 
         // Angka negatif pun tidak divalidasi — tetap diteruskan mentah.
         let r = run_with(
-            Arc::new(Stub(json!({ "status": true, "data": { "catatan": "-" } }))),
+            Arc::new(Stub(serde_json::json!({ "status": true, "data": { "catatan": "-" } }))),
             &["-1", "😀", "abc"],
         );
         assert!(
@@ -175,7 +174,7 @@ mod tests {
 
     #[test]
     fn a_falsy_status_or_data_gives_the_failure_message() {
-        for body in [json!({ "data": {} }), json!({ "status": true }), json!({})] {
+        for body in [serde_json::json!({ "data": {} }), serde_json::json!({ "status": true }), serde_json::json!({})] {
             let r = run_with(Arc::new(Stub(body)), &["12", "05", "1998"]);
             assert_eq!(reply_text(&r), "❌ *ɢᴀɢᴀʟ*\n\n> Gagal menganalisa");
         }

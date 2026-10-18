@@ -9,3 +9,5 @@ pub mod iqc;
 pub mod iqc2;
 pub mod pakustad;
 pub mod watercolortext;
+
+// Ditambahkan scripts/pasang-modul.mjs.

@@ -4,7 +4,7 @@
 //! Reaksi + pesan antara sebelum jeda `setTimeout` tidak masuk `Reply`.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::int_field;
 use crate::rpg::jualan::{
@@ -35,7 +35,7 @@ pub fn cerpen(ctx: Ctx) -> Reply {
              Nulis butuh *{STAMINA_COST} Stamina*, sisa stamina kamu *{stamina}*. Cari inspirasi dulu! 💡"
         ));
     }
-    rpg.insert("stamina".into(), json!(stamina - STAMINA_COST));
+    rpg.insert("stamina".into(), serde_json::json!(stamina - STAMINA_COST));
 
     let koin = int_field(&ctx, "koin");
     let old_exp = or_default(ctx.user_field("exp").and_then(Value::as_i64), 0);
@@ -53,7 +53,7 @@ pub fn cerpen(ctx: Ctx) -> Reply {
         .with_reaction("🚮")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "rpg": rpg }),
+            data: serde_json::json!({ "rpg": rpg }),
         });
     }
 
@@ -73,7 +73,7 @@ pub fn cerpen(ctx: Ctx) -> Reply {
         .with_reaction("🌟")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "koin": koin + royalti, "exp": new_exp, "rpg": rpg }),
+            data: serde_json::json!({ "koin": koin + royalti, "exp": new_exp, "rpg": rpg }),
         });
     }
 
@@ -92,7 +92,7 @@ pub fn cerpen(ctx: Ctx) -> Reply {
     .with_reaction("✅")
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": koin + royalti, "exp": new_exp, "rpg": rpg }),
+        data: serde_json::json!({ "koin": koin + royalti, "exp": new_exp, "rpg": rpg }),
     })
 }
 
@@ -160,7 +160,7 @@ mod tests {
 
     #[test]
     fn writer_s_block_sends_the_author_back_to_bed() {
-        let r = run(json!({"rpg": {"stamina": 9}}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 9}}));
         let t = text_of(&r);
         assert!(t.starts_with("Ide buntu, writer block menyerang!"), "{t}");
         assert!(t.contains("sisa stamina kamu *9*"), "{t}");
@@ -170,8 +170,8 @@ mod tests {
     #[test]
     fn every_draft_costs_ten_stamina() {
         for _ in 0..200 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
-            assert_eq!(written(&r)["rpg"]["stamina"], json!(90));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            assert_eq!(written(&r)["rpg"]["stamina"], serde_json::json!(90));
         }
     }
 
@@ -181,7 +181,7 @@ mod tests {
         let mut viral = 0;
         let mut biasa = 0;
         for _ in 0..4000 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
             let d = written(&r);
             let t = text_of(&r);
             if t.starts_with("NASKAH DITOLAK") {
@@ -191,12 +191,12 @@ mod tests {
                 viral += 1;
                 let koin = d["koin"].as_i64().unwrap();
                 assert!((30000..=89999).contains(&koin), "{koin}");
-                assert_eq!(d["exp"], json!(koin / 20));
+                assert_eq!(d["exp"], serde_json::json!(koin / 20));
             } else {
                 biasa += 1;
                 let koin = d["koin"].as_i64().unwrap();
                 assert!((5000..=19999).contains(&koin), "{koin}");
-                assert_eq!(d["exp"], json!(koin / 20));
+                assert_eq!(d["exp"], serde_json::json!(koin / 20));
             }
         }
         assert!(ditolak > 0 && viral > 0 && biasa > 0, "{ditolak}/{viral}/{biasa}");

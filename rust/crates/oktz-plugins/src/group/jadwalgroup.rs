@@ -176,7 +176,6 @@ pub fn jadwalgroup(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
 
-    use serde_json::json;
 
     fn run(group: Value, args: &[&str]) -> Reply {
         let ctx = Ctx {
@@ -230,7 +229,7 @@ mod tests {
 
     #[test]
     fn no_argument_shows_both_schedules_as_inactive() {
-        let r = run(json!({}), &[]);
+        let r = run(serde_json::json!({}), &[]);
         assert_eq!(
             text_of(&r),
             "⏰ *ᴊᴀᴅᴡᴀʟ ɢʀᴜᴘ*\n\n\
@@ -249,7 +248,7 @@ mod tests {
     #[test]
     fn the_status_line_shows_stored_times() {
         let r = run(
-            json!({"scheduleOpen": "06:00", "scheduleClose": "22:30"}),
+            serde_json::json!({"scheduleOpen": "06:00", "scheduleClose": "22:30"}),
             &[],
         );
         assert!(text_of(&r).contains("🔓 ᴏᴘᴇɴ: *06:00*"), "{}", text_of(&r));
@@ -258,8 +257,8 @@ mod tests {
 
     #[test]
     fn setting_open_pads_the_hour_and_writes_schedule_open() {
-        let r = run(json!({}), &["open", "6:00"]);
-        assert_eq!(group_write(&r), &json!({"scheduleOpen": "06:00"}));
+        let r = run(serde_json::json!({}), &["open", "6:00"]);
+        assert_eq!(group_write(&r), &serde_json::json!({"scheduleOpen": "06:00"}));
         assert!(
             text_of(&r).contains("┃ ㊗ ⏱️ ᴡᴏᴋᴛᴜ: *06:00 WIB*"),
             "{}",
@@ -271,8 +270,8 @@ mod tests {
 
     #[test]
     fn setting_close_uses_the_close_wording() {
-        let r = run(json!({}), &["CLOSE", "22:30"]);
-        assert_eq!(group_write(&r), &json!({"scheduleClose": "22:30"}));
+        let r = run(serde_json::json!({}), &["CLOSE", "22:30"]);
+        assert_eq!(group_write(&r), &serde_json::json!({"scheduleClose": "22:30"}));
         assert!(text_of(&r).contains("ᴀᴋsɪ: *TUTUP*"), "{}", text_of(&r));
         assert!(text_of(&r).contains("> _Grup akan otomatis ditutup_"));
     }
@@ -280,13 +279,13 @@ mod tests {
     #[test]
     fn a_time_split_into_three_tokens_is_joined_again() {
         // `.jadwalgroup open 6 : 00` — `args[2] === ':'`.
-        let r = run(json!({}), &["open", "6", ":", "00"]);
-        assert_eq!(group_write(&r), &json!({"scheduleOpen": "06:00"}));
+        let r = run(serde_json::json!({}), &["open", "6", ":", "00"]);
+        assert_eq!(group_write(&r), &serde_json::json!({"scheduleOpen": "06:00"}));
     }
 
     #[test]
     fn an_unknown_action_is_rejected() {
-        let r = run(json!({}), &["jadwal", "06:00"]);
+        let r = run(serde_json::json!({}), &["jadwal", "06:00"]);
         assert_eq!(text_of(&r), BAD_ACTION);
         assert!(r.mutations().is_empty());
     }
@@ -294,17 +293,17 @@ mod tests {
     #[test]
     fn hapus_clears_the_named_schedule_only() {
         let r = run(
-            json!({"scheduleOpen": "06:00", "scheduleClose": "22:00"}),
+            serde_json::json!({"scheduleOpen": "06:00", "scheduleClose": "22:00"}),
             &["hapus", "open"],
         );
-        assert_eq!(group_write(&r), &json!({"scheduleOpen": null}));
+        assert_eq!(group_write(&r), &serde_json::json!({"scheduleOpen": null}));
         assert!(text_of(&r).contains("buka grup"), "{}", text_of(&r));
     }
 
     #[test]
     fn hapus_close_names_the_close_schedule() {
-        let r = run(json!({"scheduleClose": "22:00"}), &["delete", "close"]);
-        assert_eq!(group_write(&r), &json!({"scheduleClose": null}));
+        let r = run(serde_json::json!({"scheduleClose": "22:00"}), &["delete", "close"]);
+        assert_eq!(group_write(&r), &serde_json::json!({"scheduleClose": null}));
         assert!(text_of(&r).contains("tutup grup"), "{}", text_of(&r));
     }
 
@@ -312,17 +311,17 @@ mod tests {
     fn hapus_with_a_wrong_or_missing_kind_is_rejected() {
         // `args[1]?.toLowerCase()` — "OPEN" tetap sah, "JADWAL" tidak.
         for args in [&["hapus"][..], &["remove", "jadwal"][..]] {
-            let r = run(json!({}), args);
+            let r = run(serde_json::json!({}), args);
             assert_eq!(text_of(&r), BAD_HAPUS, "args {args:?}");
             assert!(r.mutations().is_empty());
         }
-        let r = run(json!({"scheduleOpen": "06:00"}), &["remove", "OPEN"]);
-        assert_eq!(group_write(&r), &json!({"scheduleOpen": null}), "huruf besar di-lowercase dulu");
+        let r = run(serde_json::json!({"scheduleOpen": "06:00"}), &["remove", "OPEN"]);
+        assert_eq!(group_write(&r), &serde_json::json!({"scheduleOpen": null}), "huruf besar di-lowercase dulu");
     }
 
     #[test]
     fn a_missing_time_is_reported_with_the_action_name() {
-        let r = run(json!({}), &["open"]);
+        let r = run(serde_json::json!({}), &["open"]);
         assert!(text_of(&r).starts_with("⚠️ *ᴠᴀʟɪᴅᴀsɪ ɢᴀɢᴀʟ*"), "{}", text_of(&r));
         assert!(text_of(&r).contains("> Waktu harus diisi!"), "{}", text_of(&r));
         assert!(text_of(&r).contains(".jadwalgroup open 08:00"), "{}", text_of(&r));
@@ -332,7 +331,7 @@ mod tests {
     #[test]
     fn malformed_times_are_rejected_by_the_same_branch() {
         for t in ["25:00", "6:000", "abc", "06", "06:0", "", "-1:00", "06:60"] {
-            let r = run(json!({}), &["open", t]);
+            let r = run(serde_json::json!({}), &["open", t]);
             let expected = if t.is_empty() {
                 missing_time("open")
             } else {

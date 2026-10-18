@@ -7,7 +7,7 @@
 //! masuk tas maupun ke teks.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::rpg::heal::{
     apply_exp, coalesce, inventory_map, or_default, rpg_int, rpg_map, roll_incl, roll_percent,
@@ -64,7 +64,7 @@ pub fn berburu(ctx: Ctx) -> Reply {
              Istirahat dulu gih biar seger lagi! 🛌💤"
         ));
     }
-    rpg.insert("stamina".into(), json!(stamina - STAMINA_COST));
+    rpg.insert("stamina".into(), serde_json::json!(stamina - STAMINA_COST));
 
     let mut caught = caught();
     if caught.is_empty() {
@@ -76,7 +76,7 @@ pub fn berburu(ctx: Ctx) -> Reply {
         .with_reaction("😢")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "rpg": rpg }),
+            data: serde_json::json!({ "rpg": rpg }),
         });
     }
     caught.truncate(3);
@@ -87,7 +87,7 @@ pub fn berburu(ctx: Ctx) -> Reply {
     for (name, item, _, min, max, exp, money) in caught {
         let qty = roll_incl(*min, *max);
         let have = or_default(inv.get(*item).and_then(Value::as_i64), 0);
-        inv.insert((*item).to_string(), json!(have + qty));
+        inv.insert((*item).to_string(), serde_json::json!(have + qty));
         total_exp += exp * qty;
         total_money += money * qty;
         lines.push_str(&format!("• {name}: *+{qty} ekor*\n"));
@@ -110,7 +110,7 @@ pub fn berburu(ctx: Ctx) -> Reply {
     .with_reaction("✅")
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": crate::common::int_field(&ctx, "koin") + total_money,
+        data: serde_json::json!({ "koin": crate::common::int_field(&ctx, "koin") + total_money,
                       "inventory": inv,
                       "exp": new_exp,
                       "rpg": rpg }),
@@ -120,7 +120,6 @@ pub fn berburu(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     /// `alias` plugin `hunt.js` juga memuat "berburu", jadi `find("berburu")`
     /// bisa mengembalikan plugin yang salah — cari lewat `meta.name`.
@@ -183,7 +182,7 @@ mod tests {
     #[test]
     fn no_stamina_at_all_blocks_the_hunt_and_costs_nothing() {
         for stamina in [0, 1, 24] {
-            let r = run(json!({ "rpg": { "stamina": stamina }, "koin": 500 }));
+            let r = run(serde_json::json!({ "rpg": { "stamina": stamina }, "koin": 500 }));
             let t = text_of(&r);
             assert!(t.starts_with("Aduh kak, stamina kamu abis"), "stamina {stamina}: {t}");
             assert!(t.contains(&format!("sisa *{stamina}*")), "{t}");
@@ -195,10 +194,10 @@ mod tests {
     fn exactly_twenty_five_stamina_is_enough() {
         let mut went = false;
         for _ in 0..200 {
-            let r = run(json!({ "rpg": { "stamina": 25 } }));
+            let r = run(serde_json::json!({ "rpg": { "stamina": 25 } }));
             if !text_of(&r).starts_with("Aduh kak, stamina kamu abis") {
                 went = true;
-                assert_eq!(write_of(&r)["rpg"]["stamina"], json!(0));
+                assert_eq!(write_of(&r)["rpg"]["stamina"], serde_json::json!(0));
             }
         }
         assert!(went, "25 harus lolos");
@@ -209,7 +208,7 @@ mod tests {
     fn a_missing_stamina_reads_as_one_hundred_but_zero_stays_zero() {
         assert_eq!(stamina_or_100(&Map::new()), 100);
         let mut rpg = Map::new();
-        rpg.insert("stamina".into(), json!(0));
+        rpg.insert("stamina".into(), serde_json::json!(0));
         assert_eq!(stamina_or_100(&rpg), 0);
     }
 
@@ -217,11 +216,11 @@ mod tests {
     fn an_empty_hunt_still_charges_the_stamina() {
         let mut empty = 0;
         for _ in 0..600 {
-            let r = run(json!({ "rpg": { "stamina": 100 }, "koin": 1_000 }));
+            let r = run(serde_json::json!({ "rpg": { "stamina": 100 }, "koin": 1_000 }));
             if !text_of(&r).starts_with("CROOT!") {
                 empty += 1;
                 let data = write_of(&r);
-                assert_eq!(data["rpg"]["stamina"], json!(75), "stamina tetap kepotong");
+                assert_eq!(data["rpg"]["stamina"], serde_json::json!(75), "stamina tetap kepotong");
                 assert!(data.get("koin").is_none(), "buruan kosong tak menulis koin");
                 assert!(data.get("inventory").is_none());
             }
@@ -232,7 +231,7 @@ mod tests {
     #[test]
     fn at_most_three_animals_are_listed_even_when_more_were_caught() {
         for _ in 0..600 {
-            let r = run(json!({ "rpg": { "stamina": 100 } }));
+            let r = run(serde_json::json!({ "rpg": { "stamina": 100 } }));
             let t = text_of(&r);
             if !t.starts_with("CROOT!") {
                 continue;
@@ -251,7 +250,7 @@ mod tests {
     #[test]
     fn the_totals_match_the_rows_that_were_kept() {
         for _ in 0..400 {
-            let r = run(json!({ "rpg": { "stamina": 100 }, "koin": 0, "exp": 0 }));
+            let r = run(serde_json::json!({ "rpg": { "stamina": 100 }, "koin": 0, "exp": 0 }));
             let t = text_of(&r);
             if !t.starts_with("CROOT!") {
                 continue;

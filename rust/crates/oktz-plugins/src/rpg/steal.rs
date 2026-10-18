@@ -7,7 +7,7 @@
 //! tidak ada target yang boleh dibobol.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::int_field;
 use crate::rpg::jualan::{
@@ -64,7 +64,7 @@ pub fn steal(ctx: Ctx) -> Reply {
              Butuh *{STAMINA_COST} Stamina* buat nyusup, lu cuma punya *{stamina}*. Istirahat gih!"
         ));
     }
-    rpg.insert("stamina".into(), json!(stamina - STAMINA_COST));
+    rpg.insert("stamina".into(), serde_json::json!(stamina - STAMINA_COST));
 
     let koin = int_field(&ctx, "koin");
     let level = or_default(ctx.user_field("level").and_then(Value::as_i64), 1);
@@ -78,7 +78,7 @@ pub fn steal(ctx: Ctx) -> Reply {
         ))
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "rpg": rpg }),
+            data: serde_json::json!({ "rpg": rpg }),
         });
     }
 
@@ -92,7 +92,7 @@ pub fn steal(ctx: Ctx) -> Reply {
         let gold_loss = koin / 10;
         let health_loss = 10 + difficulty * 5;
         let health = (or_default(rpg_int(&rpg, "health"), 100) - health_loss).max(1);
-        rpg.insert("health".into(), json!(health));
+        rpg.insert("health".into(), serde_json::json!(health));
         return Reply::text(format!(
             "SIAAALLLL!! KESANDUNG POT BUNGA!! 💥🚨\n\n\
              Si *{name}* langsung kebangun dan mukulin lu abis-abisan!\n\n\
@@ -106,7 +106,7 @@ pub fn steal(ctx: Ctx) -> Reply {
         .with_reaction("💀")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "koin": (koin - gold_loss).max(0), "rpg": rpg }),
+            data: serde_json::json!({ "koin": (koin - gold_loss).max(0), "rpg": rpg }),
         });
     }
 
@@ -119,9 +119,9 @@ pub fn steal(ctx: Ctx) -> Reply {
     let mut inv = inventory_map(&ctx);
     let bonus_text = if math_random() > 0.7 {
         let item = BONUS_ITEMS[crate::common::random_index(BONUS_ITEMS.len())];
-        let slot = inv.entry(item.to_string()).or_insert(json!(0));
+        let slot = inv.entry(item.to_string()).or_insert(serde_json::json!(0));
         let have = slot.as_i64().unwrap_or(0);
-        *slot = json!(have + 1);
+        *slot = serde_json::json!(have + 1);
         format!("\n📦 Bonus Jarahan: *{item} x1*")
     } else {
         String::new()
@@ -139,7 +139,7 @@ pub fn steal(ctx: Ctx) -> Reply {
     .with_reaction("💰")
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": koin + gold, "exp": new_exp, "rpg": rpg, "inventory": inv }),
+        data: serde_json::json!({ "koin": koin + gold, "exp": new_exp, "rpg": rpg, "inventory": inv }),
     })
 }
 
@@ -200,18 +200,18 @@ mod tests {
 
     #[test]
     fn a_low_level_thief_is_turned_away_but_still_pays_the_stamina() {
-        let r = run(json!({"level": 1, "rpg": {"stamina": 100}, "koin": 500}));
+        let r = run(serde_json::json!({"level": 1, "rpg": {"stamina": 100}, "koin": 500}));
         let t = text_of(&r);
         assert!(t.starts_with("Level lu masih bocil (Level 1)."), "{t}");
         assert!(t.contains("minimal butuh *Level 3*"), "{t}");
         let d = written(&r);
-        assert_eq!(d["rpg"]["stamina"], json!(85), "db.save() di cabang ini");
+        assert_eq!(d["rpg"]["stamina"], serde_json::json!(85), "db.save() di cabang ini");
         assert!(d.get("koin").is_none());
     }
 
     #[test]
     fn low_stamina_is_refused_before_the_level_check() {
-        let r = run(json!({"level": 1, "rpg": {"stamina": 14}}));
+        let r = run(serde_json::json!({"level": 1, "rpg": {"stamina": 14}}));
         assert!(text_of(&r).starts_with("Hadeh... mau jadi pencuri kok loyo?"));
         assert!(r.mutations().is_empty());
     }
@@ -228,10 +228,10 @@ mod tests {
     #[test]
     fn a_heist_reports_its_target_and_never_breaks_its_own_range() {
         for _ in 0..1000 {
-            let r = run(json!({"level": 20, "rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            let r = run(serde_json::json!({"level": 20, "rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
             let t = text_of(&r);
             let d = written(&r);
-            assert_eq!(d["rpg"]["stamina"], json!(85));
+            assert_eq!(d["rpg"]["stamina"], serde_json::json!(85));
             if t.starts_with("SIAAALLLL") {
                 continue;
             }
@@ -242,7 +242,7 @@ mod tests {
                 .unwrap_or_else(|| panic!("target tak dikenal: {t}"));
             let koin = d["koin"].as_i64().unwrap();
             assert!((min..max).contains(&koin), "{koin} harus di {min}..{max}");
-            assert_eq!(d["exp"], json!(50 + difficulty * 30));
+            assert_eq!(d["exp"], serde_json::json!(50 + difficulty * 30));
         }
     }
 
@@ -250,7 +250,7 @@ mod tests {
     fn getting_caught_costs_a_tenth_of_the_purse_and_blood_but_no_exp() {
         let mut seen = 0;
         for _ in 0..6000 {
-            let r = run(json!({"level": 18, "rpg": {"stamina": 100}, "koin": 1000, "exp": 42}));
+            let r = run(serde_json::json!({"level": 18, "rpg": {"stamina": 100}, "koin": 1000, "exp": 42}));
             let d = written(&r);
             let t = text_of(&r);
             if !t.starts_with("SIAAALLLL") {
@@ -262,8 +262,8 @@ mod tests {
                 .find(|(name, ..)| t.contains(&format!("Si *{name}* langsung")))
                 .copied()
                 .unwrap_or_else(|| panic!("target tak dikenal: {t}"));
-            assert_eq!(d["koin"], json!(900), "10% dari 1000");
-            assert_eq!(d["rpg"]["health"], json!(100 - (10 + difficulty * 5)), "{t}");
+            assert_eq!(d["koin"], serde_json::json!(900), "10% dari 1000");
+            assert_eq!(d["rpg"]["health"], serde_json::json!(100 - (10 + difficulty * 5)), "{t}");
             assert!(d.get("exp").is_none(), "exp utuh");
         }
         assert!(seen > 0, "cabang ketahuan harus muncul");
@@ -281,7 +281,7 @@ mod tests {
     fn the_bonus_loot_only_lands_on_the_four_named_items() {
         let mut seen = false;
         for _ in 0..3000 {
-            let r = run(json!({"level": 18, "rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            let r = run(serde_json::json!({"level": 18, "rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
             let t = text_of(&r);
             if t.contains("Bonus Jarahan") {
                 seen = true;
@@ -291,7 +291,7 @@ mod tests {
                     .and_then(|s| s.split(' ').next())
                     .unwrap();
                 assert!(BONUS_ITEMS.contains(&item), "item {item}");
-                assert_eq!(written(&r)["inventory"][item], json!(1));
+                assert_eq!(written(&r)["inventory"][item], serde_json::json!(1));
             }
         }
         assert!(seen, "bonus 30% harus muncul dalam 3000 sampel");

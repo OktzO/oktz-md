@@ -6,7 +6,7 @@
 //! memberi 1 padi dengan nilai 100 — bukan 0.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::rpg::heal::{
     apply_exp, coalesce, inventory_map, or_default, rpg_int, rpg_map, roll_incl, roll_percent,
@@ -61,7 +61,7 @@ pub fn berladang(ctx: Ctx) -> Reply {
              Makan atau istirahat dulu gih! 🛌💤"
         ));
     }
-    rpg.insert("stamina".into(), json!(stamina - STAMINA_COST));
+    rpg.insert("stamina".into(), serde_json::json!(stamina - STAMINA_COST));
 
     let mut inv = inventory_map(&ctx);
     let mut lines = String::new();
@@ -71,7 +71,7 @@ pub fn berladang(ctx: Ctx) -> Reply {
         if roll_percent() <= chance {
             let qty = roll_incl(min, max);
             let have = or_default(inv.get(item).and_then(Value::as_i64), 0);
-            inv.insert(item.to_string(), json!(have + qty));
+            inv.insert(item.to_string(), serde_json::json!(have + qty));
             let value = qty * price;
             total_value += value;
             lines.push_str(&format!(
@@ -83,7 +83,7 @@ pub fn berladang(ctx: Ctx) -> Reply {
 
     if lines.is_empty() {
         let have = or_default(inv.get("padi").and_then(Value::as_i64), 0);
-        inv.insert("padi".to_string(), json!(have + 1));
+        inv.insert("padi".to_string(), serde_json::json!(have + 1));
         lines.push_str("• 🌾 Padi: *+1* (Est. Rp 100)\n");
         total_value = 100;
     }
@@ -106,14 +106,13 @@ pub fn berladang(ctx: Ctx) -> Reply {
     .with_reaction("✅")
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "inventory": inv, "exp": new_exp, "rpg": rpg }),
+        data: serde_json::json!({ "inventory": inv, "exp": new_exp, "rpg": rpg }),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: Value) -> Reply {
         let ctx = Ctx {
@@ -166,7 +165,7 @@ mod tests {
     #[test]
     fn not_enough_stamina_blocks_the_hoe_and_writes_nothing() {
         for stamina in [0, 19] {
-            let r = run(json!({ "rpg": { "stamina": stamina } }));
+            let r = run(serde_json::json!({ "rpg": { "stamina": stamina } }));
             let t = text_of(&r);
             assert!(t.starts_with("Aduh kak, encok nih badan"), "stamina {stamina}: {t}");
             assert!(t.contains(&format!("sisa stamina kamu *{stamina}*")), "{t}");
@@ -178,10 +177,10 @@ mod tests {
     fn exactly_twenty_stamina_is_enough() {
         let mut went = false;
         for _ in 0..200 {
-            let r = run(json!({ "rpg": { "stamina": 20 } }));
+            let r = run(serde_json::json!({ "rpg": { "stamina": 20 } }));
             if !text_of(&r).starts_with("Aduh kak, encok") {
                 went = true;
-                assert_eq!(write_of(&r)["rpg"]["stamina"], json!(0));
+                assert_eq!(write_of(&r)["rpg"]["stamina"], serde_json::json!(0));
             }
         }
         assert!(went, "20 harus lolos");
@@ -198,7 +197,7 @@ mod tests {
     fn a_failed_harvest_still_yields_one_padi() {
         let mut fallback = 0;
         for _ in 0..2400 {
-            let r = run(json!({ "rpg": { "stamina": 100 } }));
+            let r = run(serde_json::json!({ "rpg": { "stamina": 100 } }));
             let t = text_of(&r);
             assert!(t.starts_with("PANEN RAYA KAK!"), "{t}");
             let is_fallback = t.contains("• 🌾 Padi: *+1* (Est. Rp 100)")
@@ -211,7 +210,7 @@ mod tests {
             }
             fallback += 1;
             assert_eq!(t.matches("Est. Rp").count(), 1, "fallback tak boleh baris lain: {t}");
-            assert_eq!(write_of(&r)["inventory"]["padi"], json!(1));
+            assert_eq!(write_of(&r)["inventory"]["padi"], serde_json::json!(1));
         }
         assert!(fallback > 0, "dalam 2400 percobaan harus ada panen kosong");
     }
@@ -219,7 +218,7 @@ mod tests {
     #[test]
     fn the_total_value_is_the_sum_of_the_listed_rows() {
         for _ in 0..400 {
-            let r = run(json!({ "rpg": { "stamina": 100 }, "exp": 0 }));
+            let r = run(serde_json::json!({ "rpg": { "stamina": 100 }, "exp": 0 }));
             let t = text_of(&r);
             let data = write_of(&r);
             let total = data["exp"].as_i64().unwrap();

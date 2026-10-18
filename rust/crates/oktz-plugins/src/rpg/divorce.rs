@@ -8,7 +8,6 @@
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
 use serde_json::Value;
-use serde_json::json;
 
 use crate::common::jid_number;
 use crate::rpg::heal::{other_user, rpg_map};
@@ -67,13 +66,13 @@ pub fn divorce(ctx: Ctx) -> Reply {
             partner_rpg.insert("marriedAt".into(), Value::Null);
             Mutation::SetUser {
                 jid: spouse.clone(),
-                data: json!({ "rpg": partner_rpg }),
+                data: serde_json::json!({ "rpg": partner_rpg }),
             }
         });
 
     let mut mutations = vec![Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": koin - DIVORCE_COST, "rpg": rpg }),
+        data: serde_json::json!({ "koin": koin - DIVORCE_COST, "rpg": rpg }),
     }];
     mutations.extend(partner_mutation);
 
@@ -101,7 +100,6 @@ pub fn divorce(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::registry::{GroupRoster, Participant};
-    use serde_json::json;
 
     fn run(user: Value, partner: Option<Value>) -> Reply {
         let ctx = Ctx {
@@ -129,7 +127,7 @@ mod tests {
     }
 
     fn married(koin: i64) -> Value {
-        json!({ "koin": koin,
+        serde_json::json!({ "koin": koin,
                 "rpg": { "spouse": "628222@s.whatsapp.net",
                          "marriedAt": 1_700_000_000_000_i64 } })
     }
@@ -157,7 +155,7 @@ mod tests {
 
     #[test]
     fn an_unmarried_user_is_mocked_and_nothing_is_written() {
-        for user in [json!(null), json!({}), json!({ "rpg": {} })] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({ "rpg": {} })] {
             let r = run(user.clone(), None);
             assert!(
                 text_of(&r).starts_with("Halu tingkat tinggi... Nikah aja belum"),
@@ -169,7 +167,7 @@ mod tests {
 
     #[test]
     fn the_fee_is_charged_and_the_marriage_is_cleared() {
-        let r = run(married(50_000), Some(json!({ "rpg": { "spouse": "628111@s.whatsapp.net" } })));
+        let r = run(married(50_000), Some(serde_json::json!({ "rpg": { "spouse": "628111@s.whatsapp.net" } })));
         let t = text_of(&r);
         assert!(t.starts_with("⛈️ *SIDANG PERCERAIAN SELESAI*"), "{t}");
         assert!(t.contains("💔 @628111"), "{t}");
@@ -180,7 +178,7 @@ mod tests {
             panic!("harus SetUser");
         };
         assert_eq!(jid, "628111@s.whatsapp.net");
-        assert_eq!(data["koin"], json!(25_000));
+        assert_eq!(data["koin"], serde_json::json!(25_000));
         assert_eq!(data["rpg"]["spouse"], Value::Null);
         assert_eq!(data["rpg"]["marriedAt"], Value::Null);
     }
@@ -192,7 +190,7 @@ mod tests {
         assert_eq!(r.mutations().len(), 1);
         assert_eq!(r.mutations()[0].clone(), Mutation::SetUser {
             jid: "628111@s.whatsapp.net".into(),
-            data: json!({ "koin": 25_000,
+            data: serde_json::json!({ "koin": 25_000,
                           "rpg": { "spouse": Value::Null, "marriedAt": Value::Null } }),
         });
     }
@@ -201,7 +199,7 @@ mod tests {
     fn a_readable_partner_with_rpg_is_cleared_too() {
         let r = run(
             married(50_000),
-            Some(json!({ "rpg": { "spouse": "628111@s.whatsapp.net", "marriedAt": 1, "love": 40 } })),
+            Some(serde_json::json!({ "rpg": { "spouse": "628111@s.whatsapp.net", "marriedAt": 1, "love": 40 } })),
         );
         assert_eq!(r.mutations().len(), 2);
         let second = &r.mutations()[1];
@@ -240,7 +238,7 @@ mod tests {
         assert!(text_of(&r).starts_with("⛈️ *SIDANG PERCERAIAN SELESAI*"), "{}", text_of(&r));
         assert_eq!(r.mutations()[0].clone(), Mutation::SetUser {
             jid: "628111@s.whatsapp.net".into(),
-            data: json!({ "koin": 0,
+            data: serde_json::json!({ "koin": 0,
                           "rpg": { "spouse": Value::Null, "marriedAt": Value::Null } }),
         });
     }

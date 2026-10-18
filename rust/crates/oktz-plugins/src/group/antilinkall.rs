@@ -98,7 +98,6 @@ pub fn antilinkall(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -157,7 +156,7 @@ mod tests {
 
     #[test]
     fn no_argument_reports_the_stored_state_without_writing() {
-        let r = run(json!({}), "");
+        let r = run(serde_json::json!({}), "");
         assert!(text_of(&r).contains("> Status: *Nonaktif ❌*"), "{}", text_of(&r));
         assert!(text_of(&r).contains("> Mode: *REMOVE*"), "{}", text_of(&r));
         assert!(r.mutations().is_empty());
@@ -165,40 +164,40 @@ mod tests {
 
     #[test]
     fn an_active_setting_is_reported_as_active() {
-        let r = run(json!({"antilinkall": "on", "antilinkallMode": "kick"}), "");
+        let r = run(serde_json::json!({"antilinkall": "on", "antilinkallMode": "kick"}), "");
         assert!(text_of(&r).contains("> Status: *Aktif ✅*"), "{}", text_of(&r));
         assert!(text_of(&r).contains("> Mode: *KICK*"), "{}", text_of(&r));
     }
 
     #[test]
     fn on_and_off_write_only_the_status_flag() {
-        let on = run(json!({}), "on");
+        let on = run(serde_json::json!({}), "on");
         assert_eq!(text_of(&on), ON);
-        assert_eq!(written(&on), &json!({ "antilinkall": "on" }));
+        assert_eq!(written(&on), &serde_json::json!({ "antilinkall": "on" }));
 
-        let off = run(json!({"antilinkall": "on"}), "off");
+        let off = run(serde_json::json!({"antilinkall": "on"}), "off");
         assert_eq!(text_of(&off), OFF);
-        assert_eq!(written(&off), &json!({ "antilinkall": "off" }));
+        assert_eq!(written(&off), &serde_json::json!({ "antilinkall": "off" }));
     }
 
     #[test]
     fn metode_kick_also_turns_the_filter_on() {
-        let r = run(json!({}), "metode kick");
+        let r = run(serde_json::json!({}), "metode kick");
         assert_eq!(text_of(&r), MODE_KICK);
         assert_eq!(
             written(&r),
-            &json!({ "antilinkall": "on", "antilinkallMode": "kick" })
+            &serde_json::json!({ "antilinkall": "on", "antilinkallMode": "kick" })
         );
     }
 
     #[test]
     fn delete_is_a_synonym_of_remove_on_both_spellings() {
         for text in ["delete", "metode delete"] {
-            let r = run(json!({}), text);
+            let r = run(serde_json::json!({}), text);
             assert_eq!(text_of(&r), MODE_DELETE, "{text}");
             assert_eq!(
                 written(&r),
-                &json!({ "antilinkall": "on", "antilinkallMode": "remove" }),
+                &serde_json::json!({ "antilinkall": "on", "antilinkallMode": "remove" }),
                 "{text}"
             );
         }
@@ -207,8 +206,8 @@ mod tests {
     #[test]
     fn the_bare_shortcut_writes_the_same_pair_as_metode() {
         for (short, long) in [("kick", "metode kick"), ("remove", "metode remove")] {
-            let a = run(json!({}), short);
-            let b = run(json!({}), long);
+            let a = run(serde_json::json!({}), short);
+            let b = run(serde_json::json!({}), long);
             assert_eq!(text_of(&a), text_of(&b), "{short}");
             assert_eq!(written(&a), written(&b), "{short}");
         }
@@ -216,7 +215,7 @@ mod tests {
 
     #[test]
     fn an_unknown_method_is_refused_and_nothing_is_written() {
-        let r = run(json!({}), "metode blok");
+        let r = run(serde_json::json!({}), "metode blok");
         assert!(text_of(&r).starts_with("❌ *Metode Tidak Valid*"), "{}", text_of(&r));
         assert!(text_of(&r).contains(".antilinkall metode kick"), "{}", text_of(&r));
         assert!(r.mutations().is_empty());
@@ -224,7 +223,7 @@ mod tests {
 
     #[test]
     fn an_unrecognised_option_is_refused_and_nothing_is_written() {
-        let r = run(json!({}), "tolong");
+        let r = run(serde_json::json!({}), "tolong");
         assert_eq!(text_of(&r), BAD_OPTION);
         assert!(r.mutations().is_empty());
     }

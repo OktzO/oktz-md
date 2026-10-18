@@ -72,7 +72,6 @@ pub fn kecocokannamapasangan(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse, NoHttp};
-    use serde_json::json;
     use std::sync::Arc;
 
     #[derive(Debug)]
@@ -151,14 +150,14 @@ mod tests {
             let t = reply_text(&r);
             assert!(t.starts_with("💕 *ᴋᴇᴄᴏᴄᴏᴋᴀɴ ɴᴀᴍᴀ*"), "{t}");
             assert!(t.contains("Format: nama1 nama2"), "{t}");
-            assert!(matches!(r.without_mutations(), Reply::Text { .. }));
+            assert!(matches!(r.without_mutations().tanpa_reaksi(), Reply::Text { .. }));
         }
     }
 
     #[test]
     fn a_good_payload_renders_both_sides_and_the_note() {
         let r = run_with(
-            Arc::new(Stub(json!({
+            Arc::new(Stub(serde_json::json!({
                 "status": true,
                 "data": {
                     "nama_anda": "Putu",
@@ -181,7 +180,7 @@ mod tests {
 
     #[test]
     fn a_falsy_status_or_data_gives_the_failure_message() {
-        for body in [json!({ "data": {} }), json!({ "status": true }), json!({})] {
+        for body in [serde_json::json!({ "data": {} }), serde_json::json!({ "status": true }), serde_json::json!({})] {
             let r = run_with(Arc::new(Stub(body)), &["putu", "keyla"]);
             assert_eq!(reply_text(&r), "❌ *ɢᴀɢᴀʟ*\n\n> Gagal menganalisa");
         }

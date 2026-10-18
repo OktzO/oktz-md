@@ -8,7 +8,7 @@
 //! default Node `en-US`), bukan titik seperti `toLocaleString("id-ID")`.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::int_field;
 use crate::rpg::jualan::{
@@ -144,9 +144,9 @@ pub fn lottery(ctx: Ctx) -> Reply {
     for _ in 0..pulls {
         let (item, name, rarity, qty) = draw_one();
         if item != "trash" {
-            let slot = inv.entry(item.to_string()).or_insert(json!(0));
+            let slot = inv.entry(item.to_string()).or_insert(serde_json::json!(0));
             let have = slot.as_i64().unwrap_or(0);
-            *slot = json!(have + qty);
+            *slot = serde_json::json!(have + qty);
             total_exp += exp_by_rarity(rarity);
         }
         match grouped.iter_mut().find(|g| g.0 == item) {
@@ -203,7 +203,7 @@ pub fn lottery(ctx: Ctx) -> Reply {
         })
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "koin": koin - total_cost, "exp": new_exp, "rpg": rpg, "inventory": inv }),
+            data: serde_json::json!({ "koin": koin - total_cost, "exp": new_exp, "rpg": rpg, "inventory": inv }),
         })
 }
 
@@ -265,7 +265,7 @@ mod tests {
 
     #[test]
     fn pulling_requires_exactly_enough_money() {
-        let r = run(&["1"], json!({"koin": 499}));
+        let r = run(&["1"], serde_json::json!({"koin": 499}));
         let t = text_of(&r);
         assert!(t.starts_with("💸 *UANG LU KURANG BUAT GACHA!*"), "{t}");
         assert!(t.contains("Harga Gacha: *Rp 500/Tarikan*"), "{t}");
@@ -276,7 +276,7 @@ mod tests {
 
     #[test]
     fn the_no_arg_format_uses_commas_because_locale_is_not_specified() {
-        let r = run(&["10"], json!({"koin": 4999}));
+        let r = run(&["10"], serde_json::json!({"koin": 4999}));
         let t = text_of(&r);
         assert!(t.contains("Total Kebutuhan: *Rp 5,000 (10x)*"), "{t}");
         assert!(t.contains("Sisa Duit Lu Cuma: *Rp 4,999*"), "{t}");
@@ -293,12 +293,12 @@ mod tests {
             ("99", 10),
             ("10abc", 10),
         ] {
-            let r = run(&[arg], json!({"koin": 1_000_000}));
+            let r = run(&[arg], serde_json::json!({"koin": 1_000_000}));
             assert!(
                 text_of(&r).contains(&format!("Tarik *{expected}x*")),
                 "arg {arg:?} harus jadi {expected}x"
             );
-            assert_eq!(written(&r)["koin"], json!(1_000_000 - 500 * expected));
+            assert_eq!(written(&r)["koin"], serde_json::json!(1_000_000 - 500 * expected));
         }
     }
 
@@ -306,7 +306,7 @@ mod tests {
     fn trash_is_grouped_as_waste_and_never_stored() {
         let mut seen = false;
         for _ in 0..500 {
-            let r = run(&["1"], json!({"koin": 10_000}));
+            let r = run(&["1"], serde_json::json!({"koin": 10_000}));
             let d = written(&r);
             let t = text_of(&r);
             if t.contains("Ampas x") {
@@ -315,7 +315,7 @@ mod tests {
                     d["inventory"].get("trash").is_none(),
                     "trash tidak masuk inventory"
                 );
-                assert_eq!(d["exp"], json!(0), "trash tidak kasih exp");
+                assert_eq!(d["exp"], serde_json::json!(0), "trash tidak kasih exp");
                 break;
             }
         }
@@ -327,13 +327,13 @@ mod tests {
         for _ in 0..400 {
             let r = run(
                 &["10"],
-                json!({"koin": 100_000, "inventory": {"wood": 7, "potion": 2}}),
+                serde_json::json!({"koin": 100_000, "inventory": {"wood": 7, "potion": 2}}),
             );
             let d = written(&r);
             let inv = d["inventory"].as_object().unwrap();
             assert!(inv["wood"].as_i64().unwrap() >= 7);
             assert!(inv["potion"].as_i64().unwrap() >= 2);
-            assert_eq!(d["koin"], json!(95_000), "100000 - 10*500");
+            assert_eq!(d["koin"], serde_json::json!(95_000), "100000 - 10*500");
             assert!(!inv.contains_key("trash"));
         }
     }
@@ -341,7 +341,7 @@ mod tests {
     #[test]
     fn one_line_per_distinct_item_never_repeats_a_name() {
         for _ in 0..300 {
-            let r = run(&["10"], json!({"koin": 100_000}));
+            let r = run(&["10"], serde_json::json!({"koin": 100_000}));
             let t = text_of(&r);
             let listed: Vec<&str> = t
                 .lines()
@@ -360,7 +360,7 @@ mod tests {
     #[test]
     fn the_legendary_banner_only_shows_for_legendary_and_mythic() {
         for _ in 0..2000 {
-            let r = run(&["10"], json!({"koin": 500_000}));
+            let r = run(&["10"], serde_json::json!({"koin": 500_000}));
             let t = text_of(&r);
             let has_l = t.contains("WOOOYYY");
             let has_r = t.contains("Wihh mayan");

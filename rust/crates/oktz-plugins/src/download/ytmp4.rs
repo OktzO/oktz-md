@@ -143,7 +143,6 @@ pub fn ytmp4(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug)]
@@ -173,7 +172,7 @@ mod tests {
             let text = self
                 .body
                 .clone()
-                .map_err(|()| HttpError { message: "offline".into() })?
+                .map_err(|()| oktz_plugin_api::HttpError { message: "offline".into() })?
                 .to_string();
             Ok(HttpResponse {
                 status: 200,
@@ -225,7 +224,7 @@ mod tests {
     }
 
     fn ok_body() -> Value {
-        json!({
+        serde_json::json!({
             "status": true,
             "result": {
                 "title": "Video Contoh",
@@ -287,7 +286,7 @@ mod tests {
 
     #[test]
     fn ties_keep_the_first_entry_like_a_stable_javascript_sort() {
-        let isi = json!({
+        let isi = serde_json::json!({
             "video_normal": [
                 { "ext": "mp4", "quality": "720", "url": "https://a/1.mp4" },
                 { "ext": "mp4", "quality": "720", "url": "https://a/2.mp4" }
@@ -317,14 +316,14 @@ mod tests {
     #[test]
     fn a_response_without_video_normal_reports_the_failure_message() {
         for body in [
-            json!({ "status": false, "msg": "gagal" }),
-            json!({ "status": true, "result": { "video_normal": [] } }),
-            json!({ "status": true, "result": {} }),
+            serde_json::json!({ "status": false, "msg": "gagal" }),
+            serde_json::json!({ "status": true, "result": { "video_normal": [] } }),
+            serde_json::json!({ "status": true, "result": {} }),
             // Hanya webm: kontrak host tetap `ext: "mp4"`.
-            json!({ "status": true, "result": { "video_normal": [
+            serde_json::json!({ "status": true, "result": { "video_normal": [
                 { "ext": "webm", "quality": "720", "url": "https://cdn.example/v.webm" }
             ] } }),
-            json!({ "status": true }),
+            serde_json::json!({ "status": true }),
         ] {
             let r = run(Stub::body(body.clone()), "https://youtube.com/watch?v=xxx");
             assert_eq!(text_of(&r), GAGAL, "body {body}");

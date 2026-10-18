@@ -68,7 +68,6 @@ pub fn setgoodbye(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use serde_json::Value;
-    use serde_json::json;
 
     fn run(group: Value, text: &str) -> Reply {
         let args: Vec<String> = text.split_whitespace().map(str::to_string).collect();
@@ -129,7 +128,7 @@ mod tests {
 
     #[test]
     fn an_empty_message_shows_help_and_writes_nothing() {
-        for g in [json!(null), json!({}), json!({"goodbyeMsg": "lama"})] {
+        for g in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"goodbyeMsg": "lama"})] {
             let r = run(g.clone(), "");
             assert!(text_of(&r).starts_with("📝 *sᴇᴛ ɢᴏᴏᴅʙʏᴇ*"), "input {g}");
             assert!(text_of(&r).contains("{user}"));
@@ -139,12 +138,12 @@ mod tests {
 
     #[test]
     fn all_three_flags_are_written_together() {
-        let r = run(json!({"goodbye": false, "leave": false}), "Bye {user}!");
+        let r = run(serde_json::json!({"goodbye": false, "leave": false}), "Bye {user}!");
         let data = group_write(&r);
-        assert_eq!(data["goodbyeMsg"], json!("Bye {user}!"));
-        assert_eq!(data["goodbye"], json!(true));
+        assert_eq!(data["goodbyeMsg"], serde_json::json!("Bye {user}!"));
+        assert_eq!(data["goodbye"], serde_json::json!(true));
         assert_eq!(
-            data["leave"], json!(true),
+            data["leave"], serde_json::json!(true),
             "`leave` yang memicu pesan perpisahan saat member keluar"
         );
         assert_eq!(data.as_object().unwrap().len(), 3);
@@ -152,7 +151,7 @@ mod tests {
 
     #[test]
     fn the_reply_quotes_exactly_what_was_stored() {
-        let r = run(json!({}), "Sampai jumpa");
+        let r = run(serde_json::json!({}), "Sampai jumpa");
         let stored = group_write(&r)["goodbyeMsg"].as_str().unwrap().to_string();
         assert!(text_of(&r).contains(&stored));
     }
@@ -164,8 +163,8 @@ mod tests {
 
     #[test]
     fn a_whitespace_message_is_written_just_like_in_javascript() {
-        let r = run(json!({}), " ");
-        assert_eq!(group_write(&r)["goodbyeMsg"], json!(" "));
+        let r = run(serde_json::json!({}), " ");
+        assert_eq!(group_write(&r)["goodbyeMsg"], serde_json::json!(" "));
     }
 
 #[test]

@@ -195,7 +195,6 @@ fn error_branch(ctx: &Ctx) -> Reply {
 mod tests {
     use super::*;
 
-    use serde_json::json;
 
     fn run(filter: &str) -> Reply {
         let ctx = Ctx {
@@ -223,9 +222,9 @@ mod tests {
 
     fn sample() -> Vec<Value> {
         vec![
-            json!({"league": "Liga Inggris", "time": "20:00", "home_team": "Arsenal", "away_team": "Chelsea", "date": "2026-05-01"}),
-            json!({"league": "Liga Inggris", "time": "22:00", "home_team": "Liverpool", "away_team": "Everton", "date": "2026-05-01"}),
-            json!({"league": "Liga Italia", "time": "21:45", "home_team": "Milan", "away_team": "Roma", "date": "2026-05-02"}),
+            serde_json::json!({"league": "Liga Inggris", "time": "20:00", "home_team": "Arsenal", "away_team": "Chelsea", "date": "2026-05-01"}),
+            serde_json::json!({"league": "Liga Inggris", "time": "22:00", "home_team": "Liverpool", "away_team": "Everton", "date": "2026-05-01"}),
+            serde_json::json!({"league": "Liga Italia", "time": "21:45", "home_team": "Milan", "away_team": "Roma", "date": "2026-05-02"}),
         ]
     }
 
@@ -325,7 +324,7 @@ mod tests {
     fn the_total_counts_every_match_not_only_the_first_fifty() {
         let all: Vec<Value> = (0..60)
             .map(|i| {
-                json!({"league": "Liga Inggris", "time": "20:00", "home_team": "A", "away_team": "B", "date": format!("2026-05-{:02}", (i % 28) + 1)})
+                serde_json::json!({"league": "Liga Inggris", "time": "20:00", "home_team": "A", "away_team": "B", "date": format!("2026-05-{:02}", (i % 28) + 1)})
             })
             .collect();
         let out = render(&all, "").unwrap();
@@ -336,12 +335,12 @@ mod tests {
     #[test]
     fn a_match_without_a_date_falls_into_the_tba_group() {
         let all = vec![
-            json!({"league": "Liga Inggris", "time": "20:00", "home_team": "A", "away_team": "B"}),
+            serde_json::json!({"league": "Liga Inggris", "time": "20:00", "home_team": "A", "away_team": "B"}),
         ];
         assert!(render(&all, "").unwrap().contains("📅 *TBA*"));
-        assert_eq!(date_key(&json!({"date": null})), "TBA");
-        assert_eq!(date_key(&json!({"date": ""})), "TBA");
-        assert_eq!(date_key(&json!({})), "TBA");
+        assert_eq!(date_key(&serde_json::json!({"date": null})), "TBA");
+        assert_eq!(date_key(&serde_json::json!({"date": ""})), "TBA");
+        assert_eq!(date_key(&serde_json::json!({})), "TBA");
     }
 
     #[test]
@@ -356,15 +355,15 @@ mod tests {
 
     #[test]
     fn a_league_that_is_not_a_string_is_a_throw_not_a_crash() {
-        let all = vec![json!({"league": 7, "time": "20:00"})];
+        let all = vec![serde_json::json!({"league": 7, "time": "20:00"})];
         assert_eq!(render(&all, ""), Err(RenderErr::Throw));
-        let all = vec![json!({"time": "20:00"})];
+        let all = vec![serde_json::json!({"time": "20:00"})];
         assert_eq!(render(&all, ""), Err(RenderErr::Throw));
     }
 
     #[test]
     fn missing_match_fields_are_interpolated_as_undefined() {
-        let all = vec![json!({"league": "LigaItalia"})];
+        let all = vec![serde_json::json!({"league": "LigaItalia"})];
         let out = render(&all, "").unwrap();
         assert!(out.contains("⏰ undefined"), "{out}");
         assert!(out.contains("🏠 undefined"), "{out}");

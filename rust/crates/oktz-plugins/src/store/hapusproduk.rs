@@ -98,7 +98,7 @@ pub fn hapusproduk(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(settings: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -130,7 +130,7 @@ mod tests {
     }
 
     fn sample() -> Value {
-        json!({"storeProducts": [
+        serde_json::json!({"storeProducts": [
             {"name": "Kaos", "type": "fisik", "price": 50000, "stock": 10},
             {"name": "Netflix", "type": "digital", "price": 25000,
              "stockItems": [{"detail": "a"}, {"detail": "b"}]},
@@ -161,7 +161,7 @@ mod tests {
 
     #[test]
     fn an_absent_or_empty_product_list_is_reported_and_nothing_is_written() {
-        for s in [json!({}), json!({"storeProducts": []}), json!({"storeProducts": null})] {
+        for s in [serde_json::json!({}), serde_json::json!({"storeProducts": []}), serde_json::json!({"storeProducts": null})] {
             let r = run(s.clone(), "1");
             assert!(text_of(&r).starts_with("📭 *Belum ada produk.*"), "input {s}");
             assert!(r.mutations().is_empty(), "input {s}");
@@ -195,7 +195,7 @@ mod tests {
         let r = run(sample(), "2");
         let list = products_write(&r);
         assert_eq!(list.len(), 1);
-        assert_eq!(list[0]["name"], json!("Kaos"), "produk kedua yang dihapus");
+        assert_eq!(list[0]["name"], serde_json::json!("Kaos"), "produk kedua yang dihapus");
         assert!(text_of(&r).starts_with("🗑️ *PRODUK DIHAPUS*"));
     }
 
@@ -225,7 +225,7 @@ mod tests {
 
     #[test]
     fn deleting_the_only_product_leaves_an_empty_array() {
-        let s = json!({"storeProducts": [{"name": "A", "type": "digital", "price": 1, "stockItems": []}]});
+        let s = serde_json::json!({"storeProducts": [{"name": "A", "type": "digital", "price": 1, "stockItems": []}]});
         let r = run(s.clone(), "1");
         assert!(products_write(&r).is_empty());
         assert!(text_of(&r).contains("0 akun"));
@@ -240,7 +240,7 @@ mod tests {
     #[test]
     fn a_missing_stock_field_shows_the_javascript_stringification() {
         // `deleted.stock + ' pcs'` dengan `stock` undefined -> "undefined".
-        let s = json!({"storeProducts": [{"name": "X", "type": "fisik", "price": 10}]});
+        let s = serde_json::json!({"storeProducts": [{"name": "X", "type": "fisik", "price": 10}]});
         let r = run(s.clone(), "1");
         assert!(
             text_of(&r).contains("undefined pcs"),

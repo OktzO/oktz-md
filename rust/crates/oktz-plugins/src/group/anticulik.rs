@@ -103,7 +103,7 @@ pub fn anticulik(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::find;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(text: &str, group: Value, setting: Value) -> Reply {
         (find("anticulik").unwrap().handler)(Ctx {
@@ -116,7 +116,7 @@ mod tests {
             text: text.into(),
             args: text.split_whitespace().map(str::to_string).collect(),
             group_data: group,
-            settings: json!({ "anticulik": setting }),
+            settings: serde_json::json!({ "anticulik": setting }),
             ..Default::default()
         })
     }
@@ -165,22 +165,22 @@ mod tests {
 
     #[test]
     fn without_option_it_only_reports_and_writes_nothing() {
-        let r = run("", json!({}), Value::Null);
+        let r = run("", serde_json::json!({}), Value::Null);
         assert!(text_of(&r).contains("> Mode: *Nonaktif ❌*"));
         assert!(r.mutations().is_empty(), "status tidak boleh menulis");
     }
 
     #[test]
     fn status_prefers_group_then_global_setting() {
-        let r = run("", json!({ "anticulik": "on" }), json!("on"));
+        let r = run("", serde_json::json!({ "anticulik": "on" }), serde_json::json!("on"));
         assert!(text_of(&r).contains("> Mode: *Aktif ✅*"));
 
         // Group belum punya key, setting global yang menentukan.
-        let r = run("", json!({}), json!("on"));
+        let r = run("", serde_json::json!({}), serde_json::json!("on"));
         assert!(text_of(&r).contains("> Mode: *Aktif ✅*"));
 
         // Group wins walau global berbeda.
-        let r = run("", json!({ "anticulik": "off" }), json!("on"));
+        let r = run("", serde_json::json!({ "anticulik": "off" }), serde_json::json!("on"));
         assert!(text_of(&r).contains("> Mode: *Nonaktif ❌*"));
     }
 
@@ -188,7 +188,7 @@ mod tests {
     fn a_falsy_group_value_does_not_fall_through_to_the_setting() {
         // `??` hanya melompati null/undefined; `false` tetap dipakai, jadi
         // status nonaktif walau setting global `on`.
-        let r = run("", json!({ "anticulik": false }), json!("on"));
+        let r = run("", serde_json::json!({ "anticulik": false }), serde_json::json!("on"));
         assert!(text_of(&r).contains("> Mode: *Nonaktif ❌*"), "{}", text_of(&r));
     }
 
@@ -200,24 +200,24 @@ mod tests {
 
     #[test]
     fn on_and_off_write_the_group_field() {
-        let on = run("on", json!({}), Value::Null);
-        assert_eq!(written(&on), json!({ "anticulik": "on" }));
+        let on = run("on", serde_json::json!({}), Value::Null);
+        assert_eq!(written(&on), serde_json::json!({ "anticulik": "on" }));
         assert!(text_of(&on).starts_with("🛡️ *Anti Culik Aktif*"));
 
-        let off = run("off", json!({ "anticulik": "on" }), Value::Null);
-        assert_eq!(written(&off), json!({ "anticulik": "off" }));
+        let off = run("off", serde_json::json!({ "anticulik": "on" }), Value::Null);
+        assert_eq!(written(&off), serde_json::json!({ "anticulik": "off" }));
         assert!(text_of(&off).starts_with("🛡️ *Anti Culik Nonaktif*"));
     }
 
     #[test]
     fn the_option_is_lowercased_and_trimmed() {
-        assert_eq!(written(&run("  ON  ", json!({}), Value::Null)), json!({ "anticulik": "on" }));
-        assert_eq!(written(&run("Off", json!({}), Value::Null)), json!({ "anticulik": "off" }));
+        assert_eq!(written(&run("  ON  ", serde_json::json!({}), Value::Null)), serde_json::json!({ "anticulik": "on" }));
+        assert_eq!(written(&run("Off", serde_json::json!({}), Value::Null)), serde_json::json!({ "anticulik": "off" }));
     }
 
     #[test]
     fn an_unknown_option_is_refused_without_writing() {
-        let r = run("mungkin", json!({}), Value::Null);
+        let r = run("mungkin", serde_json::json!({}), Value::Null);
         assert_eq!(
             text_of(&r),
             "❌ *Opsi Tidak Valid*\n\n> Gunakan *.anticulik on* atau *.anticulik off*"

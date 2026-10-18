@@ -70,7 +70,7 @@ pub fn autodl(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -127,7 +127,7 @@ mod tests {
 
     #[test]
     fn a_missing_group_reads_as_inactive_and_writes_nothing() {
-        let r = run(json!({}), "");
+        let r = run(serde_json::json!({}), "");
         assert!(
             text_of(&r).contains("> Status: ❌ Nonaktif"),
             "{}",
@@ -138,8 +138,8 @@ mod tests {
 
     #[test]
     fn the_status_keyword_behaves_like_no_argument() {
-        let a = run(json!({"autodl": true}), "");
-        let b = run(json!({"autodl": true}), "status");
+        let a = run(serde_json::json!({"autodl": true}), "");
+        let b = run(serde_json::json!({"autodl": true}), "status");
         assert_eq!(text_of(&a), text_of(&b));
         assert!(text_of(&a).contains("> Status: ✅ Aktif"), "{}", text_of(&a));
         assert!(b.mutations().is_empty());
@@ -147,17 +147,17 @@ mod tests {
 
     #[test]
     fn on_and_off_write_a_boolean_and_react() {
-        let on = run(json!({}), "on");
+        let on = run(serde_json::json!({}), "on");
         assert_eq!(text_of(&on), ON);
-        assert_eq!(written(&on), &json!({ "autodl": true }));
+        assert_eq!(written(&on), &serde_json::json!({ "autodl": true }));
         match on.without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅"),
             other => panic!("harus Reaction, dapat {other:?}"),
         }
 
-        let off = run(json!({"autodl": true}), "off");
+        let off = run(serde_json::json!({"autodl": true}), "off");
         assert_eq!(text_of(&off), OFF);
-        assert_eq!(written(&off), &json!({ "autodl": false }));
+        assert_eq!(written(&off), &serde_json::json!({ "autodl": false }));
         match off.without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "❌"),
             other => panic!("harus Reaction, dapat {other:?}"),
@@ -166,7 +166,7 @@ mod tests {
 
     #[test]
     fn an_unknown_argument_is_refused_and_nothing_is_written() {
-        let r = run(json!({}), "mungkin");
+        let r = run(serde_json::json!({}), "mungkin");
         assert_eq!(text_of(&r), BAD_ARG);
         assert!(r.mutations().is_empty());
         assert!(!matches!(r.without_mutations(), Reply::Reaction { .. }));
@@ -174,12 +174,12 @@ mod tests {
 
     #[test]
     fn the_argument_is_lowercased_before_matching() {
-        assert_eq!(written(&run(json!({}), "ON")), &json!({ "autodl": true }));
+        assert_eq!(written(&run(serde_json::json!({}), "ON")), &serde_json::json!({ "autodl": true }));
     }
 
     #[test]
     fn a_non_boolean_stored_value_counts_as_active_like_javascript() {
-        let r = run(json!({"autodl": "ya"}), "");
+        let r = run(serde_json::json!({"autodl": "ya"}), "");
         assert!(text_of(&r).contains("> Status: ✅ Aktif"), "{}", text_of(&r));
     }
 }

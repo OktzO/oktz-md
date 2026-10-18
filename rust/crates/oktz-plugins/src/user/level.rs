@@ -96,7 +96,6 @@ pub fn level(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: serde_json::Value, mentioned: Vec<&str>) -> Reply {
         let ctx = Ctx {
@@ -165,7 +164,7 @@ mod tests {
 
     #[test]
     fn absent_state_renders_level_one_with_an_empty_bar() {
-        for user in [json!(null), json!({}), json!({"exp": null})] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"exp": null})] {
             let reply = run(user.clone(), vec![]);
             let out = text_of(&reply);
             assert!(out.starts_with("╭━━━━━━━━━━━━━━━━━╮\n┃ 📊 *ʟᴇᴠᴇʟ ɪɴꜰᴏ*\n╰━━━━━━━━━━━━━━━━━╯\n\n"), "{user}");
@@ -182,7 +181,7 @@ mod tests {
 
     #[test]
     fn progress_advances_with_stored_exp() {
-        let reply = run(json!({"exp": 17_500}), vec![]);
+        let reply = run(serde_json::json!({"exp": 17_500}), vec![]);
         let out = text_of(&reply);
         assert!(out.contains("┃ 📊 Level: *2*\n"));
         assert!(out.contains("┃ 🚄 Exp: *17.500*\n"));
@@ -193,7 +192,7 @@ mod tests {
 
     #[test]
     fn a_mention_changes_the_name_the_tag_and_the_mention_list() {
-        let r = run(json!({"exp": 0}), vec!["628999:5@s.whatsapp.net"]);
+        let r = run(serde_json::json!({"exp": 0}), vec!["628999:5@s.whatsapp.net"]);
         let out = text_of(&r);
         assert!(out.contains("┃ 🏷️ Name: *628999:5*\n"), "`jid.split('@')[0]` di JS");
         assert!(out.contains("┃ 🆔 Tag: @628999:5\n"));
@@ -205,7 +204,7 @@ mod tests {
 
     #[test]
     fn both_boxes_open_and_close_exactly_once_each() {
-        let reply = run(json!({"exp": 100}), vec![]);
+        let reply = run(serde_json::json!({"exp": 100}), vec![]);
         let out = text_of(&reply);
         assert_eq!(out.matches("╭┈┈⬡").count(), 2);
         assert_eq!(out.matches("╰┈┈┈┈┈┈┈┈⬡").count(), 2);

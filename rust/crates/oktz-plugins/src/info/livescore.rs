@@ -232,7 +232,6 @@ fn failed(message: &str) -> Reply {
 mod tests {
     use super::*;
 
-    use serde_json::json;
 
     fn run() -> Reply {
         let ctx = Ctx {
@@ -256,7 +255,7 @@ mod tests {
     }
 
     fn group(name: &str, matches: Value) -> Value {
-        json!({"competition": {"name": name}, "matches": matches})
+        serde_json::json!({"competition": {"name": name}, "matches": matches})
     }
 
     #[test]
@@ -333,7 +332,7 @@ mod tests {
     fn the_block_is_cut_at_the_first_closing_script_tag() {
         let html = r#"{"props":{"pageProps":{"content":{"liveScores":[{"competition":{"name":"X"},"matches":[]}]}}}}"#;
         let value = extract(&format!("{MARKER}{html}</script><script>lain</script>")).unwrap();
-        assert_eq!(value[0]["competition"]["name"], json!("X"));
+        assert_eq!(value[0]["competition"]["name"], serde_json::json!("X"));
     }
 
     #[test]
@@ -347,7 +346,7 @@ mod tests {
             ("HALF_TIME", "Turun Minum"),
             ("MENUNGGU", "MENUNGGU"),
         ] {
-            assert_eq!(status_indo(Some(&json!(wire))), indo, "{wire}");
+            assert_eq!(status_indo(Some(&serde_json::json!(wire))), indo, "{wire}");
         }
         assert_eq!(
             status_indo(None),
@@ -359,24 +358,24 @@ mod tests {
 
     #[test]
     fn an_object_score_walks_the_chain_current_normal_time_score() {
-        let m = json!({"score": {"teamA": {"normalTime": "1-0"}, "teamB": {"score": 2}}});
+        let m = serde_json::json!({"score": {"teamA": {"normalTime": "1-0"}, "teamB": {"score": 2}}});
         assert_eq!(score_side(&m, "teamA"), "1-0");
         assert_eq!(score_side(&m, "teamB"), "2");
-        let m = json!({"score": {"teamA": {"current": 3, "normalTime": "1-0", "score": 9}}});
+        let m = serde_json::json!({"score": {"teamA": {"current": 3, "normalTime": "1-0", "score": 9}}});
         assert_eq!(score_side(&m, "teamA"), "3", "yang pertama menang");
     }
 
     #[test]
     fn a_scalar_or_missing_score_falls_back_to_itself_then_to_a_dash() {
-        assert_eq!(score_side(&json!({"score": {"teamA": 0}}), "teamA"), "0");
+        assert_eq!(score_side(&serde_json::json!({"score": {"teamA": 0}}), "teamA"), "0");
         assert_eq!(
-            score_side(&json!({"score": {"teamA": "menang"}}), "teamA"),
+            score_side(&serde_json::json!({"score": {"teamA": "menang"}}), "teamA"),
             "menang"
         );
-        assert_eq!(score_side(&json!({"score": {"teamA": null}}), "teamA"), "-");
-        assert_eq!(score_side(&json!({"score": {}}), "teamA"), "-");
-        assert_eq!(score_side(&json!({}), "teamA"), "-");
-        let empty: Value = json!({"score": {"teamA": {}}});
+        assert_eq!(score_side(&serde_json::json!({"score": {"teamA": null}}), "teamA"), "-");
+        assert_eq!(score_side(&serde_json::json!({"score": {}}), "teamA"), "-");
+        assert_eq!(score_side(&serde_json::json!({}), "teamA"), "-");
+        let empty: Value = serde_json::json!({"score": {"teamA": {}}});
         assert_eq!(
             score_side(&empty, "teamA"),
             "-",
@@ -386,22 +385,22 @@ mod tests {
 
     #[test]
     fn the_period_prefers_name_then_short_then_long() {
-        let m = json!({"period": {"name": "Babak Kedua", "short": "B2", "long": "Second Half"}});
+        let m = serde_json::json!({"period": {"name": "Babak Kedua", "short": "B2", "long": "Second Half"}});
         assert_eq!(period(&m), "Babak Kedua");
-        let m = json!({"period": {"short": "B2"}});
+        let m = serde_json::json!({"period": {"short": "B2"}});
         assert_eq!(period(&m), "B2");
-        let m = json!({"period": "HT"});
+        let m = serde_json::json!({"period": "HT"});
         assert_eq!(period(&m), "HT");
-        assert_eq!(period(&json!({"period": ""})), "", "falsy → string kosong");
-        assert_eq!(period(&json!({})), "");
-        assert_eq!(period(&json!({"period": {}})), "-");
+        assert_eq!(period(&serde_json::json!({"period": ""})), "", "falsy → string kosong");
+        assert_eq!(period(&serde_json::json!({})), "");
+        assert_eq!(period(&serde_json::json!({"period": {}})), "-");
     }
 
     #[test]
     fn a_match_renders_status_period_and_red_cards() {
         let g = group(
             "Liga Inggris",
-            json!([{
+            serde_json::json!([{
                 "status": "LIVE",
                 "period": {"name": "Babak Kedua"},
                 "teamA": {"name": "Arsenal"},
@@ -424,7 +423,7 @@ mod tests {
     fn a_match_without_a_period_drops_the_period_segment() {
         let g = group(
             "Liga Italia",
-            json!([{"status": "FINISHED", "teamA": {"name": "A"}, "teamB": {"name": "B"}}]),
+            serde_json::json!([{"status": "FINISHED", "teamA": {"name": "A"}, "teamB": {"name": "B"}}]),
         );
         let out = render(&[g]);
         assert!(
@@ -436,11 +435,11 @@ mod tests {
     #[test]
     fn a_competition_without_matches_is_skipped_entirely() {
         let list = vec![
-            group("Kosong", json!([])),
-            group("LigaItalia", json!([])),
+            group("Kosong", serde_json::json!([])),
+            group("LigaItalia", serde_json::json!([])),
             group(
                 "Isi",
-                json!([{"status": "LIVE", "teamA": {"name": "A"}, "teamB": {"name": "B"}}]),
+                serde_json::json!([{"status": "LIVE", "teamA": {"name": "A"}, "teamB": {"name": "B"}}]),
             ),
         ];
         let out = render(&list);
@@ -458,7 +457,7 @@ mod tests {
             .map(|i| {
                 group(
                     &format!("Liga{i}"),
-                    json!([{"status": "LIVE", "teamA": {"name": "A"}, "teamB": {"name": "B"}}]),
+                    serde_json::json!([{"status": "LIVE", "teamA": {"name": "A"}, "teamB": {"name": "B"}}]),
                 )
             })
             .collect();
@@ -470,7 +469,7 @@ mod tests {
 
     #[test]
     fn a_competition_without_a_name_uses_the_dash_fallback() {
-        let g = json!({"matches": [{"status": "LIVE", "teamA": {"name": "A"}, "teamB": {"name": "B"}}]});
+        let g = serde_json::json!({"matches": [{"status": "LIVE", "teamA": {"name": "A"}, "teamB": {"name": "B"}}]});
         let teks = render(&[g]);
         assert!(teks.contains("🏆 *-*"), "{teks}");
     }

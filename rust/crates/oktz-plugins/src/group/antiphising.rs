@@ -89,7 +89,6 @@ pub fn antiphising(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -147,7 +146,7 @@ mod tests {
 
     #[test]
     fn no_argument_reports_the_stored_state_without_writing() {
-        let r = run(json!({}), "");
+        let r = run(serde_json::json!({}), "");
         assert!(text_of(&r).contains("> Status: *OFF*"), "{}", text_of(&r));
         assert!(text_of(&r).contains("> Mode: *REMOVE*"), "{}", text_of(&r));
         assert!(r.mutations().is_empty());
@@ -155,20 +154,20 @@ mod tests {
 
     #[test]
     fn a_stored_setting_is_uppercased() {
-        let r = run(json!({"antiphising": "on", "antiphisingMode": "kick"}), "");
+        let r = run(serde_json::json!({"antiphising": "on", "antiphisingMode": "kick"}), "");
         assert!(text_of(&r).contains("> Status: *ON*"), "{}", text_of(&r));
         assert!(text_of(&r).contains("> Mode: *KICK*"), "{}", text_of(&r));
     }
 
     #[test]
     fn on_and_off_write_only_the_status_flag() {
-        let on = run(json!({}), "on");
+        let on = run(serde_json::json!({}), "on");
         assert_eq!(text_of(&on), ON);
-        assert_eq!(written(&on), &json!({ "antiphising": "on" }));
+        assert_eq!(written(&on), &serde_json::json!({ "antiphising": "on" }));
 
-        let off = run(json!({"antiphising": "on"}), "off");
+        let off = run(serde_json::json!({"antiphising": "on"}), "off");
         assert_eq!(text_of(&off), OFF);
-        assert_eq!(written(&off), &json!({ "antiphising": "off" }));
+        assert_eq!(written(&off), &serde_json::json!({ "antiphising": "off" }));
     }
 
     #[test]
@@ -178,11 +177,11 @@ mod tests {
             ("metode remove", "remove", MODE_DELETE),
             ("metode delete", "remove", MODE_DELETE),
         ] {
-            let r = run(json!({}), text);
+            let r = run(serde_json::json!({}), text);
             assert_eq!(text_of(&r), message, "{text}");
             assert_eq!(
                 written(&r),
-                &json!({ "antiphising": "on", "antiphisingMode": mode }),
+                &serde_json::json!({ "antiphising": "on", "antiphisingMode": mode }),
                 "{text}"
             );
         }
@@ -190,22 +189,22 @@ mod tests {
 
     #[test]
     fn the_bare_shortcut_matches_the_metode_form() {
-        let a = run(json!({}), "kick");
-        let b = run(json!({}), "metode kick");
+        let a = run(serde_json::json!({}), "kick");
+        let b = run(serde_json::json!({}), "metode kick");
         assert_eq!(text_of(&a), text_of(&b));
         assert_eq!(written(&a), written(&b));
     }
 
     #[test]
     fn an_unknown_method_is_refused_and_nothing_is_written() {
-        let r = run(json!({}), "metode blok");
+        let r = run(serde_json::json!({}), "metode blok");
         assert_eq!(text_of(&r), BAD_METHOD);
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn an_unrecognised_option_is_refused_and_nothing_is_written() {
-        let r = run(json!({}), "tolong");
+        let r = run(serde_json::json!({}), "tolong");
         assert_eq!(text_of(&r), BAD_OPTION);
         assert!(r.mutations().is_empty());
     }

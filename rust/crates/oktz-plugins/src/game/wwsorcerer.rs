@@ -32,7 +32,7 @@ pub fn wwsorcerer(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use crate::game::wwkill::{GAMES_KEY, game_fixture, night_ctx, player};
-    use serde_json::{Map, Value, json};
+    use serde_json::{Map, Value};
 
     const SORC: &str = "628111@s.whatsapp.net";
     const TARGET: &str = "628999@s.whatsapp.net";
@@ -40,7 +40,7 @@ mod tests {
     fn game(target_role: &str) -> Value {
         game_fixture(
             "night",
-            json!([
+            serde_json::json!([
                 player(SORC, 1, "sorcerer", true, false),
                 player(TARGET, 3, target_role, true, false),
             ]),
@@ -122,7 +122,7 @@ mod tests {
         assert!(text_of(&r).contains("adalah SEER"));
         let g = ctx.session_get(GAMES_KEY).unwrap_or_default();
         assert!(g["120363@g.us"]["nightActions"].as_object().unwrap().is_empty());
-        assert_eq!(g["120363@g.us"]["players"][0]["skillUsed"], json!(true));
+        assert_eq!(g["120363@g.us"]["players"][0]["skillUsed"], serde_json::json!(true));
     }
 
     #[test]

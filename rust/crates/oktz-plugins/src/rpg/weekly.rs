@@ -5,7 +5,7 @@
 //! menghitungnya sendiri.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::common::{int_field, now_ms};
 use crate::rpg::jualan::{exp_gain_only, inventory_map, or_default, roll_incl, rpg_map};
@@ -62,19 +62,19 @@ pub fn weekly(ctx: Ctx) -> Reply {
 
     let mut inv = inventory_map(&ctx);
     let have = inv.get("uncommon").and_then(Value::as_i64).unwrap_or(0);
-    inv.insert("uncommon".into(), json!(have + crate_reward));
+    inv.insert("uncommon".into(), serde_json::json!(have + crate_reward));
 
     let rpg = rpg_map(&ctx);
     let old_exp = or_default(user.get("exp").and_then(Value::as_i64), 0);
     let new_exp = exp_gain_only(old_exp, exp_reward);
     let mut cd = cooldowns;
-    cd.insert("weekly".into(), json!(now));
+    cd.insert("weekly".into(), serde_json::json!(now));
 
     let mut data = Map::new();
     data.insert("cooldowns".into(), Value::Object(cd));
-    data.insert("exp".into(), json!(new_exp));
+    data.insert("exp".into(), serde_json::json!(new_exp));
     data.insert("inventory".into(), Value::Object(inv));
-    data.insert("koin".into(), json!(int_field(&ctx, "koin") + money_reward));
+    data.insert("koin".into(), serde_json::json!(int_field(&ctx, "koin") + money_reward));
     data.insert("rpg".into(), Value::Object(rpg));
 
     Reply::text(format!(
@@ -152,10 +152,10 @@ mod tests {
     #[test]
     fn a_brand_new_or_stale_row_can_claim_immediately() {
         for user in [
-            json!({}),
-            json!({"cooldowns": {}}),
-            json!({"cooldowns": {"weekly": 0}}),
-            json!({"cooldowns": {"weekly": 1}}),
+            serde_json::json!({}),
+            serde_json::json!({"cooldowns": {}}),
+            serde_json::json!({"cooldowns": {"weekly": 0}}),
+            serde_json::json!({"cooldowns": {"weekly": 1}}),
         ] {
             let r = run(user.clone());
             assert!(text_of(&r).starts_with("DORRR! GAJIAN MINGGUAN"), "{user}");
@@ -165,7 +165,7 @@ mod tests {
 
     #[test]
     fn claiming_this_instant_blocks_the_next_one() {
-        let r = run(json!({"cooldowns": {"weekly": now_ms()}}));
+        let r = run(serde_json::json!({"cooldowns": {"weekly": now_ms()}}));
         let t = text_of(&r);
         assert!(t.starts_with("Wah, jatah mingguan kamu udah ludes kak!"), "{t}");
         // `last + WEEKLY - now` — `now` diambil sedikit SESUDAH test, jadi
@@ -198,7 +198,7 @@ mod tests {
 
     #[test]
     fn a_row_exactly_one_week_old_is_claimable_again() {
-        let r = run(json!({"cooldowns": {"weekly": now_ms() - WEEKLY_COOLDOWN}}));
+        let r = run(serde_json::json!({"cooldowns": {"weekly": now_ms() - WEEKLY_COOLDOWN}}));
         assert!(text_of(&r).starts_with("DORRR!"), "{:?}", text_of(&r));
     }
 
@@ -206,7 +206,7 @@ mod tests {
     fn the_payout_lands_inside_the_documented_bands_and_stamps_the_timer() {
         for _ in 0..200 {
             let before = now_ms();
-            let r = run(json!({"koin": 500, "exp": 100, "inventory": {"uncommon": 2}}));
+            let r = run(serde_json::json!({"koin": 500, "exp": 100, "inventory": {"uncommon": 2}}));
             let d = written(&r);
             let after = now_ms();
             let t = text_of(&r);
@@ -233,9 +233,9 @@ mod tests {
             assert!((30000..=79999).contains(&money), "uang {money}");
             assert!((1..=3).contains(&crates), "crate {crates}");
 
-            assert_eq!(d["exp"], json!(100 + exp));
-            assert_eq!(d["koin"], json!(500 + money));
-            assert_eq!(d["inventory"]["uncommon"], json!(2 + crates));
+            assert_eq!(d["exp"], serde_json::json!(100 + exp));
+            assert_eq!(d["koin"], serde_json::json!(500 + money));
+            assert_eq!(d["inventory"]["uncommon"], serde_json::json!(2 + crates));
 
             let stamped = d["cooldowns"]["weekly"].as_i64().unwrap();
             assert!((before..=after).contains(&stamped), "timestamp harus waktu claim");
@@ -244,8 +244,8 @@ mod tests {
 
     #[test]
     fn other_countdown_keys_survive_the_write() {
-        let r = run(json!({"cooldowns": {"daily": 12345}}));
-        assert_eq!(written(&r)["cooldowns"]["daily"], json!(12345));
+        let r = run(serde_json::json!({"cooldowns": {"daily": 12345}}));
+        assert_eq!(written(&r)["cooldowns"]["daily"], serde_json::json!(12345));
         assert!(written(&r)["cooldowns"]["weekly"].as_i64().unwrap() > 12345);
     }
 }

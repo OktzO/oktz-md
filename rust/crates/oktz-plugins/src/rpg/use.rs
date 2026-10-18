@@ -6,7 +6,7 @@
 //! mengisi stats `rpg`, dan jalur tanpa exp sama sekali untuk potion biasa.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::common::int_field;
 use crate::rpg::jualan::{exp_gain_only, inventory_map, or_default, roll_excl, rpg_map};
@@ -38,12 +38,12 @@ impl Stats {
     }
 
     fn write(&self, rpg: &mut Map<String, Value>) {
-        rpg.insert("health".into(), json!(self.health));
-        rpg.insert("maxHealth".into(), json!(self.max_health));
-        rpg.insert("mana".into(), json!(self.mana));
-        rpg.insert("maxMana".into(), json!(self.max_mana));
-        rpg.insert("stamina".into(), json!(self.stamina));
-        rpg.insert("maxStamina".into(), json!(self.max_stamina));
+        rpg.insert("health".into(), serde_json::json!(self.health));
+        rpg.insert("maxHealth".into(), serde_json::json!(self.max_health));
+        rpg.insert("mana".into(), serde_json::json!(self.mana));
+        rpg.insert("maxMana".into(), serde_json::json!(self.max_mana));
+        rpg.insert("stamina".into(), serde_json::json!(self.stamina));
+        rpg.insert("maxStamina".into(), serde_json::json!(self.max_stamina));
     }
 }
 
@@ -53,7 +53,7 @@ fn consume(inv: &mut Map<String, Value>, key: &str) {
     if left <= 0 {
         inv.remove(key);
     } else {
-        inv.insert(key.to_string(), json!(left));
+        inv.insert(key.to_string(), serde_json::json!(left));
     }
 }
 
@@ -260,22 +260,22 @@ pub fn use_item(ctx: Ctx) -> Reply {
     };
 
     if let Some((item, qty)) = loot {
-        let slot = inv.entry(item.to_string()).or_insert(json!(0));
+        let slot = inv.entry(item.to_string()).or_insert(serde_json::json!(0));
         let have = slot.as_i64().unwrap_or(0);
-        *slot = json!(have + qty);
+        *slot = serde_json::json!(have + qty);
     }
     s.write(&mut rpg);
     if let Some(attack) = s.attack {
-        rpg.insert("attack".into(), json!(attack));
+        rpg.insert("attack".into(), serde_json::json!(attack));
     }
 
     let old_exp = or_default(ctx.user_field("exp").and_then(Value::as_i64), 0);
     let mut data = serde_json::Map::new();
     if koin_gain > 0 {
-        data.insert("koin".into(), json!(koin + koin_gain));
+        data.insert("koin".into(), serde_json::json!(koin + koin_gain));
     }
     if exp_gain > 0 {
-        data.insert("exp".into(), json!(exp_gain_only(old_exp, exp_gain)));
+        data.insert("exp".into(), serde_json::json!(exp_gain_only(old_exp, exp_gain)));
     }
     data.insert("rpg".into(), Value::Object(rpg));
     data.insert("inventory".into(), Value::Object(inv));
@@ -326,13 +326,13 @@ mod tests {
     }
 
     fn bag(item: &str, n: i64) -> Value {
-        json!({ "inventory": { (item): n } })
+        serde_json::json!({ "inventory": { (item): n } })
     }
 
     /// Bar stat kosong di semua resource — supaya guard "sudah penuh" tidak
     /// memblokir. Semua nilai default tetap dibaca lewat `||`.
     fn weak(item: &str, n: i64) -> Value {
-        json!({
+        serde_json::json!({
             "inventory": { (item): n },
             "rpg": { "health": 10, "mana": 10, "stamina": 10 },
         })
@@ -365,7 +365,7 @@ mod tests {
 
     #[test]
     fn no_item_name_prints_the_usage_card() {
-        let r = run(&[], json!({}));
+        let r = run(&[], serde_json::json!({}));
         let t = text_of(&r);
         assert!(t.starts_with("🎒 *ᴜsᴇ ɪᴛᴇᴍ*"), "{t}");
         assert!(t.contains("`.use <nama_item>`") && t.contains("`.inventory`"), "{t}");
@@ -374,7 +374,7 @@ mod tests {
 
     #[test]
     fn an_item_that_is_not_in_the_bag_is_named_back_to_you() {
-        let r = run(&["potion"], json!({}));
+        let r = run(&["potion"], serde_json::json!({}));
         let t = text_of(&r);
         assert!(t.starts_with("❌ *ɪᴛᴇᴍ ᴛɪᴅᴀᴋ ᴀᴅᴀ*"), "{t}");
         assert!(t.contains("Kamu tidak memiliki item *potion*!"), "{t}");
@@ -412,15 +412,15 @@ mod tests {
         let r = run(&["potion"], weak("potion", 1));
         let d = written(&r);
         assert!(d["inventory"].get("potion").is_none(), "sisa 0 dihapus");
-        assert_eq!(d["rpg"]["health"], json!(60), "10 + 50 = 60");
+        assert_eq!(d["rpg"]["health"], serde_json::json!(60), "10 + 50 = 60");
 
         let r = run(
             &["potion"],
-            json!({"inventory": {"potion": 2}, "rpg": {"health": 80, "maxHealth": 90}}),
+            serde_json::json!({"inventory": {"potion": 2}, "rpg": {"health": 80, "maxHealth": 90}}),
         );
         let d = written(&r);
-        assert_eq!(d["rpg"]["health"], json!(90), "80 + 50 -> clamp 90");
-        assert_eq!(d["inventory"]["potion"], json!(1));
+        assert_eq!(d["rpg"]["health"], serde_json::json!(90), "80 + 50 -> clamp 90");
+        assert_eq!(d["inventory"]["potion"], serde_json::json!(1));
     }
 
     #[test]
@@ -436,7 +436,7 @@ mod tests {
             let r = run(&[item], weak(item, 1));
             assert_eq!(
                 written(&r)["rpg"][field],
-                json!(after),
+                serde_json::json!(after),
                 "{item} harus menaikkan {field} ke {after} (dari 10)"
             );
         }
@@ -461,14 +461,14 @@ mod tests {
             let r = run(&[item], bag(item, 1));
             let t = text_of(&r);
             assert!(t.contains(&format!("⚔️ Attack bertambah: +{add} (sekarang: {})", 10 + add)), "{item}: {t}");
-            assert_eq!(written(&r)["rpg"]["attack"], json!(10 + add), "{item}");
+            assert_eq!(written(&r)["rpg"]["attack"], serde_json::json!(10 + add), "{item}");
         }
         // Attack yang sudah ada ditambahkan, bukan ditimpa.
         let r = run(
             &["leather"],
-            json!({"inventory": {"leather": 1}, "rpg": {"attack": 40}}),
+            serde_json::json!({"inventory": {"leather": 1}, "rpg": {"attack": 40}}),
         );
-        assert_eq!(written(&r)["rpg"]["attack"], json!(43));
+        assert_eq!(written(&r)["rpg"]["attack"], serde_json::json!(43));
     }
 
     #[test]
@@ -483,7 +483,7 @@ mod tests {
         for _ in 0..1500 {
             let r = run(
                 &["mysterybox"],
-                json!({"koin": 1000, "exp": 0, "inventory": {"mysterybox": 1, "diamond": 0}}),
+                serde_json::json!({"koin": 1000, "exp": 0, "inventory": {"mysterybox": 1, "diamond": 0}}),
             );
             let d = written(&r);
             let t = text_of(&r);
@@ -521,7 +521,7 @@ mod tests {
         for _ in 0..600 {
             let r = run(
                 &["scroll"],
-                json!({"koin": 0, "exp": 0, "inventory": {"scroll": 1}}),
+                serde_json::json!({"koin": 0, "exp": 0, "inventory": {"scroll": 1}}),
             );
             let d = written(&r);
             let t = text_of(&r);
@@ -582,14 +582,14 @@ mod tests {
     fn consuming_the_last_copy_removes_the_key_but_leaves_the_others() {
         let r = run(
             &["potion"],
-            json!({
+            serde_json::json!({
                 "inventory": { "potion": 1, "herb": 9 },
                 "rpg": { "health": 10 },
             }),
         );
         let inv = written(&r)["inventory"].as_object().unwrap().clone();
         assert!(!inv.contains_key("potion"), "{inv:?}");
-        assert_eq!(inv["herb"], json!(9), "barang lain tak boleh gone");
+        assert_eq!(inv["herb"], serde_json::json!(9), "barang lain tak boleh gone");
     }
 
     #[test]
@@ -599,7 +599,7 @@ mod tests {
         let r = run(&["leather"], bag("leather", 1));
         let rpg = written(&r)["rpg"].as_object().unwrap().clone();
         for field in ["health", "maxHealth", "mana", "maxMana", "stamina", "maxStamina"] {
-            assert_eq!(rpg[field], json!(100), "{field} di-backfill ke 100");
+            assert_eq!(rpg[field], serde_json::json!(100), "{field} di-backfill ke 100");
         }
     }
 }

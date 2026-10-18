@@ -9,7 +9,7 @@
 //! beberapa baris sebelumnya.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::int_field;
 use crate::common::now_ms;
@@ -44,7 +44,7 @@ pub fn streamer(ctx: Ctx) -> Reply {
              Streaming butuh *{STAMINA_COST} Stamina*, sisa stamina kamu *{stamina}*. Tidur dulu woi! 🛏️"
         ));
     }
-    rpg.insert("stamina".into(), json!(stamina - STAMINA_COST));
+    rpg.insert("stamina".into(), serde_json::json!(stamina - STAMINA_COST));
 
     let koin = int_field(&ctx, "koin");
     let old_exp = or_default(ctx.user_field("exp").and_then(Value::as_i64), 0);
@@ -61,7 +61,7 @@ pub fn streamer(ctx: Ctx) -> Reply {
         .with_reaction("🚫")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "lastStreamer": now_ms() + EXTRA_COOLDOWN_MS, "rpg": rpg }),
+            data: serde_json::json!({ "lastStreamer": now_ms() + EXTRA_COOLDOWN_MS, "rpg": rpg }),
         });
     }
 
@@ -96,7 +96,7 @@ pub fn streamer(ctx: Ctx) -> Reply {
         .with_reaction("✅")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "koin": koin + total, "exp": new_exp, "rpg": rpg }),
+            data: serde_json::json!({ "koin": koin + total, "exp": new_exp, "rpg": rpg }),
         })
 }
 
@@ -160,7 +160,7 @@ mod tests {
 
     #[test]
     fn tired_eyes_end_the_stream_before_it_starts() {
-        let r = run(json!({"rpg": {"stamina": 19}}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 19}}));
         let t = text_of(&r);
         assert!(t.starts_with("Mata sepet kebanyakan natap layar!"), "{t}");
         assert!(t.contains("sisa stamina kamu *19*"), "{t}");
@@ -170,22 +170,22 @@ mod tests {
     #[test]
     fn every_stream_costs_twenty_stamina() {
         for _ in 0..300 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
-            assert_eq!(written(&r)["rpg"]["stamina"], json!(80));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            assert_eq!(written(&r)["rpg"]["stamina"], serde_json::json!(80));
         }
     }
 
     #[test]
     fn a_ban_writes_a_five_minute_penalty_and_no_money() {
         for _ in 0..4000 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 5000, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 5000, "exp": 0}));
             let d = written(&r);
             let t = text_of(&r);
             if t.starts_with("AKUN STREAMING KAMU DI-BANNED") {
                 let until = d["lastStreamer"].as_i64().unwrap();
                 let delta = until - now_ms();
                 assert!((295_000..=300_000).contains(&delta), "sisa penalti {delta}ms");
-                assert_eq!(d["rpg"]["stamina"], json!(80), "stamina tetap hangsus");
+                assert_eq!(d["rpg"]["stamina"], serde_json::json!(80), "stamina tetap hangsus");
                 assert!(d.get("koin").is_none() && d.get("exp").is_none());
                 return;
             }
@@ -210,7 +210,7 @@ mod tests {
     fn ad_revenue_and_the_sultan_donation_add_up_into_the_purse() {
         let mut sultan = 0;
         for _ in 0..4000 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 1000, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 1000, "exp": 0}));
             let t = text_of(&r);
             if t.starts_with("AKUN STREAMING") {
                 continue;

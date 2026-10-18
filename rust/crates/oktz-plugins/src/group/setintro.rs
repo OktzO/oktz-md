@@ -66,7 +66,6 @@ pub fn setintro(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use serde_json::Value;
-    use serde_json::json;
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -128,7 +127,7 @@ mod tests {
         // `.trim()` membuat pesan berisi spasi saja dianggap kosong — berbeda
         // dari `setwelcome` yang TIDAK memangkas.
         for msg in ["", "   ", "\t\n"] {
-            let r = run(json!({}), msg);
+            let r = run(serde_json::json!({}), msg);
             assert!(
                 text_of(&r).starts_with("📝 *sᴇᴛ ɪɴᴛʀᴏ*"),
                 "input {msg:?} harus help"
@@ -139,7 +138,7 @@ mod tests {
 
     #[test]
     fn the_help_branch_lists_every_placeholder_and_the_example() {
-        let r = run(json!({}), "");
+        let r = run(serde_json::json!({}), "");
         let t = text_of(&r);
         for token in ["@user", "@group", "@count", "@date", "@time", "@desc", "@botname"] {
             assert!(t.contains(token), "placeholder {token} hilang dari help");
@@ -149,10 +148,10 @@ mod tests {
 
     #[test]
     fn the_message_is_trimmed_on_both_sides_before_storage() {
-        let r = run(json!({}), "   halo dunia   ");
+        let r = run(serde_json::json!({}), "   halo dunia   ");
         assert_eq!(
             group_write(&r)["intro"],
-            json!("halo dunia"),
+            serde_json::json!("halo dunia"),
             "`m.text?.trim()` ada di kedua cabang JS"
         );
     }
@@ -160,13 +159,13 @@ mod tests {
     #[test]
     fn inner_whitespace_and_placeholders_survive_untouched() {
         let msg = "halo @user\n\n  dari @group pada @date";
-        let r = run(json!({}), msg);
-        assert_eq!(group_write(&r)["intro"], json!(msg));
+        let r = run(serde_json::json!({}), msg);
+        assert_eq!(group_write(&r)["intro"], serde_json::json!(msg));
     }
 
     #[test]
     fn the_confirm_reply_names_the_live_prefix_and_points_at_intro() {
-        let r = run(json!({}), "halo");
+        let r = run(serde_json::json!({}), "halo");
         let t = text_of(&r);
         assert!(t.starts_with("✅ *ɪɴᴛʀᴏ ᴅɪsᴀᴠᴇ!*"));
         assert!(t.contains("Ketik *.intro* untuk melihat hasilnya."), "{t}");
@@ -180,15 +179,15 @@ mod tests {
 
     #[test]
     fn only_the_intro_field_is_written() {
-        let r = run(json!({"intro": "lama", "game": false}), "baru");
+        let r = run(serde_json::json!({"intro": "lama", "game": false}), "baru");
         let data = group_write(&r);
         assert_eq!(data.as_object().unwrap().len(), 1, "hanya `intro` disentuh");
-        assert_eq!(data["intro"], json!("baru"));
+        assert_eq!(data["intro"], serde_json::json!("baru"));
     }
 
     #[test]
     fn the_confirm_reply_is_paired_with_the_write() {
-        let r = run(json!({}), "halo");
+        let r = run(serde_json::json!({}), "halo");
         assert!(text_of(&r).contains("berhasil diubah"));
         assert_eq!(r.mutations().len(), 1);
     }

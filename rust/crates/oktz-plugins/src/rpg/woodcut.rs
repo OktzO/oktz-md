@@ -6,7 +6,7 @@
 //! nol dianggap falsy, jadi penebang dengan bar kosong tetap boleh masuk.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::rpg::jualan::{
     apply_exp, inventory_map, math_random, or_default, rpg_int, rpg_map, roll_incl,
@@ -43,23 +43,23 @@ pub fn woodcut(ctx: Ctx) -> Reply {
              Nebang butuh *{STAMINA_COST} Stamina*, kamu cuma punya *{stamina}*. Istirahat kek! 🛌💤"
         ));
     }
-    rpg.insert("stamina".into(), json!(stamina - STAMINA_COST));
+    rpg.insert("stamina".into(), serde_json::json!(stamina - STAMINA_COST));
 
     let mut inv = inventory_map(&ctx);
     let mut results: Vec<(&'static str, i64)> = Vec::new();
     for &(item, name, chance, min, max) in DROPS.iter() {
         if math_random() * 100.0 <= chance {
             let qty = roll_incl(min, max);
-            let slot = inv.entry(item.to_string()).or_insert(json!(0));
+            let slot = inv.entry(item.to_string()).or_insert(serde_json::json!(0));
             let have = slot.as_i64().unwrap_or(0);
-            *slot = json!(have + qty);
+            *slot = serde_json::json!(have + qty);
             results.push((name, qty));
         }
     }
     if results.is_empty() {
-        let slot = inv.entry("wood".to_string()).or_insert(json!(0));
+        let slot = inv.entry("wood".to_string()).or_insert(serde_json::json!(0));
         let have = slot.as_i64().unwrap_or(0);
-        *slot = json!(have + 1);
+        *slot = serde_json::json!(have + 1);
         results.push(("🪵 Kayu", 1));
     }
 
@@ -81,7 +81,7 @@ pub fn woodcut(ctx: Ctx) -> Reply {
         .with_reaction("✅")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "exp": new_exp, "rpg": rpg, "inventory": inv }),
+            data: serde_json::json!({ "exp": new_exp, "rpg": rpg, "inventory": inv }),
         })
 }
 
@@ -142,20 +142,20 @@ mod tests {
 
     #[test]
     fn fourteen_stamina_is_refused_and_zero_is_not() {
-        let r = run(json!({"rpg": {"stamina": 14}}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 14}}));
         let t = text_of(&r);
         assert!(t.starts_with("Tangan kamu udah lecet kak"), "{t}");
         assert!(t.contains("kamu cuma punya *14*"), "{t}");
         assert!(r.mutations().is_empty());
 
-        let r = run(json!({"rpg": {"stamina": 0}, "exp": 0}));
-        assert_eq!(written(&r)["rpg"]["stamina"], json!(85), "0 || 100 -> 100 - 15");
+        let r = run(serde_json::json!({"rpg": {"stamina": 0}, "exp": 0}));
+        assert_eq!(written(&r)["rpg"]["stamina"], serde_json::json!(85), "0 || 100 -> 100 - 15");
     }
 
     #[test]
     fn the_listed_loot_equals_the_written_bag() {
         for _ in 0..400 {
-            let r = run(json!({"rpg": {"stamina": 100}, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "exp": 0}));
             let t = text_of(&r);
             let inv = written(&r)["inventory"].as_object().unwrap().clone();
             let lines = t.lines().filter(|l| l.starts_with("• ")).count();
@@ -176,7 +176,7 @@ mod tests {
     #[test]
     fn an_empty_haul_falls_back_to_a_single_log() {
         for _ in 0..6000 {
-            let r = run(json!({"rpg": {"stamina": 100}, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "exp": 0}));
             let t = text_of(&r);
             // Drop `wood` selalu 2..=5, jadi baris `+1` hanya bisa fallback.
             if t.contains("• 🪵 Kayu: *+1*") {
@@ -185,7 +185,7 @@ mod tests {
                     1,
                     "fallback hanya jalan kalau nol drop: {t}"
                 );
-                assert_eq!(written(&r)["inventory"]["wood"], json!(1));
+                assert_eq!(written(&r)["inventory"]["wood"], serde_json::json!(1));
                 return;
             }
         }
@@ -195,9 +195,9 @@ mod tests {
     #[test]
     fn every_stump_costs_fifteen_stamina_and_lands_in_the_exp_band() {
         for _ in 0..300 {
-            let r = run(json!({"rpg": {"stamina": 100}, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "exp": 0}));
             let d = written(&r);
-            assert_eq!(d["rpg"]["stamina"], json!(85));
+            assert_eq!(d["rpg"]["stamina"], serde_json::json!(85));
             let exp = d["exp"].as_i64().unwrap();
             assert!((50..=249).contains(&exp), "exp {exp}");
         }

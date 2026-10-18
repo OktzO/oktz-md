@@ -437,6 +437,17 @@ impl Reply {
         cur
     }
 
+    /// Balasan di balik `Reaction`, kalau ada (tanpa efek samping).
+    ///
+    /// `with_reaction` membungkus balasan di dalam `Mutate`+`Reaction`, jadi
+    /// test yang ingin memeriksa jenis balasannya perlu melepas keduanya.
+    pub fn tanpa_reaksi(&self) -> &Self {
+        match self {
+            Self::Reaction { reply, .. } => reply,
+            _ => self,
+        }
+    }
+
     /// Mutasi yang dibawa reply ini (Kosong kalau bukan `Mutate`).
     pub fn mutations(&self) -> &[Mutation] {
         match self {
@@ -753,6 +764,14 @@ pub struct Ctx {
     /// kosong — bukan nilai produksi. Tanpa itu plugin yang salah baca kunci
     /// akan diam-diam memakai API key milik orang lain di test.
     pub config: Arc<oktz_core::config::Runtime>,
+    /// `sock.*` JS selain kirim pesan: cek nomor, foto profil, operasi grup.
+    /// Default-nya [`SockMati`] yang menolak dengan alasan — bukan `Option`
+    /// yang wajib di-unwrap di tiap plugin.
+    pub sock: Arc<dyn crate::sock::Sock>,
+    /// Padanan `fs` Node. Default-nya [`BerkasPalsu`](crate::berkas::BerkasPalsu)
+    /// (di memori) supaya test tidak menyentuh berkas nyata; jalur produksi
+    /// memasang [`BerkasNyata`](crate::berkas::BerkasNyata) berakar ke folder aset.
+    pub berkas: Arc<dyn crate::berkas::Berkas>,
 }
 
 impl Ctx {
@@ -784,6 +803,16 @@ impl Ctx {
     /// `config.js` — nilai runtime yang dibaca plugin.
     pub fn config(&self) -> &oktz_core::config::Runtime {
         &self.config
+    }
+
+    /// `sock` JS: cek nomor, foto profil, operasi grup.
+    pub fn sock(&self) -> &dyn crate::sock::Sock {
+        self.sock.as_ref()
+    }
+
+    /// Padanan `fs` Node, berakar ke folder aset.
+    pub fn berkas(&self) -> &dyn crate::berkas::Berkas {
+        self.berkas.as_ref()
     }
 }
 
@@ -1420,6 +1449,8 @@ impl Default for Ctx {
             media: None,
             media_fetch: Arc::new(NoMediaFetch),
             config: Arc::new(oktz_core::config::Runtime::default()),
+            sock: Arc::new(crate::sock::SockMati),
+            berkas: Arc::new(crate::berkas::BerkasPalsu::baru()),
         }
     }
 }

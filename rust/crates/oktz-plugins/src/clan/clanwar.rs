@@ -11,7 +11,7 @@
 //! disebut di balasan supaya hadiah hilang tidak senyap.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::clan::clancreate::{add_koin, clans, emblem, field_num, field_str, find_clan_entry, members, save_clans};
 use crate::clan::clanmembers::{level_of, user_row};
@@ -196,7 +196,7 @@ fn reward_member(ctx: &Ctx, jid: &str, r: &Rewards) -> Option<Mutation> {
     }
     Some(Mutation::SetUser {
         jid: jid.to_string(),
-        data: json!({
+        data: serde_json::json!({
             "koin": add_koin(koin, r.koin as i64),
             "exp": (exp + r.exp as i64).clamp(0, MAX_EXP),
             "energi": (energi + r.energi as i64).max(0),
@@ -205,7 +205,7 @@ fn reward_member(ctx: &Ctx, jid: &str, r: &Rewards) -> Option<Mutation> {
 }
 
 /// `clan.wins || 0` sebagai bulat. Semua penghitung clan di JS berupa
-/// bilangan bulat, jadi hasilnya ditulis sebagai integer JSON — `json!(1.0)`
+/// bilangan bulat, jadi hasilnya ditulis sebagai integer JSON — `serde_json::json!(1.0)`
 /// akan jadi `1.0` dan plugin lain yang baca `as_i64` ikut salah.
 fn field_int(clan: &Value, key: &str) -> i64 {
     let v = field_num(clan, key);
@@ -215,15 +215,15 @@ fn field_int(clan: &Value, key: &str) -> i64 {
 fn bump(clan: &mut Value, key: &str, add: i64) {
     let cur = field_int(clan, key);
     if let Some(o) = clan.as_object_mut() {
-        o.insert(key.to_string(), json!(cur + add));
+        o.insert(key.to_string(), serde_json::json!(cur + add));
     }
 }
 
 fn set_exp(clan: &mut Value, add: i64) {
     let exp = field_int(clan, "exp") + add;
     if let Some(o) = clan.as_object_mut() {
-        o.insert("exp".into(), json!(exp));
-        o.insert("level".into(), json!(level_from_exp(exp as f64)));
+        o.insert("exp".into(), serde_json::json!(exp));
+        o.insert("level".into(), serde_json::json!(level_from_exp(exp as f64)));
     }
 }
 
@@ -361,10 +361,10 @@ mod tests {
     use oktz_plugin_api::registry::GroupRoster;
 
     /// Counter ditulis sebagai integer JSON, sama seperti yang ditulis
-    /// `clancreate` — kalau di sini dipakai `f64`, `json!(0.0)` ikut menguji
+    /// `clancreate` — kalau di sini dipakai `f64`, `serde_json::json!(0.0)` ikut menguji
     /// kebocoran float yang tidak ada di store sungguhan.
     fn clan(id: &str, name: &str, ms: &[&str], level: f64, wins: f64, exp: f64) -> Value {
-        json!({
+        serde_json::json!({
             "id": id,
             "name": name,
             "emblem": "🐉",
@@ -385,7 +385,7 @@ mod tests {
             text: text.into(),
             args: text.split_whitespace().map(str::to_string).collect(),
             user_data: user,
-            settings: json!({ "clans": clans_map }),
+            settings: serde_json::json!({ "clans": clans_map }),
             ..Default::default()
         }
     }
@@ -438,16 +438,16 @@ mod tests {
 
     #[test]
     fn a_sender_without_a_clan_is_turned_away() {
-        let c = ctx_of(json!({}), "Dragon", json!({}));
+        let c = ctx_of(serde_json::json!({}), "Dragon", serde_json::json!({}));
         assert_eq!(text_of(c), "❌ Kamu belum punya clan");
     }
 
     #[test]
     fn no_target_shows_the_help_block() {
         let c = ctx_of(
-            json!({ "clanId": "A" }),
+            serde_json::json!({ "clanId": "A" }),
             "",
-            json!({ "A": clan("A", "Alpha", &["628111@s.whatsapp.net"], 1.0, 0.0, 0.0) }),
+            serde_json::json!({ "A": clan("A", "Alpha", &["628111@s.whatsapp.net"], 1.0, 0.0, 0.0) }),
         );
         let out = text_of(c);
         assert!(out.starts_with("⚔️ *CLAN WAR*"), "{out}");
@@ -456,38 +456,38 @@ mod tests {
 
     #[test]
     fn a_missing_own_clan_and_a_missing_enemy_are_distinct_messages() {
-        let only_a = json!({ "A": clan("A", "Alpha", &["628111@s.whatsapp.net"], 1.0, 0.0, 0.0) });
+        let only_a = serde_json::json!({ "A": clan("A", "Alpha", &["628111@s.whatsapp.net"], 1.0, 0.0, 0.0) });
         assert_eq!(
-            text_of(ctx_of(json!({ "clanId": "Z" }), "Alpha", only_a.clone())),
+            text_of(ctx_of(serde_json::json!({ "clanId": "Z" }), "Alpha", only_a.clone())),
             "❌ Clan kamu tidak ditemukan"
         );
         assert_eq!(
-            text_of(ctx_of(json!({ "clanId": "A" }), "Nope", only_a)),
+            text_of(ctx_of(serde_json::json!({ "clanId": "A" }), "Nope", only_a)),
             "❌ Clan lawan tidak ditemukan"
         );
     }
 
     #[test]
     fn fighting_your_own_clan_id_is_refused() {
-        let map = json!({ "A": clan("A", "Alpha", &["1", "2", "3"], 1.0, 0.0, 0.0) });
+        let map = serde_json::json!({ "A": clan("A", "Alpha", &["1", "2", "3"], 1.0, 0.0, 0.0) });
         assert_eq!(
-            text_of(ctx_of(json!({ "clanId": "A" }), "A", map)),
+            text_of(ctx_of(serde_json::json!({ "clanId": "A" }), "A", map)),
             "❌ Tidak bisa war melawan clan sendiri"
         );
     }
 
     #[test]
     fn both_clans_need_at_least_three_members() {
-        let mut map = json!({
+        let mut map = serde_json::json!({
             "A": clan("A", "Alpha", &["628111@s.whatsapp.net", "2@s", "3@s"], 1.0, 0.0, 0.0),
             "B": clan("B", "Beta", &["4@s", "5@s"], 1.0, 0.0, 0.0),
         });
-        let me = json!({ "clanId": "A" });
+        let me = serde_json::json!({ "clanId": "A" });
         assert_eq!(
             text_of(ctx_of(me.clone(), "B", map.clone())),
             "❌ Clan lawan butuh minimal 3 member"
         );
-        map["A"] = json!(clan("A", "Alpha", &["628111@s.whatsapp.net", "2@s"], 1.0, 0.0, 0.0));
+        map["A"] = serde_json::json!(clan("A", "Alpha", &["628111@s.whatsapp.net", "2@s"], 1.0, 0.0, 0.0));
         assert_eq!(
             text_of(ctx_of(me, "B", map)),
             "❌ Clan kamu butuh minimal 3 member"
@@ -496,11 +496,11 @@ mod tests {
 
     #[test]
     fn the_enemy_is_found_by_id_key_then_by_name_then_by_its_id_field() {
-        let map = json!({
+        let map = serde_json::json!({
             "A": clan("A", "Alpha", &["628111@s.whatsapp.net", "2@s", "3@s"], 1.0, 0.0, 0.0),
             "XYZ": clan("BE7", "Beta", &["4@s", "5@s", "6@s"], 1.0, 0.0, 0.0),
         });
-        let me = json!({ "clanId": "A" });
+        let me = serde_json::json!({ "clanId": "A" });
         for target in ["XYZ", "beta", "BE7"] {
             let r = run(ctx_of(me.clone(), target, map.clone()));
             assert!(
@@ -520,14 +520,14 @@ mod tests {
             3.0,
             0.0,
         );
-        let mut ctx = ctx_of(json!({ "clanId": "A" }), "B", json!({}));
-        ctx.user_data = json!({ "rpg": { "level": 10, "exp": 500 } });
+        let mut ctx = ctx_of(serde_json::json!({ "clanId": "A" }), "B", serde_json::json!({}));
+        ctx.user_data = serde_json::json!({ "rpg": { "level": 10, "exp": 500 } });
         ctx.roster = GroupRoster {
             participants: vec![Participant {
                 jid: "628222@s.whatsapp.net".into(),
                 is_admin: false,
                 is_owner: false,
-                data: json!({ "level": 20, "exp": 1000 }),
+                data: serde_json::json!({ "level": 20, "exp": 1000 }),
             }],
             is_bot_admin: false,
         };
@@ -539,7 +539,7 @@ mod tests {
     #[test]
     fn a_clan_with_no_readable_rows_still_has_the_documented_minimum_power() {
         let clan_v = clan("A", "Alpha", &["1@s", "2@s", "3@s"], 0.0, 0.0, 0.0);
-        let ctx = ctx_of(json!({ "clanId": "A" }), "B", json!({}));
+        let ctx = ctx_of(serde_json::json!({ "clanId": "A" }), "B", serde_json::json!({}));
         // 3 member * (1*100 + 0) + level default 1 * 500 + 0 = 800
         assert_eq!(calculate_power(&ctx, &clan_v), 800.0);
     }
@@ -547,12 +547,12 @@ mod tests {
     #[test]
     fn rewards_scale_by_one_tenth_of_the_clan_level_and_floor() {
         // level 1 -> mult 1.1 -> 30000*1.1 = 33000
-        assert_eq!(scaled_rewards(&json!({ "level": 1 }), true).koin, 33_000.0);
+        assert_eq!(scaled_rewards(&serde_json::json!({ "level": 1 }), true).koin, 33_000.0);
         // level 10 -> mult 2.0 -> 60000; exp 30000; energi 30
-        let r = scaled_rewards(&json!({ "level": 10 }), true);
+        let r = scaled_rewards(&serde_json::json!({ "level": 10 }), true);
         assert_eq!((r.koin, r.exp, r.energi), (60_000.0, 30_000.0, 30.0));
         // level 0 -> default 1
-        assert_eq!(scaled_rewards(&json!({ "level": 0 }), false).koin, 6_600.0);
+        assert_eq!(scaled_rewards(&serde_json::json!({ "level": 0 }), false).koin, 6_600.0);
     }
 
     #[test]
@@ -575,11 +575,11 @@ mod tests {
 
     #[test]
     fn a_war_settles_both_clans_and_rewrites_both_levels() {
-        let map = json!({
+        let map = serde_json::json!({
             "A": clan("A", "Alpha", &["628111@s.whatsapp.net", "2@s", "3@s"], 1.0, 0.0, 0.0),
             "B": clan("B", "Beta", &["4@s", "5@s", "6@s"], 1.0, 0.0, 0.0),
         });
-        let r = run(ctx_of(json!({ "clanId": "A", "koin": 0, "exp": 0, "energi": 10 }), "B", map));
+        let r = run(ctx_of(serde_json::json!({ "clanId": "A", "koin": 0, "exp": 0, "energi": 10 }), "B", map));
         let after = saved_clans(&r);
         let a = &after["A"];
         let b = &after["B"];
@@ -589,20 +589,20 @@ mod tests {
         assert_eq!(field_num(a, "losses") == 1.0, !a_won);
         // exp = 5000 -> level 1 ; exp = 1000 -> level 1
         assert_eq!(field_num(a, "exp"), if a_won { CLAN_EXP_WIN } else { CLAN_EXP_LOSE });
-        assert_eq!(a["level"], json!(1), "floor(5000/10000)+1 dan floor(1000/10000)+1");
-        assert_eq!(b["level"], json!(1));
+        assert_eq!(a["level"], serde_json::json!(1), "floor(5000/10000)+1 dan floor(1000/10000)+1");
+        assert_eq!(b["level"], serde_json::json!(1));
         // Nama clan lain tidak ikut berubah.
         assert_eq!(field_str(b, "name"), "Beta");
     }
 
     #[test]
     fn only_members_whose_row_is_readable_get_a_reward_mutation() {
-        let map = json!({
+        let map = serde_json::json!({
             "A": clan("A", "Alpha", &["628111@s.whatsapp.net", "2@s", "3@s"], 1.0, 0.0, 0.0),
             "B": clan("B", "Beta", &["4@s", "5@s", "6@s"], 1.0, 0.0, 0.0),
         });
         let mut ctx = ctx_of(
-            json!({ "clanId": "A", "koin": 100, "exp": 10, "energi": 10 }),
+            serde_json::json!({ "clanId": "A", "koin": 100, "exp": 10, "energi": 10 }),
             "B",
             map,
         );
@@ -611,7 +611,7 @@ mod tests {
                 jid: "2@s".into(),
                 is_admin: false,
                 is_owner: false,
-                data: json!({ "koin": 0, "exp": 0, "energi": 0 }),
+                data: serde_json::json!({ "koin": 0, "exp": 0, "energi": 0 }),
             }],
             is_bot_admin: false,
         };
@@ -641,16 +641,16 @@ mod tests {
     fn a_minus_one_sentinel_member_is_left_untouched() {
         let clan_v = clan("A", "Alpha", &["628111@s.whatsapp.net", "2@s", "3@s"], 1.0, 0.0, 0.0);
         let mut ctx = ctx_of(
-            json!({ "clanId": "A", "koin": -1, "exp": 0, "energi": 0 }),
+            serde_json::json!({ "clanId": "A", "koin": -1, "exp": 0, "energi": 0 }),
             "B",
-            json!({}),
+            serde_json::json!({}),
         );
         ctx.roster = GroupRoster {
             participants: vec![Participant {
                 jid: "2@s".into(),
                 is_admin: false,
                 is_owner: false,
-                data: json!({ "koin": 5, "exp": 0, "energi": 0 }),
+                data: serde_json::json!({ "koin": 5, "exp": 0, "energi": 0 }),
             }],
             is_bot_admin: false,
         };
@@ -668,37 +668,37 @@ mod tests {
     #[test]
     fn rewards_clamp_at_zero_and_at_the_store_maximums() {
         let mut ctx = ctx_of(
-            json!({ "clanId": "A", "koin": 5, "exp": 0, "energi": 0 }),
+            serde_json::json!({ "clanId": "A", "koin": 5, "exp": 0, "energi": 0 }),
             "B",
-            json!({}),
+            serde_json::json!({}),
         );
         ctx.roster = GroupRoster::default();
-        let m = reward_member(&ctx, "628111@s.whatsapp.net", &scaled_rewards(&json!({ "level": 1 }), true))
+        let m = reward_member(&ctx, "628111@s.whatsapp.net", &scaled_rewards(&serde_json::json!({ "level": 1 }), true))
             .expect("ada mutasi");
         match m {
             Mutation::SetUser { data, .. } => {
-                assert_eq!(data["energi"], json!(16), "Math.max(0, 0 + 16)");
-                assert_eq!(data["koin"], json!(5 + 33_000));
+                assert_eq!(data["energi"], serde_json::json!(16), "Math.max(0, 0 + 16)");
+                assert_eq!(data["koin"], serde_json::json!(5 + 33_000));
             }
             _ => unreachable!(),
         }
         // `Math.max(0, energi + amount)` — hanya `energi == -1` yang lolos
         // sebagai sentinel; nilai negatif lain tetap dijepit ke 0.
-        ctx.user_data = json!({ "clanId": "A", "koin": 0, "exp": 0, "energi": -100 });
-        match reward_member(&ctx, "628111@s.whatsapp.net", &scaled_rewards(&json!({ "level": 1 }), true)).unwrap() {
+        ctx.user_data = serde_json::json!({ "clanId": "A", "koin": 0, "exp": 0, "energi": -100 });
+        match reward_member(&ctx, "628111@s.whatsapp.net", &scaled_rewards(&serde_json::json!({ "level": 1 }), true)).unwrap() {
             Mutation::SetUser { data, .. } => {
-                assert_eq!(data["energi"], json!(0), "max(0, -100 + 16) = 0");
-                assert_eq!(data["koin"], json!(33_000), "Math.max(0, ..) di updateKoin");
+                assert_eq!(data["energi"], serde_json::json!(0), "max(0, -100 + 16) = 0");
+                assert_eq!(data["koin"], serde_json::json!(33_000), "Math.max(0, ..) di updateKoin");
             }
             _ => unreachable!(),
         }
 
-        ctx.user_data = json!({ "clanId": "A", "koin": 9_000_000_000_000i64 - 1, "exp": 9_000_000_000i64, "energi": 0 });
-        let m = reward_member(&ctx, "628111@s.whatsapp.net", &scaled_rewards(&json!({ "level": 1 }), true)).unwrap();
+        ctx.user_data = serde_json::json!({ "clanId": "A", "koin": 9_000_000_000_000i64 - 1, "exp": 9_000_000_000i64, "energi": 0 });
+        let m = reward_member(&ctx, "628111@s.whatsapp.net", &scaled_rewards(&serde_json::json!({ "level": 1 }), true)).unwrap();
         match m {
             Mutation::SetUser { data, .. } => {
-                assert_eq!(data["koin"], json!(9_000_000_000_000i64), "MAX_KOIN");
-                assert_eq!(data["exp"], json!(9_000_000_000i64), "MAX_EXP");
+                assert_eq!(data["koin"], serde_json::json!(9_000_000_000_000i64), "MAX_KOIN");
+                assert_eq!(data["exp"], serde_json::json!(9_000_000_000i64), "MAX_EXP");
             }
             _ => unreachable!(),
         }
@@ -706,12 +706,12 @@ mod tests {
 
     #[test]
     fn clan_counters_are_written_as_json_integers() {
-        let map = json!({
+        let map = serde_json::json!({
             "A": clan("A", "Alpha", &["628111@s.whatsapp.net", "2@s", "3@s"], 1.0, 0.0, 0.0),
             "B": clan("B", "Beta", &["4@s", "5@s", "6@s"], 1.0, 0.0, 0.0),
         });
         let after = saved_clans(&run(ctx_of(
-            json!({ "clanId": "A", "koin": 0, "exp": 0, "energi": 0 }),
+            serde_json::json!({ "clanId": "A", "koin": 0, "exp": 0, "energi": 0 }),
             "B",
             map,
         )));
@@ -731,19 +731,19 @@ mod tests {
         // `.clanwar Alpha` — "Alpha" bukan `clanId`, jadi cek "diri sendiri"
         // di JS tidak menangkapnya dan `myClan`/`enemyClan` menunjuk objek
         // yang sama: wins dan losses naik dua-duanya, exp dapat 5000+1000.
-        let map = json!({
+        let map = serde_json::json!({
             "A": clan("A", "Alpha", &["628111@s.whatsapp.net", "2@s", "3@s"], 1.0, 0.0, 0.0),
         });
         let after = saved_clans(&run(ctx_of(
-            json!({ "clanId": "A", "koin": 0, "exp": 0, "energi": 0 }),
+            serde_json::json!({ "clanId": "A", "koin": 0, "exp": 0, "energi": 0 }),
             "Alpha",
             map,
         )));
         let a = &after["A"];
-        assert_eq!(a["wins"], json!(1));
-        assert_eq!(a["losses"], json!(1));
-        assert_eq!(a["exp"], json!(6_000));
-        assert_eq!(a["level"], json!(1));
+        assert_eq!(a["wins"], serde_json::json!(1));
+        assert_eq!(a["losses"], serde_json::json!(1));
+        assert_eq!(a["exp"], serde_json::json!(6_000));
+        assert_eq!(a["level"], serde_json::json!(1));
         assert_eq!(after.len(), 1, "hanya satu clan tersimpan");
     }
 
@@ -752,10 +752,10 @@ mod tests {
     /// test ini harus mengoper set hadiah yang sesuai dengan cabangnya.
     #[test]
     fn the_loser_see_the_consolation_line_and_the_winner_the_reward_line() {
-        let win_r = scaled_rewards(&json!({ "level": 1 }), true);
-        let lose_r = scaled_rewards(&json!({ "level": 1 }), false);
-        let my = json!({ "name": "Alpha", "emblem": "🐉" });
-        let enemy = json!({ "name": "Beta", "emblem": "🔥" });
+        let win_r = scaled_rewards(&serde_json::json!({ "level": 1 }), true);
+        let lose_r = scaled_rewards(&serde_json::json!({ "level": 1 }), false);
+        let my = serde_json::json!({ "name": "Alpha", "emblem": "🐉" });
+        let enemy = serde_json::json!({ "name": "Beta", "emblem": "🔥" });
 
         let win = result_text(&my, &enemy, 900.0, 100.0, true, &win_r, 0);
         assert!(win.contains("🐉 *Alpha*  vs  *Beta* 🔥"), "{win}");
@@ -779,8 +779,8 @@ mod tests {
     /// pada cabang, bukan pada isi `mine`.
     #[test]
     fn the_printed_amounts_follow_the_set_handed_in() {
-        let win_r = scaled_rewards(&json!({ "level": 1 }), true);
-        let lose_r = scaled_rewards(&json!({ "level": 1 }), false);
+        let win_r = scaled_rewards(&serde_json::json!({ "level": 1 }), true);
+        let lose_r = scaled_rewards(&serde_json::json!({ "level": 1 }), false);
         assert_eq!((win_r.koin, win_r.exp, win_r.energi), (33_000.0, 16_500.0, 16.0));
         assert_eq!((lose_r.koin, lose_r.exp, lose_r.energi), (6_600.0, 3_300.0, 3.0));
     }

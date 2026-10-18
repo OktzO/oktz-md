@@ -1,6 +1,6 @@
 //! `plugins/group/absen.js` — tandai kehadiran di sesi absen grup.
 
-use serde_json::{Value, json};
+use serde_json::{Value};
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
 use crate::common::{date_long, days_from_civil, jid_number, now_ms};
@@ -91,11 +91,11 @@ pub(crate) fn store_peserta(ctx: &Ctx, peserta: &[String]) {
     let list: Vec<Value> = peserta.iter().cloned().map(Value::String).collect();
     ctx.session_update(ABSENSI_KEY, |slot| {
         if !slot.is_object() {
-            *slot = json!({});
+            *slot = serde_json::json!({});
         }
         let map = slot.as_object_mut().expect("sudah diganti objek");
         map.entry(chat.clone())
-            .or_insert_with(|| json!({ "peserta": [] }));
+            .or_insert_with(|| serde_json::json!({ "peserta": [] }));
         if let Some(entry) = map.get_mut(&chat).and_then(Value::as_object_mut) {
             entry.insert("peserta".into(), Value::Array(list.clone()));
         }
@@ -185,7 +185,7 @@ mod tests {
     }
 
     fn open_session(peserta: Vec<&str>) -> Value {
-        json!({
+        serde_json::json!({
             CHAT: {
                 "keterangan": "Absen Harian",
                 "createdBy": OTHER,
@@ -238,7 +238,7 @@ mod tests {
 
     #[test]
     fn a_session_for_another_chat_is_not_this_groups_session() {
-        let r = run(Some(json!({"120999@g.us": {"keterangan": "x", "peserta": []}})), SENDER);
+        let r = run(Some(serde_json::json!({"120999@g.us": {"keterangan": "x", "peserta": []}})), SENDER);
         assert_eq!(text_of(&r), NO_SESSION);
     }
 
@@ -283,7 +283,7 @@ mod tests {
         let after = ctx.session_get(ABSENSI_KEY).unwrap();
         assert_eq!(peserta_of(after.get(CHAT).unwrap()), vec![SENDER.to_string()]);
         assert_eq!(
-            after[CHAT]["keterangan"], json!("Absen Harian"),
+            after[CHAT]["keterangan"], serde_json::json!("Absen Harian"),
             "field lain milik mulaiabsen tidak boleh tertimpa"
         );
     }
@@ -319,17 +319,17 @@ mod tests {
     #[test]
     fn entry_created_falls_back_through_last_update_and_last_active() {
         assert_eq!(
-            entry_created_ms(&json!({"createdAt": 1_714_528_984_000i64})),
+            entry_created_ms(&serde_json::json!({"createdAt": 1_714_528_984_000i64})),
             1_714_528_984_000
         );
         assert_eq!(
-            entry_created_ms(&json!({"lastUpdate": "2024-05-01T02:03:04.000Z"})),
+            entry_created_ms(&serde_json::json!({"lastUpdate": "2024-05-01T02:03:04.000Z"})),
             1_714_528_984_000
         );
-        assert_eq!(entry_created_ms(&json!({"lastActive": 7})), 7);
-        assert_eq!(entry_created_ms(&json!({})), 0, "tidak ada = 0");
+        assert_eq!(entry_created_ms(&serde_json::json!({"lastActive": 7})), 7);
+        assert_eq!(entry_created_ms(&serde_json::json!({})), 0, "tidak ada = 0");
         assert_eq!(
-            entry_created_ms(&json!({"createdAt": "rusak"})),
+            entry_created_ms(&serde_json::json!({"createdAt": "rusak"})),
             0,
             "string rusak = 0, bukan panic"
         );
@@ -339,7 +339,7 @@ mod tests {
     fn pruning_only_runs_past_the_chat_limit() {
         let mut sessions = serde_json::Map::new();
         for i in 0..ABSENSI_MAX_CHATS {
-            sessions.insert(format!("g{i}"), json!({ "createdAt": now_ms() }));
+            sessions.insert(format!("g{i}"), serde_json::json!({ "createdAt": now_ms() }));
         }
         let ctx = Ctx::default();
         ctx.session_set(ABSENSI_KEY, Value::Object(sessions.clone()));
@@ -351,7 +351,7 @@ mod tests {
         );
 
         let mut sessions = sessions;
-        sessions.insert("kejadian".into(), json!({ "createdAt": now_ms() }));
+        sessions.insert("kejadian".into(), serde_json::json!({ "createdAt": now_ms() }));
         ctx.session_set(ABSENSI_KEY, Value::Object(sessions));
         prune_absensi(&ctx);
         assert_eq!(
@@ -367,9 +367,9 @@ mod tests {
         // menyisakannya, jadi pencadangan tidak boleh ikut membuangnya.
         let mut sessions = serde_json::Map::new();
         for i in 0..ABSENSI_MAX_CHATS {
-            sessions.insert(format!("g{i}"), json!({ "createdAt": 0 }));
+            sessions.insert(format!("g{i}"), serde_json::json!({ "createdAt": 0 }));
         }
-        sessions.insert("tanpa-waktu".into(), json!({ "peserta": [] }));
+        sessions.insert("tanpa-waktu".into(), serde_json::json!({ "peserta": [] }));
         let ctx = Ctx::default();
         ctx.session_set(ABSENSI_KEY, Value::Object(sessions));
         prune_absensi(&ctx);
@@ -381,9 +381,9 @@ mod tests {
     fn pruning_drops_sessions_past_the_ttl_once_over_the_limit() {
         let mut sessions = serde_json::Map::new();
         for i in 0..ABSENSI_MAX_CHATS {
-            sessions.insert(format!("g{i}"), json!({ "createdAt": now_ms() }));
+            sessions.insert(format!("g{i}"), serde_json::json!({ "createdAt": now_ms() }));
         }
-        sessions.insert("basi".into(), json!({ "createdAt": now_ms() - ABSENSI_TTL_MS - 1 }));
+        sessions.insert("basi".into(), serde_json::json!({ "createdAt": now_ms() - ABSENSI_TTL_MS - 1 }));
         let ctx = Ctx::default();
         ctx.session_set(ABSENSI_KEY, Value::Object(sessions));
         prune_absensi(&ctx);

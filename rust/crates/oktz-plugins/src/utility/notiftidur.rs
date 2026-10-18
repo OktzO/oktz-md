@@ -6,7 +6,7 @@
 //! ada di [`crate::utility::notifmakan`].
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::{js_truthy, joined_strings};
 use crate::utility::notifmakan::{
@@ -28,18 +28,18 @@ fn set_notif_tidur(
         .and_then(|p| p.get("lastSent"))
         .filter(|v| js_truthy(Some(v)))
         .cloned()
-        .unwrap_or_else(|| json!({}));
+        .unwrap_or_else(|| serde_json::json!({}));
     let created_at = prev
         .as_ref()
         .and_then(|p| p.get("createdAt"))
         .filter(|v| js_truthy(Some(v)))
         .cloned()
-        .unwrap_or_else(|| json!(crate::common::now_ms()));
+        .unwrap_or_else(|| serde_json::json!(crate::common::now_ms()));
     put_notif(
         ctx,
         SETTING_KEY,
         store,
-        json!({
+        serde_json::json!({
             "sender": ctx.sender,
             "chatJid": ctx.chat,
             "jadwal": jadwal,
@@ -133,7 +133,7 @@ pub fn notiftidur(ctx: Ctx) -> Reply {
         let Some(mut entry) = existing else {
             return Reply::text("❌ *Belum ada pengingat tidur* yang aktif di chat ini");
         };
-        entry["enabled"] = json!(false);
+        entry["enabled"] = serde_json::json!(false);
         return Reply::text(format!(
             "✅ *Pengingat tidur dinonaktifkan* 🔕\n\n\
              > Ketik `{}notiftidur on` untuk mengaktifkan kembali",
@@ -153,7 +153,7 @@ pub fn notiftidur(ctx: Ctx) -> Reply {
             ));
         }
         if let Some(mut entry) = existing {
-            entry["enabled"] = json!(true);
+            entry["enabled"] = serde_json::json!(true);
             let text = format!(
                 "✅ *Pengingat tidur diaktifkan kembali!* 🔔\n\n⏰ Jadwal: {} WIB",
                 jadwal_inline(&entry)
@@ -205,7 +205,6 @@ mod tests {
     use super::*;
 
     use oktz_plugin_api::Mutation;
-    use serde_json::json;
 
     const SENDER: &str = "628111@s.whatsapp.net";
     const CHAT: &str = "120363@g.us";
@@ -241,7 +240,7 @@ mod tests {
     }
 
     fn existing(jadwal: &[&str], enabled: bool) -> Value {
-        json!({ SETTING_KEY: { KEY: {
+        serde_json::json!({ SETTING_KEY: { KEY: {
             "sender": SENDER, "chatJid": CHAT, "jadwal": jadwal,
             "enabled": enabled, "lastSent": {"22:00_2026-01-01": true}, "createdAt": 1
         }}})
@@ -271,7 +270,7 @@ mod tests {
     #[test]
     fn without_a_recognised_keyword_the_plugin_shows_the_info_panel() {
         for args in [vec![], vec!["status"], vec!["nyanyi"]] {
-            let r = run(json!({}), &args);
+            let r = run(serde_json::json!({}), &args);
             let t = text_of(&r);
             assert!(t.starts_with("🌙 *PENGINGAT TIDUR*"), "args {args:?}: {t}");
             assert!(t.contains("📌 *Status:* ⚪ Belum diatur"), "args {args:?}: {t}");
@@ -293,10 +292,10 @@ mod tests {
 
     #[test]
     fn on_stores_the_schedule_without_a_menu_field() {
-        let r = run(json!({}), &["on", "22.00,23.30"]);
+        let r = run(serde_json::json!({}), &["on", "22.00,23.30"]);
         let entry = &setting_of(&r)[KEY];
-        assert_eq!(entry["jadwal"], json!(["22:00", "23:30"]));
-        assert_eq!(entry["enabled"], json!(true));
+        assert_eq!(entry["jadwal"], serde_json::json!(["22:00", "23:30"]));
+        assert_eq!(entry["enabled"], serde_json::json!(true));
         assert!(
             entry.get("menu").is_none(),
             "setNotifTidur tidak menulis menu: {entry}"
@@ -315,8 +314,8 @@ mod tests {
             "✅ *Pengingat tidur diaktifkan kembali!* 🔔\n\n⏰ Jadwal: *22:00* WIB"
         );
         let entry = &setting_of(&r)[KEY];
-        assert_eq!(entry["enabled"], json!(true));
-        assert_eq!(entry["jadwal"], json!(["22:00"]));
+        assert_eq!(entry["enabled"], serde_json::json!(true));
+        assert_eq!(entry["jadwal"], serde_json::json!(["22:00"]));
     }
 
     #[test]
@@ -334,15 +333,15 @@ mod tests {
     fn off_keeps_the_schedule_and_the_last_sent_bookkeeping() {
         let r = run(existing(&["22:00"], true), &["off"]);
         let entry = &setting_of(&r)[KEY];
-        assert_eq!(entry["enabled"], json!(false));
-        assert_eq!(entry["jadwal"], json!(["22:00"]));
-        assert_eq!(entry["lastSent"], json!({"22:00_2026-01-01": true}));
+        assert_eq!(entry["enabled"], serde_json::json!(false));
+        assert_eq!(entry["jadwal"], serde_json::json!(["22:00"]));
+        assert_eq!(entry["lastSent"], serde_json::json!({"22:00_2026-01-01": true}));
         assert!(text_of(&r).contains("✅ *Pengingat tidur dinonaktifkan* 🔕"), "{}", text_of(&r));
     }
 
     #[test]
     fn off_without_an_entry_is_refused() {
-        let r = run(json!({}), &["off"]);
+        let r = run(serde_json::json!({}), &["off"]);
         assert_eq!(text_of(&r), "❌ *Belum ada pengingat tidur* yang aktif di chat ini");
         assert!(r.mutations().is_empty());
     }
@@ -351,9 +350,9 @@ mod tests {
     fn edit_replaces_the_schedule_and_keeps_the_old_ones_metadata() {
         let r = run(existing(&["22:00"], true), &["edit", "23.00"]);
         let entry = &setting_of(&r)[KEY];
-        assert_eq!(entry["jadwal"], json!(["23:00"]));
-        assert_eq!(entry["lastSent"], json!({"22:00_2026-01-01": true}));
-        assert_eq!(entry["createdAt"], json!(1));
+        assert_eq!(entry["jadwal"], serde_json::json!(["23:00"]));
+        assert_eq!(entry["lastSent"], serde_json::json!({"22:00_2026-01-01": true}));
+        assert_eq!(entry["createdAt"], serde_json::json!(1));
         let t = text_of(&r);
         assert!(t.starts_with("✅ *Jadwal tidur diperbarui!* ✏️\n\n⏰ *Jadwal baru:*"), "{t}");
         assert!(!t.contains("setiap hari"), "catatan harian hanya untuk `on`: {t}");
@@ -361,7 +360,7 @@ mod tests {
 
     #[test]
     fn edit_without_an_existing_entry_points_at_on() {
-        let r = run(json!({}), &["edit", "23.00"]);
+        let r = run(serde_json::json!({}), &["edit", "23.00"]);
         assert_eq!(
             text_of(&r),
             "❌ *Belum ada pengingat tidur!*\n\n> Aktifkan dulu: `.notiftidur on 22.00`"
@@ -372,9 +371,9 @@ mod tests {
     #[test]
     fn a_missing_or_malformed_schedule_is_refused() {
         for (settings, args) in [
-            (json!({}), vec!["on"]),
-            (json!({}), vec!["on", "abc"]),
-            (json!({}), vec!["on", "24.00"]),
+            (serde_json::json!({}), vec!["on"]),
+            (serde_json::json!({}), vec!["on", "abc"]),
+            (serde_json::json!({}), vec!["on", "24.00"]),
             (existing(&["22:00"], false), vec!["edit"]),
             (existing(&["22:00"], false), vec!["edit", "22:99"]),
         ] {
@@ -391,7 +390,7 @@ mod tests {
 
     #[test]
     fn the_two_reminders_live_in_different_setting_keys() {
-        let r = run(json!({}), &["on", "22.00"]);
+        let r = run(serde_json::json!({}), &["on", "22.00"]);
         match &r.mutations()[0] {
             Mutation::SetSetting { key, .. } => assert_eq!(key, "notifTidur"),
             other => panic!("harus SetSetting, dapat {other:?}"),

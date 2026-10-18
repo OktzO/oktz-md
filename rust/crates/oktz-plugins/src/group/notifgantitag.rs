@@ -14,7 +14,6 @@
 //! `saluranCtx()`; keduanya tidak ada di API plugin dan tidak ikut di-port.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::json;
 
 const OWNER_ONLY: &str = "❌ Hanya owner yang bisa menggunakan fitur ini!";
 
@@ -114,7 +113,7 @@ pub fn notifgantitag(ctx: Ctx) -> Reply {
 
     // `groupData.notifLabelChange === true` — perbandingan ketat, bukan
     // kebenaran JS: angka 1 atau string "on" di store tidak dihitung aktif.
-    let current = ctx.group_field("notifLabelChange") == Some(&json!(true));
+    let current = ctx.group_field("notifLabelChange") == Some(&serde_json::json!(true));
 
     if sub.as_deref() == Some("on") {
         if current {
@@ -122,7 +121,7 @@ pub fn notifgantitag(ctx: Ctx) -> Reply {
         }
         return Reply::text(NOW_ON).with_mutation(Mutation::SetGroup {
             jid: ctx.chat.clone(),
-            data: json!({ "notifLabelChange": true }),
+            data: serde_json::json!({ "notifLabelChange": true }),
         });
     }
 
@@ -132,7 +131,7 @@ pub fn notifgantitag(ctx: Ctx) -> Reply {
         }
         return Reply::text(NOW_OFF).with_mutation(Mutation::SetGroup {
             jid: ctx.chat.clone(),
-            data: json!({ "notifLabelChange": false }),
+            data: serde_json::json!({ "notifLabelChange": false }),
         });
     }
 
@@ -212,25 +211,25 @@ mod tests {
 
     #[test]
     fn turning_on_writes_the_flag_and_the_full_message() {
-        let r = run(json!({}), &["on"], false);
+        let r = run(serde_json::json!({}), &["on"], false);
         assert_eq!(body(&r), NOW_ON);
-        assert_eq!(write(&r), json!({"notifLabelChange": true}));
+        assert_eq!(write(&r), serde_json::json!({"notifLabelChange": true}));
     }
 
     #[test]
     fn turning_off_writes_the_flag_and_the_full_message() {
-        let r = run(json!({"notifLabelChange": true}), &["off"], false);
+        let r = run(serde_json::json!({"notifLabelChange": true}), &["off"], false);
         assert_eq!(body(&r), NOW_OFF);
-        assert_eq!(write(&r), json!({"notifLabelChange": false}));
+        assert_eq!(write(&r), serde_json::json!({"notifLabelChange": false}));
     }
 
     #[test]
     fn repeating_the_same_state_only_warns() {
-        let on = run(json!({"notifLabelChange": true}), &["on"], false);
+        let on = run(serde_json::json!({"notifLabelChange": true}), &["on"], false);
         assert!(body(&on).starts_with("⚠️ *ɴᴏᴛɪꜰ ʟᴀʙᴇʟ ᴀʟʀᴇᴀᴅʏ ᴀᴄᴛɪᴠᴇ*"));
         assert!(on.mutations().is_empty());
 
-        let off = run(json!({}), &["off"], false);
+        let off = run(serde_json::json!({}), &["off"], false);
         assert!(body(&off).starts_with("⚠️ *ɴᴏᴛɪꜰ ʟᴀʙᴇʟ ᴀʟʀᴇᴀᴅʏ ɪɴᴀᴄᴛɪᴠᴇ*"));
         assert!(off.mutations().is_empty());
     }
@@ -238,28 +237,28 @@ mod tests {
     #[test]
     fn only_the_literal_true_counts_as_on() {
         // `=== true`, bukan kebenaran JS: 1 dan "on" tetap "nonaktif".
-        for stored in [json!(1), json!("on"), json!("true"), json!({})] {
+        for stored in [serde_json::json!(1), serde_json::json!("on"), serde_json::json!("true"), serde_json::json!({})] {
             let r = run(
-                json!({ "notifLabelChange": stored.clone() }),
+                serde_json::json!({ "notifLabelChange": stored.clone() }),
                 &["on"],
                 false,
             );
-            assert_eq!(write(&r), json!({"notifLabelChange": true}), "{stored}");
+            assert_eq!(write(&r), serde_json::json!({"notifLabelChange": true}), "{stored}");
         }
     }
 
     #[test]
     fn the_action_is_lowercased_before_matching() {
-        assert!(run(json!({}), &["ON"], false).mutations().len() == 1);
+        assert!(run(serde_json::json!({}), &["ON"], false).mutations().len() == 1);
         assert!(
-            run(json!({"notifLabelChange": true}), &["Off"], false)
+            run(serde_json::json!({"notifLabelChange": true}), &["Off"], false)
                 .mutations()
                 .len()
                 == 1
         );
         // Argumen lain jatuh ke menu, tanpa menulis.
         for other in ["nyala", "1", "on!"] {
-            let r = run(json!({}), &[other], false);
+            let r = run(serde_json::json!({}), &[other], false);
             assert!(
                 body(&r).starts_with("🏷️ *ɴᴏᴛɪꜰ ɢᴀɴᴛɪ ᴛᴀɢ/ʟᴀʙᴇʟ*"),
                 "{other:?}"
@@ -270,9 +269,9 @@ mod tests {
 
     #[test]
     fn the_menu_reports_the_stored_status_and_uses_the_live_prefix() {
-        let off = run(json!({}), &[], false);
+        let off = run(serde_json::json!({}), &[], false);
         assert!(body(&off).contains("> Status: *❌ OFF*"), "{}", body(&off));
-        let on = run(json!({"notifLabelChange": true}), &[], false);
+        let on = run(serde_json::json!({"notifLabelChange": true}), &[], false);
         assert!(body(&on).contains("> Status: *✅ ON*"), "{}", body(&on));
         assert!(
             !body(&off).contains("` .notifgantitag"),
@@ -289,7 +288,7 @@ mod tests {
     fn the_global_variants_never_fall_through_to_the_local_one() {
         for action in ["on", "off"] {
             for owner in [true, false] {
-                let r = run(json!({}), &[action, "all"], owner);
+                let r = run(serde_json::json!({}), &[action, "all"], owner);
                 assert!(
                     r.mutations().is_empty(),
                     "{action} all/{owner} tidak boleh menulis store"
@@ -306,8 +305,8 @@ mod tests {
     #[test]
     fn all_is_only_global_when_the_second_argument_is_exactly_all() {
         // `on anything` bukan `on all`, jadi harus jadi `on` lokal biasa.
-        let r = run(json!({}), &["on", "semua"], false);
-        assert_eq!(write(&r), json!({"notifLabelChange": true}));
+        let r = run(serde_json::json!({}), &["on", "semua"], false);
+        assert_eq!(write(&r), serde_json::json!({"notifLabelChange": true}));
         assert_eq!(body(&r), NOW_ON);
     }
 }

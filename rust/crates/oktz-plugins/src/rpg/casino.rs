@@ -6,7 +6,6 @@
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
 use serde_json::Value;
-use serde_json::json;
 
 use crate::rpg::heal::or_default;
 use crate::tools::kalkulatormbg::thousands_id;
@@ -109,14 +108,13 @@ pub fn casino(ctx: Ctx) -> Reply {
     .with_reaction(emoji)
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": new_koin }),
+        data: serde_json::json!({ "koin": new_koin }),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: Value, arg: Option<&str>) -> Reply {
         let ctx = Ctx {
@@ -159,7 +157,7 @@ mod tests {
 
     #[test]
     fn without_a_bet_the_how_to_is_shown_and_nothing_is_written() {
-        let r = run(json!({ "koin": 50_000 }), None);
+        let r = run(serde_json::json!({ "koin": 50_000 }), None);
         let t = text_of(&r);
         assert!(t.starts_with("🎰 *LAS VEGAS KELILING*"), "{t}");
         assert!(t.contains("`.casino all`"), "{t}");
@@ -170,7 +168,7 @@ mod tests {
     #[test]
     fn a_bet_below_one_thousand_is_refused() {
         for bad in ["999", "0", "-5000", "abc", "1e3"] {
-            let r = run(json!({ "koin": 99_999 }), Some(bad));
+            let r = run(serde_json::json!({ "koin": 99_999 }), Some(bad));
             assert!(
                 text_of(&r).starts_with("Hadeh... mau judi kok modal receh"),
                 "bet {bad}"
@@ -183,7 +181,7 @@ mod tests {
     fn exactly_one_thousand_is_accepted() {
         let mut played = false;
         for _ in 0..50 {
-            let r = run(json!({ "koin": 99_999 }), Some("1000"));
+            let r = run(serde_json::json!({ "koin": 99_999 }), Some("1000"));
             if !text_of(&r).starts_with("Hadeh") {
                 played = true;
             }
@@ -201,7 +199,7 @@ mod tests {
 
     #[test]
     fn betting_more_than_the_purse_is_refused() {
-        let r = run(json!({ "koin": 999 }), Some("1000"));
+        let r = run(serde_json::json!({ "koin": 999 }), Some("1000"));
         let t = text_of(&r);
         assert!(t.starts_with("Jangan ngutang bos!"), "{t}");
         assert!(t.contains("Rp 999"), "{t}");
@@ -211,7 +209,7 @@ mod tests {
     #[test]
     fn all_bets_the_whole_purse_and_is_still_subject_to_the_minimum() {
         // koin 500 < 1000 -> "modal receh", bukan "jangan ngutang".
-        let small = run(json!({ "koin": 500 }), Some("all"));
+        let small = run(serde_json::json!({ "koin": 500 }), Some("all"));
         assert!(text_of(&small).starts_with("Hadeh"), "{}", text_of(&small));
         assert_eq!(bet_of("all", 500), None);
 
@@ -226,7 +224,7 @@ mod tests {
         let mut loss = 0;
         let mut draw = 0;
         for _ in 0..900 {
-            let r = run(json!({ "koin": 10_000 }), Some("1000"));
+            let r = run(serde_json::json!({ "koin": 10_000 }), Some("1000"));
             let t = text_of(&r);
             assert!(t.starts_with("🎰 *MEJA KASINO DITUTUP!*"), "{t}");
             assert!(t.contains("👤 Poin Lu: *"), "{t}");

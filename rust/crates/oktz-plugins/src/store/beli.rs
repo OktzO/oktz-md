@@ -221,7 +221,7 @@ pub fn beli(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     /// `beli` juga alias `rpg/shop.js` di JS, jadi `find("beli")`
     /// mengembalikan shop lebih dulu. Lookup by name, bukan by key.
@@ -261,7 +261,7 @@ mod tests {
     }
 
     fn sample() -> Value {
-        json!({"storeProducts": [
+        serde_json::json!({"storeProducts": [
             {"id": "p1", "name": "Netflix", "type": "digital", "price": 25000,
              "originalPrice": 30000, "description": "1 bulan",
              "stockItems": [{"detail": "a@mail"}], "stock": 1},
@@ -299,7 +299,7 @@ mod tests {
 
     #[test]
     fn an_empty_catalog_is_reported_and_nothing_is_written() {
-        for s in [json!({}), json!({"storeProducts": []})] {
+        for s in [serde_json::json!({}), serde_json::json!({"storeProducts": []})] {
             let r = run("1", s.clone());
             let t = text_of(&r);
             assert!(t.starts_with("📭 *Belum ada produk tersedia.*"), "{s}: {t}");
@@ -322,7 +322,7 @@ mod tests {
 
     #[test]
     fn the_picker_marks_an_empty_product_as_unavailable() {
-        let s = json!({"storeProducts": [
+        let s = serde_json::json!({"storeProducts": [
             {"id": "p1", "name": "Netflix", "type": "digital", "price": 25000,
              "stockItems": [], "stock": 0}
         ]});
@@ -331,7 +331,7 @@ mod tests {
 
     #[test]
     fn an_empty_product_is_refused_with_its_name() {
-        let s = json!({"storeProducts": [
+        let s = serde_json::json!({"storeProducts": [
             {"id": "p1", "name": "Netflix", "type": "digital", "price": 25000,
              "stockItems": [], "stock": 0}
         ]});
@@ -345,13 +345,13 @@ mod tests {
     #[test]
     fn a_minus_one_stock_means_unlimited_and_stays_buyable() {
         // Sudah `stockItems: []` — tanpa short-circuit `-1` produk ini habis.
-        let s = json!({"storeProducts": [
+        let s = serde_json::json!({"storeProducts": [
             {"id": "p1", "name": "Kaos", "type": "fisik", "price": 1000, "stock": -1}
         ]});
         let __balasan = run("", s);
         let t = text_of(&__balasan);
         assert!(t.contains("📦 *1.* Kaos — Rp 1.000 ✅"), "{t}");
-        assert!(!text_of(&run("1", json!({"storeProducts": [
+        assert!(!text_of(&run("1", serde_json::json!({"storeProducts": [
             {"id": "p1", "name": "Kaos", "type": "fisik", "price": 1000, "stock": -1}
         ]}))).contains("Stok Habis"));
     }
@@ -367,38 +367,38 @@ mod tests {
         assert!(t.contains("🏷️ ~~Rp 30.000~~"), "harga coret: {t}");
         assert!(t.contains("📝 _1 bulan_"), "{t}");
         assert!(t.contains("💳 *INSTRUKSI PEMBAYARAN*"), "{t}");
-        assert_eq!(setting_written(&r, COUNTER), json!(1));
+        assert_eq!(setting_written(&r, COUNTER), serde_json::json!(1));
 
         let trx = setting_written(&r, TRX);
         let entry = &trx["TRX-001"];
-        assert_eq!(entry["trxId"], json!("TRX-001"));
-        assert_eq!(entry["buyerJid"], json!("628111@s.whatsapp.net"));
-        assert_eq!(entry["purchaseChat"], json!("628111@s.whatsapp.net"));
-        assert_eq!(entry["purchaseIsGroup"], json!(false));
-        assert_eq!(entry["productIndex"], json!(0));
-        assert_eq!(entry["productId"], json!("p1"));
-        assert_eq!(entry["productName"], json!("Netflix"));
-        assert_eq!(entry["productType"], json!("digital"));
-        assert_eq!(entry["price"], json!(25000));
-        assert_eq!(entry["status"], json!("pending"));
+        assert_eq!(entry["trxId"], serde_json::json!("TRX-001"));
+        assert_eq!(entry["buyerJid"], serde_json::json!("628111@s.whatsapp.net"));
+        assert_eq!(entry["purchaseChat"], serde_json::json!("628111@s.whatsapp.net"));
+        assert_eq!(entry["purchaseIsGroup"], serde_json::json!(false));
+        assert_eq!(entry["productIndex"], serde_json::json!(0));
+        assert_eq!(entry["productId"], serde_json::json!("p1"));
+        assert_eq!(entry["productName"], serde_json::json!("Netflix"));
+        assert_eq!(entry["productType"], serde_json::json!("digital"));
+        assert_eq!(entry["price"], serde_json::json!(25000));
+        assert_eq!(entry["status"], serde_json::json!("pending"));
         assert!(entry["createdAt"].is_i64());
     }
 
     #[test]
     fn the_counter_keeps_climbing_and_pads_to_three_digits() {
-        let s = json!({"storeProducts": [
+        let s = serde_json::json!({"storeProducts": [
             {"id": "p1", "name": "Kaos", "type": "fisik", "price": 1000, "stock": 5}
         ], "storeTrxCounter": 8});
         let r = run("1", s);
         assert!(text_of(&r).contains("`TRX-009`"), "{}", text_of(&r));
-        assert_eq!(setting_written(&r, COUNTER), json!(9));
+        assert_eq!(setting_written(&r, COUNTER), serde_json::json!(9));
         assert_eq!(pad3(1234), "1234", "padStart tidak memotong");
         assert_eq!(pad3(0), "000");
     }
 
     #[test]
     fn a_group_purchase_records_the_group_chat() {
-        let s = json!({"storeProducts": [
+        let s = serde_json::json!({"storeProducts": [
             {"id": "p1", "name": "Kaos", "type": "fisik", "price": 1000, "stock": 5}
         ]});
         let mut ctx = Ctx {
@@ -414,8 +414,8 @@ mod tests {
         ctx.args = vec!["1".into()];
         let r = (plugin().handler)(ctx);
         let trx = setting_written(&r, TRX);
-        assert_eq!(trx["TRX-001"]["purchaseChat"], json!("120363@g.us"));
-        assert_eq!(trx["TRX-001"]["purchaseIsGroup"], json!(true));
+        assert_eq!(trx["TRX-001"]["purchaseChat"], serde_json::json!("120363@g.us"));
+        assert_eq!(trx["TRX-001"]["purchaseIsGroup"], serde_json::json!(true));
     }
 
     #[test]

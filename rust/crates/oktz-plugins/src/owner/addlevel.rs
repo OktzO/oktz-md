@@ -1,7 +1,6 @@
 //! `plugins/owner/addlevel.js` — tambah level user lewat exp.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::json;
 
 use crate::common::{jid_number, parse_int};
 use crate::user::exp::{EXP_PER_LEVEL, calculate_level, role_of};
@@ -102,12 +101,12 @@ pub fn addlevel(ctx: Ctx) -> Reply {
         .with_reaction("✅")
         .with_mutation(Mutation::SetUser {
             jid: target,
-            data: json!({
+            data: serde_json::json!({
                 "exp": new_exp,
                 "rpg": ctx
                     .user_field("rpg")
                     .cloned()
-                    .unwrap_or_else(|| json!({})),
+                    .unwrap_or_else(|| serde_json::json!({})),
             }),
         })
 }
@@ -175,7 +174,7 @@ mod tests {
     #[test]
     fn no_level_count_shows_help_and_writes_nothing() {
         for msg in ["", "@628999", "abc", "0"] {
-            let r = run(msg, json!({}), Some(OTHER));
+            let r = run(msg, serde_json::json!({}), Some(OTHER));
             assert!(text_of(&r).starts_with("📊 *ADD LEVEL*"), "input {msg:?}");
             assert!(r.mutations().is_empty(), "input {msg:?}");
         }
@@ -183,7 +182,7 @@ mod tests {
 
     #[test]
     fn five_levels_costs_exactly_fifty_thousand_exp() {
-        let r = run("5", json!({ "exp": 0 }), None);
+        let r = run("5", serde_json::json!({ "exp": 0 }), None);
         assert_eq!(written_exp(&r), (SENDER.to_string(), 50_000));
         let t = text_of(&r);
         assert!(t.contains("sebanyak *5 Level*"), "{t}");
@@ -195,7 +194,7 @@ mod tests {
     #[test]
     fn a_mention_redirects_the_write_to_that_jid() {
         assert_eq!(
-            written_exp(&run("10", json!({}), Some(OTHER))),
+            written_exp(&run("10", serde_json::json!({}), Some(OTHER))),
             (OTHER.to_string(), 100_000)
         );
     }
@@ -205,25 +204,25 @@ mod tests {
         // 9.999 exp = level 1; +10 level (100.000) → 109.999 = level 11 (Elite).
         // Yang menentukan role adalah level SESUDAH, bukan `levels` yang
         // ditambahkan: 10 level di sini, role-nya Elite bukan Master.
-        let r = run("10", json!({ "exp": 9_999 }), None);
+        let r = run("10", serde_json::json!({ "exp": 9_999 }), None);
         let t = text_of(&r);
         assert!(t.contains("Level Sekarang: *11*"), "{t}");
         assert!(t.contains("Role Saat Ini: *⭐ Elite*"), "{t}");
 
         // 900.000 exp = level 91; +1 level → 910.000 = level 92, tetap Mythic.
-        let high = run("1", json!({ "exp": 900_000 }), None);
+        let high = run("1", serde_json::json!({ "exp": 900_000 }), None);
         assert!(text_of(&high).contains("Level Sekarang: *92*"), "{}", text_of(&high));
     }
 
     #[test]
     fn exp_is_capped_at_nine_billion() {
-        let r = run("1000", json!({ "exp": 8_999_999_999i64 }), None);
+        let r = run("1000", serde_json::json!({ "exp": 8_999_999_999i64 }), None);
         assert_eq!(written_exp(&r).1, MAX_EXP);
     }
 
     #[test]
     fn both_reactions_are_emitted_in_the_js_order() {
-        match run("5", json!({}), None).without_mutations() {
+        match run("5", serde_json::json!({}), None).without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅"),
             other => panic!("harus Reaction, dapat {other:?}"),
         }
@@ -231,6 +230,6 @@ mod tests {
 
     #[test]
     fn the_applied_reply_is_paired_with_the_write_it_claims() {
-        assert_eq!(run("5", json!({}), None).mutations().len(), 1);
+        assert_eq!(run("5", serde_json::json!({}), None).mutations().len(), 1);
     }
 }

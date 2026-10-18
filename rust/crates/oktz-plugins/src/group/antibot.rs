@@ -61,7 +61,7 @@ pub fn antibot(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -123,7 +123,7 @@ mod tests {
     #[test]
     fn no_argument_and_status_both_only_report() {
         for text in ["", "status"] {
-            let r = run(json!({}), text);
+            let r = run(serde_json::json!({}), text);
             assert_eq!(text_of(&r), status(false), "input {text:?}");
             assert!(r.mutations().is_empty(), "status tidak boleh menulis");
         }
@@ -131,7 +131,7 @@ mod tests {
 
     #[test]
     fn status_reflects_the_stored_flag() {
-        let r = run(json!({ "antibot": true }), "");
+        let r = run(serde_json::json!({ "antibot": true }), "");
         assert!(text_of(&r).contains("> Status: ✅ Aktif"), "{}", text_of(&r));
         assert!(r.mutations().is_empty());
     }
@@ -139,8 +139,8 @@ mod tests {
     #[test]
     fn a_falsy_stored_value_reports_nonaktif() {
         // `groupData.antibot || false` — `0`, `""`, dan `null` semuanya falsy.
-        for stored in [json!(null), json!(false), json!(0), json!("")] {
-            let r = run(json!({ "antibot": stored }), "");
+        for stored in [serde_json::json!(null), serde_json::json!(false), serde_json::json!(0), serde_json::json!("")] {
+            let r = run(serde_json::json!({ "antibot": stored }), "");
             assert!(
                 text_of(&r).contains("> Status: ❌ Nonaktif"),
                 "stored {stored} harus nonaktif: {}",
@@ -151,19 +151,19 @@ mod tests {
 
     #[test]
     fn on_and_off_write_a_boolean_and_react() {
-        let on = run(json!({}), "on");
+        let on = run(serde_json::json!({}), "on");
         assert_eq!(text_of(&on), ON);
-        assert_eq!(written(&on), &json!({ "antibot": true }));
+        assert_eq!(written(&on), &serde_json::json!({ "antibot": true }));
 
-        let off = run(json!({ "antibot": true }), "off");
+        let off = run(serde_json::json!({ "antibot": true }), "off");
         assert_eq!(text_of(&off), OFF);
-        assert_eq!(written(&off), &json!({ "antibot": false }));
+        assert_eq!(written(&off), &serde_json::json!({ "antibot": false }));
     }
 
     #[test]
     fn each_write_branch_carries_its_own_reaction() {
         for (text, emoji) in [("on", "✅"), ("off", "❌")] {
-            match run(json!({}), text).without_mutations() {
+            match run(serde_json::json!({}), text).without_mutations() {
                 Reply::Reaction { emoji: e, .. } => assert_eq!(e, emoji, "{text}"),
                 other => panic!("harus Reaction, dapat {other:?}"),
             }
@@ -173,18 +173,18 @@ mod tests {
     #[test]
     fn the_action_is_lowercased_before_matching() {
         assert_eq!(
-            written(&run(json!({}), "ON")),
-            &json!({ "antibot": true })
+            written(&run(serde_json::json!({}), "ON")),
+            &serde_json::json!({ "antibot": true })
         );
         assert_eq!(
-            written(&run(json!({}), "Off")),
-            &json!({ "antibot": false })
+            written(&run(serde_json::json!({}), "Off")),
+            &serde_json::json!({ "antibot": false })
         );
     }
 
     #[test]
     fn an_unknown_action_is_refused_and_nothing_is_written() {
-        let r = run(json!({}), "mungkin");
+        let r = run(serde_json::json!({}), "mungkin");
         assert_eq!(text_of(&r), BAD_ACTION);
         assert!(r.mutations().is_empty());
     }

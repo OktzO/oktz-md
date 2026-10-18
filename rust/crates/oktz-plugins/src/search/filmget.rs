@@ -13,7 +13,7 @@
 use oktz_plugin_api::{Ctx, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::{error_template, js_truthy};
+use crate::common::{js_truthy};
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `config.APIkey?.neoxr || ''` — lihat catatan `ponytail:` di
@@ -34,8 +34,8 @@ pub(crate) fn help(prefix: &str) -> String {
         "🎬 *ꜰɪʟᴍ ᴅᴇᴛᴀɪʟ*\n\n\
          > Ambil detail film dari URL\n\n\
          *Format:*\n\
-         > \\`{prefix}filmget <url>\\`\n\n\
-         > Gunakan \\`{prefix}film <judul>\\` untuk cari film dulu"
+         > `{prefix}filmget <url>`\n\n\
+         > Gunakan `{prefix}film <judul>` untuk cari film dulu"
     )
 }
 
@@ -140,7 +140,7 @@ pub fn filmget(ctx: Ctx) -> Reply {
     }
 
     let Some(resp) = ctx.http.get(&api_url(url)).ok() else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
     let data = resp.json().unwrap_or(Value::Null);
 
@@ -167,7 +167,6 @@ pub fn filmget(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     /// Stub dengan pencocokanAwalan: endpoint film-get, lalu thumbnail.
@@ -203,7 +202,7 @@ mod tests {
                 .iter()
                 .find(|(prefix, _)| url.starts_with(prefix.as_str()))
                 .and_then(|(_, b)| b.clone())
-                .ok_or_else(|| HttpError {
+                .ok_or_else(|| oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 })?;
             Ok(HttpResponse {
@@ -240,7 +239,7 @@ mod tests {
             sender: "628111@s.whatsapp.net".into(),
             chat: "628111@s.whatsapp.net".into(),
             text: text.into(),
-            args: text.split_whitespace().collect(),
+            args: text.split_whitespace().map(str::to_string).collect(),
             http,
             ..Default::default()
         };
@@ -332,7 +331,7 @@ mod tests {
         assert!(body.contains("▶️ *Streaming:*\n> 1. Srv1\n> 2. Srv2\n\n"), "{body}");
         assert!(body.contains("📥 *Download:*\n> 1. Pixeldrain\n"), "{body}");
         assert_eq!(reaction_of(&r), Some("✅"));
-        assert!(matches!(r.without_mutations(), Reply::Interactive { .. }));
+        assert!(matches!(r.without_mutations().tanpa_reaksi(), Reply::Interactive { .. }));
 
         let seen = http.seen.lock().unwrap().clone();
         assert_eq!(seen.len(), 2, "film-get lalu thumbnail: {seen:?}");
@@ -345,7 +344,7 @@ mod tests {
 
     #[test]
     fn missing_fields_fall_back_to_a_dash() {
-        let film = json!({});
+        let film = serde_json::json!({});
         let text = format_text(&film, &[], &[]);
         assert!(text.starts_with("🎬 *Film*\n\n"), "{text}");
         assert!(text.contains("┃ Rating: -\n┃ Quality: -\n"), "{text}");
@@ -381,13 +380,13 @@ mod tests {
     #[test]
     fn a_transport_failure_on_the_endpoint_reports_the_error_template() {
         let r = run(Stub::empty(), "https://tv.neoxr.eu/film/civil-war");
-        assert_eq!(body_of(&r), error_template(".", "filmget"));
+        assert_eq!(body_of(&r), crate::common::error_template(".", "filmget"));
         assert_eq!(reaction_of(&r), Some("☢"));
     }
 
     #[test]
     fn the_stream_and_download_lists_default_to_empty_arrays() {
-        let data = json!({"stream": "bukan array", "download": {"a": 1}});
+        let data = serde_json::json!({"stream": "bukan array", "download": {"a": 1}});
         assert!(streams_of(&data).is_empty());
         assert!(downloads_of(&data).is_empty());
     }

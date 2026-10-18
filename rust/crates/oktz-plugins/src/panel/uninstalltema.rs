@@ -11,7 +11,6 @@
 //! yang tidak ada di `Ctx`. `parse_input` dipakai dari `installtemabilling.rs`.
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
-use serde_json::json;
 
 use crate::panel::installtemabilling::{BAD_FORMAT, parse_input};
 
@@ -49,7 +48,7 @@ pub fn uninstalltema(ctx: Ctx) -> Reply {
     };
 
     // `global.installtema = { vps: ipvps, pwvps: passwd }`
-    ctx.session_set(SESSION_KEY, json!({ "vps": ipvps, "pwvps": passwd }));
+    ctx.session_set(SESSION_KEY, serde_json::json!({ "vps": ipvps, "pwvps": passwd }));
 
     Reply::text(format!(
         "⚠️ *ᴜɴɪɴsᴛᴀʟʏ ᴛᴇᴍᴀ* tidak tersedia di port Rust\n\n\
@@ -132,7 +131,7 @@ mod tests {
 
         // `global.installtema = { vps, pwvps }` dengan nilai yang sudah di-trim.
         let saved = ctx.session_get(SESSION_KEY).expect("session harus terisi");
-        assert_eq!(saved, json!({ "vps": "192.168.1.1", "pwvps": "secretpass" }));
+        assert_eq!(saved, serde_json::json!({ "vps": "192.168.1.1", "pwvps": "secretpass" }));
     }
 
     #[test]

@@ -7,7 +7,6 @@
 //! bagian `db.setUser`/`updateExp`/`updateKoin` di JS.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::json;
 
 /// `config.limits?.premium || 100` — `config.limits` tidak ada di `config.js`.
 const PREMIUM_LIMIT: i64 = 100;
@@ -74,7 +73,7 @@ pub fn addpremall(ctx: Ctx) -> Reply {
             .unwrap_or(0);
         writes.push(Mutation::SetUser {
             jid,
-            data: json!({
+            data: serde_json::json!({
                 "energi": PREMIUM_LIMIT,
                 "isPremium": true,
                 "exp": (exp + 200_000).clamp(0, 9_000_000_000),
@@ -123,7 +122,7 @@ mod tests {
             sender: "628111@s.whatsapp.net".into(),
             chat: "120363@g.us".into(),
             is_group: true,
-            group_data: json!({ "subject": "Grup Uji" }),
+            group_data: serde_json::json!({ "subject": "Grup Uji" }),
             roster,
             ..Default::default()
         };
@@ -179,17 +178,17 @@ mod tests {
     #[test]
     fn a_fresh_member_gets_the_full_premium_package() {
         let roster = GroupRoster {
-            participants: vec![member("628111@s.whatsapp.net", json!({ "exp": 0, "koin": 0 }))],
+            participants: vec![member("628111@s.whatsapp.net", serde_json::json!({ "exp": 0, "koin": 0 }))],
             is_bot_admin: false,
         };
         let __balasan = run(roster.clone());
         let w = writes(&__balasan);
         assert_eq!(w.len(), 1);
         assert_eq!(w[0].0, "628111@s.whatsapp.net");
-        assert_eq!(w[0].1["energi"], json!(100));
-        assert_eq!(w[0].1["isPremium"], json!(true));
-        assert_eq!(w[0].1["exp"], json!(200_000));
-        assert_eq!(w[0].1["koin"], json!(20_000));
+        assert_eq!(w[0].1["energi"], serde_json::json!(100));
+        assert_eq!(w[0].1["isPremium"], serde_json::json!(true));
+        assert_eq!(w[0].1["exp"], serde_json::json!(200_000));
+        assert_eq!(w[0].1["koin"], serde_json::json!(20_000));
     }
 
     #[test]
@@ -197,22 +196,22 @@ mod tests {
         let roster = GroupRoster {
             participants: vec![member(
                 "628111@s.whatsapp.net",
-                json!({ "exp": 1_000, "koin": 500 }),
+                serde_json::json!({ "exp": 1_000, "koin": 500 }),
             )],
             is_bot_admin: false,
         };
         let __balasan = run(roster.clone());
         let w = writes(&__balasan);
-        assert_eq!(w[0].1["exp"], json!(201_000));
-        assert_eq!(w[0].1["koin"], json!(20_500));
+        assert_eq!(w[0].1["exp"], serde_json::json!(201_000));
+        assert_eq!(w[0].1["koin"], serde_json::json!(20_500));
     }
 
     #[test]
     fn an_already_premium_member_is_counted_and_not_rewritten() {
         let roster = GroupRoster {
             participants: vec![
-                member("1@s.whatsapp.net", json!({ "isPremium": true })),
-                member("2@s.whatsapp.net", json!({})),
+                member("1@s.whatsapp.net", serde_json::json!({ "isPremium": true })),
+                member("2@s.whatsapp.net", serde_json::json!({})),
             ],
             is_bot_admin: false,
         };
@@ -225,7 +224,7 @@ mod tests {
     #[test]
     fn a_participant_without_digits_is_neither_written_nor_counted_as_premium() {
         let roster = GroupRoster {
-            participants: vec![member("@lid", json!({}))],
+            participants: vec![member("@lid", serde_json::json!({}))],
             is_bot_admin: false,
         };
         let r = run(roster.clone());
@@ -236,7 +235,7 @@ mod tests {
     #[test]
     fn the_report_names_the_group_from_group_data() {
         let roster = GroupRoster {
-            participants: vec![member("1@s.whatsapp.net", json!({}))],
+            participants: vec![member("1@s.whatsapp.net", serde_json::json!({}))],
             is_bot_admin: false,
         };
         assert!(text_of(&run(roster.clone())).contains("> Grup: Grup Uji"));
@@ -245,7 +244,7 @@ mod tests {
     #[test]
     fn the_final_reaction_is_the_one_from_the_js_order() {
         let roster = GroupRoster {
-            participants: vec![member("1@s.whatsapp.net", json!({}))],
+            participants: vec![member("1@s.whatsapp.net", serde_json::json!({}))],
             is_bot_admin: false,
         };
         match run(roster.clone()).without_mutations() {

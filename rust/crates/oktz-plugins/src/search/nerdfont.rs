@@ -16,7 +16,6 @@
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
-use crate::common::error_template;
 
 /// `nerdfont.js:5` — satu-satunya endpoint.
 pub(crate) const URL: &str = "https://www.nerdfonts.com/font-downloads";
@@ -253,7 +252,7 @@ pub fn nerdfont(ctx: Ctx) -> Reply {
     // `nerdfont.js` TIDAK pernah membaca `m.text`: parameter `<query>` di
     // `usage` cuma sisa. Permintaan tetap jalan untuk input kosong.
     let Ok(res) = ctx.http.get(URL) else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command));
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command));
     };
     let html = res.text();
 
@@ -261,7 +260,7 @@ pub fn nerdfont(ctx: Ctx) -> Reply {
         Ok(fonts) => Reply::Interactive {
             body: kartu(&fonts, &ctx.prefix),
         },
-        Err(_) => Reply::text(error_template(&ctx.prefix, &ctx.command)),
+        Err(_) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)),
     }
 }
 
@@ -300,7 +299,7 @@ mod tests {
             let text = self
                 .body
                 .clone()
-                .map_err(|()| HttpError { message: "offline".into() })?;
+                .map_err(|()| oktz_plugin_api::HttpError { message: "offline".into() })?;
             Ok(HttpResponse {
                 status: 200,
                 body: HttpBody::Bytes {
@@ -470,7 +469,7 @@ Info: Y</div>
     </div>"#;
         assert!(parse_fonts(html).is_err());
         let r = run(Stub::html(html), "");
-        assert_eq!(text_of(&r), error_template(".", "nerdfont"));
+        assert_eq!(text_of(&r), crate::common::error_template(".", "nerdfont"));
     }
 
     #[test]
@@ -543,7 +542,7 @@ Info: Y</div>
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "");
-        assert_eq!(text_of(&r), error_template(".", "nerdfont"));
+        assert_eq!(text_of(&r), crate::common::error_template(".", "nerdfont"));
         let seen = Stub::offline();
         let _ = run(seen.clone(), "Coolvetica");
         assert_eq!(seen.seen.lock().unwrap()[0], URL);

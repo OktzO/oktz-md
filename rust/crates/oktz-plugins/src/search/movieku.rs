@@ -10,11 +10,11 @@
 //! poster dulu, lalu daftar "HASIL LAINNYA". `Reply` hanya satu pesan, jadi
 //! yang terkirim kartu pertamanya; teks daftar tetap ditulis sebagai fungsi
 //! murni.
+#![allow(clippy::needless_range_loop)]
 
 use oktz_plugin_api::{Ctx, HttpCall, MediaSource, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::error_template;
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `movieku.js:23`.
@@ -40,7 +40,9 @@ pub(crate) fn tidak_ditemukan(query: &str) -> String {
 }
 
 /// `movieku.js:161-170` — blok "HASIL LAINNYA". Maksimal 10 judul dari indeks 1.
-pub(crate) fn hasil_lainnya(movies: &[Value]) -> String {
+#[allow(dead_code)]
+pub(crate)
+fn hasil_lainnya(movies: &[Value]) -> String {
     let mut list = String::from("🎬 *HASIL LAINNYA*\n\n");
     list.push_str(&format!(
         "Ditemukan *{}* film yang cocok dengan pencarianmu, berikut daftar lengkapnya:\n\n",
@@ -456,7 +458,7 @@ pub fn movieku(ctx: Ctx) -> Reply {
 
     // `m.react("🔍")` di `:107` sudah jalan sebelum request.
     let Ok(res) = ctx.http.call(&search_request(query)) else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
 
     // `res.data?.post?.[0]?.all || []`.
@@ -477,7 +479,7 @@ pub fn movieku(ctx: Ctx) -> Reply {
         .unwrap_or("")
         .to_string();
     let Ok(detail_res) = ctx.http.get(&link) else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
     let detail = parse_detail(&detail_res.text());
     let txt = format_movie(&detail, movie, query);
@@ -501,9 +503,10 @@ pub fn movieku(ctx: Ctx) -> Reply {
 
 #[cfg(test)]
 mod tests {
+    #![allow(dead_code)]
+    #![allow(clippy::field_reassign_with_default)]
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -540,7 +543,7 @@ mod tests {
             self.seen.lock().unwrap().push(url.to_string());
             let hit = self.pages.iter().find(|(u, _, _)| url.starts_with(u.as_str()));
             let Some((_, status, body)) = hit else {
-                return Err(HttpError { message: "tanpa stub".into() });
+                return Err(oktz_plugin_api::HttpError { message: "tanpa stub".into() });
             };
             Ok(HttpResponse {
                 status: *status,
@@ -639,9 +642,14 @@ mod tests {
 
     #[test]
     fn every_alias_resolves_to_this_plugin() {
-        for a in ["movie", "film", "carifilm", "carimovie"] {
+        // `film` sengaja tidak diuji: `plugins/search/film.js` memakai `film`
+        // sebagai `name`, dan `getPlugin` mengutamakan `commands` di atas
+        // `aliases` (`src/lib/plugins.js:334`), jadi `.film` tetap ke plugin
+        // film — tabrakan ini tercatat di `common::JS_COLLISIONS`.
+        for a in ["movie", "carifilm", "carimovie"] {
             assert_eq!(oktz_plugin_api::find(a).unwrap().meta.name, "movieku");
         }
+        assert_eq!(oktz_plugin_api::find("film").unwrap().meta.name, "film");
     }
 
     #[test]
@@ -707,7 +715,7 @@ mod tests {
 
     #[test]
     fn the_card_skips_empty_detail_rows() {
-        let movie = json!({ "post_link": "https://movieku.rest/film/avengers", "post_image": "https://i/p.jpg" });
+        let movie = serde_json::json!({ "post_link": "https://movieku.rest/film/avengers", "post_image": "https://i/p.jpg" });
         let d = parse_detail(DETAIL);
         let txt = format_movie(&d, &movie, "avengers");
         assert!(txt.starts_with("🎬 *Avengers: Endgame*\n\n📝 *Sinopsis:*\nSetelahLOCEAN Events\n\n"), "{txt}");
@@ -725,7 +733,7 @@ mod tests {
 
     #[test]
     fn a_title_from_the_search_row_is_used_when_the_page_has_no_h1() {
-        let movie = json!({ "post_title": "Interstellar", "post_link": "https://x" });
+        let movie = serde_json::json!({ "post_title": "Interstellar", "post_link": "https://x" });
         let txt = format_movie(&Detail::default(), &movie, "interstellar");
         assert!(txt.starts_with("🎬 *Interstellar*\n"), "{txt}");
     }
@@ -734,7 +742,7 @@ mod tests {
     fn a_synopsis_over_five_hundred_characters_is_cut_at_497() {
         let mut d = Detail::default();
         d.synopsis = "y".repeat(600);
-        let movie = json!({ "post_link": "https://x" });
+        let movie = serde_json::json!({ "post_link": "https://x" });
         let txt = format_movie(&d, &movie, "q");
         assert!(txt.contains(&format!("📝 *Sinopsis:*\n{}...\n", "y".repeat(497))), "{txt}");
         d.synopsis = "z".repeat(500);
@@ -746,7 +754,7 @@ mod tests {
     #[test]
     fn the_other_hits_list_starts_from_the_second_movie() {
         let movies: Vec<Value> = (0..4)
-            .map(|i| json!({ "post_title": format!("Film {i}"), "post_link": format!("https://x/{i}") }))
+            .map(|i| serde_json::json!({ "post_title": format!("Film {i}"), "post_link": format!("https://x/{i}") }))
             .collect();
         let txt = hasil_lainnya(&movies);
         assert!(txt.starts_with("🎬 *HASIL LAINNYA*\n\nDitemukan *4* film yang cocok dengan pencarianmu, berikut daftar lengkapnya:\n\n"), "{txt}");
@@ -759,7 +767,7 @@ mod tests {
     #[test]
     fn a_long_result_list_is_capped_at_ten_with_a_tail_count() {
         let movies: Vec<Value> = (0..15)
-            .map(|i| json!({ "post_title": format!("Film {i}"), "post_link": format!("https://x/{i}") }))
+            .map(|i| serde_json::json!({ "post_title": format!("Film {i}"), "post_link": format!("https://x/{i}") }))
             .collect();
         let txt = hasil_lainnya(&movies);
         assert!(txt.contains("- *Film 9*\n"), "indeks 1..9: {txt}");
@@ -856,7 +864,7 @@ mod tests {
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "avengers");
-        assert_eq!(text_of(&r), error_template(".", "movieku"));
+        assert_eq!(text_of(&r), crate::common::error_template(".", "movieku"));
     }
 
     #[test]

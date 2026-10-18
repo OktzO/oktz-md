@@ -160,7 +160,7 @@ pub fn buyfitur(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(args: &[&str], user: Value) -> Reply {
         let ctx = Ctx {
@@ -224,7 +224,7 @@ mod tests {
     #[test]
     fn a_premium_user_is_turned_away_even_when_naming_a_feature() {
         for args in [vec![""], vec!["sticker"]] {
-            let r = run(&args, json!({"isPremium": true, "koin": 99999}));
+            let r = run(&args, serde_json::json!({"isPremium": true, "koin": 99999}));
             assert_eq!(text_of(&r), ALREADY_PREMIUM, "args {args:?}");
             assert!(r.mutations().is_empty(), "args {args:?}");
         }
@@ -232,7 +232,7 @@ mod tests {
 
     #[test]
     fn without_an_argument_the_menu_lists_every_feature_locked() {
-        let r = run(&[], json!({"koin": 5000}));
+        let r = run(&[], serde_json::json!({"koin": 5000}));
         let t = text_of(&r);
         assert!(t.starts_with("╭━━━━━━━━━━━━━━━━━╮"), "{t}");
         assert!(t.contains("> Harga: *3.000* bal/fitur"), "{t}");
@@ -248,7 +248,7 @@ mod tests {
 
     #[test]
     fn an_unlocked_feature_shows_a_checkmark() {
-        let r = run(&[], json!({"koin": 0, "unlockedFeatures": ["ai", "game"]}));
+        let r = run(&[], serde_json::json!({"koin": 0, "unlockedFeatures": ["ai", "game"]}));
         let t = text_of(&r);
         assert!(t.contains("┃ ✅ *AI Access*"), "{t}");
         assert!(t.contains("┃ ✅ *Game Bonus*"), "{t}");
@@ -257,7 +257,7 @@ mod tests {
 
     #[test]
     fn a_missing_koin_field_reads_as_zero() {
-        let r = run(&[], json!({}));
+        let r = run(&[], serde_json::json!({}));
         assert!(text_of(&r).contains("> Koin: *0*"), "{}", text_of(&r));
     }
 
@@ -270,7 +270,7 @@ mod tests {
             ("sticker2", "sticker2"),
             ("STICKERX", "stickerx"),
         ] {
-            let r = run(&[input], json!({"koin": 99999}));
+            let r = run(&[input], serde_json::json!({"koin": 99999}));
             let t = text_of(&r);
             assert!(t.starts_with("❌ *ɢᴀɢᴀʟ*"), "input {input}: {t}");
             assert!(t.contains(&format!("> Fitur `{echoed}` tidak ditemukan")), "{t}");
@@ -280,15 +280,15 @@ mod tests {
 
     #[test]
     fn the_feature_id_is_matched_case_insensitively() {
-        let r = run(&["TOOLS"], json!({"koin": 3000}));
+        let r = run(&["TOOLS"], serde_json::json!({"koin": 3000}));
         let t = text_of(&r);
         assert!(t.contains("┃ 🎁 ꜰɪᴛᴜʀ: *Advanced Tools*"), "{t}");
-        assert_eq!(user_writes(&r)[1]["unlockedFeatures"], json!(["tools"]));
+        assert_eq!(user_writes(&r)[1]["unlockedFeatures"], serde_json::json!(["tools"]));
     }
 
     #[test]
     fn an_already_unlocked_feature_is_refused() {
-        let r = run(&["ai"], json!({"koin": 99999, "unlockedFeatures": ["ai"]}));
+        let r = run(&["ai"], serde_json::json!({"koin": 99999, "unlockedFeatures": ["ai"]}));
         assert_eq!(text_of(&r), ALREADY_UNLOCKED.replace("{}", "AI Access"));
         assert!(r.mutations().is_empty());
     }
@@ -296,7 +296,7 @@ mod tests {
     #[test]
     fn insufficient_koin_reports_both_the_price_and_the_balance() {
         for koin in [0, 2999] {
-            let r = run(&["sticker"], json!({"koin": koin}));
+            let r = run(&["sticker"], serde_json::json!({"koin": koin}));
             let t = text_of(&r);
             assert!(t.starts_with("❌ *ɢᴀɢᴀʟ*"), "{t}");
             assert!(t.contains("> Butuh: *3.000*"), "{t}");
@@ -307,7 +307,7 @@ mod tests {
 
     #[test]
     fn the_exact_price_is_enough() {
-        let r = run(&["sticker"], json!({"koin": 3000}));
+        let r = run(&["sticker"], serde_json::json!({"koin": 3000}));
         let t = text_of(&r);
         assert!(t.starts_with("✅ *ꜰɪᴛᴜʀ ᴅɪ-ᴜɴʟᴏᴄᴋ*"), "{t}");
         assert!(t.contains("┃ 🎁 ꜰɪᴛᴜʀ: *Sticker Unlimited*"), "{t}");
@@ -318,15 +318,15 @@ mod tests {
 
     #[test]
     fn a_purchase_charges_koin_and_appends_the_feature_id() {
-        let r = run(&["game"], json!({"koin": 12500, "unlockedFeatures": ["ai"]}));
+        let r = run(&["game"], serde_json::json!({"koin": 12500, "unlockedFeatures": ["ai"]}));
         assert!(text_of(&r).contains("┃ 💰 sɪsᴀ: *9.500*"), "{}", text_of(&r));
         let w = user_writes(&r);
         assert_eq!(
             w[0]["koin"],
-            json!(9500),
+            serde_json::json!(9500),
             "koin harus ANGKA LENGAP — SetUser menimpa, bukan menjumlahkan"
         );
-        assert_eq!(w[1]["unlockedFeatures"], json!(["ai", "game"]));
+        assert_eq!(w[1]["unlockedFeatures"], serde_json::json!(["ai", "game"]));
         match r.without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅"),
             other => panic!("harus Reaction, dapat {other:?}"),
@@ -346,9 +346,9 @@ mod tests {
     #[test]
     fn only_the_first_argument_is_read_as_the_feature_id() {
         // `m.args[0]?.toLowerCase()` — `lagi` diabaikan, `ai` yang dibeli.
-        let r = run(&["ai", "lagi"], json!({"koin": 99999}));
+        let r = run(&["ai", "lagi"], serde_json::json!({"koin": 99999}));
         let t = text_of(&r);
         assert!(t.contains("┃ 🎁 ꜰɪᴛᴜʀ: *AI Access*"), "{t}");
-        assert_eq!(user_writes(&r)[1]["unlockedFeatures"], json!(["ai"]));
+        assert_eq!(user_writes(&r)[1]["unlockedFeatures"], serde_json::json!(["ai"]));
     }
 }

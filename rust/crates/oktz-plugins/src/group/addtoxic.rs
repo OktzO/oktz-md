@@ -87,7 +87,6 @@ pub fn addtoxic(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use serde_json::Value;
-    use serde_json::json;
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -146,7 +145,7 @@ mod tests {
         // Input whitespace-only jadi args kosong, jadi `join(' ').trim()`
         // menghasilkan string kosong → cabang help.
         for msg in ["", "   ", "\t\n"] {
-            let r = run(json!({}), msg);
+            let r = run(serde_json::json!({}), msg);
             assert!(text_of(&r).starts_with("📝 *ᴀᴅᴅ ᴛᴏxɪᴄ*"), "input {msg:?}");
             assert!(r.mutations().is_empty(), "input {msg:?}");
         }
@@ -154,22 +153,22 @@ mod tests {
 
     #[test]
     fn a_word_shorter_than_two_characters_is_rejected() {
-        let r = run(json!({}), "x");
+        let r = run(serde_json::json!({}), "x");
         assert_eq!(text_of(&r), TOO_SHORT);
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn exactly_two_characters_is_accepted_and_thirty_is_the_ceiling() {
-        let two = run(json!({}), "ab");
+        let two = run(serde_json::json!({}), "ab");
         assert_eq!(list_write(&two).len(), 1);
 
         let thirty = "x".repeat(30);
-        let r = run(json!({}), &thirty);
+        let r = run(serde_json::json!({}), &thirty);
         assert_eq!(list_write(&r).len(), 1, "30 huruf tepat masih diterima");
 
         let thirty_one = "x".repeat(31);
-        let r = run(json!({}), &thirty_one);
+        let r = run(serde_json::json!({}), &thirty_one);
         assert_eq!(text_of(&r), TOO_LONG);
         assert!(r.mutations().is_empty());
     }
@@ -179,7 +178,7 @@ mod tests {
         // 30 emoji = 120 byte UTF-8 tapi hanya 30 char; JS `length` juga 30
         // untuk BMP. Yang diuji: tidak ada yang terpotong oleh batas byte.
         let emoji = "😀".repeat(30);
-        let r = run(json!({}), &emoji);
+        let r = run(serde_json::json!({}), &emoji);
         assert_eq!(
             list_write(&r).len(),
             1,
@@ -189,25 +188,25 @@ mod tests {
 
     #[test]
     fn an_existing_word_is_refused_and_nothing_is_written() {
-        let r = run(json!({"toxicWords": ["kata"]}), "kata");
+        let r = run(serde_json::json!({"toxicWords": ["kata"]}), "kata");
         assert_eq!(text_of(&r), already("kata"));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn the_word_is_lowercased_before_the_duplicate_check() {
-        let refused = run(json!({"toxicWords": ["kata"]}), "KATA");
+        let refused = run(serde_json::json!({"toxicWords": ["kata"]}), "KATA");
         assert!(text_of(&refused).starts_with("❌ *ɢᴀɢᴀʟ*"));
         assert!(refused.mutations().is_empty());
 
-        let stored = run(json!({}), "KaTa");
-        assert_eq!(list_write(&stored)[0], json!("kata"));
+        let stored = run(serde_json::json!({}), "KaTa");
+        assert_eq!(list_write(&stored)[0], serde_json::json!("kata"));
     }
 
     #[test]
     fn multi_token_input_is_joined_with_spaces() {
-        let r = run(json!({}), "kata  kasar  sekali");
-        assert_eq!(list_write(&r)[0], json!("kata kasar sekali"));
+        let r = run(serde_json::json!({}), "kata  kasar  sekali");
+        assert_eq!(list_write(&r)[0], serde_json::json!("kata kasar sekali"));
         assert!(
             text_of(&r).contains("`kata kasar sekali`"),
             "reply mengutip kata gabungan: {}",
@@ -217,21 +216,21 @@ mod tests {
 
     #[test]
     fn the_reported_total_matches_what_is_written() {
-        let r = run(json!({"toxicWords": ["a", "b"]}), "baru");
+        let r = run(serde_json::json!({"toxicWords": ["a", "b"]}), "baru");
         assert_eq!(list_write(&r).len(), 3);
         assert!(text_of(&r).contains("┃ 📊 ᴛᴏᴛᴀʟ: `3` kata"), "{}", text_of(&r));
     }
 
     #[test]
     fn a_fresh_group_stores_one_word_and_reports_one() {
-        let r = run(json!({}), "baru");
+        let r = run(serde_json::json!({}), "baru");
         assert_eq!(list_write(&r).len(), 1);
         assert!(text_of(&r).contains("`1` kata"));
     }
 
     #[test]
     fn the_added_reply_reacts_and_is_paired_with_the_write() {
-        let r = run(json!({}), "baru");
+        let r = run(serde_json::json!({}), "baru");
         match r.without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅"),
             other => panic!("harus Reaction, dapat {other:?}"),

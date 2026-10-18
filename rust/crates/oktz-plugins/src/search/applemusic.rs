@@ -119,7 +119,6 @@ fn encode(raw: &str) -> String {
 mod tests {
     use super::*;
     use oktz_plugin_api::{Ctx, HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     /// HTTP yang dicatat: mengembalikan body yang sudah disiapkan, atau gagal
@@ -157,7 +156,7 @@ mod tests {
             let text = self
                 .result
                 .clone()
-                .map_err(|()| HttpError { message: "offline".into() })?;
+                .map_err(|()| oktz_plugin_api::HttpError { message: "offline".into() })?;
             Ok(HttpResponse {
                 status: 200,
                 body: HttpBody::Bytes {
@@ -208,7 +207,7 @@ mod tests {
     fn tracks(n: usize) -> Vec<Value> {
         (0..n)
             .map(|i| {
-                json!({
+                serde_json::json!({
                     "title": format!("Lagu {i}"),
                     "subtitle": format!("Artist {i}"),
                     "url": format!("https://youtu.be/abc{i}"),
@@ -241,7 +240,7 @@ mod tests {
 
     #[test]
     fn an_empty_query_shows_the_usage_card_without_touching_the_network() {
-        let http = Stub::body(json!({}));
+        let http = Stub::body(serde_json::json!({}));
         for text in ["", "   "] {
             let r = run(http.clone(), text);
             let t = text_of(&r);
@@ -253,7 +252,7 @@ mod tests {
 
     #[test]
     fn results_are_numbered_with_artist_and_link() {
-        let http = Stub::body(json!({ "status": true, "result": tracks(2) }));
+        let http = Stub::body(serde_json::json!({ "status": true, "result": tracks(2) }));
         let r = run(http.clone(), "Best Friend");
         let t = text_of(&r);
         assert!(t.starts_with("🍎 *ᴀᴘᴘʟᴇ ᴍᴜsɪᴄ sᴇᴀʀᴄʜ*"), "{t}");
@@ -275,7 +274,7 @@ mod tests {
 
     #[test]
     fn only_the_first_five_tracks_are_listed() {
-        let http = Stub::body(json!({ "result": tracks(9) }));
+        let http = Stub::body(serde_json::json!({ "result": tracks(9) }));
         let t = owned(run(http.clone(), "x"));
         assert!(t.contains("5."), "lima hasil: {t}");
         assert!(!t.contains("6."), "enam hasil terpotong: {t}");
@@ -283,7 +282,7 @@ mod tests {
 
     #[test]
     fn a_missing_subtitle_falls_back_to_unknown() {
-        let http = Stub::body(json!({ "result": [
+        let http = Stub::body(serde_json::json!({ "result": [
             { "title": "T", "subtitle": "", "url": "u" },
             { "title": "T2", "url": "u2" }
         ] }));
@@ -293,7 +292,7 @@ mod tests {
 
     #[test]
     fn an_empty_result_list_reports_not_found() {
-        for body in [json!({ "status": false, "result": [] }), json!({}), json!({"result": null})] {
+        for body in [serde_json::json!({ "status": false, "result": [] }), serde_json::json!({}), serde_json::json!({"result": null})] {
             let http = Stub::body(body.clone());
             let t = owned(run(http.clone(), "tidak ada"));
             assert_eq!(t, not_found("tidak ada"), "body {body}");

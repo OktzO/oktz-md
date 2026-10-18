@@ -102,7 +102,7 @@ mod tests {
 
     #[test]
     fn an_empty_context_still_produces_the_same_image() {
-        // JS tidak pernah membaca \`m\`, jadi tidak ada cabang yang bisa gagal.
+        // JS tidak pernah membaca `m`, jadi tidak ada cabang yang bisa gagal.
         let r = cecanvietnam(Ctx::default());
         assert!(r.has_media());
     }

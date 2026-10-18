@@ -36,7 +36,7 @@ mod tests {
 
     use crate::group::notifclosegroup::ADMIN_ONLY;
     use oktz_plugin_api::{Mutation, Participant};
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(group: Value, arg: Option<&str>) -> Reply {
         let ctx = Ctx {
@@ -96,7 +96,7 @@ mod tests {
 
     #[test]
     fn the_status_header_uses_the_open_title_and_unlock() {
-        let r = run(json!({"notifOpenGroup": true}), None);
+        let r = run(serde_json::json!({"notifOpenGroup": true}), None);
         assert!(
             text_of(&r).starts_with("🔓 *ɴᴏᴛɪꜰ ᴏᴘᴇɴ ɢʀᴏᴜᴘ*\n\n> Status: ✅ Aktif"),
             "{}",
@@ -109,20 +109,20 @@ mod tests {
     #[test]
     fn on_and_off_use_this_plugin_own_wording() {
         assert_eq!(
-            text_of(&run(json!({}), Some("on"))),
+            text_of(&run(serde_json::json!({}), Some("on"))),
             "✅ *ɴᴏᴛɪꜰ ᴏᴘᴇɴ ɢʀᴏᴜᴘ ᴅɪᴀᴋᴛɪꜰᴋᴀɴ*"
         );
-        assert_eq!(group_write(&run(json!({}), Some("on"))), &json!({"notifOpenGroup": true}));
+        assert_eq!(group_write(&run(serde_json::json!({}), Some("on"))), &serde_json::json!({"notifOpenGroup": true}));
         assert_eq!(
-            text_of(&run(json!({}), Some("off"))),
+            text_of(&run(serde_json::json!({}), Some("off"))),
             "❌ *ɴᴏᴛɪꜰ ᴏᴘᴇɴ ɢʀᴏᴜᴘ ᴅɪɴᴏɴᴀᴋᴛɪꜰᴋᴀɴ*"
         );
-        assert_eq!(group_write(&run(json!({}), Some("off"))), &json!({"notifOpenGroup": false}));
+        assert_eq!(group_write(&run(serde_json::json!({}), Some("off"))), &serde_json::json!({"notifOpenGroup": false}));
     }
 
     #[test]
     fn a_stored_non_bool_never_reports_aktif() {
-        let r = run(json!({"notifOpenGroup": "true"}), None);
+        let r = run(serde_json::json!({"notifOpenGroup": "true"}), None);
         assert!(text_of(&r).contains("> Status: ❌ Nonaktif"), "{}", text_of(&r));
     }
 

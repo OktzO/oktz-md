@@ -151,7 +151,6 @@ fn usage(prefix: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(settings: Value, text: &str, is_group: bool) -> Reply {
         let ctx = Ctx {
@@ -205,14 +204,14 @@ mod tests {
 
     #[test]
     fn the_group_branch_is_rejected_and_writes_nothing() {
-        let r = run(json!({"storeLists": [{"name": "A"}]}), "1 nama B", true);
+        let r = run(serde_json::json!({"storeLists": [{"name": "A"}]}), "1 nama B", true);
         assert!(text_of(&r).starts_with("🚫 *Akses Ditolak*"));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn an_empty_store_short_circuits_before_parsing() {
-        let r = run(json!({}), "1 nama B", false);
+        let r = run(serde_json::json!({}), "1 nama B", false);
         assert!(text_of(&r).starts_with("📭 *Belum ada informasi.*"));
         assert!(r.mutations().is_empty());
     }
@@ -220,7 +219,7 @@ mod tests {
     #[test]
     fn text_that_does_not_match_the_pattern_shows_usage() {
         for bad in ["bukan perintah", "nama erah"] {
-            let r = run(json!({"storeLists": [{"name": "A"}]}), bad, false);
+            let r = run(serde_json::json!({"storeLists": [{"name": "A"}]}), bad, false);
             assert!(
                 text_of(&r).starts_with("✏️ *EDIT INFORMASI TOKO*"),
                 "input {bad:?} harus menampilkan usage"
@@ -231,7 +230,7 @@ mod tests {
 
     #[test]
     fn an_out_of_range_number_is_rejected_before_writing() {
-        let r = run(json!({"storeLists": [{"name": "A"}]}), "5 nama B", false);
+        let r = run(serde_json::json!({"storeLists": [{"name": "A"}]}), "5 nama B", false);
         assert!(text_of(&r).contains("Nomor tidak valid."));
         assert!(text_of(&r).contains("Rentang: 1-1"));
         assert!(r.mutations().is_empty());
@@ -240,7 +239,7 @@ mod tests {
     #[test]
     fn editing_the_name_lands_in_the_store() {
         let r = run(
-            json!({"storeLists": [{"name": "Lama", "content": "isi"}]}),
+            serde_json::json!({"storeLists": [{"name": "Lama", "content": "isi"}]}),
             "1 nama FAQ Pembayaran",
             false,
         );
@@ -254,7 +253,7 @@ mod tests {
     #[test]
     fn editing_content_also_recomputes_the_description_preview() {
         let r = run(
-            json!({"storeLists": [{"name": "A", "content": "lama", "description": "lama"}]}),
+            serde_json::json!({"storeLists": [{"name": "A", "content": "lama", "description": "lama"}]}),
             "1 isi baru;;baris dua",
             false,
         );
@@ -271,7 +270,7 @@ mod tests {
     #[test]
     fn editing_the_description_does_not_touch_content() {
         let r = run(
-            json!({"storeLists": [{"name": "A", "content": "isi asli"}]}),
+            serde_json::json!({"storeLists": [{"name": "A", "content": "isi asli"}]}),
             "1 deskripsi preview;;baru",
             false,
         );
@@ -282,7 +281,7 @@ mod tests {
 
     #[test]
     fn too_short_name_and_content_are_rejected_without_writing() {
-        let settings = json!({"storeLists": [{"name": "A", "content": "isi"}]});
+        let settings = serde_json::json!({"storeLists": [{"name": "A", "content": "isi"}]});
         let short_name = run(settings.clone(), "1 nama B", false);
         assert!(text_of(&short_name).contains("Nama terlalu pendek."));
         assert!(short_name.mutations().is_empty());
@@ -294,7 +293,7 @@ mod tests {
 
     #[test]
     fn media_fields_report_that_media_is_needed_and_write_nothing() {
-        let settings = json!({"storeLists": [{"name": "A", "image": "u"}]});
+        let settings = serde_json::json!({"storeLists": [{"name": "A", "image": "u"}]});
         let img = run(settings.clone(), "1 gambar", false);
         assert!(text_of(&img).contains("🖼️ *Reply atau kirim gambar baru.*"));
         assert!(img.mutations().is_empty(), "tidak boleh menghapus media lama");

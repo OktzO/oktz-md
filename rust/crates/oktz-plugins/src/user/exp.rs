@@ -77,7 +77,6 @@ pub fn exp(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     /// `find("exp")` ambigu: `exp` juga alias plugin `expedition.js`, dan
     /// `find` mengembalikan siapa pun yang terdaftar lebih dulu di
@@ -181,7 +180,7 @@ mod tests {
 
     #[test]
     fn absent_state_shows_zero_exp_and_level_one() {
-        for user in [json!(null), json!({}), json!({"exp": null})] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"exp": null})] {
             let out = run(user.clone(), vec![]);
             assert_eq!(
                 out,
@@ -193,7 +192,7 @@ mod tests {
 
     #[test]
     fn stored_exp_drives_level_and_title_together() {
-        let out = run(json!({"exp": 999_999}), vec![]);
+        let out = run(serde_json::json!({"exp": 999_999}), vec![]);
         assert!(out.contains("*〔 ⭐ Exp 〕* 1000.0K\n"));
         assert!(out.contains("*〔 🏆 Level 〕* 100\n"));
         assert!(out.contains("*〔 🎖️ Title 〕* 🐉 Mythic\n"));
@@ -201,7 +200,7 @@ mod tests {
 
     #[test]
     fn a_mention_shows_the_target_number() {
-        let out = run(json!({"exp": 50_000}), vec!["628999@s.whatsapp.net"]);
+        let out = run(serde_json::json!({"exp": 50_000}), vec!["628999@s.whatsapp.net"]);
         assert!(out.contains("*〔 👤 User 〕* 628999\n"));
         assert!(out.contains("*〔 🏆 Level 〕* 6\n"));
         assert!(out.contains("*〔 🎖️ Title 〕* 🛡️ Warrior\n"));

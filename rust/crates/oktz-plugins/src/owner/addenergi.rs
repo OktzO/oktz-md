@@ -1,7 +1,6 @@
 //! `plugins/owner/addenergi.js` — tambah energi (bisa `--unlimited`).
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::json;
 
 /// `config.energi.default` (`config.js:114`) — nilai yang dipakai `setUser`
 /// untuk user yang belum pernah ada.
@@ -171,7 +170,7 @@ pub fn addenergi(ctx: Ctx) -> Reply {
         .with_reaction("✅")
         .with_mutation(Mutation::SetUser {
             jid: target,
-            data: json!({ "energi": UNLIMITED }),
+            data: serde_json::json!({ "energi": UNLIMITED }),
         });
     }
 
@@ -189,7 +188,7 @@ pub fn addenergi(ctx: Ctx) -> Reply {
     .with_reaction("✅")
     .with_mutation(Mutation::SetUser {
         jid: target,
-        data: json!({ "energi": new_energi }),
+        data: serde_json::json!({ "energi": new_energi }),
     })
 }
 
@@ -298,7 +297,7 @@ mod tests {
     #[test]
     fn amount_and_target_both_missing_show_help_and_write_nothing() {
         for msg in ["", "   ", "abc", "@628999"] {
-            let r = run(msg, json!({}));
+            let r = run(msg, serde_json::json!({}));
             assert!(text_of(&r).starts_with("⚡ *ᴀᴅᴅ ᴇɴᴇʀɢɪ*"), "input {msg:?}");
             assert!(r.mutations().is_empty(), "input {msg:?}");
         }
@@ -309,7 +308,7 @@ mod tests {
         // `!targetJid || (!isUnlimited && amount <= 0)` — Mention tanpa angka
         // tidak bisa jatuh ke "tambah ke diri sendiri".
         for text in ["", "abc", "0"] {
-            let r = run_to(text, json!({}), OTHER);
+            let r = run_to(text, serde_json::json!({}), OTHER);
             assert!(
                 text_of(&r).starts_with("⚡ *ᴀᴅᴅ ᴇɴᴇʀɢɪ*"),
                 "input {text:?}: {}",
@@ -321,7 +320,7 @@ mod tests {
 
     #[test]
     fn a_bare_amount_adds_to_the_sender() {
-        let r = run("100", json!({ "energi": 40 }));
+        let r = run("100", serde_json::json!({ "energi": 40 }));
         assert_eq!(written_energi(&r), (SENDER.to_string(), 140));
         assert!(text_of(&r).contains("berhasil di tambahkan sebanyak *100*"), "{}", text_of(&r));
         assert!(text_of(&r).contains("mempunyai *140* energi"));
@@ -330,12 +329,12 @@ mod tests {
     #[test]
     fn a_mention_and_a_quote_both_redirect_the_write() {
         assert_eq!(
-            written_energi(&run_to("50", json!({}), OTHER)),
+            written_energi(&run_to("50", serde_json::json!({}), OTHER)),
             (OTHER.to_string(), 99_999 + 50),
             "target di luar sender+roster: energi lama = default config"
         );
         assert_eq!(
-            written_energi(&run_quoted("50", json!({}), OTHER)),
+            written_energi(&run_quoted("50", serde_json::json!({}), OTHER)),
             (OTHER.to_string(), 99_999 + 50),
             "m.quoted menang atas mentionedJid"
         );
@@ -347,7 +346,7 @@ mod tests {
         // jadi ia yang jadi numArg, bukan nomor tujuan. Branch phone hanya
         // kena kalau token itu DILEWATI numArg, jadi mustahil untuk angka
         // murni: keep the test honest about what the JS actually does.
-        let r = run("628999123456 50", json!({ "energi": 0 }));
+        let r = run("628999123456 50", serde_json::json!({ "energi": 0 }));
         let (jid, value) = written_energi(&r);
         assert_eq!(jid, SENDER, "tidak ada target, jadi jatuh ke sender");
         assert_eq!(value, 628_999_123_456, "numArg = 628999123456");
@@ -369,7 +368,7 @@ mod tests {
 
     #[test]
     fn adding_to_a_user_with_zero_stays_at_or_above_zero() {
-        let r = run("500", json!({ "energi": 10 }));
+        let r = run("500", serde_json::json!({ "energi": 10 }));
         assert_eq!(written_energi(&r), (SENDER.to_string(), 510));
         assert!(text_of(&r).contains("*510* energi"));
     }
@@ -378,14 +377,14 @@ mod tests {
     fn the_floor_is_zero_when_the_stored_value_went_negative() {
         // `Math.max(0, (energi ?? 0) + amount)` — row dengan -20 (bukan -1)
         // dijepit ke 0, persis `db.updateEnergi`.
-        let r = run("5", json!({ "energi": -20 }));
+        let r = run("5", serde_json::json!({ "energi": -20 }));
         assert_eq!(written_energi(&r), (SENDER.to_string(), 0));
     }
 
     #[test]
     fn unlimited_writes_minus_one_for_either_spelling() {
         for flag in ["--unlimited", "--unli", "--UNLIMITED"] {
-            let r = run(flag, json!({ "energi": 12 }));
+            let r = run(flag, serde_json::json!({ "energi": 12 }));
             assert_eq!(written_energi(&r), (SENDER.to_string(), UNLIMITED), "flag {flag}");
             assert!(text_of(&r).contains("unlimited / tidak terbatas"), "flag {flag}");
         }
@@ -393,7 +392,7 @@ mod tests {
 
     #[test]
     fn an_unlimited_user_is_never_topped_up() {
-        let r = run("100", json!({ "energi": -1 }));
+        let r = run("100", serde_json::json!({ "energi": -1 }));
         assert!(text_of(&r).starts_with("⚡ *INFORMASI*"), "{}", text_of(&r));
         assert!(r.mutations().is_empty(), "tidak boleh menulis");
         match r.without_mutations() {
@@ -414,7 +413,7 @@ mod tests {
                     jid: OTHER.into(),
                     is_admin: false,
                     is_owner: false,
-                    data: json!({ "energi": -1 }),
+                    data: serde_json::json!({ "energi": -1 }),
                 }],
                 is_bot_admin: false,
             },
@@ -435,7 +434,7 @@ mod tests {
     #[test]
     fn a_missing_stored_value_falls_back_to_the_config_default() {
         let ctx = Ctx {
-            user_data: json!({ "koin": 3 }),
+            user_data: serde_json::json!({ "koin": 3 }),
             ..Default::default()
         };
         assert_eq!(stored_energi(&ctx, "628111@s.whatsapp.net"), DEFAULT_ENERGI);
@@ -453,7 +452,7 @@ mod tests {
 
     #[test]
     fn the_success_reply_reacts_and_carries_the_write_it_claims() {
-        let r = run("100", json!({ "energi": 0 }));
+        let r = run("100", serde_json::json!({ "energi": 0 }));
         match r.without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅"),
             other => panic!("harus Reaction, dapat {other:?}"),

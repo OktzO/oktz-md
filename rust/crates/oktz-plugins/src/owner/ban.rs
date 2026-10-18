@@ -118,7 +118,7 @@ pub fn ban(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(text: &str, mentioned: Option<&str>, settings: Value) -> Reply {
         let ctx = Ctx {
@@ -175,7 +175,7 @@ mod tests {
     #[test]
     fn a_number_shorter_than_ten_or_longer_than_fifteen_is_refused() {
         for text in ["", "123", "6281234567890123456"] {
-            let r = run(text, None, json!({}));
+            let r = run(text, None, serde_json::json!({}));
             assert!(text_of(&r).starts_with("🚫 *ʙᴀɴ ᴅsᴇʀ*"), "input {text:?}");
             assert!(r.mutations().is_empty(), "input {text:?}");
         }
@@ -184,14 +184,14 @@ mod tests {
     #[test]
     fn exactly_ten_and_exactly_fifteen_digits_are_accepted() {
         for text in ["1234567890", "123456789012345"] {
-            assert_eq!(stored(&run(text, None, json!({}))).len(), 1, "input {text:?}");
+            assert_eq!(stored(&run(text, None, serde_json::json!({}))).len(), 1, "input {text:?}");
         }
     }
 
     #[test]
     fn a_mention_wins_over_the_argument() {
-        let r = run("628000000000", Some("6289991234567@s.whatsapp.net"), json!({}));
-        assert_eq!(stored(&r)[0], json!("6289991234567"));
+        let r = run("628000000000", Some("6289991234567@s.whatsapp.net"), serde_json::json!({}));
+        assert_eq!(stored(&r)[0], serde_json::json!("6289991234567"));
     }
 
     #[test]
@@ -213,7 +213,7 @@ mod tests {
 
     #[test]
     fn a_number_already_on_the_list_is_refused_and_writes_nothing() {
-        let existing = json!({ "bannedUsers": ["6281234567890"] });
+        let existing = serde_json::json!({ "bannedUsers": ["6281234567890"] });
         let r = run("6281234567890", None, existing);
         assert!(text_of(&r).contains("sudah dibanned"), "{}", text_of(&r));
         assert!(r.mutations().is_empty());
@@ -225,7 +225,7 @@ mod tests {
         // bukan normalisasi nomor. Jadi hanya entri yang benar-benar berakhian
         // sama yang cocok; "081234567890" TIDAK cocok dengan "6281234567890".
         for existing in ["81234567890", "126281234567890", "6281234567890"] {
-            let settings = json!({ "bannedUsers": [existing] });
+            let settings = serde_json::json!({ "bannedUsers": [existing] });
             let r = run("6281234567890", None, settings);
             assert!(
                 text_of(&r).contains("sudah dibanned"),
@@ -241,25 +241,25 @@ mod tests {
         // Guard batas: "081234567890" share digit AWAL dengan target tapi bukan
         // suffix, jadi JS tetap memban. Menahan ini menjaga `endsWith` dari
         // berubah jadi `startsWith` atau normalisasi diam-diam.
-        let settings = json!({ "bannedUsers": ["081234567890"] });
+        let settings = serde_json::json!({ "bannedUsers": ["081234567890"] });
         let r = run("6281234567890", None, settings);
         assert_eq!(stored(&r).len(), 2);
     }
 
     #[test]
     fn banning_appends_to_the_existing_list_and_reports_the_new_total() {
-        let existing = json!({ "bannedUsers": ["628111111111"] });
+        let existing = serde_json::json!({ "bannedUsers": ["628111111111"] });
         let r = run("628999999999", None, existing);
         assert_eq!(
             stored(&r),
-            vec![json!("628111111111"), json!("628999999999")]
+            vec![serde_json::json!("628111111111"), serde_json::json!("628999999999")]
         );
         assert!(text_of(&r).contains("┃ 📊 ᴛᴏᴛᴀʟ: `2` ᴜsᴇʀ"), "{}", text_of(&r));
     }
 
     #[test]
     fn the_applied_reply_reacts_and_is_paired_with_the_write() {
-        let r = run("628999999999", None, json!({}));
+        let r = run("628999999999", None, serde_json::json!({}));
         match r.without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "🚫"),
             other => panic!("harus Reaction, dapat {other:?}"),

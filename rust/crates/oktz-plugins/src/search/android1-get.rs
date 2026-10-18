@@ -17,7 +17,7 @@
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::{error_template, js_truthy};
+use crate::common::{js_truthy};
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `config.APIkey?.neoxr || ''` (`config.js`) = `process.env.APIKEY_NEOXR || ""`.
@@ -78,12 +78,12 @@ pub fn android1_get(ctx: Ctx) -> Reply {
     // `throw new Error("Gagal mengambil detail APK")` dilempar ke `catch`, jadi
     // hasilnya template error yang sama seperti di `info/jadwalbola.rs`.
     let Some(resp) = ctx.http.get(&api_url(url)).ok() else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
     let data = resp.json().unwrap_or(Value::Null);
 
     if !js_truthy(data.get("status")) || !js_truthy(data.get("data")) {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     }
     let app = data.get("data").unwrap_or(&Value::Null);
 
@@ -132,7 +132,7 @@ mod tests {
     impl HttpGet for Stub {
         fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
             self.seen.lock().unwrap().push(url.to_string());
-            let body = self.body.clone().ok_or_else(|| HttpError {
+            let body = self.body.clone().ok_or_else(|| oktz_plugin_api::HttpError {
                 message: "offline".into(),
             })?;
             Ok(HttpResponse {
@@ -166,7 +166,7 @@ mod tests {
             sender: "628111@s.whatsapp.net".into(),
             chat: "628111@s.whatsapp.net".into(),
             text: text.into(),
-            args: text.split_whitespace().collect(),
+            args: text.split_whitespace().map(str::to_string).collect(),
             http,
             ..Default::default()
         };
@@ -264,7 +264,7 @@ mod tests {
             let r = run(Stub::new(body), "https://an1.com/a");
             assert_eq!(body_of(&r), NO_DOWNLOAD_URL, "{body}");
             assert_eq!(reaction_of(&r), Some("⚠️"), "{body}");
-            assert!(matches!(r.without_mutations(), Reply::Interactive { .. }), "{body}");
+            assert!(matches!(r.without_mutations().tanpa_reaksi(), Reply::Interactive { .. }), "{body}");
         }
     }
 
@@ -277,7 +277,7 @@ mod tests {
             "<html>bukan json</html>",
         ] {
             let r = run(Stub::new(body), "https://an1.com/a");
-            assert_eq!(body_of(&r), error_template(".", "android1-get"), "{body}");
+            assert_eq!(body_of(&r), crate::common::error_template(".", "android1-get"), "{body}");
             assert_eq!(reaction_of(&r), Some("☢"), "{body}");
         }
     }

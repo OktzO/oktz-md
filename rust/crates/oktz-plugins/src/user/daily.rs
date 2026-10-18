@@ -138,7 +138,7 @@ fn _assert_same_timezone(now: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(user: Value) -> Reply {
         let ctx = Ctx {
@@ -203,7 +203,7 @@ mod tests {
         // jadi gap `- 1` bisa naik ke cooldown penuh di antara dua pembacaan
         // dan test jadi flaky.
         for gap in [0i64, 1000, 3_600_000, DAILY_COOLDOWN - 1_000] {
-            let r = run(json!({ "cooldowns": { "daily": just_now - gap } }));
+            let r = run(serde_json::json!({ "cooldowns": { "daily": just_now - gap } }));
             assert!(text_of(&r).starts_with("🕕 *ᴄᴏᴏʟᴅᴏᴡɴ*"), "gap {gap}");
             assert!(r.mutations().is_empty(), "gap {gap} tidak boleh menulis");
         }
@@ -216,7 +216,7 @@ mod tests {
         // ms saja sudah memotong 60.000 → 59 dari hitungan menit. Bentuknya
         // yang dikunci di sini, angkanya dikunci di test `remaining_text_*`.
         let just_now = now_ms();
-        let r = run(json!({ "cooldowns": { "daily": just_now - 60_000 } }));
+        let r = run(serde_json::json!({ "cooldowns": { "daily": just_now - 60_000 } }));
         let t = text_of(&r);
         assert!(t.starts_with("🕕 *ᴄᴏᴏʟᴅᴏᴡɴ*"), "{t}");
         assert!(t.contains("Kamu sudah klaim hari ini"), "{t}");
@@ -262,14 +262,14 @@ mod tests {
     #[test]
     fn a_claim_at_or_past_the_full_day_is_allowed() {
         let old = now_ms() - DAILY_COOLDOWN;
-        let r = run(json!({ "cooldowns": { "daily": old } }));
+        let r = run(serde_json::json!({ "cooldowns": { "daily": old } }));
         assert!(text_of(&r).starts_with("🎉 *ᴅᴀɪʟʏ ᴄʟᴀɪᴍ sᴜᴋsᴇs*"));
         assert_eq!(r.mutations().len(), 1);
     }
 
     #[test]
     fn a_user_with_no_cooldown_row_can_claim_immediately() {
-        for user in [json!(null), json!({}), json!({"cooldowns": {}})] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"cooldowns": {}})] {
             let r = run(user.clone(), );
             assert!(text_of(&r).starts_with("🎉"), "input {user}");
             assert_eq!(r.mutations().len(), 1, "input {user}");
@@ -281,7 +281,7 @@ mod tests {
         // 200 sampel per klaim; ranges: exp 1000-5999, money 5000-14999,
         // potion 1-3.
         for _ in 0..200 {
-            let r = run(json!({}));
+            let r = run(serde_json::json!({}));
             let d = write_of(&r);
             let exp = d["exp"].as_i64().unwrap();
             let koin = d["koin"].as_i64().unwrap();
@@ -294,7 +294,7 @@ mod tests {
 
     #[test]
     fn rewards_are_added_to_the_stored_balances_not_overwriting_them() {
-        let r = run(json!({"exp": 5000, "koin": 1000}));
+        let r = run(serde_json::json!({"exp": 5000, "koin": 1000}));
         let d = write_of(&r);
         assert!(d["exp"].as_i64().unwrap() > 5000);
         assert!(d["koin"].as_i64().unwrap() > 1000);
@@ -303,9 +303,9 @@ mod tests {
     #[test]
     fn the_cooldown_stamp_is_written_and_other_cooldowns_survive() {
         let before = now_ms();
-        let r = run(json!({ "cooldowns": { "lain": 12345 } }));
+        let r = run(serde_json::json!({ "cooldowns": { "lain": 12345 } }));
         let d = write_of(&r);
-        assert_eq!(d["cooldowns"]["lain"], json!(12345), "cooldown lain utuh");
+        assert_eq!(d["cooldowns"]["lain"], serde_json::json!(12345), "cooldown lain utuh");
         assert!(
             d["cooldowns"]["daily"].as_i64().unwrap() >= before,
             "daily harus dicatat"
@@ -314,21 +314,21 @@ mod tests {
 
     #[test]
     fn other_inventory_items_survive_the_potion_update() {
-        let r = run(json!({ "inventory": { "kunai": 3 } }));
+        let r = run(serde_json::json!({ "inventory": { "kunai": 3 } }));
         let inv = write_of(&r)["inventory"].as_object().unwrap().clone();
-        assert_eq!(inv["kunai"], json!(3), "item lain tidak boleh hilang");
+        assert_eq!(inv["kunai"], serde_json::json!(3), "item lain tidak boleh hilang");
         assert!(inv["potion"].as_i64().unwrap() >= 1);
     }
 
     #[test]
     fn the_potion_count_accumulates_across_claims() {
-        let r = run(json!({ "inventory": { "potion": 10 } }));
+        let r = run(serde_json::json!({ "inventory": { "potion": 10 } }));
         assert!(write_of(&r)["inventory"]["potion"].as_i64().unwrap() >= 11);
     }
 
     #[test]
     fn the_reply_mentions_the_sender_and_shows_a_local_greeting() {
-        let r = run(json!({}));
+        let r = run(serde_json::json!({}));
         assert_eq!(message_mentions(&r), &["628111@s.whatsapp.net"]);
         let t = text_of(&r);
         assert!(t.starts_with("🎉 *ᴅᴀɪʟʏ ᴄʟᴀɪᴍ sᴜᴋsᴇs*"), "{t}");
@@ -384,7 +384,7 @@ mod tests {
 
     #[test]
     fn the_success_reply_is_paired_with_the_write() {
-        let r = run(json!({}));
+        let r = run(serde_json::json!({}));
         assert!(text_of(&r).contains("ᴄʟᴀɪᴍ sᴜᴋsᴇs"));
         assert_eq!(r.mutations().len(), 1);
     }

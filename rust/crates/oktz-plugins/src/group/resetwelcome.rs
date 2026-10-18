@@ -46,7 +46,7 @@ pub fn resetwelcome(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(group: Value) -> Reply {
         let ctx = Ctx {
@@ -100,7 +100,7 @@ mod tests {
 
     #[test]
     fn an_absent_or_empty_welcome_is_reported_as_already_default() {
-        for g in [json!(null), json!({}), json!({"welcomeMsg": null}), json!({"welcomeMsg": ""})] {
+        for g in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"welcomeMsg": null}), serde_json::json!({"welcomeMsg": ""})] {
             let r = run(g.clone());
             assert_eq!(text_of(&r), already_default(), "input {g}");
             assert!(r.mutations().is_empty(), "tidak boleh menulis: {g}");
@@ -109,7 +109,7 @@ mod tests {
 
     #[test]
     fn a_group_row_that_exists_but_has_no_welcome_key_is_also_default() {
-        let r = run(json!({"jid": "120363@g.us", "welcome": true}));
+        let r = run(serde_json::json!({"jid": "120363@g.us", "welcome": true}));
         assert_eq!(text_of(&r), already_default());
         assert!(r.mutations().is_empty());
     }
@@ -119,29 +119,29 @@ mod tests {
         // `0` falsy → sudah default. `{}` TRUTHY di JS (`!{}` = false) →
         // plugin mencoba mereset, dan menulis `null` di atasnya. Mengira
         // "bukan string = tidak ada" akan salah untuk objek.
-        let zero = run(json!({"welcomeMsg": 0}));
+        let zero = run(serde_json::json!({"welcomeMsg": 0}));
         assert_eq!(text_of(&zero), already_default(), "0 falsy di JS");
         assert!(zero.mutations().is_empty());
 
-        let obj = run(json!({"welcomeMsg": {}}));
+        let obj = run(serde_json::json!({"welcomeMsg": {}}));
         assert_eq!(text_of(&obj), DONE, "objek kosong truthy di JS");
         assert_eq!(group_write(&obj)["welcomeMsg"], Value::Null);
 
-        let empty_arr = run(json!({"welcomeMsg": []}));
+        let empty_arr = run(serde_json::json!({"welcomeMsg": []}));
         assert_eq!(text_of(&empty_arr), DONE, "array kosong truthy di JS");
 
-        let empty_obj = run(json!({"welcomeMsg": ""}));
+        let empty_obj = run(serde_json::json!({"welcomeMsg": ""}));
         assert_eq!(text_of(&empty_obj), already_default(), "string kosong falsy");
 
-        for falsy in [json!(false), json!(null)] {
-            let r = run(json!({ "welcomeMsg": falsy.clone() }));
+        for falsy in [serde_json::json!(false), serde_json::json!(null)] {
+            let r = run(serde_json::json!({ "welcomeMsg": falsy.clone() }));
             assert_eq!(text_of(&r), already_default(), "input {falsy}");
         }
     }
 
     #[test]
     fn a_stored_message_is_cleared_to_null_not_deleted() {
-        let r = run(json!({"welcomeMsg": "Halo {user}"}));
+        let r = run(serde_json::json!({"welcomeMsg": "Halo {user}"}));
         let data = group_write(&r);
         assert_eq!(
             data["welcomeMsg"],
@@ -158,7 +158,7 @@ mod tests {
 
     #[test]
     fn the_reset_reply_is_paired_with_the_write() {
-        let r = run(json!({"welcomeMsg": "x"}));
+        let r = run(serde_json::json!({"welcomeMsg": "x"}));
         assert!(text_of(&r).contains("ᴅɪʀᴇsᴇᴛ"));
         assert_eq!(r.mutations().len(), 1);
     }

@@ -57,6 +57,33 @@ Baca dulu `rust/crates/oktz-plugin-api/src/registry.rs` dan
   basename, mime_dari_nama, interp}` dan
   `crate::tools::phisingataubukan::encode_uri_component`.
 
+## Kapabilitas yang sudah tersedia
+
+Sebelum menyatakan sebuah plugin "terblokir", periksa daftar ini. Yang ada di
+sini BUKAN alasan untuk melewatkan plugin.
+
+- `fs` Node -> `ctx.berkas()` (`oktz_plugin_api::berkas::Berkas`):
+  `ada`, `baca`, `baca_teks`, `tulis`, `tulis_teks`, `tambah_teks`, `daftar`,
+  `hapus`, `buat_folder`, `ukuran`, `salin`. Jalurnya relatif ke akar aset.
+- `child_process` + ffmpeg -> `oktz_plugin_api::ffmpeg`:
+  `jalankan`, `jalankan_dengan_masukan`, `jalankan_ke_berkas`.
+- `sharp` -> `oktz_plugin_api::gambar`:
+  `sharp(bytes)?`, lalu `.ubah_ukuran`, `.pas_di_dalam`, `.tanpa_memperbesar`,
+  `.putar_otomatis`, `.pastikan_alfa`, `.skala_abu`, lalu `.ke_jpeg(kualitas)`,
+  `.ke_png()`, `.ke_webp(kualitas)`, `.metadata()`.
+- `sock.onWhatsApp` / `profilePictureUrl` / `groupMetadata` /
+  `groupParticipantsUpdate` / `groupLeave` / `groupInviteCode` /
+  `groupGetInviteInfo` / `groupCreate` / `groupAcceptInvite` /
+  `updateProfilePicture` / `readMessages` / `sendPresenceUpdate` /
+  `fetchStatus` / `getName` / `getBusinessProfile` -> `ctx.sock()`
+  (`oktz_plugin_api::sock::Sock`).
+- `answerHandler` -> `#[answer_handler(...)]` di `oktz_plugin_api`, dan
+  `oktz_plugin_api::ANSWER_HANDLERS`.
+- `cheerio` -> parser mini per berkas, seperti konvensi repo ini.
+- `AIRich` (`src/lib/builder.js`) BELUM ada. Plugin yang benar-benar butuh
+  `AIRich` untuk menyusun tampilan: tulis kepala berkas `//! BLOKIRAN:` yang
+  menyebut bagian mana yang butuh `AIRich`, jangan mengarang tampilan lain.
+
 ## Gaya penulisan
 
 - `ponytail:` untuk penyimpangan yang disengaja, menyebut nama jalan yang

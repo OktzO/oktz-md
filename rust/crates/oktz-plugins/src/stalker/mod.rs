@@ -4,3 +4,5 @@ pub mod npmstalk;
 pub mod pintereststalk;
 pub mod tiktokstalk;
 pub mod ytstalk;
+
+// Ditambahkan scripts/pasang-modul.mjs.

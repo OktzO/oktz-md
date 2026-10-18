@@ -1,7 +1,6 @@
 //! `plugins/owner/addkoin.js` — tambah koin user (plafon 9 triliun).
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::json;
 
 use crate::common::{jid_number, parse_int};
 
@@ -112,7 +111,7 @@ pub fn addkoin(ctx: Ctx) -> Reply {
     .with_reaction("✅")
     .with_mutation(Mutation::SetUser {
         jid: target,
-        data: json!({ "koin": new_koin }),
+        data: serde_json::json!({ "koin": new_koin }),
     })
 }
 
@@ -181,7 +180,7 @@ mod tests {
     #[test]
     fn no_amount_shows_help_and_writes_nothing() {
         for msg in ["", "@628999", "abc"] {
-            let r = run(msg, json!({}), Some(OTHER));
+            let r = run(msg, serde_json::json!({}), Some(OTHER));
             assert!(text_of(&r).starts_with("💰 *ᴀᴅᴅ ᴋᴏɪɴ*"), "input {msg:?}");
             assert!(r.mutations().is_empty(), "input {msg:?}");
         }
@@ -189,7 +188,7 @@ mod tests {
 
     #[test]
     fn a_bare_amount_adds_to_the_sender_and_reports_the_added_value() {
-        let r = run("100000", json!({ "koin": 5 }), None);
+        let r = run("100000", serde_json::json!({ "koin": 5 }), None);
         assert_eq!(written(&r), (SENDER.to_string(), 100_005));
         assert!(text_of(&r).contains("sebanyak *100.00K*"), "{}", text_of(&r));
         assert!(text_of(&r).contains("*@628111*"), "{}", text_of(&r));
@@ -198,21 +197,21 @@ mod tests {
     #[test]
     fn a_mention_redirects_the_write_to_that_jid() {
         assert_eq!(
-            written(&run("1000", json!({}), Some(OTHER))),
+            written(&run("1000", serde_json::json!({}), Some(OTHER))),
             (OTHER.to_string(), 1_000)
         );
     }
 
     #[test]
     fn the_cap_is_nine_trillion() {
-        let r = run("99999999999999", json!({ "koin": 0 }), None);
+        let r = run("99999999999999", serde_json::json!({ "koin": 0 }), None);
         assert_eq!(written(&r).1, MAX_KOIN);
         assert!(text_of(&r).contains("*9.00T*"), "{}", text_of(&r));
     }
 
     #[test]
     fn an_unlimited_koin_holder_is_refused_and_nothing_is_written() {
-        let r = run("100", json!({ "koin": -1 }), None);
+        let r = run("100", serde_json::json!({ "koin": -1 }), None);
         assert!(text_of(&r).starts_with("💰 *INFORMATION*"), "{}", text_of(&r));
         assert!(r.mutations().is_empty());
         match r.without_mutations() {
@@ -223,7 +222,7 @@ mod tests {
 
     #[test]
     fn the_success_reply_reacts_and_is_paired_with_the_write() {
-        let r = run("100", json!({}), None);
+        let r = run("100", serde_json::json!({}), None);
         match r.without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅"),
             other => panic!("harus Reaction, dapat {other:?}"),

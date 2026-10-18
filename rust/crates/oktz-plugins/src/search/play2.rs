@@ -9,6 +9,7 @@
 //! Yang dipor penuh karena murni dan bisa diuji: parser LRC, konversi lirik
 //! polos menjadi lirik bertime, normalisasi, pemformat durasi, `secondsFromTimestamp`,
 //! `escapeHtml`, dan kartu pakai.
+#![allow(clippy::collapsible_if)]
 
 #![allow(dead_code)] // jalur playback tidak terjangkau tanpa kapabilitas di atas
 
@@ -50,7 +51,7 @@ pub(crate) fn parse_lrc_timestamp(menit: f64, detik: f64, pecahan: Option<&str>)
     }
     let milidetik = match pecahan {
         None => 0.0,
-        Some(t) if t.is_empty() => 0.0,
+        Some("") => 0.0,
         Some(t) => {
             let angka: f64 = t.parse().unwrap_or(0.0);
             match t.chars().count() {

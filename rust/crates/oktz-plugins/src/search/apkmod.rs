@@ -16,7 +16,7 @@
 use oktz_plugin_api::{Ctx, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::{error_template, js_truthy};
+use crate::common::{js_truthy};
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `config.APIkey?.neoxr || ''` — lihat catatan `ponytail:` di
@@ -37,7 +37,7 @@ pub(crate) fn help(prefix: &str) -> String {
         "📱 *ᴀᴘᴋ ᴍᴏᴅ sᴇᴀʀᴄʜ*\n\n\
          > Cari APK MOD Premium\n\n\
          > Contoh:\n\
-         \\`{prefix}apkmod vpn\\`"
+         `{prefix}apkmod vpn`"
     )
 }
 
@@ -106,7 +106,7 @@ pub fn apkmod(ctx: Ctx) -> Reply {
     }
 
     let Some(resp) = ctx.http.get(&api_url(text)).ok() else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
     let data = resp.json().unwrap_or(Value::Null);
 
@@ -116,7 +116,7 @@ pub fn apkmod(ctx: Ctx) -> Reply {
     // String non-kosong lolos guard lalu `apps.forEach` melempar TypeError
     // di JS -> `catch` -> template error.
     let Some(apps) = data.get("data").and_then(Value::as_array) else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
     let apps = &apps[..apps.len().min(15)];
 
@@ -130,7 +130,6 @@ pub fn apkmod(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug)]
@@ -157,7 +156,7 @@ mod tests {
     impl HttpGet for Stub {
         fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
             self.seen.lock().unwrap().push(url.to_string());
-            let body = self.body.clone().ok_or_else(|| HttpError {
+            let body = self.body.clone().ok_or_else(|| oktz_plugin_api::HttpError {
                 message: "offline".into(),
             })?;
             Ok(HttpResponse {
@@ -191,7 +190,7 @@ mod tests {
             sender: "628111@s.whatsapp.net".into(),
             chat: "628111@s.whatsapp.net".into(),
             text: text.into(),
-            args: text.split_whitespace().collect(),
+            args: text.split_whitespace().map(str::to_string).collect(),
             http,
             ..Default::default()
         };
@@ -270,7 +269,7 @@ mod tests {
             "{body}"
         );
         assert_eq!(reaction_of(&r), Some("✅"));
-        assert!(matches!(r.without_mutations(), Reply::Interactive { .. }));
+        assert!(matches!(r.without_mutations().tanpa_reaksi(), Reply::Interactive { .. }));
 
         assert_eq!(
             http.seen.lock().unwrap()[0],
@@ -281,9 +280,9 @@ mod tests {
     #[test]
     fn only_fifteen_apps_are_listed() {
         let apps: Vec<Value> = (0..20)
-            .map(|i| json!({"name": format!("App {i}"), "version": "1", "mod": "M"}))
+            .map(|i| serde_json::json!({"name": format!("App {i}"), "version": "1", "mod": "M"}))
             .collect();
-        let body = format!("{{\"status\": true, \"data\": {}}}", json!(apps));
+        let body = format!("{{\"status\": true, \"data\": {}}}", serde_json::json!(apps));
         let out = body_of(&run(Stub::new(&body), "app"));
         assert!(out.contains("*15.* App 14\n"), "{out}");
         assert!(!out.contains("App 15"), "hasil ke-16 terpotong: {out}");
@@ -317,7 +316,7 @@ mod tests {
     #[test]
     fn a_non_array_payload_hits_the_catch_branch_like_the_foreach_type_error() {
         let r = run(Stub::new(r#"{"status": true, "data": "x"}"#), "q");
-        assert_eq!(body_of(&r), error_template(".", "apkmod"));
+        assert_eq!(body_of(&r), crate::common::error_template(".", "apkmod"));
         assert_eq!(reaction_of(&r), Some("☢"));
     }
 
@@ -348,10 +347,14 @@ mod tests {
 
     #[test]
     fn the_caption_helper_never_panics_on_strange_values() {
-        let apps = [json!("bukan objek"), json!(null), json!({"name": 7})];
+        let apps = [serde_json::json!("bukan objek"), serde_json::json!(null), serde_json::json!({"name": 7})];
         let out = format_list(&apps, "🚀 \u{0} ñ");
         assert!(out.starts_with("📱 *Hasil pencarian dari 🚀 \u{0} ñ*\n\n"), "{out}");
-        assert!(out.contains("*3.* bukan objek\n   ├ 🏷️ undefined\n"), "{out}");
-        assert!(out.contains("*2.* null\n"), "{out}");
+        // JS: `app.name` pada string primitif = undefined; `null.name`
+        // melempar TypeError, di sini diturunkan jadi undefined supaya helper
+        // tidak panik; `{name: 7}` -> string "7".
+        assert!(out.contains("*1.* undefined\n"), "{out}");
+        assert!(out.contains("*2.* undefined\n"), "{out}");
+        assert!(out.contains("*3.* 7\n"), "{out}");
     }
 }

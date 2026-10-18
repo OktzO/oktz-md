@@ -280,7 +280,6 @@ pub fn phisingataubukan(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     /// HTTP offline: Balasan sudah disiapkan, atau gagal total.
@@ -311,7 +310,7 @@ mod tests {
             let text = self
                 .result
                 .clone()
-                .map_err(|()| HttpError { message: "offline".into() })?;
+                .map_err(|()| oktz_plugin_api::HttpError { message: "offline".into() })?;
             Ok(HttpResponse {
                 status: 200,
                 body: HttpBody::Bytes {
@@ -361,7 +360,7 @@ mod tests {
     }
 
     fn scan() -> Value {
-        json!({
+        serde_json::json!({
             "scanned_url": "https://google.com",
             "status_description": "Aman",
             "is_phishing": false,
@@ -418,7 +417,7 @@ mod tests {
 
     #[test]
     fn a_clean_result_lists_every_five_flags_as_tidak() {
-        let http = Stub::body(json!({ "status": true, "result": scan() }));
+        let http = Stub::body(serde_json::json!({ "status": true, "result": scan() }));
         let r = run(http.clone(), "https://google.com");
         let t = body(&r);
         assert!(t.starts_with("🛡️ *HASIL SCAN URL* 🛡️"), "{t}");
@@ -439,7 +438,7 @@ mod tests {
 
     #[test]
     fn a_single_true_flag_flips_only_that_row() {
-        let http = Stub::body(json!({ "status": true, "result": {
+        let http = Stub::body(serde_json::json!({ "status": true, "result": {
             "scanned_url": "https://evil.test",
             "status_description": "Berbahaya",
             "is_phishing": true,
@@ -463,10 +462,10 @@ mod tests {
         // `!data.status || !data.result` — objek kosong tetap truthy di JS,
         // jadi `result: {}` harus tetap jalan.
         let cases = [
-            json!({ "status": false, "result": scan() }),
-            json!({ "status": true, "result": null }),
-            json!({ "result": scan() }),
-            json!({ "status": true }),
+            serde_json::json!({ "status": false, "result": scan() }),
+            serde_json::json!({ "status": true, "result": null }),
+            serde_json::json!({ "result": scan() }),
+            serde_json::json!({ "status": true }),
         ];
         for body_json in cases {
             let http = Stub::body(body_json.clone());
@@ -475,7 +474,7 @@ mod tests {
             assert_eq!(reaction(&r), Some("❌".to_string()), "body {body_json}");
         }
 
-        let http = Stub::body(json!({ "status": true, "result": {} }));
+        let http = Stub::body(serde_json::json!({ "status": true, "result": {} }));
         assert!(
             !body(&run(http.clone(), "x")).is_empty(),
             "result kosong = objek truthy, bukan kegagalan scan"
@@ -501,7 +500,7 @@ mod tests {
 
     #[test]
     fn the_scanned_url_goes_through_encode_uri_component() {
-        let http = Stub::body(json!({ "status": true, "result": scan() }));
+        let http = Stub::body(serde_json::json!({ "status": true, "result": scan() }));
         run(http.clone(), "https://a.test/?x=1 2");
         let seen = http.seen.lock().unwrap().clone();
         assert_eq!(seen.len(), 1);
@@ -525,35 +524,35 @@ mod tests {
     #[test]
     fn last_modified_is_rendered_the_way_id_id_does_it() {
         assert_eq!(
-            to_locale_string(Some(&json!("2026-10-14T03:30:45Z"))),
+            to_locale_string(Some(&serde_json::json!("2026-10-14T03:30:45Z"))),
             "14/10/2026 10.30.45",
             "Z = UTC, digeser ke WIB"
         );
         assert_eq!(
-            to_locale_string(Some(&json!("2026-10-14T03:30:45.250+00:00"))),
+            to_locale_string(Some(&serde_json::json!("2026-10-14T03:30:45.250+00:00"))),
             "14/10/2026 10.30.45"
         );
         assert_eq!(
-            to_locale_string(Some(&json!("2026-10-14T03:30:45+07:00"))),
+            to_locale_string(Some(&serde_json::json!("2026-10-14T03:30:45+07:00"))),
             "14/10/2026 03.30.45",
             "offset +07:00 = sudah WIB, jangan digeser lagi"
         );
         assert_eq!(
-            to_locale_string(Some(&json!("2026-10-14T03:30:45+0700"))),
+            to_locale_string(Some(&serde_json::json!("2026-10-14T03:30:45+0700"))),
             "14/10/2026 03.30.45"
         );
         assert_eq!(
-            to_locale_string(Some(&json!("2026-10-14T10:30:45"))),
+            to_locale_string(Some(&serde_json::json!("2026-10-14T10:30:45"))),
             "14/10/2026 10.30.45",
             "tanpa offset dibaca sebagai Asia/Jakarta"
         );
         assert_eq!(
-            to_locale_string(Some(&json!("2026-10-14 03:30:45"))),
+            to_locale_string(Some(&serde_json::json!("2026-10-14 03:30:45"))),
             "14/10/2026 03.30.45",
             "spasi juga pemisah yang V8 terima"
         );
         assert_eq!(
-            to_locale_string(Some(&json!("2026-10-14T03:30:45.123456Z"))),
+            to_locale_string(Some(&serde_json::json!("2026-10-14T03:30:45.123456Z"))),
             "14/10/2026 10.30.45",
             "pecahan dipotong, bukan dibulatkan"
         );
@@ -564,11 +563,11 @@ mod tests {
         // ES2015: `YYYY-MM-DD` = UTC. V8 di WIB merender 07.00.00, bukan
         // 00.00.00 — test ini existed menjaga supaya tidak "diperbaiki" nanti.
         assert_eq!(
-            to_locale_string(Some(&json!("2026-10-14"))),
+            to_locale_string(Some(&serde_json::json!("2026-10-14"))),
             "14/10/2026 07.00.00"
         );
         assert_eq!(
-            to_locale_string(Some(&json!("2026-1-1"))),
+            to_locale_string(Some(&serde_json::json!("2026-1-1"))),
             "01/01/2026 07.00.00",
             "bulan/hari satu digit tetap diterima"
         );
@@ -577,12 +576,12 @@ mod tests {
     #[test]
     fn out_of_range_values_roll_over_exactly_like_v8() {
         assert_eq!(
-            to_locale_string(Some(&json!("2026-02-30"))),
+            to_locale_string(Some(&serde_json::json!("2026-02-30"))),
             "02/03/2026 07.00.00",
             "hari excessive melorot, bukan Invalid Date"
         );
         assert_eq!(
-            to_locale_string(Some(&json!("2026-10-14T24:00:00"))),
+            to_locale_string(Some(&serde_json::json!("2026-10-14T24:00:00"))),
             "15/10/2026 00.00.00",
             "jam 24 = tengah malam hari berikutnya"
         );
@@ -591,20 +590,20 @@ mod tests {
     #[test]
     fn an_unreadable_date_becomes_invalid_date_never_a_panic() {
         for bad in [
-            json!("bukan tanggal"),
-            json!(""),
-            json!("2026-13-45"),
-            json!("2026-00-10"),
-            json!("2026-10-00"),
-            json!("2026-10-32"),
-            json!("2026-10-14T99:99"),
-            json!("2026-10-14T23:60:00"),
-            json!("2026-10-14T10:30:60"),
-            json!("2026-10-14T03:30:45,250Z"),
-            json!("2026-10-14T03:30:45-05"),
-            json!("2026-10-14T03"),
-            json!([1, 2]),
-            json!({ "a": 1 }),
+            serde_json::json!("bukan tanggal"),
+            serde_json::json!(""),
+            serde_json::json!("2026-13-45"),
+            serde_json::json!("2026-00-10"),
+            serde_json::json!("2026-10-00"),
+            serde_json::json!("2026-10-32"),
+            serde_json::json!("2026-10-14T99:99"),
+            serde_json::json!("2026-10-14T23:60:00"),
+            serde_json::json!("2026-10-14T10:30:60"),
+            serde_json::json!("2026-10-14T03:30:45,250Z"),
+            serde_json::json!("2026-10-14T03:30:45-05"),
+            serde_json::json!("2026-10-14T03"),
+            serde_json::json!([1, 2]),
+            serde_json::json!({ "a": 1 }),
         ] {
             assert_eq!(
                 to_locale_string(Some(&bad)),
@@ -620,10 +619,10 @@ mod tests {
         // `new Date(null)` -> epoch 0, bukan Invalid Date. Kalau plugin ini
         // pernah menerima `last_modified: null` dari API, teks yang tampil di
         // produksi adalah "01/01/1970 07.00.00".
-        assert_eq!(to_locale_string(Some(&json!(null))), "01/01/1970 07.00.00");
-        assert_eq!(to_locale_string(Some(&json!(false))), "01/01/1970 07.00.00");
+        assert_eq!(to_locale_string(Some(&serde_json::json!(null))), "01/01/1970 07.00.00");
+        assert_eq!(to_locale_string(Some(&serde_json::json!(false))), "01/01/1970 07.00.00");
         assert_eq!(
-            to_locale_string(Some(&json!(true))),
+            to_locale_string(Some(&serde_json::json!(true))),
             "01/01/1970 07.00.00",
             "1 ms tidak muncul di toLocaleString"
         );
@@ -631,7 +630,7 @@ mod tests {
 
     #[test]
     fn a_missing_result_field_renders_as_an_empty_gap_not_none() {
-        let t = render(&json!({}));
+        let t = render(&serde_json::json!({}));
         assert!(t.contains("🔗 *URL:* \n"), "{t}");
         assert!(t.contains("📊 *Status:* \n"), "{t}");
         assert!(t.contains("_Terakhir dipindai: Invalid Date_"), "{t}");

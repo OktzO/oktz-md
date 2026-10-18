@@ -5,7 +5,7 @@
 //! jadi kategorinya `"tools"` — bukan ikut direktori berkas.
 
 use oktz_plugin_api::{Ctx, QuotedMessage, Reply, plugin};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 pub(crate) const NO_QUOTE: &str = "❌ *Reply pesan yang ingin di-inspect*";
 
@@ -17,14 +17,14 @@ pub(crate) const NO_QUOTE: &str = "❌ *Reply pesan yang ingin di-inspect*";
 /// `remoteJid`, `fileName`) supaya bentuknya masih recognizable.
 pub(crate) fn quoted_json(q: &QuotedMessage) -> String {
     let mut map = Map::new();
-    map.insert("id".into(), json!(q.id));
-    map.insert("participant".into(), json!(q.sender));
-    map.insert("remoteJid".into(), json!(q.chat));
-    map.insert("type".into(), json!(q.kind.wire_type()));
-    map.insert("text".into(), json!(q.text));
-    map.insert("mimetype".into(), json!(q.mimetype));
-    map.insert("fileName".into(), json!(q.file_name));
-    map.insert("fromMe".into(), json!(q.from_me));
+    map.insert("id".into(), serde_json::json!(q.id));
+    map.insert("participant".into(), serde_json::json!(q.sender));
+    map.insert("remoteJid".into(), serde_json::json!(q.chat));
+    map.insert("type".into(), serde_json::json!(q.kind.wire_type()));
+    map.insert("text".into(), serde_json::json!(q.text));
+    map.insert("mimetype".into(), serde_json::json!(q.mimetype));
+    map.insert("fileName".into(), serde_json::json!(q.file_name));
+    map.insert("fromMe".into(), serde_json::json!(q.from_me));
     // `JSON.stringify` dengan indent 2 — pretty printer yang sama.
     serde_json::to_string_pretty(&Value::Object(map)).unwrap_or_default()
 }

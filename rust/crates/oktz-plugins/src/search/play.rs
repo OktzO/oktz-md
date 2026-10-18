@@ -7,6 +7,7 @@
 //!
 //! Yang dipor: guard, pemformat views, susunan kartu `NOW PLAYING`, dan pesan
 //! gagalnya.
+#![allow(clippy::too_many_arguments)]
 
 #![allow(dead_code)] // jalur pencarian tidak terjangkau tanpa yt-search
 

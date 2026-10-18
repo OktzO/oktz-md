@@ -89,7 +89,7 @@ pub fn owner(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(settings: Value) -> String {
         let ctx = Ctx {
@@ -133,7 +133,7 @@ mod tests {
 
     #[test]
     fn the_normal_branch_renders_one_name_per_owner() {
-        let out = run(json!({"owner": ["6285608953677", "628999"]}));
+        let out = run(serde_json::json!({"owner": ["6285608953677", "628999"]}));
         assert!(out.starts_with("👑 *ᴏᴡɴᴇʀ ɪɴꜰᴏʀᴍᴀᴛɪᴏɴ*\n\n"), "{out}");
         assert!(out.contains("┃ ㊗ ɴᴀᴍᴀ: *Oktz, Oktz*"), "satu nama per owner: {out}");
         assert!(out.contains("┃ ㊗ ʙᴏᴛ: *Oktz Bot*"), "{out}");
@@ -143,7 +143,7 @@ mod tests {
 
     #[test]
     fn a_named_owner_replaces_the_default_name() {
-        let out = run(json!({
+        let out = run(serde_json::json!({
             "owner": ["6285608953677"],
             "ownerNames": {"6285608953677": "Lyoraaa"}
         }));
@@ -153,7 +153,7 @@ mod tests {
     #[test]
     fn owner_name_falls_back_to_the_main_owner_name() {
         let ctx = Ctx {
-            settings: json!({"ownerNames": {"628999": "Danzzz"}}),
+            settings: serde_json::json!({"ownerNames": {"628999": "Danzzz"}}),
             ..Default::default()
         };
         assert_eq!(owner_name(&ctx, "6285608953677"), OWNER_NAME);
@@ -165,7 +165,7 @@ mod tests {
     #[test]
     fn duplicate_owners_are_collapsed_per_clean_number() {
         let ctx = Ctx {
-            settings: json!({"owner": ["+62 811-1", "628111", "628111"]}),
+            settings: serde_json::json!({"owner": ["+62 811-1", "628111", "628111"]}),
             ..Default::default()
         };
         assert_eq!(owner_numbers(&ctx), ["+62 811-1".to_string()]);
@@ -173,7 +173,7 @@ mod tests {
 
     #[test]
     fn the_fallback_branch_renders_an_empty_name_list() {
-        for settings in [json!({}), json!({"owner": []}), json!({"owner": "x"})] {
+        for settings in [serde_json::json!({}), serde_json::json!({"owner": []}), serde_json::json!({"owner": "x"})] {
             let out = run(settings.clone());
             assert!(out.contains("┃ ㊗ ɴᴀᴍᴀ: **\n"), "{settings} -> {out}");
         }
@@ -182,7 +182,7 @@ mod tests {
     #[test]
     fn the_plugin_only_reads() {
         let ctx = Ctx {
-            settings: json!({"owner": ["628111"]}),
+            settings: serde_json::json!({"owner": ["628111"]}),
             ..Default::default()
         };
         let r = (oktz_plugin_api::find("owner").unwrap().handler)(ctx);

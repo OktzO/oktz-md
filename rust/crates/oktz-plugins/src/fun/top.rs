@@ -66,7 +66,7 @@ pub(crate) fn build(members: &mut [String], kategori: &str) -> Result<(String, V
 pub fn top(ctx: Ctx) -> Reply {
     let kategori = ctx.args.join(" ").trim().to_string();
     if kategori.is_empty() {
-        return Reply::text(format!("\\`Contoh: {}top orang pintar\\`", ctx.prefix));
+        return Reply::text(format!("`Contoh: {}top orang pintar`", ctx.prefix));
     }
     let mut members = roster_jids(&ctx);
     match build(&mut members, &kategori) {
@@ -151,7 +151,7 @@ mod tests {
                 args: empty,
                 ..ctx_of(10, &[])
             });
-            assert_eq!(reply.text_body(), Some("\\`Contoh: .top orang pintar\\`"));
+            assert_eq!(reply.text_body(), Some("`Contoh: .top orang pintar`"));
         }
     }
 

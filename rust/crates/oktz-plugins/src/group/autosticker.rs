@@ -73,7 +73,7 @@ pub fn autosticker(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -138,7 +138,7 @@ mod tests {
 
     #[test]
     fn no_argument_reports_status_and_never_writes() {
-        let off = run(json!({}), "");
+        let off = run(serde_json::json!({}), "");
         assert!(
             text_of(&off).contains("> Status: ❌ Nonaktif"),
             "{}",
@@ -146,7 +146,7 @@ mod tests {
         );
         assert!(off.mutations().is_empty());
 
-        let on = run(json!({ "autosticker": true }), "");
+        let on = run(serde_json::json!({ "autosticker": true }), "");
         assert!(
             text_of(&on).contains("> Status: ✅ Aktif"),
             "{}",
@@ -176,8 +176,8 @@ mod tests {
     #[test]
     fn every_on_spelling_writes_true_once() {
         for input in ["on", "1", "aktif"] {
-            let r = run(json!({}), input);
-            assert_eq!(written(&r), &json!({ "autosticker": true }), "{input}");
+            let r = run(serde_json::json!({}), input);
+            assert_eq!(written(&r), &serde_json::json!({ "autosticker": true }), "{input}");
             assert_eq!(text_of(&r), TURNED_ON, "{input}");
         }
     }
@@ -185,8 +185,8 @@ mod tests {
     #[test]
     fn every_off_spelling_writes_false_once() {
         for input in ["off", "0", "nonaktif"] {
-            let r = run(json!({ "autosticker": true }), input);
-            assert_eq!(written(&r), &json!({ "autosticker": false }), "{input}");
+            let r = run(serde_json::json!({ "autosticker": true }), input);
+            assert_eq!(written(&r), &serde_json::json!({ "autosticker": false }), "{input}");
             assert_eq!(text_of(&r), TURNED_OFF, "{input}");
         }
     }
@@ -194,7 +194,7 @@ mod tests {
     #[test]
     fn turning_on_an_already_on_group_writes_nothing() {
         for input in ["on", "1", "aktif"] {
-            let r = run(json!({ "autosticker": true }), input);
+            let r = run(serde_json::json!({ "autosticker": true }), input);
             assert_eq!(text_of(&r), ALREADY_ON, "{input}");
             assert!(r.mutations().is_empty(), "{input}");
         }
@@ -203,7 +203,7 @@ mod tests {
     #[test]
     fn turning_off_an_already_off_group_writes_nothing() {
         for input in ["off", "0", "nonaktif"] {
-            let r = run(json!({}), input);
+            let r = run(serde_json::json!({}), input);
             assert_eq!(text_of(&r), ALREADY_OFF, "{input}");
             assert!(r.mutations().is_empty(), "{input}");
         }
@@ -211,16 +211,16 @@ mod tests {
 
     #[test]
     fn the_spellings_are_lowercased_before_matching() {
-        assert_eq!(written(&run(json!({}), "ON")), &json!({ "autosticker": true }));
+        assert_eq!(written(&run(serde_json::json!({}), "ON")), &serde_json::json!({ "autosticker": true }));
         assert_eq!(
-            written(&run(json!({ "autosticker": true }), "Nonaktif")),
-            &json!({ "autosticker": false })
+            written(&run(serde_json::json!({ "autosticker": true }), "Nonaktif")),
+            &serde_json::json!({ "autosticker": false })
         );
     }
 
     #[test]
     fn an_unknown_word_is_refused_with_the_prefix() {
-        let r = run(json!({}), "mungkin");
+        let r = run(serde_json::json!({}), "mungkin");
         assert_eq!(text_of(&r), "❌ Gunakan: `.autosticker on/off`");
         assert!(r.mutations().is_empty());
     }

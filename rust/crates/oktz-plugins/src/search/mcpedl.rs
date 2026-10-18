@@ -10,7 +10,7 @@
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::{error_template, js_truthy};
+use crate::common::{js_truthy};
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `mcpedl.js:50` — kartu pakai; contoh memakai command `mcpe`, bukan
@@ -154,11 +154,11 @@ pub fn mcpedl(ctx: Ctx) -> Reply {
         .http
         .call(
             &oktz_plugin_api::HttpCall::get(api_url(query, &ctx.config().api_keys.cuki))
-                .header("x-api-key", ctx.config().api_keys.cuki)
+                .header("x-api-key", &ctx.config().api_keys.cuki)
                 .header("user-agent", "Mozilla/5.0"),
         )
     else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
 
     // `if (!data?.status || !Array.isArray(data?.data?.results)) throw` (`:39`).
@@ -170,7 +170,7 @@ pub fn mcpedl(ctx: Ctx) -> Reply {
             .and_then(|d| d.get("results"))
             .is_some_and(Value::is_array);
     if !sah {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     }
     let data = &body["data"];
 
@@ -195,7 +195,6 @@ pub fn mcpedl(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -216,7 +215,7 @@ mod tests {
     impl HttpGet for Stub {
         fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
             self.seen.lock().unwrap().push(url.to_string());
-            Err(HttpError {
+            Err(oktz_plugin_api::HttpError {
                 message: "offline".into(),
             })
         }
@@ -340,9 +339,9 @@ mod tests {
     #[test]
     fn results_are_capped_at_ten_and_keep_the_rating_line() {
         let semua: Vec<Value> = (0..13)
-            .map(|i| json!({ "title": format!("Map {i}"), "link": format!("https://m/{i}") }))
+            .map(|i| serde_json::json!({ "title": format!("Map {i}"), "link": format!("https://m/{i}") }))
             .collect();
-        let data = json!({ "results": semua });
+        let data = serde_json::json!({ "results": semua });
         let items = take_items(&data);
         assert_eq!(items.len(), 10);
         let t = caption(&items, &data, "q");
@@ -355,7 +354,7 @@ mod tests {
     #[test]
     fn a_rating_of_zero_still_falls_back_to_the_dash() {
         // `item.rating || '-'` — `0` falsy di JS.
-        let data = json!({ "results": [ { "title": "M", "link": "l", "rating": 0 } ] });
+        let data = serde_json::json!({ "results": [ { "title": "M", "link": "l", "rating": 0 } ] });
         let items = take_items(&data);
         assert!(caption(&items, &data, "q").contains("⭐ Rating: -"), "0 falsy");
     }
@@ -364,7 +363,7 @@ mod tests {
     fn a_non_array_results_field_is_never_treated_as_a_hit() {
         // Handler menolak bentuk ini sebelum `take_items` dipanggil, karena di
         // JS `!Array.isArray(..)` melempar.
-        let data = json!({ "results": "bukan array" });
+        let data = serde_json::json!({ "results": "bukan array" });
         assert!(!data
             .get("results")
             .is_some_and(Value::is_array));
@@ -373,12 +372,12 @@ mod tests {
 
     #[test]
     fn missing_item_fields_print_undefined_like_a_template_literal() {
-        let data = json!({ "results": [ { "title": "Tanpa field" } ] });
+        let data = serde_json::json!({ "results": [ { "title": "Tanpa field" } ] });
         let items = take_items(&data);
         let t = caption(&items, &data, "q");
         assert!(t.ends_with("*1.* Tanpa field\n   ├ ⭐ Rating: -\n   ├ undefined"), "{t}");
         assert_eq!(interp(None), "undefined");
-        assert_eq!(interp(Some(&json!(null))), "null");
-        assert_eq!(interp(Some(&json!(12))), "12");
+        assert_eq!(interp(Some(&serde_json::json!(null))), "null");
+        assert_eq!(interp(Some(&serde_json::json!(12))), "12");
     }
 }

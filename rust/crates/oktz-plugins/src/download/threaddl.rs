@@ -344,7 +344,6 @@ mod tests {
     use oktz_plugin_api::HttpGet;
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug)]
@@ -381,7 +380,7 @@ mod tests {
             let text = self
                 .body
                 .clone()
-                .map_err(|()| HttpError { message: "offline".into() })?;
+                .map_err(|()| oktz_plugin_api::HttpError { message: "offline".into() })?;
             Ok(HttpResponse {
                 status: 200,
                 body: HttpBody::Bytes {
@@ -459,7 +458,7 @@ mod tests {
 
     #[test]
     fn a_link_without_the_word_threads_is_refused_without_any_request() {
-        let http = Stub::body(json!({ "success": true }));
+        let http = Stub::body(serde_json::json!({ "success": true }));
         for text in ["", "   ", "https://twitter.com/x/status/1"] {
             let r = run(http.clone(), text);
             assert_eq!(text_of(&r), BAD_LINK, "input {text:?}");
@@ -487,34 +486,34 @@ mod tests {
     #[test]
     fn clean_text_strips_carriage_returns_and_collapses_blank_runs() {
         assert_eq!(
-            clean_text(Some(&json!("halo\r\ndunia"))),
+            clean_text(Some(&serde_json::json!("halo\r\ndunia"))),
             "halo\ndunia",
             "\\r dihapus total"
         );
         assert_eq!(
-            clean_text(Some(&json!("a \t \nb"))),
+            clean_text(Some(&serde_json::json!("a \t \nb"))),
             "a\nb",
             "spasi dan tab tepat sebelum newline jadi satu newline"
         );
         assert_eq!(
-            clean_text(Some(&json!("a\n   b"))),
+            clean_text(Some(&serde_json::json!("a\n   b"))),
             "a\n   b",
             "spasi setelah newline tidak disentuh"
         );
         assert_eq!(
-            clean_text(Some(&json!("a\n\n\n\n\nb"))),
+            clean_text(Some(&serde_json::json!("a\n\n\n\n\nb"))),
             "a\n\nb",
             "tiga newline atau lebih jadi dua"
         );
-        assert_eq!(clean_text(Some(&json!("   \n  "))), "");
+        assert_eq!(clean_text(Some(&serde_json::json!("   \n  "))), "");
         assert_eq!(clean_text(Some(&Value::Null)), "");
         assert_eq!(clean_text(None), "");
-        assert_eq!(clean_text(Some(&json!("a &amp; b"))), "a & b");
+        assert_eq!(clean_text(Some(&serde_json::json!("a &amp; b"))), "a & b");
     }
 
     #[test]
     fn duplicate_and_url_less_items_are_dropped() {
-        let info = json!({
+        let info = serde_json::json!({
             "video": { "qualities": [
                 { "quality": "hd", "url": "https://cdn/v.mp4" },
                 { "quality": "sd", "url": "https://cdn/v.mp4" },
@@ -545,7 +544,7 @@ mod tests {
 
     #[test]
     fn video_comes_first_and_images_second() {
-        let info = json!({
+        let info = serde_json::json!({
             "images": { "urls": [{ "url": "https://cdn/a.jpg" }] },
             "video": { "qualities": [{ "url": "https://cdn/v.mp4" }] }
         });
@@ -565,20 +564,20 @@ mod tests {
 
     #[test]
     fn missing_containers_normalize_to_an_empty_list() {
-        assert!(normalize_result(&json!({})).is_empty());
+        assert!(normalize_result(&serde_json::json!({})).is_empty());
         assert!(normalize_result(&Value::Null).is_empty());
-        assert!(normalize_result(&json!({ "video": {}, "images": {} })).is_empty());
+        assert!(normalize_result(&serde_json::json!({ "video": {}, "images": {} })).is_empty());
     }
 
     #[test]
     fn the_caption_uses_the_js_fallback_chain() {
-        let info = json!({ "author": "zuck", "title": "Halo", "description": "Cadangan" });
+        let info = serde_json::json!({ "author": "zuck", "title": "Halo", "description": "Cadangan" });
         let text = caption(&info, 2);
         assert!(text.contains("👤 *Pembuat*: zuck"), "{text}");
         assert!(text.contains("📝 *Teks Postingan*: Halo"), "{text}");
         assert!(text.contains("📊 *Jumlah File Media*: 2 file"), "{text}");
 
-        let tanpa_judul = json!({ "author": "", "description": "  Hanya deskripsi  " });
+        let tanpa_judul = serde_json::json!({ "author": "", "description": "  Hanya deskripsi  " });
         let text = caption(&tanpa_judul, 0);
         assert!(text.contains("👤 *Pembuat*: Unknown"), "{text}");
         assert!(
@@ -586,13 +585,13 @@ mod tests {
             "{text}"
         );
 
-        let kosong = caption(&json!({}), 1);
+        let kosong = caption(&serde_json::json!({}), 1);
         assert!(kosong.contains("📝 *Teks Postingan*: Tidak ada deskripsi."), "{kosong}");
     }
 
     #[test]
     fn the_query_string_keeps_the_param_order_of_the_js() {
-        let http = Stub::body(json!({ "success": true, "data": { "images": { "urls": [] } } }));
+        let http = Stub::body(serde_json::json!({ "success": true, "data": { "images": { "urls": [] } } }));
         let _ = run(http.clone(), "https://www.threads.net/@zuck/post/1");
         assert_eq!(
             http.seen.lock().unwrap().clone(),
@@ -607,7 +606,7 @@ mod tests {
     #[test]
     fn a_single_photo_is_sent_as_an_image_with_the_caption() {
         let r = run(
-            Stub::body(json!({
+            Stub::body(serde_json::json!({
                 "success": true,
                 "data": { "author": "zuck", "images": { "urls": [{ "url": "https://cdn/a.jpg" }] } }
             })),
@@ -624,7 +623,7 @@ mod tests {
     #[test]
     fn a_single_video_degrades_to_the_caption_text() {
         let r = run(
-            Stub::body(json!({
+            Stub::body(serde_json::json!({
                 "success": true,
                 "data": { "video": { "qualities": [{ "url": "https://cdn/v.mp4" }] } }
             })),
@@ -637,7 +636,7 @@ mod tests {
     #[test]
     fn several_media_send_only_the_caption_text() {
         let r = run(
-            Stub::body(json!({
+            Stub::body(serde_json::json!({
                 "success": true,
                 "data": { "images": { "urls": [
                     { "url": "https://cdn/a.jpg" },
@@ -654,14 +653,14 @@ mod tests {
     #[test]
     fn a_failed_response_reports_the_system_reason() {
         for (body, alasan) in [
-            (json!({ "success": false, "message": "Postingan privat" }), "Postingan privat"),
-            (json!({ "success": false, "error": "Dihapus" }), "Dihapus"),
-            (json!({ "success": false }), "Tidak diketahui"),
-            (json!({ "success": true, "data": {} }), "Tidak diketahui"),
-            (json!({ "success": "true", "data": { "images": { "urls": [{ "url": "u" }] } } }), "Tidak diketahui"),
+            (serde_json::json!({ "success": false, "message": "Postingan privat" }), "Postingan privat"),
+            (serde_json::json!({ "success": false, "error": "Dihapus" }), "Dihapus"),
+            (serde_json::json!({ "success": false }), "Tidak diketahui"),
+            (serde_json::json!({ "success": true, "data": {} }), "Tidak diketahui"),
+            (serde_json::json!({ "success": "true", "data": { "images": { "urls": [{ "url": "u" }] } } }), "Tidak diketahui"),
             // `res.data || {}` menerima string, lalu `data.success !== true`
             // dan `result.length === 0` menyalakan cabang gagal — bukan catch.
-            (json!("bukan objek"), "Tidak diketahui"),
+            (serde_json::json!("bukan objek"), "Tidak diketahui"),
         ] {
             let r = run(Stub::body(body.clone()), "https://www.threads.net/@zuck/post/1");
             assert_eq!(text_of(&r), failed(alasan), "body {body}");

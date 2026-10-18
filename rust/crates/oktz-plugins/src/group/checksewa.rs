@@ -12,7 +12,7 @@
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
 
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 /// Key global tempat `db.db.data.sewa` dipetakan.
 const SEWA_KEY: &str = "sewa";
@@ -34,7 +34,7 @@ fn init_if_missing(ctx: &Ctx) -> Option<Mutation> {
         .is_null()
         .then(|| Mutation::SetSetting {
             key: SEWA_KEY.to_string(),
-            value: json!({ "enabled": false, "groups": {} }),
+            value: serde_json::json!({ "enabled": false, "groups": {} }),
         })
 }
 
@@ -235,11 +235,11 @@ mod tests {
     }
 
     fn with_sewa(enabled: bool, groups: Value) -> Value {
-        json!({ "sewa": { "enabled": enabled, "groups": groups } })
+        serde_json::json!({ "sewa": { "enabled": enabled, "groups": groups } })
     }
 
     fn tenant(extra: Value) -> Value {
-        with_sewa(true, json!({ CHAT: extra }))
+        with_sewa(true, serde_json::json!({ CHAT: extra }))
     }
 
     #[test]
@@ -273,18 +273,18 @@ mod tests {
             text_of(&r),
             "ℹ️ Sistem sewa tidak aktif\n\nBot ini bisa digunakan di semua grup."
         );
-        assert_eq!(init_written(&r), Some(json!({ "enabled": false, "groups": {} })));
+        assert_eq!(init_written(&r), Some(serde_json::json!({ "enabled": false, "groups": {} })));
     }
 
     #[test]
     fn an_existing_table_is_never_rewritten() {
-        let r = run(CHAT, with_sewa(false, json!({})));
+        let r = run(CHAT, with_sewa(false, serde_json::json!({})));
         assert!(init_written(&r).is_none(), "tabel sudah ada -> jangan tulis ulang");
     }
 
     #[test]
     fn an_unknown_group_is_told_it_is_not_registered() {
-        let r = run(CHAT, with_sewa(true, json!({ "other@g.us": {} })));
+        let r = run(CHAT, with_sewa(true, serde_json::json!({ "other@g.us": {} })));
         assert_eq!(
             text_of(&r),
             "❌ Grup ini tidak terdaftar dalam sistem sewa\n\nHubungi owner bot untuk info sewa."
@@ -295,7 +295,7 @@ mod tests {
     fn a_lifetime_tenant_reacts_with_the_infinity_sign() {
         let r = run(
             CHAT,
-            tenant(json!({ "name": "Grupku", "isLifetime": true, "addedAt": 1_700_000_000_000i64 })),
+            tenant(serde_json::json!({ "name": "Grupku", "isLifetime": true, "addedAt": 1_700_000_000_000i64 })),
         );
         let t = text_of(&r);
         assert!(t.starts_with("♾️ *STATUS SEWA*"), "{t}");
@@ -311,13 +311,13 @@ mod tests {
 
     #[test]
     fn a_missing_added_at_falls_back_to_a_dash() {
-        let r = run(CHAT, tenant(json!({ "isLifetime": true })));
+        let r = run(CHAT, tenant(serde_json::json!({ "isLifetime": true })));
         assert!(text_of(&r).contains("Terdaftar sejak: *-*"), "{}", text_of(&r));
     }
 
     #[test]
     fn an_expired_tenant_gets_the_expired_card() {
-        let r = run(CHAT, tenant(json!({ "expiredAt": 1_700_000_000_000i64 })));
+        let r = run(CHAT, tenant(serde_json::json!({ "expiredAt": 1_700_000_000_000i64 })));
         let t = text_of(&r);
         assert!(t.starts_with("❌ *SEWA EXPIRED*"), "{t}");
         assert!(t.contains("Berakhir: *15 November 2023 05:13*"), "{t}");
@@ -343,7 +343,7 @@ mod tests {
     fn a_tenant_without_expiry_never_reaches_a_reply() {
         // JS: `fromTimestamp(undefined)` melempar RangeError sebelum balasan
         // mana pun terkirim.
-        let r = run(CHAT, tenant(json!({ "name": "Grupku" })));
+        let r = run(CHAT, tenant(serde_json::json!({ "name": "Grupku" })));
         assert!(r.is_none(), "tidak ada teks yang boleh dikirim");
         assert!(r.text_body().is_none());
     }
@@ -351,7 +351,7 @@ mod tests {
     #[test]
     fn a_tenant_inside_three_days_gets_the_amber_reaction_and_the_warning() {
         let soon = crate::common::now_ms() + 2 * 86_400_000i64;
-        let r = run(CHAT, tenant(json!({ "expiredAt": soon })));
+        let r = run(CHAT, tenant(serde_json::json!({ "expiredAt": soon })));
         let t = text_of(&r);
         assert!(t.starts_with("⏱️ *STATUS SEWA*"), "{t}");
         assert!(t.contains("Sisa waktu: *2 hari*"), "{t}");
@@ -368,7 +368,7 @@ mod tests {
     #[test]
     fn a_tenant_far_from_expiring_uses_the_clock_reaction() {
         let far = crate::common::now_ms() + 400 * 86_400_000i64;
-        let r = run(CHAT, tenant(json!({ "expiredAt": far })));
+        let r = run(CHAT, tenant(serde_json::json!({ "expiredAt": far })));
         let t = text_of(&r);
         assert!(t.contains("Sisa waktu: *400 hari*"), "{t}");
         assert!(!t.contains("Sewa hampir habis"), "{t}");
@@ -380,7 +380,7 @@ mod tests {
 
     #[test]
     fn the_group_name_falls_back_to_the_chat_number() {
-        let r = run(CHAT, tenant(json!({ "expiredAt": 1i64 })));
+        let r = run(CHAT, tenant(serde_json::json!({ "expiredAt": 1i64 })));
         assert!(text_of(&r).contains("Grup: *120363*"), "{}", text_of(&r));
     }
 }

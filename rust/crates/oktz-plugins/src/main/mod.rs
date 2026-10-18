@@ -4,3 +4,5 @@ pub mod gacha;
 pub mod owner;
 pub mod rules;
 pub mod tqto;
+
+// Ditambahkan scripts/pasang-modul.mjs.

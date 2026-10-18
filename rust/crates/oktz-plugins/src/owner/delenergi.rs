@@ -1,7 +1,6 @@
 //! `plugins/owner/delenergi.js` — kurangi energi user.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::json;
 
 use crate::common::{jid_number, parse_int};
 
@@ -140,7 +139,7 @@ pub fn delenergi(ctx: Ctx) -> Reply {
     .with_reaction("✅")
     .with_mutation(Mutation::SetUser {
         jid: target,
-        data: json!({ "energi": new_energi }),
+        data: serde_json::json!({ "energi": new_energi }),
     })
 }
 
@@ -209,7 +208,7 @@ mod tests {
     #[test]
     fn no_amount_shows_help_and_writes_nothing() {
         for text in ["", "@628999", "abc"] {
-            let r = run(text, json!({}), Some(OTHER));
+            let r = run(text, serde_json::json!({}), Some(OTHER));
             assert!(text_of(&r).starts_with("⚡ *ᴅᴇʟ ᴇɴᴇʀɢɪ*"), "input {text:?}");
             assert!(r.mutations().is_empty(), "input {text:?}");
         }
@@ -217,7 +216,7 @@ mod tests {
 
     #[test]
     fn a_bare_amount_subtracts_from_the_sender() {
-        let r = run("50", json!({ "energi": 200 }), None);
+        let r = run("50", serde_json::json!({ "energi": 200 }), None);
         assert_eq!(written(&r), (SENDER.to_string(), 150));
         let t = text_of(&r);
         assert!(t.contains("┃ 👤 ᴜsᴇʀ: @628111"), "{t}");
@@ -227,7 +226,7 @@ mod tests {
 
     #[test]
     fn subtracting_beyond_zero_clamps_at_zero() {
-        let r = run("500", json!({ "energi": 10 }), None);
+        let r = run("500", serde_json::json!({ "energi": 10 }), None);
         assert_eq!(written(&r).1, 0);
         assert!(text_of(&r).contains("┃ ⚡ sɪsᴀ: *0*"), "{}", text_of(&r));
     }
@@ -235,7 +234,7 @@ mod tests {
     #[test]
     fn an_unlimited_user_first_drops_to_twenty_five() {
         // JS: `energi === -1` → `setUser(..., {energi: 25})` sebelum pengurangan.
-        let r = run("50", json!({ "energi": -1 }), None);
+        let r = run("50", serde_json::json!({ "energi": -1 }), None);
         assert_eq!(written(&r).1, 0, "25 - 50 dijepit ke 0");
     }
 
@@ -243,14 +242,14 @@ mod tests {
     fn a_user_absent_from_the_store_is_refused_and_writes_nothing() {
         // `db.getUser(targetJid)` null → guard "tidak ditemukan". Baris `{}`
         // ADA di store (object JS truthy), jadi bukan kasus ini.
-        let r = run("50", json!(null), None);
+        let r = run("50", serde_json::json!(null), None);
         assert!(text_of(&r).contains("User tidak ditemukan di database"), "{}", text_of(&r));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn a_stored_row_without_the_field_counts_as_zero() {
-        let r = run("50", json!({}), None);
+        let r = run("50", serde_json::json!({}), None);
         assert_eq!(written(&r), (SENDER.to_string(), 0));
     }
 
@@ -260,7 +259,7 @@ mod tests {
         // jadi guard "user tidak ditemukan" dulu yang kena — sama seperti
         // `db.getUser(targetJid)` yang `null` untuk user yang tak pernah
         // terdaftar. Barisnya ditulis ke JID target, bukan ke sender.
-        let r = run("50", json!({ "energi": 200 }), Some(OTHER));
+        let r = run("50", serde_json::json!({ "energi": 200 }), Some(OTHER));
         assert!(text_of(&r).contains("User tidak ditemukan di database"), "{}", text_of(&r));
         assert!(r.mutations().is_empty(), "tidak boleh menulis");
     }
@@ -274,7 +273,7 @@ mod tests {
             chat: SENDER.into(),
             text: "50".into(),
             args: vec!["50".into()],
-            user_data: json!({ "energi": 200 }),
+            user_data: serde_json::json!({ "energi": 200 }),
             quoted: Some(oktz_plugin_api::QuotedMessage {
                 id: "q".into(),
                 sender: OTHER.into(),
@@ -293,7 +292,7 @@ mod tests {
 
     #[test]
     fn the_applied_reply_reacts_and_is_paired_with_the_write() {
-        let r = run("50", json!({ "energi": 100 }), None);
+        let r = run("50", serde_json::json!({ "energi": 100 }), None);
         match r.without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅"),
             other => panic!("harus Reaction, dapat {other:?}"),

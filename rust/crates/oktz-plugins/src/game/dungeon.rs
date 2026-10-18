@@ -8,7 +8,7 @@
 //! dan harus dipasang router sebelum alur ini bisa dilanjutkan.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 /// `SESSION_TIMEOUT` (`dungeon.js:147`) — 5 menit.
 pub(crate) const SESSION_TIMEOUT_MS: i64 = 5 * 60 * 1000;
@@ -130,11 +130,11 @@ pub fn dungeon(ctx: Ctx) -> Reply {
         ("stamina", 100),
         ("maxStamina", 100),
     ] {
-        block.insert(key.into(), json!(default_field(rpg, key, default)));
+        block.insert(key.into(), serde_json::json!(default_field(rpg, key, default)));
     }
     block.insert(
         "dungeon_session".into(),
-        json!({ "stage": "lobi", "time": crate::common::now_ms() }),
+        serde_json::json!({ "stage": "lobi", "time": crate::common::now_ms() }),
     );
 
     let mut data = serde_json::Map::new();
@@ -152,7 +152,6 @@ pub fn dungeon(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     const SENDER: &str = "628111@s.whatsapp.net";
 
@@ -214,7 +213,7 @@ mod tests {
 
     #[test]
     fn a_fresh_user_gets_the_lobby_and_a_lobi_session() {
-        let r = run(json!({}));
+        let r = run(serde_json::json!({}));
         let t = text_of(&r);
         assert!(t.starts_with("🏰 *LOBI DUNGEON*"), "{t}");
         assert!(t.contains("> Level: *1*"), "{t}");
@@ -223,25 +222,25 @@ mod tests {
         assert!(t.contains("🔒 *3.* 🏰 Kastil Tua (Butuh Lv 10)"), "{t}");
 
         let data = written(&r);
-        assert_eq!(data["rpg"]["dungeon_session"]["stage"], json!("lobi"));
+        assert_eq!(data["rpg"]["dungeon_session"]["stage"], serde_json::json!("lobi"));
         assert!(data["rpg"]["dungeon_session"]["time"].as_i64().unwrap() > 0);
-        assert_eq!(data["rpg"]["attack"], json!(10));
-        assert_eq!(data["rpg"]["maxStamina"], json!(100));
-        assert_eq!(data["inventory"], json!({}), "`if (!user.inventory)`");
+        assert_eq!(data["rpg"]["attack"], serde_json::json!(10));
+        assert_eq!(data["rpg"]["maxStamina"], serde_json::json!(100));
+        assert_eq!(data["inventory"], serde_json::json!({}), "`if (!user.inventory)`");
     }
 
     #[test]
     fn existing_rpg_values_are_preserved_and_zero_falls_back_to_the_default() {
-        let r = run(json!({"rpg": {"attack": 55, "stamina": 0, "health": 30}}));
+        let r = run(serde_json::json!({"rpg": {"attack": 55, "stamina": 0, "health": 30}}));
         let data = written(&r);
-        assert_eq!(data["rpg"]["attack"], json!(55), "nilai ada tidak ditimpa");
-        assert_eq!(data["rpg"]["health"], json!(30));
-        assert_eq!(data["rpg"]["stamina"], json!(100), "`!0` → default");
+        assert_eq!(data["rpg"]["attack"], serde_json::json!(55), "nilai ada tidak ditimpa");
+        assert_eq!(data["rpg"]["health"], serde_json::json!(30));
+        assert_eq!(data["rpg"]["stamina"], serde_json::json!(100), "`!0` → default");
     }
 
     #[test]
     fn an_existing_inventory_is_not_reset() {
-        let r = run(json!({"inventory": {"iron": 3}}));
+        let r = run(serde_json::json!({"inventory": {"iron": 3}}));
         let data = written(&r);
         assert!(
             data.get("inventory").is_none(),
@@ -252,7 +251,7 @@ mod tests {
     #[test]
     fn a_live_session_blocks_a_second_run_and_writes_nothing() {
         let now = crate::common::now_ms();
-        let r = run(json!({"rpg": {"dungeon_session": {"stage": "lobi", "time": now}}}));
+        let r = run(serde_json::json!({"rpg": {"dungeon_session": {"stage": "lobi", "time": now}}}));
         assert_eq!(text_of(&r), ACTIVE);
         assert!(r.mutations().is_empty());
     }
@@ -260,10 +259,10 @@ mod tests {
     #[test]
     fn an_expired_session_is_replaced_by_a_new_one() {
         let stale = crate::common::now_ms() - SESSION_TIMEOUT_MS - 1;
-        let r = run(json!({"rpg": {"dungeon_session": {"stage": "encounter", "time": stale}}}));
+        let r = run(serde_json::json!({"rpg": {"dungeon_session": {"stage": "encounter", "time": stale}}}));
         assert!(text_of(&r).starts_with("🏰 *LOBI DUNGEON*"), "{}", text_of(&r));
         let data = written(&r);
-        assert_eq!(data["rpg"]["dungeon_session"]["stage"], json!("lobi"));
+        assert_eq!(data["rpg"]["dungeon_session"]["stage"], serde_json::json!("lobi"));
     }
 
     #[test]
@@ -286,25 +285,25 @@ mod tests {
         // membuktikan cabang "masih hidup" yang dipilih, dengan margin 1 menit
         // supaya pencatatan jam di test tidak ikut menentukan hasilnya.
         let fresh = crate::common::now_ms() - SESSION_TIMEOUT_MS + 60_000;
-        let r = run(json!({"rpg": {"dungeon_session": {"stage": "lobi", "time": fresh}}}));
+        let r = run(serde_json::json!({"rpg": {"dungeon_session": {"stage": "lobi", "time": fresh}}}));
         assert_eq!(text_of(&r), ACTIVE);
     }
 
     #[test]
     fn a_session_without_a_timestamp_is_treated_as_expired() {
-        let r = run(json!({"rpg": {"dungeon_session": {"stage": "lobi"}}}));
+        let r = run(serde_json::json!({"rpg": {"dungeon_session": {"stage": "lobi"}}}));
         assert!(text_of(&r).starts_with("🏰 *LOBI DUNGEON*"), "{}", text_of(&r));
     }
 
     #[test]
     fn the_unlock_line_follows_the_level_threshold_per_dungeon() {
-        let t = owned(run(json!({"level": 5})));
+        let t = owned(run(serde_json::json!({"level": 5})));
         assert!(t.contains("🔓 *1.* 🌲 Hutan Gelap"), "{t}");
         assert!(t.contains("🔓 *2.* 🍄 Rawa Beracun (Lv 5+)"), "{t}");
         assert!(t.contains("🔒 *3.* 🏰 Kastil Tua"), "{t}");
         assert!(t.contains("> Level: *5*"), "{t}");
 
-        let t = owned(run(json!({"level": 50})));
+        let t = owned(run(serde_json::json!({"level": 50})));
         for (id, _, _) in DUNGEONS {
             assert!(t.contains(&format!("🔓 *{id}.*")), "dungeon {id} belum terbuka: {t}");
         }
@@ -312,7 +311,7 @@ mod tests {
 
     #[test]
     fn level_zero_is_read_as_one_because_of_the_js_or_fallback() {
-        let t = owned(run(json!({"level": 0})));
+        let t = owned(run(serde_json::json!({"level": 0})));
         assert!(t.contains("> Level: *1*"), "{t}");
         assert!(t.contains("🔓 *1.*"), "{t}");
     }
@@ -321,7 +320,7 @@ mod tests {
     fn a_negative_level_falls_through_to_the_level_guard() {
         // `-5 || 1` = -5 di JS, jadi level negatif bukan 1 dan guard level
         // yang menangkapnya.
-        let r = run(json!({"level": -5}));
+        let r = run(serde_json::json!({"level": -5}));
         assert_eq!(text_of(&r), too_low(-5));
         assert!(r.mutations().is_empty());
     }
@@ -336,10 +335,10 @@ mod tests {
 
     #[test]
     fn a_null_rpg_object_is_handled_without_panicking() {
-        for user in [json!(null), json!({}), json!({"rpg": null}), json!({"rpg": "bukan object"})] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"rpg": null}), serde_json::json!({"rpg": "bukan object"})] {
             let r = run(user.clone());
             assert!(text_of(&r).starts_with("🏰 *LOBI DUNGEON*"), "input {user}");
-            assert_eq!(written(&r)["rpg"]["stamina"], json!(100), "input {user}");
+            assert_eq!(written(&r)["rpg"]["stamina"], serde_json::json!(100), "input {user}");
         }
     }
 }

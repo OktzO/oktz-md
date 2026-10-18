@@ -49,7 +49,6 @@ pub fn resetintro(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use serde_json::Value;
-    use serde_json::json;
 
     fn run(group: Value) -> Reply {
         let ctx = Ctx {
@@ -107,12 +106,12 @@ mod tests {
     #[test]
     fn an_absent_or_falsy_intro_is_already_at_the_default() {
         for g in [
-            json!(null),
-            json!({}),
-            json!({"intro": null}),
-            json!({"intro": ""}),
-            json!({"intro": 0}),
-            json!({"intro": false}),
+            serde_json::json!(null),
+            serde_json::json!({}),
+            serde_json::json!({"intro": null}),
+            serde_json::json!({"intro": ""}),
+            serde_json::json!({"intro": 0}),
+            serde_json::json!({"intro": false}),
         ] {
             let r = run(g.clone());
             assert_eq!(text_of(&r), already_default(), "input {g}");
@@ -122,7 +121,7 @@ mod tests {
 
     #[test]
     fn a_stored_intro_is_cleared() {
-        let r = run(json!({"intro": "halo @user", "game": false}));
+        let r = run(serde_json::json!({"intro": "halo @user", "game": false}));
         let data = group_write(&r);
         assert_eq!(data["intro"], Value::Null);
         assert_eq!(
@@ -144,7 +143,7 @@ mod tests {
 
     #[test]
     fn the_reset_reply_is_paired_with_the_write() {
-        let r = run(json!({"intro": "x"}));
+        let r = run(serde_json::json!({"intro": "x"}));
         assert!(text_of(&r).contains("dikembalikan ke default"));
         assert_eq!(r.mutations().len(), 1);
     }
@@ -153,9 +152,9 @@ mod tests {
     fn resetting_twice_is_a_no_op_the_second_time() {
         // Setelah `null`, cabang "sudah default" yang diambil — jadi reset
         // kedua tidak menulis apa pun.
-        let first = run(json!({"intro": "x"}));
+        let first = run(serde_json::json!({"intro": "x"}));
         assert_eq!(first.mutations().len(), 1);
-        let second = run(json!({"intro": null}));
+        let second = run(serde_json::json!({"intro": null}));
         assert_eq!(text_of(&second), already_default());
         assert!(second.mutations().is_empty());
     }

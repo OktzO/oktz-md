@@ -9,7 +9,6 @@
 //! `thousands_id` memformat digit apa adanya.
 
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
-use crate::fun::tod::error_template;
 use crate::tools::kalkulatormbg::thousands_id;
 use crate::tools::phisingataubukan::encode_uri_component;
 
@@ -85,7 +84,7 @@ pub fn fakebankjago(ctx: Ctx) -> Reply {
         encode_uri_component(&clean)
     );
     let Ok(res) = ctx.http.get(&url) else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
 
     let caption = format!(
@@ -123,7 +122,7 @@ mod tests {
         }
         fn respond(&self) -> Result<HttpResponse, HttpError> {
             let Some(bytes) = &self.resp else {
-                return Err(HttpError {
+                return Err(oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 });
             };
@@ -294,7 +293,7 @@ mod tests {
     #[test]
     fn a_failed_request_reports_the_error_template() {
         let r = run(Stub::offline(), "Furina|10");
-        assert_eq!(body(&r), error_template(".", "fakebankjago"));
+        assert_eq!(body(&r), crate::common::error_template(".", "fakebankjago"));
         assert_eq!(emoji(&r), "☢");
     }
 

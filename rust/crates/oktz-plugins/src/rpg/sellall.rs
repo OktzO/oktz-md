@@ -113,7 +113,7 @@ pub fn sellall(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(user: Value) -> Reply {
         let ctx = Ctx {
@@ -167,10 +167,10 @@ mod tests {
     #[test]
     fn an_empty_bag_is_reported_and_nothing_is_written() {
         for user in [
-            json!(null),
-            json!({}),
-            json!({"inventory": {}}),
-            json!({"inventory": null}),
+            serde_json::json!(null),
+            serde_json::json!({}),
+            serde_json::json!({"inventory": {}}),
+            serde_json::json!({"inventory": null}),
         ] {
             let r = run(user.clone());
             assert!(
@@ -184,50 +184,50 @@ mod tests {
     #[test]
     fn a_bag_holding_only_unsellable_items_is_reported_as_empty() {
         // Potion ada di inventory tapi TIDAK ada di SELL_PRICES.
-        let r = run(json!({"inventory": {"potion": 5, "kunai": 3}}));
+        let r = run(serde_json::json!({"inventory": {"potion": 5, "kunai": 3}}));
         assert!(text_of(&r).starts_with("❌ *ᴛɪᴅᴀᴋ ᴀᴅᴀ ɪᴛᴇᴍ*"));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn every_sellable_item_is_priced_and_zeroed() {
-        let r = run(json!({
+        let r = run(serde_json::json!({
             "inventory": {"rock": 2, "fish": 3, "dragon": 1},
             "koin": 100,
         }));
         let data = write_of(&r);
         // 2*20 + 3*100 + 1*10000 = 10340
-        assert_eq!(data["koin"], json!(100 + 10340));
+        assert_eq!(data["koin"], serde_json::json!(100 + 10340));
         let inv = data["inventory"].as_object().unwrap();
         for item in ["rock", "fish", "dragon"] {
-            assert_eq!(inv[item], json!(0), "{item} harus terjual");
+            assert_eq!(inv[item], serde_json::json!(0), "{item} harus terjual");
         }
     }
 
     #[test]
     fn unsellable_items_are_untouched_in_the_written_inventory() {
-        let r = run(json!({"inventory": {"rock": 1, "potion": 9}}));
+        let r = run(serde_json::json!({"inventory": {"rock": 1, "potion": 9}}));
         let inv = write_of(&r)["inventory"].as_object().unwrap().clone();
-        assert_eq!(inv["rock"], json!(0));
-        assert_eq!(inv["potion"], json!(9), "tidak punya harga jual, tetap");
+        assert_eq!(inv["rock"], serde_json::json!(0));
+        assert_eq!(inv["potion"], serde_json::json!(9), "tidak punya harga jual, tetap");
     }
 
     #[test]
     fn the_reply_lists_items_and_the_total_matches_the_write() {
-        let r = run(json!({"inventory": {"rock": 2, "gold": 1}}));
+        let r = run(serde_json::json!({"inventory": {"rock": 2, "gold": 1}}));
         let t = text_of(&r);
         assert!(t.starts_with("💰 *sᴇʟʟ ᴀʟʟ sᴜᴋsᴇs*"), "{t}");
         assert!(t.contains("> rock: 2x = Rp 40"), "{t}");
         assert!(t.contains("> gold: 1x = Rp 1.000"), "{t}");
         assert!(t.contains("> 💵 Total: *Rp 1.040*"), "{t}");
-        assert_eq!(write_of(&r)["koin"], json!(1040));
+        assert_eq!(write_of(&r)["koin"], serde_json::json!(1040));
     }
 
     #[test]
     fn items_are_rendered_in_the_js_table_order_not_alphabetical() {
         // Dragon (index terakhir) harus tampil sebelum rock (index pertama)
         // kalau urutannya benar-benar mengikuti object literal.
-        let r = run(json!({"inventory": {"rock": 1, "trash": 1, "dragon": 1}}));
+        let r = run(serde_json::json!({"inventory": {"rock": 1, "trash": 1, "dragon": 1}}));
         let t = text_of(&r);
         let pos = |n: &str| t.find(n).expect("item hilang");
         assert!(pos("rock") < pos("trash"), "{t}");
@@ -239,9 +239,9 @@ mod tests {
         // 12 item berbeda -> 10 baris + ringkasan.
         let mut inv = serde_json::Map::new();
         for (item, _) in SELL_PRICES.iter().take(12) {
-            inv.insert((*item).to_string(), json!(1));
+            inv.insert((*item).to_string(), serde_json::json!(1));
         }
-        let r = run(json!({ "inventory": inv }));
+        let r = run(serde_json::json!({ "inventory": inv }));
         let t = text_of(&r);
         assert!(t.contains("> ... dan 2 item lainnya"), "{t}");
         assert!(!t.contains("> bear:"), "item ke-11/12 tidak dirender");
@@ -251,31 +251,31 @@ mod tests {
     fn exactly_ten_item_lines_get_no_summary() {
         let mut inv = serde_json::Map::new();
         for (item, _) in SELL_PRICES.iter().take(10) {
-            inv.insert((*item).to_string(), json!(1));
+            inv.insert((*item).to_string(), serde_json::json!(1));
         }
-        let r = run(json!({ "inventory": inv }));
+        let r = run(serde_json::json!({ "inventory": inv }));
         let t = text_of(&r);
         assert!(!t.contains("item lainnya"), "tepat 10 tidak perlu ringkasan");
     }
 
     #[test]
     fn a_zero_quantity_item_is_not_sold_and_stays_zero() {
-        let r = run(json!({"inventory": {"rock": 0, "fish": 1}}));
+        let r = run(serde_json::json!({"inventory": {"rock": 0, "fish": 1}}));
         let inv = write_of(&r)["inventory"].as_object().unwrap().clone();
-        assert_eq!(inv["rock"], json!(0));
+        assert_eq!(inv["rock"], serde_json::json!(0));
         assert!(text_of(&r).contains("> fish: 1x = Rp 100"));
         assert!(!text_of(&r).contains("rock"), "qty 0 tidak masuk daftar");
     }
 
     #[test]
     fn a_missing_koin_reads_as_zero_and_still_gains_the_sale() {
-        let r = run(json!({"inventory": {"rock": 1}}));
-        assert_eq!(write_of(&r)["koin"], json!(20), "`user.koin || 0`");
+        let r = run(serde_json::json!({"inventory": {"rock": 1}}));
+        assert_eq!(write_of(&r)["koin"], serde_json::json!(20), "`user.koin || 0`");
     }
 
     #[test]
     fn the_sale_reply_is_paired_with_the_write() {
-        let r = run(json!({"inventory": {"rock": 1}}));
+        let r = run(serde_json::json!({"inventory": {"rock": 1}}));
         assert!(text_of(&r).contains("sᴇʟʟ ᴀʟʟ sᴜᴋsᴇs"));
         assert_eq!(r.mutations().len(), 1);
     }

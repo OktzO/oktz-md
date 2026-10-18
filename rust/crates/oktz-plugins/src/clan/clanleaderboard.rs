@@ -135,7 +135,6 @@ pub fn clanleaderboard(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(clans: Value) -> Reply {
         let ctx = Ctx {
@@ -145,14 +144,14 @@ mod tests {
             chat: "628111@s.whatsapp.net".into(),
             text: String::new(),
             args: Vec::new(),
-            settings: json!({ crate::clan::clancreate::CLANS_KEY: clans }),
+            settings: serde_json::json!({ crate::clan::clancreate::CLANS_KEY: clans }),
             ..Default::default()
         };
         (oktz_plugin_api::find("clanleaderboard").unwrap().handler)(ctx)
     }
 
     fn clan(name: &str, wins: i64, losses: i64, exp: i64, level: i64, count: usize) -> Value {
-        json!({
+        serde_json::json!({
             "id": name,
             "name": name,
             "emblem": "🐺",
@@ -191,7 +190,7 @@ mod tests {
 
     #[test]
     fn an_empty_registry_shows_the_creation_hint_and_writes_nothing() {
-        let r = run(json!({}));
+        let r = run(serde_json::json!({}));
         assert_eq!(text_of(&r), empty());
         assert!(r.mutations().is_empty());
     }
@@ -210,7 +209,7 @@ mod tests {
 
     #[test]
     fn a_missing_level_counts_as_one() {
-        let c = json!({});
+        let c = serde_json::json!({});
         assert_eq!(score(&c), 500.0);
         assert_eq!(level_of(&c), 1);
     }

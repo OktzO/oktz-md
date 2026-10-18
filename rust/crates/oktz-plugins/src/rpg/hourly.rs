@@ -6,7 +6,7 @@
 //! user tidak terdeteksi di sini.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::rpg::heal::{apply_exp, or_default, rpg_map};
 use crate::tools::kalkulatormbg::thousands_id;
@@ -59,7 +59,7 @@ pub fn hourly(ctx: Ctx) -> Reply {
     let exp_reward = if premium { PREMIUM_EXP } else { NORMAL_EXP };
     let money_reward = if premium { PREMIUM_MONEY } else { NORMAL_MONEY };
 
-    rpg.insert("lastHourly".into(), json!(now));
+    rpg.insert("lastHourly".into(), serde_json::json!(now));
     let old_exp = or_default(ctx.user_field("exp").and_then(Value::as_i64), 0);
     let new_exp = apply_exp(&mut rpg, old_exp, exp_reward);
 
@@ -75,7 +75,7 @@ pub fn hourly(ctx: Ctx) -> Reply {
     .with_reaction("⏰")
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": crate::common::int_field(&ctx, "koin") + money_reward,
+        data: serde_json::json!({ "koin": crate::common::int_field(&ctx, "koin") + money_reward,
                       "exp": new_exp,
                       "rpg": rpg }),
     })
@@ -84,7 +84,6 @@ pub fn hourly(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: Value) -> Reply {
         let ctx = Ctx {
@@ -146,33 +145,33 @@ mod tests {
 
     #[test]
     fn a_first_claim_pays_the_free_tier_and_stamps_the_moment() {
-        let r = run(json!({ "koin": 500, "exp": 0 }));
+        let r = run(serde_json::json!({ "koin": 500, "exp": 0 }));
         let t = text_of(&r);
         assert!(t.starts_with("WAKTUNYA GAJIAN JAM-JAMAN!"), "{t}");
         assert!(t.contains("💸 Koin: *+Rp 1.000*"), "{t}");
         assert!(t.contains("📈 EXP: *+200*"), "{t}");
         let data = write_of(&r);
-        assert_eq!(data["koin"], json!(1_500));
-        assert_eq!(data["exp"], json!(200));
+        assert_eq!(data["koin"], serde_json::json!(1_500));
+        assert_eq!(data["exp"], serde_json::json!(200));
         assert!(data["rpg"]["lastHourly"].as_i64().unwrap() > 0);
     }
 
     #[test]
     fn a_premium_member_gets_five_times_the_payout() {
-        let r = run(json!({ "isPremium": true, "koin": 0, "exp": 0 }));
+        let r = run(serde_json::json!({ "isPremium": true, "koin": 0, "exp": 0 }));
         let t = text_of(&r);
         assert!(t.contains("💸 Koin: *+Rp 5.000*"), "{t}");
         assert!(t.contains("📈 EXP: *+1.000*"), "{t}");
         let data = write_of(&r);
-        assert_eq!(data["koin"], json!(5_000));
-        assert_eq!(data["exp"], json!(1_000));
+        assert_eq!(data["koin"], serde_json::json!(5_000));
+        assert_eq!(data["exp"], serde_json::json!(1_000));
     }
 
     #[test]
     fn an_owner_counts_as_premium_even_without_the_flag() {
         let ctx = Ctx {
             is_owner: true,
-            user_data: json!({ "isPremium": false, "koin": 0, "exp": 0 }),
+            user_data: serde_json::json!({ "isPremium": false, "koin": 0, "exp": 0 }),
             ..Default::default()
         };
         let r = (oktz_plugin_api::find("hourly").unwrap().handler)(ctx);
@@ -183,7 +182,7 @@ mod tests {
     fn a_claim_made_within_the_hour_is_refused_and_writes_nothing() {
         let now = crate::common::now_ms();
         for ago in [0, 1_000, 3_599_000] {
-            let r = run(json!({ "rpg": { "lastHourly": now - ago }, "koin": 500 }));
+            let r = run(serde_json::json!({ "rpg": { "lastHourly": now - ago }, "koin": 500 }));
             let t = text_of(&r);
             assert!(t.starts_with("Eits, buru-buru amat kak!"), "yang lalu {ago} ms: {t}");
             assert!(r.mutations().is_empty(), "yang lalu {ago} ms");
@@ -194,7 +193,7 @@ mod tests {
     /// jadi `now - 0` jauh lebih besar dari cooldown dan klaim langsung boleh.
     #[test]
     fn a_missing_stamp_counts_as_never_claimed() {
-        for user in [json!(null), json!({}), json!({ "rpg": {} })] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({ "rpg": {} })] {
             let r = run(user.clone());
             assert!(text_of(&r).starts_with("WAKTUNYA GAJIAN"), "input {user}");
             assert_eq!(r.mutations().len(), 1, "input {user}");
@@ -204,7 +203,7 @@ mod tests {
     #[test]
     fn a_claim_older_than_an_hour_is_allowed_again() {
         let now = crate::common::now_ms();
-        let r = run(json!({ "rpg": { "lastHourly": now - COOLDOWN_MS - 1 } }));
+        let r = run(serde_json::json!({ "rpg": { "lastHourly": now - COOLDOWN_MS - 1 } }));
         assert!(text_of(&r).starts_with("WAKTUNYA GAJIAN"));
     }
 }

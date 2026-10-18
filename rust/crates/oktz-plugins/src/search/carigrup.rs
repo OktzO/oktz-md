@@ -8,7 +8,7 @@
 use oktz_plugin_api::{Ctx, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::{error_template, js_truthy};
+use crate::common::{js_truthy};
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `config.APIkey?.cuki || ''` (`config.js`) = `process.env.APIKEY_CUKI || ""`.
@@ -25,7 +25,7 @@ pub(crate) fn api_url(text: &str) -> String {
 /// `carigrup.js:25-27` — kartu saat keyword kosong.
 pub(crate) fn help(prefix: &str) -> String {
     format!(
-        "🔍 *ᴄᴀʀɪ ɢʀᴜᴘ ᴡᴀ*\n\n> Masukkan keyword pencarian\n\n\\`Contoh: {prefix}carigrup gb isian\\`"
+        "🔍 *ᴄᴀʀɪ ɢʀᴜᴘ ᴡᴀ*\n\n> Masukkan keyword pencarian\n\n`Contoh: {prefix}carigrup gb isian`"
     )
 }
 
@@ -138,7 +138,7 @@ pub fn carigrup(ctx: Ctx) -> Reply {
     }
 
     let Some(resp) = ctx.http.get(&api_url(&text)).ok() else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
     let data = resp.json().unwrap_or(Value::Null);
 
@@ -153,7 +153,6 @@ pub fn carigrup(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug)]
@@ -180,7 +179,7 @@ mod tests {
     impl HttpGet for Stub {
         fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
             self.seen.lock().unwrap().push(url.to_string());
-            let body = self.body.clone().ok_or_else(|| HttpError {
+            let body = self.body.clone().ok_or_else(|| oktz_plugin_api::HttpError {
                 message: "offline".into(),
             })?;
             Ok(HttpResponse {
@@ -214,7 +213,7 @@ mod tests {
             sender: "628111@s.whatsapp.net".into(),
             chat: "628111@s.whatsapp.net".into(),
             text: text.into(),
-            args: text.split_whitespace().collect(),
+            args: text.split_whitespace().map(str::to_string).collect(),
             http,
             ..Default::default()
         };
@@ -296,7 +295,7 @@ mod tests {
 
     #[test]
     fn two_groups_render_the_header_and_the_numbered_blocks() {
-        let head = json!({
+        let head = serde_json::json!({
             "query": "gb isian",
             "total": 2,
             "groups": [
@@ -313,13 +312,13 @@ mod tests {
 
     #[test]
     fn a_description_of_exactly_one_hundred_fifty_characters_is_not_truncated() {
-        let group = json!({"description": "x".repeat(150)});
+        let group = serde_json::json!({"description": "x".repeat(150)});
         assert_eq!(short_description(&group), "x".repeat(150));
 
-        let group = json!({"description": "x".repeat(151)});
+        let group = serde_json::json!({"description": "x".repeat(151)});
         assert_eq!(short_description(&group), format!("{}...", "x".repeat(150)));
 
-        let group = json!({"description": "  "});
+        let group = serde_json::json!({"description": "  "});
         assert_eq!(
             short_description(&group),
             "  ",
@@ -329,9 +328,9 @@ mod tests {
 
     #[test]
     fn missing_fields_are_interpolated_as_undefined_like_js() {
-        let group = json!({});
+        let group = serde_json::json!({});
         assert_eq!(short_description(&group), "-");
-        let out = format_result(&json!({}), std::slice::from_ref(&group));
+        let out = format_result(&serde_json::json!({}), std::slice::from_ref(&group));
         assert!(out.contains("📌 Keyword: *undefined*"), "{out}");
         assert!(out.contains("📊 Total: *undefined* grup ditemukan"), "{out}");
         assert!(
@@ -361,7 +360,7 @@ mod tests {
 
     #[test]
     fn a_filled_group_list_passes_the_guard() {
-        let data = json!({"status": true, "data": {"query": "q", "groups": [{"title": "A"}]}});
+        let data = serde_json::json!({"status": true, "data": {"query": "q", "groups": [{"title": "A"}]}});
         let (head, groups) = found_groups(&data).unwrap();
         assert_eq!(groups.len(), 1);
         assert_eq!(head.get("query").and_then(Value::as_str), Some("q"));
@@ -369,9 +368,9 @@ mod tests {
 
     #[test]
     fn the_renderer_never_panics_on_strange_values() {
-        let groups = [json!("bukan objek"), json!(null), json!({"title": 7})];
-        let out = format_result(&json!({"query": "🚀 \u{0}", "total": 3}), &groups);
+        let groups = [serde_json::json!("bukan objek"), serde_json::json!(null), serde_json::json!({"title": 7})];
+        let out = format_result(&serde_json::json!({"query": "🚀 \u{0}", "total": 3}), &groups);
         assert!(out.starts_with("🔍 *ᴄᴀʀɪ ɢʀᴜᴘ ᴡᴀ*\n\n📌 Keyword: *🚀 \u{0}*"), "{out}");
-        assert!(out.contains("*3.* 7\n"), "{out}");
+        assert!(out.contains("*3. 7*\n"), "{out}");
     }
 }

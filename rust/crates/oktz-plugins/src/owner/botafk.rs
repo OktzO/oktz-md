@@ -111,7 +111,7 @@ pub fn botafk(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     const SINCE: i64 = 1_700_000_000_000;
 
@@ -171,26 +171,26 @@ mod tests {
 
     #[test]
     fn without_a_reason_the_bot_goes_afk_with_the_default_label() {
-        let r = run(json!({}), "");
+        let r = run(serde_json::json!({}), "");
         let data = write_of(&r);
-        assert_eq!(data["active"], json!(true));
-        assert_eq!(data["reason"], json!("AFK"), "`|| 'AFK'`");
+        assert_eq!(data["active"], serde_json::json!(true));
+        assert_eq!(data["reason"], serde_json::json!("AFK"), "`|| 'AFK'`");
         assert!(data["since"].as_i64().unwrap() > 0, "since harus diisi");
         assert!(text_of(&r).starts_with("💤 *ʙᴏᴛ ᴀꜰᴋ ᴀᴋᴛɪꜰ*"));
     }
 
     #[test]
     fn a_reason_is_joined_from_all_arguments() {
-        let r = run(json!({}), "lagi istirahat sebentar");
-        assert_eq!(write_of(&r)["reason"], json!("lagi istirahat sebentar"));
+        let r = run(serde_json::json!({}), "lagi istirahat sebentar");
+        assert_eq!(write_of(&r)["reason"], serde_json::json!("lagi istirahat sebentar"));
         assert!(text_of(&r).contains("┃ 📝 ᴀʟᴀsᴀɴ: `lagi istirahat sebentar`"));
     }
 
     #[test]
     fn a_second_invocation_brings_the_bot_back_online() {
-        let r = run(json!({"botAfk": {"active": true, "reason": "istirahat", "since": SINCE}}), "");
+        let r = run(serde_json::json!({"botAfk": {"active": true, "reason": "istirahat", "since": SINCE}}), "");
         let data = write_of(&r);
-        assert_eq!(data["active"], json!(false));
+        assert_eq!(data["active"], serde_json::json!(false));
         assert_eq!(
             data.as_object().unwrap().len(),
             1,
@@ -206,7 +206,7 @@ mod tests {
         // dikunci adalah bentuknya dan sumber angkanya.
         let old = now_ms() - 90 * 60 * 1000;
         let r = run(
-            json!({"botAfk": {"active": true, "reason": "x", "since": old}}),
+            serde_json::json!({"botAfk": {"active": true, "reason": "x", "since": old}}),
             "",
         );
         assert!(
@@ -218,7 +218,7 @@ mod tests {
 
     #[test]
     fn a_stored_afk_without_a_reason_reports_a_dash() {
-        let r = run(json!({"botAfk": {"active": true, "since": SINCE}}), "");
+        let r = run(serde_json::json!({"botAfk": {"active": true, "since": SINCE}}), "");
         assert!(
             text_of(&r).contains("┃ 📝 ᴀʟᴀsᴀɴ: `-`"),
             "`currentAfk.reason || '-'`"
@@ -228,7 +228,7 @@ mod tests {
 #[test]
     fn an_empty_reason_string_also_falls_back_to_the_dash() {
         let r = run(
-            json!({"botAfk": {"active": true, "reason": "", "since": SINCE}}),
+            serde_json::json!({"botAfk": {"active": true, "reason": "", "since": SINCE}}),
             "",
         );
         let dash = format!("`{dash}`", dash = "-");
@@ -241,21 +241,21 @@ mod tests {
 
     #[test]
     fn a_record_with_active_false_goes_back_into_afk_not_offline() {
-        let r = run(json!({"botAfk": {"active": false, "since": SINCE}}), "");
+        let r = run(serde_json::json!({"botAfk": {"active": false, "since": SINCE}}), "");
         assert_eq!(
             write_of(&r)["active"],
-            json!(true),
+            serde_json::json!(true),
             "`currentAfk && currentAfk.active` exige active === true"
         );
     }
 
     #[test]
     fn the_two_branches_react_differently() {
-        match run(json!({}), "").without_mutations() {
+        match run(serde_json::json!({}), "").without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "💤"),
             other => panic!("harus Reaction, dapat {other:?}"),
         }
-        match run(json!({"botAfk": {"active": true, "since": SINCE}}), "").without_mutations() {
+        match run(serde_json::json!({"botAfk": {"active": true, "since": SINCE}}), "").without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅"),
             other => panic!("harus Reaction, dapat {other:?}"),
         }
@@ -263,7 +263,7 @@ mod tests {
 
     #[test]
     fn the_active_reply_names_the_live_prefix_and_shows_a_time() {
-        let r = run(json!({}), "x");
+        let r = run(serde_json::json!({}), "x");
         let t = text_of(&r);
         assert!(t.contains("Ketik `.botafk` untuk kembali online"), "{t}");
         let stamp_line = t
@@ -276,9 +276,9 @@ mod tests {
 
     #[test]
     fn each_branch_is_paired_with_exactly_one_write() {
-        assert_eq!(run(json!({}), "").mutations().len(), 1);
+        assert_eq!(run(serde_json::json!({}), "").mutations().len(), 1);
         assert_eq!(
-            run(json!({"botAfk": {"active": true, "since": SINCE}}), "")
+            run(serde_json::json!({"botAfk": {"active": true, "since": SINCE}}), "")
                 .mutations()
                 .len(),
             1

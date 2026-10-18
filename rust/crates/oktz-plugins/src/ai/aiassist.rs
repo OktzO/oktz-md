@@ -13,10 +13,9 @@
 //! `deviceId`, `selectedChatModel`, dan `locale` tetap sama.
 
 use oktz_plugin_api::{Ctx, HttpGet, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::{JAKARTA_OFFSET_SECS, jakarta_parts, now_ms, roll};
-use crate::fun::tod::error_template;
 
 /// `API` (`src/scraper/unlimitedai.js:3`).
 const ENDPOINT: &str = "https://app.unlimitedai.chat/api/chat";
@@ -129,7 +128,7 @@ pub(crate) fn unlimited_ai(http: &dyn HttpGet, character: &str, prompt: &str) ->
         character_prompt(character)
     );
     let created = iso_utc_now();
-    let body = json!({
+    let body = serde_json::json!({
         "chatId": chat_id,
         "messages": [
             {
@@ -212,7 +211,7 @@ pub fn aiassist(ctx: Ctx) -> Reply {
         Err(AiFailure::Rejected(e)) => {
             Reply::text(failed("AI Assistant Error", &e)).with_reaction("☢")
         }
-        Err(AiFailure::Transport) => Reply::text(error_template(&ctx.prefix, &ctx.command))
+        Err(AiFailure::Transport) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
             .with_reaction("☢"),
     }
 }
@@ -245,7 +244,7 @@ mod tests {
         }
         fn respond(&self) -> Result<HttpResponse, HttpError> {
             let Some(text) = &self.resp else {
-                return Err(HttpError {
+                return Err(oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 });
             };
@@ -421,7 +420,7 @@ mod tests {
     #[test]
     fn a_transport_failure_falls_back_to_the_shared_error_template() {
         let r = run(Stub::offline(), "halo");
-        assert_eq!(body(&r), error_template(".", "aiassist"));
+        assert_eq!(body(&r), crate::common::error_template(".", "aiassist"));
         assert!(matches!(
             r.without_mutations(),
             Reply::Reaction { emoji, .. } if emoji == "☢"

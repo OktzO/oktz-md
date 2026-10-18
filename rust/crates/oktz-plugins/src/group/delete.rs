@@ -112,14 +112,13 @@ mod tests {
     use super::*;
     use oktz_plugin_api::registry::GroupRoster;
     use oktz_plugin_api::{QuotedKind, QuotedMessage};
-    use serde_json::json;
 
     fn p(jid: &str, admin: bool) -> Participant {
         Participant {
             jid: jid.into(),
             is_admin: admin,
             is_owner: false,
-            data: json!({}),
+            data: serde_json::json!({}),
         }
     }
 

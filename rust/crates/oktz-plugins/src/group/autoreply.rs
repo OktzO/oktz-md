@@ -18,7 +18,7 @@
 //!   statis di `config.js`, jadi `?? false` di ujung sudah mencakupnya.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::{body_stripped, js_truthy, now_ms};
 
@@ -185,7 +185,7 @@ pub fn autoreply(ctx: Ctx) -> Reply {
             .with_reaction("✅")
             .with_mutation(Mutation::SetSetting {
                 key: "autoreplyPrivate".into(),
-                value: json!(true),
+                value: serde_json::json!(true),
             }),
             Some("off") => Reply::text(
                 "❌ *ᴀᴜᴛᴏʀᴇᴘʟʏ ᴘʀɪᴠᴀᴛᴇ ᴅɪɴᴏɴᴀᴋᴛɪꜰᴋᴀɴ*\n\n> Bot tidak akan merespon otomatis di private chat",
@@ -193,7 +193,7 @@ pub fn autoreply(ctx: Ctx) -> Reply {
             .with_reaction("❌")
             .with_mutation(Mutation::SetSetting {
                 key: "autoreplyPrivate".into(),
-                value: json!(false),
+                value: serde_json::json!(false),
             }),
             _ => Reply::text(format!(
                 "📱 *AUTOREPLY PRIVATE*\n\n\
@@ -252,10 +252,10 @@ pub fn autoreply(ctx: Ctx) -> Reply {
             match posisi {
                 Some(i) => {
                     if let Some(obj) = list[i].as_object_mut() {
-                        obj.insert("reply".into(), json!(reply));
+                        obj.insert("reply".into(), serde_json::json!(reply));
                     }
                 }
-                None => list.push(json!({ "trigger": trigger.to_lowercase(), "reply": reply })),
+                None => list.push(serde_json::json!({ "trigger": trigger.to_lowercase(), "reply": reply })),
             }
             return Reply::text(format!(
                 "✅ *GLOBAL AUTOREPLY DITAMBAHKAN*\n\n\
@@ -368,7 +368,7 @@ pub fn autoreply(ctx: Ctx) -> Reply {
                 .with_reaction("✅")
                 .with_mutation(Mutation::SetGroup {
                     jid: ctx.chat.clone(),
-                    data: json!({ "autoreply": true }),
+                    data: serde_json::json!({ "autoreply": true }),
                 })
         }
         Some("off") => {
@@ -376,7 +376,7 @@ pub fn autoreply(ctx: Ctx) -> Reply {
                 .with_reaction("❌")
                 .with_mutation(Mutation::SetGroup {
                     jid: ctx.chat.clone(),
-                    data: json!({ "autoreply": false }),
+                    data: serde_json::json!({ "autoreply": false }),
                 })
         }
 
@@ -415,7 +415,7 @@ pub fn autoreply(ctx: Ctx) -> Reply {
                     image = lama;
                 }
             }
-            let reply_data = json!({
+            let reply_data = serde_json::json!({
                 "trigger": trigger.to_lowercase(),
                 "reply": reply,
                 "image": image,
@@ -437,7 +437,7 @@ pub fn autoreply(ctx: Ctx) -> Reply {
                 .with_reaction("✅")
                 .with_mutation(Mutation::SetGroup {
                     jid: ctx.chat.clone(),
-                    data: json!({ "customReplies": list }),
+                    data: serde_json::json!({ "customReplies": list }),
                 })
         }
 
@@ -467,7 +467,7 @@ pub fn autoreply(ctx: Ctx) -> Reply {
             .with_reaction("🗑️")
             .with_mutation(Mutation::SetGroup {
                 jid: ctx.chat.clone(),
-                data: json!({ "customReplies": list }),
+                data: serde_json::json!({ "customReplies": list }),
             })
         }
 
@@ -511,7 +511,7 @@ pub fn autoreply(ctx: Ctx) -> Reply {
                 .with_reaction("🗑️")
                 .with_mutation(Mutation::SetGroup {
                     jid: ctx.chat.clone(),
-                    data: json!({ "customReplies": [] }),
+                    data: serde_json::json!({ "customReplies": [] }),
                 })
         }
 
@@ -607,7 +607,7 @@ mod tests {
             r.mutations(),
             &[Mutation::SetSetting {
                 key: "autoreplyPrivate".into(),
-                value: json!(true),
+                value: serde_json::json!(true),
             }]
         );
     }
@@ -616,7 +616,7 @@ mod tests {
     fn private_status_shows_the_stored_value() {
         let mut c = ctx_grup(&["private"], "private");
         c.is_owner = true;
-        c.settings = json!({ "autoreplyPrivate": true });
+        c.settings = serde_json::json!({ "autoreplyPrivate": true });
         assert!(text_of(&run(c)).contains("Status: *✅ AKTIF*"));
 
         let mut c = ctx_grup(&["private"], "private");
@@ -649,7 +649,7 @@ mod tests {
             r.mutations(),
             &[Mutation::SetSetting {
                 key: "globalCustomReplies".into(),
-                value: json!([{ "trigger": "halo", "reply": "Hai" }]),
+                value: serde_json::json!([{ "trigger": "halo", "reply": "Hai" }]),
             }]
         );
     }
@@ -668,7 +668,7 @@ mod tests {
             &["global", "add", "HALO|baru"],
             "global add HALO|baru",
         ));
-        c.settings = json!({ "globalCustomReplies": [
+        c.settings = serde_json::json!({ "globalCustomReplies": [
             { "trigger": "halo", "reply": "lama", "image": "/tmp/x.jpg" },
             { "trigger": "lain", "reply": "x" }
         ] });
@@ -679,7 +679,7 @@ mod tests {
             r.mutations(),
             &[Mutation::SetSetting {
                 key: "globalCustomReplies".into(),
-                value: json!([
+                value: serde_json::json!([
                     { "trigger": "halo", "reply": "baru", "image": "/tmp/x.jpg" },
                     { "trigger": "lain", "reply": "x" }
                 ]),
@@ -706,7 +706,7 @@ mod tests {
     #[test]
     fn global_list_renders_entries_with_a_utf16_preview() {
         let mut c = ctx_owner(ctx_grup(&["global"], "global"));
-        c.settings = json!({ "globalCustomReplies": [{ "trigger": "halo", "reply": "a" }] });
+        c.settings = serde_json::json!({ "globalCustomReplies": [{ "trigger": "halo", "reply": "a" }] });
         let t = text_of(&run(c));
         // `m.reply(text.trim())` (`autoreply.js:150`) membuang newline terakhir,
 // tapi spasi setelah `*halo*` tetap ada karena `hasImage` kosong.
@@ -719,14 +719,14 @@ mod tests {
     #[test]
     fn global_del_removes_by_exact_trigger() {
         let mut c = ctx_owner(ctx_grup(&["global", "del", "halo"], "global del halo"));
-        c.settings = json!({ "globalCustomReplies": [{ "trigger": "halo", "reply": "x" }] });
+        c.settings = serde_json::json!({ "globalCustomReplies": [{ "trigger": "halo", "reply": "x" }] });
         let r = run(c);
         assert_eq!(reaction_of(&r), "🗑️");
         assert_eq!(
             r.mutations(),
             &[Mutation::SetSetting {
                 key: "globalCustomReplies".into(),
-                value: json!([]),
+                value: serde_json::json!([]),
             }]
         );
     }
@@ -775,7 +775,7 @@ mod tests {
             r.mutations(),
             &[Mutation::SetGroup {
                 jid: "120363@g.us".into(),
-                data: json!({ "autoreply": true }),
+                data: serde_json::json!({ "autoreply": true }),
             }]
         );
 
@@ -785,7 +785,7 @@ mod tests {
             r.mutations(),
             &[Mutation::SetGroup {
                 jid: "120363@g.us".into(),
-                data: json!({ "autoreply": false }),
+                data: serde_json::json!({ "autoreply": false }),
             }]
         );
     }
@@ -798,7 +798,7 @@ mod tests {
         assert!(t.contains("Efektif di Grup: *❌ NONAKTIF*"), "{t}");
 
         let mut c = ctx_grup(&["status"], "status");
-        c.settings = json!({ "smartTriggers": true });
+        c.settings = serde_json::json!({ "smartTriggers": true });
         let t = text_of(&run(c));
         assert!(t.contains("Status Global: *✅ AKTIF*"), "{t}");
         assert!(t.contains("Status Grup Ini: *DEFAULT*"), "{t}");
@@ -808,13 +808,13 @@ mod tests {
     #[test]
     fn stored_null_is_nonaktif_but_still_nullish_for_effective() {
         let mut c = ctx_grup(&[], "");
-        c.group_data = json!({ "autoreply": null });
+        c.group_data = serde_json::json!({ "autoreply": null });
         let t = text_of(&run(c));
         assert!(t.contains("Status Grup Ini: *❌ NONAKTIF*"), "{t}");
 
         let mut c = ctx_grup(&[], "");
-        c.group_data = json!({ "autoreply": null });
-        c.settings = json!({ "smartTriggers": true });
+        c.group_data = serde_json::json!({ "autoreply": null });
+        c.settings = serde_json::json!({ "smartTriggers": true });
         let t = text_of(&run(c));
         assert!(t.contains("Efektif di Grup: *✅ AKTIF*"), "{t}");
     }
@@ -822,8 +822,8 @@ mod tests {
     #[test]
     fn stored_false_is_falsy_and_not_nullish() {
         let mut c = ctx_grup(&[], "");
-        c.group_data = json!({ "autoreply": false });
-        c.settings = json!({ "smartTriggers": true });
+        c.group_data = serde_json::json!({ "autoreply": false });
+        c.settings = serde_json::json!({ "smartTriggers": true });
         let t = text_of(&run(c));
         assert!(t.contains("Status Grup Ini: *❌ NONAKTIF*"), "{t}");
         assert!(
@@ -884,7 +884,7 @@ mod tests {
     #[test]
     fn group_add_replaces_in_place_and_keeps_the_old_image() {
         let mut c = ctx_grup(&["add", "halo|baru"], "add halo|baru");
-        c.group_data = json!({ "customReplies": [
+        c.group_data = serde_json::json!({ "customReplies": [
             { "trigger": "halo", "reply": "lama", "image": "/tmp/lama.jpg", "createdAt": 1 }
         ] });
         let r = run(c);
@@ -918,7 +918,7 @@ mod tests {
     #[test]
     fn group_del_removes_and_reports_the_remaining_count() {
         let mut c = ctx_grup(&["del", "halo"], "del halo");
-        c.group_data = json!({ "customReplies": [
+        c.group_data = serde_json::json!({ "customReplies": [
             { "trigger": "halo", "reply": "x" },
             { "trigger": "bye", "reply": "y" }
         ] });
@@ -950,7 +950,7 @@ mod tests {
     #[test]
     fn group_list_shows_defaults_and_customs() {
         let mut c = ctx_grup(&["list"], "list");
-        c.group_data = json!({ "customReplies": [
+        c.group_data = serde_json::json!({ "customReplies": [
             { "trigger": "halo", "reply": "hai juga", "image": "/tmp/x.jpg" }
         ] });
         let t = text_of(&run(c));
@@ -979,14 +979,14 @@ mod tests {
     #[test]
     fn group_reset_clears_everything() {
         let mut c = ctx_grup(&["reset"], "reset");
-        c.group_data = json!({ "customReplies": [{ "trigger": "a", "reply": "b" }] });
+        c.group_data = serde_json::json!({ "customReplies": [{ "trigger": "a", "reply": "b" }] });
         let r = run(c);
         assert_eq!(reaction_of(&r), "🗑️");
         assert_eq!(
             r.mutations(),
             &[Mutation::SetGroup {
                 jid: "120363@g.us".into(),
-                data: json!({ "customReplies": [] }),
+                data: serde_json::json!({ "customReplies": [] }),
             }]
         );
     }

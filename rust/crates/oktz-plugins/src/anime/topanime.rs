@@ -154,7 +154,6 @@ pub fn topanime(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug)]
@@ -178,7 +177,7 @@ mod tests {
         }
         fn respond(&self) -> Result<HttpResponse, HttpError> {
             let Some(text) = &self.resp else {
-                return Err(HttpError {
+                return Err(oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 });
             };
@@ -238,7 +237,7 @@ mod tests {
 
     /// Satu entri dengan field lengkap supaya render bisa diuji terpisah.
     fn entry(rank: i64, name: &str, image: Option<&str>) -> Value {
-        json!({
+        serde_json::json!({
             "rank": rank,
             "name": name,
             "japanese": format!("{name} JP"),
@@ -280,7 +279,7 @@ mod tests {
 
     #[test]
     fn a_normal_list_becomes_an_image_with_the_caption() {
-        let payload = json!({
+        let payload = serde_json::json!({
             "status": true,
             "result": { "result": [
                 entry(1, "Gojo", Some("https://cdn.example/gojo.png")),
@@ -315,7 +314,7 @@ mod tests {
 
     #[test]
     fn a_list_without_a_leading_image_falls_back_to_plain_text() {
-        let payload = json!({
+        let payload = serde_json::json!({
             "status": true,
             "result": { "result": [entry(1, "Gojo", None)] }
         });
@@ -327,7 +326,7 @@ mod tests {
 
     #[test]
     fn an_empty_list_still_renders_the_frame() {
-        let payload = json!({ "status": true, "result": { "result": [] } });
+        let payload = serde_json::json!({ "status": true, "result": { "result": [] } });
         let r = run(Stub::ok(&payload.to_string()));
         assert!(!r.has_media());
         assert!(body(&r).ends_with("_Menampilkan 0 karakter teratas._"));
@@ -336,10 +335,10 @@ mod tests {
     #[test]
     fn missing_or_falsy_status_reports_the_gagal_branch() {
         for payload in [
-            json!({ "status": false, "result": { "result": [] } }),
-            json!({ "status": true }),
-            json!({ "status": true, "result": {} }),
-            json!({ "status": true, "result": { "result": null } }),
+            serde_json::json!({ "status": false, "result": { "result": [] } }),
+            serde_json::json!({ "status": true }),
+            serde_json::json!({ "status": true, "result": {} }),
+            serde_json::json!({ "status": true, "result": { "result": null } }),
         ] {
             let r = run(Stub::ok(&payload.to_string()));
             assert_eq!(body(&r), NO_DATA, "{payload}");
@@ -380,7 +379,7 @@ mod tests {
 
     #[test]
     fn missing_fields_render_as_undefined_like_template_literal() {
-        let txt = render_list(&json!([{}]));
+        let txt = render_list(&serde_json::json!([{}]));
         assert!(txt.contains("*undefined - undefined*"), "{txt}");
     }
 }

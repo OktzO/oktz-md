@@ -104,7 +104,6 @@ pub fn addcmdsticker(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{QuotedKind, QuotedMessage};
-    use serde_json::json;
 
     fn quoted(kind: QuotedKind) -> Option<QuotedMessage> {
         Some(QuotedMessage {
@@ -139,7 +138,7 @@ mod tests {
     }
 
     fn full() -> serde_json::Value {
-        json!({"stickerCommands": {
+        serde_json::json!({"stickerCommands": {
             "hashaaa": {"command": "menu", "addedBy": "628111", "addedAt": 1},
             "hashbbb": {"command": "promo", "addedBy": "628222", "addedAt": 2}
         }})
@@ -179,7 +178,7 @@ mod tests {
 
     #[test]
     fn no_argument_shows_the_help_without_the_active_card() {
-        for s in [json!({}), json!({"stickerCommands": {}})] {
+        for s in [serde_json::json!({}), serde_json::json!({"stickerCommands": {}})] {
             let __balasan = run(&[], s.clone(), None);
             let t = body(&__balasan);
             assert!(t.starts_with("🖼️ *sᴛɪᴄᴋᴇʀ ᴛᴏ ᴄᴏᴍᴍᴀɴᴅ*"), "{s}: {t}");
@@ -204,10 +203,10 @@ mod tests {
         for i in 0..13 {
             map.insert(
                 format!("hash{i:02}"),
-                json!({"command": format!("cmd{i:02}"), "addedBy": "628111", "addedAt": i}),
+                serde_json::json!({"command": format!("cmd{i:02}"), "addedBy": "628111", "addedAt": i}),
             );
         }
-        let s = json!({"stickerCommands": map});
+        let s = serde_json::json!({"stickerCommands": map});
         let __balasan = run(&[], s.clone(), None);
         let t = body(&__balasan);
         assert!(t.contains("┃ 🖼️ → `cmd09`\n"), "10 terakhir yang tampil: {t}");
@@ -217,9 +216,9 @@ mod tests {
         // Tepat 10 → tidak ada baris overflow.
         let mut map10 = serde_json::Map::new();
         for i in 0..10 {
-            map10.insert(format!("h{i}"), json!({"command": format!("c{i}")}));
+            map10.insert(format!("h{i}"), serde_json::json!({"command": format!("c{i}")}));
         }
-        let __balasan = run(&[], json!({ "stickerCommands": map10 }), None);
+        let __balasan = run(&[], serde_json::json!({ "stickerCommands": map10 }), None);
         let t = body(&__balasan);
         assert!(!t.contains("lainnya"), "tepat 10 tidak overflow: {t}");
     }

@@ -51,7 +51,6 @@ pub fn similarity(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use serde_json::Value;
-    use serde_json::json;
 
     fn run(text: &str) -> Reply {
         let args: Vec<String> = text.split_whitespace().map(str::to_string).collect();
@@ -109,8 +108,8 @@ mod tests {
 
     #[test]
     fn on_and_off_each_write_their_own_boolean() {
-        assert_eq!(stored(&run("on")), Some(json!(true)));
-        assert_eq!(stored(&run("off")), Some(json!(false)));
+        assert_eq!(stored(&run("on")), Some(serde_json::json!(true)));
+        assert_eq!(stored(&run("off")), Some(serde_json::json!(false)));
     }
 
     #[test]
@@ -155,7 +154,7 @@ mod tests {
             command: "similarity".into(),
             text: String::new(),
             args: Vec::new(),
-            settings: json!({"similarity": true}),
+            settings: serde_json::json!({"similarity": true}),
             ..Default::default()
         };
         let r = (oktz_plugin_api::find("similarity").unwrap().handler)(ctx);

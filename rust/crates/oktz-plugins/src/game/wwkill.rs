@@ -12,9 +12,7 @@
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 use serde_json::{Map, Value};
-#[cfg(test)]
-use serde_json::json;
-
+// const dipakai jalur non-test juga; jangan disaring cfg(test).
 pub(crate) const GAMES_KEY: &str = "werewolfGames";
 
 /// `ROLES` (`werewolf.js:35`): kunci, emoji, nama, tim.
@@ -273,9 +271,9 @@ pub(crate) fn night_action(ctx: &Ctx, cmd: &str) -> Reply {
     out.unwrap_or_else(|| Reply::text(NOT_IN_GAME))
 }
 
-#[cfg(test)]
+// const dipakai jalur non-test juga; jangan disaring cfg(test).
 pub(crate) fn game_fixture(phase: &str, players: Value) -> Value {
-    json!({
+    serde_json::json!({
         "chat": "120363@g.us",
         "phase": phase,
         "nightActions": {},
@@ -283,9 +281,9 @@ pub(crate) fn game_fixture(phase: &str, players: Value) -> Value {
     })
 }
 
-#[cfg(test)]
+// const dipakai jalur non-test juga; jangan disaring cfg(test).
 pub(crate) fn player(id: &str, number: i64, role: &str, alive: bool, skill_used: bool) -> Value {
-    json!({
+    serde_json::json!({
         "id": id,
         "number": number,
         "role": role,
@@ -295,7 +293,7 @@ pub(crate) fn player(id: &str, number: i64, role: &str, alive: bool, skill_used:
 }
 
 /// Bangun `Ctx` untuk aksi malam atas state game tertentu.
-#[cfg(test)]
+// const dipakai jalur non-test juga; jangan disaring cfg(test).
 pub(crate) fn night_ctx(
     sender: &str,
     cmd: &str,
@@ -342,10 +340,10 @@ pub fn wwkill(ctx: Ctx) -> Reply {
     night_action(&ctx, "wwkill")
 }
 
-#[cfg(test)]
+// const dipakai jalur non-test juga; jangan disaring cfg(test).
 mod tests {
+    #![allow(dead_code)]
     use super::*;
-    use serde_json::json;
 
     const WOLF: &str = "628111@s.whatsapp.net";
     const OTHER: &str = "628999@s.whatsapp.net";
@@ -353,7 +351,7 @@ mod tests {
     fn night_game() -> Value {
         game_fixture(
             "night",
-            json!([
+            serde_json::json!([
                 player(WOLF, 1, "werewolf", true, false),
                 player(OTHER, 2, "villager", true, false),
             ]),
@@ -402,7 +400,7 @@ mod tests {
         for cmd in ["wwkill", "wwprotect", "wwsee", "wwsorcerer"] {
             assert_eq!(owned(run(cmd, None, "1")), NOT_IN_GAME, "cmd {cmd}");
         }
-        let day = game_fixture("day", json!([player(WOLF, 1, "werewolf", true, false)]));
+        let day = game_fixture("day", serde_json::json!([player(WOLF, 1, "werewolf", true, false)]));
         assert_eq!(owned(run("wwkill", Some(day), "1")), NOT_IN_GAME);
     }
 
@@ -410,7 +408,7 @@ mod tests {
     fn a_dead_sender_is_refused_by_the_membership_check() {
         let dead = game_fixture(
             "night",
-            json!([
+            serde_json::json!([
                 player(WOLF, 1, "werewolf", false, false),
                 player(OTHER, 2, "villager", true, false),
             ]),
@@ -429,7 +427,7 @@ mod tests {
     fn an_already_used_skill_is_refused_before_the_target_is_read() {
         let g = game_fixture(
             "night",
-            json!([
+            serde_json::json!([
                 player(WOLF, 1, "werewolf", true, true),
                 player(OTHER, 2, "villager", true, false),
             ]),
@@ -466,7 +464,7 @@ mod tests {
     fn a_dead_or_unknown_target_is_refused() {
         let g = game_fixture(
             "night",
-            json!([
+            serde_json::json!([
                 player(WOLF, 1, "werewolf", true, false),
                 player(OTHER, 2, "villager", false, false),
             ]),
@@ -492,7 +490,7 @@ mod tests {
         for ally in ["sorcerer", "werewolf"] {
             let g = game_fixture(
                 "night",
-                json!([
+                serde_json::json!([
                     player(WOLF, 1, "werewolf", true, false),
                     player(OTHER, 2, ally, true, false),
                 ]),
@@ -527,11 +525,11 @@ mod tests {
         let g = night_game();
         let p = plan(&g, WOLF, "wwkill", Some(2)).unwrap();
         let after = apply(&g, WOLF, &p);
-        assert_eq!(after["nightActions"]["kill"], json!(OTHER));
-        assert_eq!(after["players"][0]["skillUsed"], json!(true));
+        assert_eq!(after["nightActions"]["kill"], serde_json::json!(OTHER));
+        assert_eq!(after["players"][0]["skillUsed"], serde_json::json!(true));
         assert_eq!(
             after["players"][1]["skillUsed"],
-            json!(false),
+            serde_json::json!(false),
             "player lain tidak tersentuh"
         );
     }
@@ -554,8 +552,8 @@ mod tests {
         let r = night_action(&ctx, "wwkill");
         assert!(text_of(&r).contains("TARGET TERPILIH"));
         let g = ctx.session_get(GAMES_KEY).unwrap();
-        assert_eq!(g["120363@g.us"]["nightActions"]["kill"], json!(OTHER));
-        assert_eq!(g["120363@g.us"]["players"][0]["skillUsed"], json!(true));
+        assert_eq!(g["120363@g.us"]["nightActions"]["kill"], serde_json::json!(OTHER));
+        assert_eq!(g["120363@g.us"]["players"][0]["skillUsed"], serde_json::json!(true));
         match r.without_mutations() {
             Reply::Text { mentions, .. } => assert_eq!(mentions, &[OTHER.to_string()]),
             other => panic!("harus Text, dapat {other:?}"),

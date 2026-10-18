@@ -6,7 +6,6 @@
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
 use serde_json::Value;
-use serde_json::json;
 
 use crate::rpg::heal::{apply_exp, math_random, or_default, rpg_int, rpg_map, roll_incl};
 use crate::tools::kalkulatormbg::thousands_id;
@@ -44,13 +43,13 @@ pub fn crime(ctx: Ctx) -> Reply {
         ))
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "koin": koin + stolen, "exp": new_exp, "rpg": rpg }),
+            data: serde_json::json!({ "koin": koin + stolen, "exp": new_exp, "rpg": rpg }),
         });
     }
 
     let fine = roll_incl(5_000, 14_999).min(koin);
     let left_hp = (or_default(rpg_int(&rpg, "health"), 100) - 15).max(0);
-    rpg.insert("health".into(), json!(left_hp));
+    rpg.insert("health".into(), serde_json::json!(left_hp));
 
     Reply::text(format!(
         "NGIIING NGIING!! ALARM BUNYI!! 🚨🚓\n\n\
@@ -62,14 +61,13 @@ pub fn crime(ctx: Ctx) -> Reply {
     ))
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": (koin - fine).max(0), "rpg": rpg }),
+        data: serde_json::json!({ "koin": (koin - fine).max(0), "rpg": rpg }),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: Value) -> Reply {
         let ctx = Ctx {
@@ -120,14 +118,14 @@ mod tests {
     fn both_branches_appear_and_each_writes_exactly_one_row() {
         let (mut win, mut caught) = (0, 0);
         for _ in 0..600 {
-            let r = run(json!({ "koin": 100_000, "exp": 0 }));
+            let r = run(serde_json::json!({ "koin": 100_000, "exp": 0 }));
             let t = text_of(&r);
             let data = write_of(&r);
             if t.starts_with("HACKING SUKSES!!") {
                 win += 1;
                 let stolen = data["koin"].as_i64().unwrap() - 100_000;
                 assert!((5_000..=19_999).contains(&stolen), "curian {stolen}");
-                assert_eq!(data["exp"], json!(stolen / 20), "exp = curian / 20");
+                assert_eq!(data["exp"], serde_json::json!(stolen / 20), "exp = curian / 20");
                 assert!(t.contains(&format!("*+Rp {}*", thousands_id(stolen as f64))), "{t}");
                 assert!(data["rpg"].get("health").is_none(), "k menang tak kena HP");
             } else {
@@ -149,7 +147,7 @@ mod tests {
     fn the_fine_never_exceeds_the_purse_and_never_goes_negative() {
         for purse in [0, 1_000] {
             for _ in 0..300 {
-                let r = run(json!({ "koin": purse, "rpg": { "health": 100 } }));
+                let r = run(serde_json::json!({ "koin": purse, "rpg": { "health": 100 } }));
                 if text_of(&r).starts_with("NGIIING") {
                     let after = write_of(&r)["koin"].as_i64().unwrap();
                     assert_eq!(after, 0, "dompet {purse} -> {after}");
@@ -162,9 +160,9 @@ mod tests {
     fn the_health_floor_is_zero_here_not_one_as_in_boss() {
         let mut floored = false;
         for _ in 0..600 {
-            let r = run(json!({ "koin": 50_000, "rpg": { "health": 3 } }));
+            let r = run(serde_json::json!({ "koin": 50_000, "rpg": { "health": 3 } }));
             if text_of(&r).starts_with("NGIIING") {
-                assert_eq!(write_of(&r)["rpg"]["health"], json!(0), "Math.max(0, 3 - 15)");
+                assert_eq!(write_of(&r)["rpg"]["health"], serde_json::json!(0), "Math.max(0, 3 - 15)");
                 floored = true;
             }
         }
@@ -173,7 +171,7 @@ mod tests {
 
     #[test]
     fn a_missing_user_row_never_panics() {
-        for user in [json!(null), json!({}), json!({ "koin": null })] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({ "koin": null })] {
             let r = run(user.clone());
             assert!(!text_of(&r).is_empty(), "input {user}");
         }

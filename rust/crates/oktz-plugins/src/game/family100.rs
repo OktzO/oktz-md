@@ -15,7 +15,7 @@
 //! tanpa timer yang benar-benar memanggil `endSession`.
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 /// `createSession(..., 120000)` (`family100.js:84`).
 pub(crate) const SESSION_TIMEOUT_MS: i64 = 120_000;
@@ -192,14 +192,14 @@ pub fn family100(ctx: Ctx) -> Reply {
         // `session_update` memberi `Value::Null` untuk key baru, sedangkan JS
         // menulis ke objek `gameSessions` yang sudah ada.
         if !sessions.is_object() {
-            *sessions = json!({});
+            *sessions = serde_json::json!({});
         }
         let entry = sessions
             .as_object_mut()
             .expect("baru saja diganti objek")
             .entry(chat.clone())
             .or_insert(Value::Null);
-        *entry = json!({
+        *entry = serde_json::json!({
             "chatId": chat,
             "gameType": "family100",
             "question": { "soal": question.soal, "jawaban": question.jawaban },
@@ -307,10 +307,10 @@ mod tests {
         assert!(r.mutations().is_empty(), "state ditulis lewat session, bukan mutasi");
 
         let s = ctx.session_get(SESSIONS_KEY).unwrap()[CHAT].clone();
-        assert_eq!(s["gameType"], json!("family100"));
-        assert_eq!(s["chatId"], json!(CHAT));
-        assert_eq!(s["answered"], json!([]));
-        assert_eq!(s["answeredBy"], json!({}));
+        assert_eq!(s["gameType"], serde_json::json!("family100"));
+        assert_eq!(s["chatId"], serde_json::json!(CHAT));
+        assert_eq!(s["answered"], serde_json::json!([]));
+        assert_eq!(s["answeredBy"], serde_json::json!({}));
         let end = s["endTime"].as_i64().unwrap();
         let start = s["startTime"].as_i64().unwrap();
         assert!(
@@ -333,7 +333,7 @@ mod tests {
     #[test]
     fn a_second_call_shows_the_running_session_instead_of_a_new_question() {
         let now = crate::common::now_ms();
-        let t = text_of(&run(ctx_with(json!({
+        let t = text_of(&run(ctx_with(serde_json::json!({
             CHAT: {
                 "gameType": "family100",
                 "question": { "soal": "Hotel Bintang 5 Jakarta", "jawaban": ["sheraton", "hilton"] },
@@ -357,7 +357,7 @@ mod tests {
     #[test]
     fn a_session_from_another_game_does_not_block_a_new_family100() {
         let now = crate::common::now_ms();
-        let t = text_of(&run(ctx_with(json!({
+        let t = text_of(&run(ctx_with(serde_json::json!({
             CHAT: {
                 "gameType": "tictactoe",
                 "question": { "soal": "?", "jawaban": [] },
@@ -371,7 +371,7 @@ mod tests {
     #[test]
     fn an_expired_session_is_replaced_by_a_new_one() {
         let now = crate::common::now_ms();
-        let ctx = ctx_with(json!({
+        let ctx = ctx_with(serde_json::json!({
             CHAT: {
                 "gameType": "family100",
                 "question": { "soal": "Sesi Lama", "jawaban": ["x"] },
@@ -386,7 +386,7 @@ mod tests {
         assert!(!t.contains("Sesi Lama"), "sesi kedaluwarsa tidak boleh tampil");
         assert_ne!(
             ctx.session_get(SESSIONS_KEY).unwrap()[CHAT]["question"]["soal"],
-            json!("Sesi Lama")
+            serde_json::json!("Sesi Lama")
         );
     }
 
@@ -396,7 +396,7 @@ mod tests {
     #[test]
     fn a_running_session_of_another_game_is_replaced_by_the_new_one() {
         let now = crate::common::now_ms();
-        let ctx = ctx_with(json!({
+        let ctx = ctx_with(serde_json::json!({
             CHAT: {
                 "gameType": "tictactoe",
                 "question": { "soal": "?", "jawaban": [] },
@@ -408,8 +408,8 @@ mod tests {
         let t = text_of(&__balasan);
         assert!(t.starts_with("Waktunya main *FAMILY 100*"), "{t}");
         let s = ctx.session_get(SESSIONS_KEY).unwrap()[CHAT].clone();
-        assert_eq!(s["gameType"], json!("family100"), "sesi lama harus tertimpa");
-        assert_ne!(s["question"]["soal"], json!("?"), "soal baru harus tersimpan");
+        assert_eq!(s["gameType"], serde_json::json!("family100"), "sesi lama harus tertimpa");
+        assert_ne!(s["question"]["soal"], serde_json::json!("?"), "soal baru harus tersimpan");
     }
 
     #[test]

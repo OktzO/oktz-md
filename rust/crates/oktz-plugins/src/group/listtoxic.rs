@@ -83,7 +83,6 @@ pub fn listtoxic(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(group: serde_json::Value) -> String {
         let ctx = Ctx {
@@ -131,7 +130,7 @@ mod tests {
 
     #[test]
     fn absent_group_data_shows_only_defaults() {
-        let out = run(json!(null));
+        let out = run(serde_json::json!(null));
         assert!(out.starts_with("📋 *ᴅᴀꜰᴛᴀʀ ᴋᴀᴛᴀ ᴛᴏxɪᴄ*\n\n"));
         assert!(!out.contains("✏️ *ᴄᴜsᴛᴏᴍ*"));
         assert!(out.contains("╭┈┈⬡「 📦 *ᴅᴇꜰᴀᴜʟᴛ* (20) 」\n"));
@@ -143,14 +142,14 @@ mod tests {
 
     #[test]
     fn empty_custom_list_omits_the_custom_block() {
-        let out = run(json!({"toxicWords": []}));
+        let out = run(serde_json::json!({"toxicWords": []}));
         assert!(!out.contains("✏️ *ᴄᴜsᴛᴏᴍ*"));
         assert!(out.contains("Total: *20* kata"));
     }
 
     #[test]
     fn custom_words_come_first_and_raise_the_total() {
-        let out = run(json!({"toxicWords": ["kazak", "bangsat-kecil"]}));
+        let out = run(serde_json::json!({"toxicWords": ["kazak", "bangsat-kecil"]}));
         assert!(out.contains("╭┈┈⬡「 ✏️ *ᴄᴜsᴛᴏᴍ* (2) 」\n┃ 1. kazak\n┃ 2. bangsat-kecil\n╰┈┈┈┈┈┈┈┈⬡"));
         assert!(out.contains("Total: *22* kata"));
         assert!(
@@ -161,14 +160,14 @@ mod tests {
 
     #[test]
     fn a_wrong_typed_toxic_list_does_not_panic() {
-        let out = run(json!({"toxicWords": {"a": 1}}));
+        let out = run(serde_json::json!({"toxicWords": {"a": 1}}));
         assert!(!out.contains("✏️ *ᴄᴜsᴛᴏᴍ*"));
         assert!(out.contains("Total: *20* kata"));
     }
 
     #[test]
     fn both_blocks_close_and_count_is_two_when_custom_exists() {
-        let out = run(json!({"toxicWords": ["x"]}));
+        let out = run(serde_json::json!({"toxicWords": ["x"]}));
         assert_eq!(out.matches("╰┈┈┈┈┈┈┈┈⬡").count(), 2);
         assert_eq!(out.matches("╭┈┈⬡").count(), 2);
     }

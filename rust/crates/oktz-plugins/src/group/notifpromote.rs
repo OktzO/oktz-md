@@ -36,7 +36,7 @@ mod tests {
 
     use crate::group::notifclosegroup::ADMIN_ONLY;
     use oktz_plugin_api::{Mutation, Participant};
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(group: Value, arg: Option<&str>, owner: bool) -> Reply {
         let ctx = Ctx {
@@ -91,7 +91,7 @@ mod tests {
 
     #[test]
     fn the_status_header_uses_the_promote_title_and_crown() {
-        let r = run(json!({"notifPromote": false}), None, true);
+        let r = run(serde_json::json!({"notifPromote": false}), None, true);
         assert!(
             text_of(&r).starts_with("👑 *ɴᴏᴛɪꜰ ᴘʀᴏᴍᴏᴛᴇ*\n\n> Status: ❌ Nonaktif"),
             "{}",
@@ -103,20 +103,20 @@ mod tests {
     #[test]
     fn on_and_off_use_this_plugin_own_wording() {
         assert_eq!(
-            text_of(&run(json!({}), Some("on"), true)),
+            text_of(&run(serde_json::json!({}), Some("on"), true)),
             "✅ *ɴᴏᴛɪꜰ ᴘʀᴏᴍᴏᴛᴇ ᴅɪᴀᴋᴛɪꜰᴋᴀɴ*"
         );
-        assert_eq!(group_write(&run(json!({}), Some("on"), true)), &json!({"notifPromote": true}));
+        assert_eq!(group_write(&run(serde_json::json!({}), Some("on"), true)), &serde_json::json!({"notifPromote": true}));
         assert_eq!(
-            text_of(&run(json!({}), Some("off"), true)),
+            text_of(&run(serde_json::json!({}), Some("off"), true)),
             "❌ *ɴᴏᴛɪꜰ ᴘʀᴏᴍᴏᴛᴇ ᴅɪɴᴏɴᴀᴋᴛɪꜰᴋᴀɴ*"
         );
-        assert_eq!(group_write(&run(json!({}), Some("off"), true)), &json!({"notifPromote": false}));
+        assert_eq!(group_write(&run(serde_json::json!({}), Some("off"), true)), &serde_json::json!({"notifPromote": false}));
     }
 
     #[test]
     fn a_plain_member_is_rejected() {
-        let r = run(json!({}), Some("on"), false);
+        let r = run(serde_json::json!({}), Some("on"), false);
         assert_eq!(text_of(&r), ADMIN_ONLY);
         assert!(r.mutations().is_empty());
     }

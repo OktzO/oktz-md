@@ -98,7 +98,7 @@ pub fn clanjoin(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(user: Value, arg: &str, clans: Value) -> Reply {
         let ctx = Ctx {
@@ -109,14 +109,14 @@ mod tests {
             text: arg.into(),
             args: arg.split_whitespace().map(str::to_string).collect(),
             user_data: user,
-            settings: json!({ crate::clan::clancreate::CLANS_KEY: clans }),
+            settings: serde_json::json!({ crate::clan::clancreate::CLANS_KEY: clans }),
             ..Default::default()
         };
         (oktz_plugin_api::find("clanjoin").unwrap().handler)(ctx)
     }
 
     fn clan(extra: Value) -> Value {
-        let mut c = json!({
+        let mut c = serde_json::json!({
             "id": "DRG",
             "name": "Dragon",
             "emblem": "🐉",
@@ -172,21 +172,21 @@ mod tests {
 
     #[test]
     fn an_empty_argument_shows_the_help_card() {
-        let r = run(json!({}), "", json!({}));
+        let r = run(serde_json::json!({}), "", serde_json::json!({}));
         assert_eq!(text_of(&r), help());
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn a_user_who_already_has_a_clan_is_told_to_leave_first() {
-        let r = run(json!({"clanId": "LAIN"}), "DRG", json!({ "DRG": clan(json!({})) }));
+        let r = run(serde_json::json!({"clanId": "LAIN"}), "DRG", serde_json::json!({ "DRG": clan(serde_json::json!({})) }));
         assert_eq!(text_of(&r), "❌ Kamu sudah punya clan\nKeluar dulu: *.clanleave*");
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn an_unknown_clan_is_reported() {
-        let r = run(json!({}), "Zzz", json!({ "DRG": clan(json!({})) }));
+        let r = run(serde_json::json!({}), "Zzz", serde_json::json!({ "DRG": clan(serde_json::json!({})) }));
         assert_eq!(text_of(&r), "❌ Clan tidak ditemukan");
         assert!(r.mutations().is_empty());
     }
@@ -194,9 +194,9 @@ mod tests {
     #[test]
     fn a_closed_clan_refuses_the_join() {
         let r = run(
-            json!({}),
+            serde_json::json!({}),
             "DRG",
-            json!({ "DRG": clan(json!({"isOpen": false})) }),
+            serde_json::json!({ "DRG": clan(serde_json::json!({"isOpen": false})) }),
         );
         assert_eq!(text_of(&r), "❌ *Dragon* sedang tertutup");
         assert!(r.mutations().is_empty());
@@ -205,16 +205,16 @@ mod tests {
     #[test]
     fn a_full_clan_refuses_the_join() {
         let full: Vec<String> = (0..50).map(|i| format!("62800{i}@s.whatsapp.net")).collect();
-        let r = run(json!({}), "DRG", json!({ "DRG": clan(json!({"members": full})) }));
+        let r = run(serde_json::json!({}), "DRG", serde_json::json!({ "DRG": clan(serde_json::json!({"members": full})) }));
         assert_eq!(text_of(&r), "❌ *Dragon* sudah penuh (50/50)");
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn a_successful_join_appends_the_sender_and_links_the_clan_id() {
-        let r = run(json!({}), "DRG", json!({ "DRG": clan(json!({})) }));
+        let r = run(serde_json::json!({}), "DRG", serde_json::json!({ "DRG": clan(serde_json::json!({})) }));
         let (list, jid, id) = written(&r);
-        assert_eq!(list, json!(["628999@s.whatsapp.net", "628111@s.whatsapp.net"]));
+        assert_eq!(list, serde_json::json!(["628999@s.whatsapp.net", "628111@s.whatsapp.net"]));
         assert_eq!(jid, "628111@s.whatsapp.net");
         assert_eq!(id, "DRG", "ID yang disimpan adalah KUNCI peta, bukan `clan.id`");
         let t = text_of(&r);
@@ -233,7 +233,7 @@ mod tests {
     #[test]
     fn joining_by_name_or_lowercase_id_resolves_the_same_clan() {
         for arg in ["Dragon", "dragon", "DRG"] {
-            let r = run(json!({}), arg, json!({ "DRG": clan(json!({})) }));
+            let r = run(serde_json::json!({}), arg, serde_json::json!({ "DRG": clan(serde_json::json!({})) }));
             let (_, _, id) = written(&r);
             assert_eq!(id, "DRG", "arg {arg}");
         }

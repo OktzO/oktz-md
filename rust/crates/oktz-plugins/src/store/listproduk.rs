@@ -153,7 +153,6 @@ pub(crate) fn index_arg(ctx: &Ctx, len: usize) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(settings: serde_json::Value, text: &str, is_group: bool) -> Reply {
         let ctx = Ctx {
@@ -195,13 +194,13 @@ mod tests {
 
     #[test]
     fn an_absent_setting_shows_the_empty_branch() {
-        assert_eq!(text_of(&run(json!({}), "", false)), EMPTY);
+        assert_eq!(text_of(&run(serde_json::json!({}), "", false)), EMPTY);
     }
 
     #[test]
     fn a_digital_product_counts_stock_items_and_a_physical_one_counts_stock() {
         let r = run(
-            json!({"storeProducts": [
+            serde_json::json!({"storeProducts": [
                 {"name": "Spotify", "price": 25000, "type": "digital",
                  "stockItems": [{"id": 1}, {"id": 2}], "stock": 2},
                 {"name": "Kaos", "price": 65000, "type": "fisik", "stock": 8}
@@ -216,7 +215,7 @@ mod tests {
     #[test]
     fn a_missing_type_defaults_to_digital() {
         let r = run(
-            json!({"storeProducts": [{"name": "X", "price": 1000, "stock": 0}]}),
+            serde_json::json!({"storeProducts": [{"name": "X", "price": 1000, "stock": 0}]}),
             "",
             false,
         );
@@ -233,7 +232,7 @@ mod tests {
     #[test]
     fn unlimited_stock_marks_both_types_available() {
         let r = run(
-            json!({"storeProducts": [
+            serde_json::json!({"storeProducts": [
                 {"name": "A", "price": 1, "type": "digital", "stock": -1},
                 {"name": "B", "price": 1, "type": "fisik", "stock": -1}
             ]}),
@@ -250,13 +249,13 @@ mod tests {
     #[test]
     fn a_discount_price_is_shown_struck_through_only_when_truthy() {
         let with = run(
-            json!({"storeProducts": [{"name": "A", "price": 30000, "originalPrice": 40000, "stock": 1}]}),
+            serde_json::json!({"storeProducts": [{"name": "A", "price": 30000, "originalPrice": 40000, "stock": 1}]}),
             "",
             false,
         );
         assert!(text_of(&with).contains("💰 ~~Rp 40.000~~ Rp 30.000"));
         let without = run(
-            json!({"storeProducts": [{"name": "A", "price": 30000, "originalPrice": 0, "stock": 1}]}),
+            serde_json::json!({"storeProducts": [{"name": "A", "price": 30000, "originalPrice": 0, "stock": 1}]}),
             "",
             false,
         );
@@ -267,7 +266,7 @@ mod tests {
     fn long_descriptions_are_truncated_at_sixty_characters() {
         let long = "a".repeat(70);
         let r = run(
-            json!({"storeProducts": [{"name": "A", "price": 1, "stock": 1, "description": long}]}),
+            serde_json::json!({"storeProducts": [{"name": "A", "price": 1, "stock": 1, "description": long}]}),
             "",
             false,
         );
@@ -277,7 +276,7 @@ mod tests {
     // `listproduk.js:104` juga mengirim di grup; teksnya sama persis.
     #[test]
     fn the_group_branch_sends_the_same_text() {
-        let s = json!({"storeProducts": [{"name": "A", "price": 1000, "stock": 1}]});
+        let s = serde_json::json!({"storeProducts": [{"name": "A", "price": 1000, "stock": 1}]});
         assert_eq!(text_of(&run(s.clone(), "", true)), text_of(&run(s.clone(), "", false)));
     }
 

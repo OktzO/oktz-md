@@ -12,11 +12,12 @@
 //! `ponytail:` `error.response?.status === 403` tidak bisa dibedakan: `HttpError`
 //! hanya membawa `message`, bukan status. Cabang 403 karena itu tidak
 //! terjangkau; teksnya tetap ditulis sebagai fungsi murni.
+#![allow(clippy::unnecessary_map_or)]
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::{error_template, js_truthy};
+use crate::common::{js_truthy};
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `config.APIkey?.neoxr || ''`.
@@ -153,7 +154,7 @@ pub fn pixiv(ctx: Ctx) -> Reply {
 
     // `await m.react("🔍")` di `:30` sudah jalan sebelum request.
     let Ok(res) = ctx.http.get(&api_url(&query)) else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
 
     let data = res.json().unwrap_or(Value::Null);
@@ -172,7 +173,6 @@ pub fn pixiv(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -204,7 +204,7 @@ mod tests {
             let v = self
                 .body
                 .clone()
-                .ok_or_else(|| HttpError { message: "offline".into() })?;
+                .ok_or_else(|| oktz_plugin_api::HttpError { message: "offline".into() })?;
             Ok(HttpResponse {
                 status: 200,
                 body: HttpBody::Bytes {
@@ -300,7 +300,7 @@ mod tests {
 
     #[test]
     fn a_hit_uses_the_artist_palette_reaction() {
-        let http = Stub::with(json!({
+        let http = Stub::with(serde_json::json!({
             "status": true,
             "data": [ { "title": "Fanart", "userName": "Seniman", "width": 1000,
                         "height": 1500, "pageCount": 2, "url": "https://p/1" } ],
@@ -319,7 +319,7 @@ mod tests {
 
     #[test]
     fn ai_and_nsfw_badges_attach_without_a_space() {
-        let body = json!({
+        let body = serde_json::json!({
             "status": true,
             "data": [
                 { "title": "AI", "aiType": 2, "xRestrict": 1 },
@@ -338,9 +338,9 @@ mod tests {
     #[test]
     fn only_ten_artworks_are_listed() {
         let data: Vec<Value> = (0..13)
-            .map(|i| json!({ "title": format!("Art {i}"), "url": format!("https://p/{i}") }))
+            .map(|i| serde_json::json!({ "title": format!("Art {i}"), "url": format!("https://p/{i}") }))
             .collect();
-        let body = json!({ "status": true, "data": data });
+        let body = serde_json::json!({ "status": true, "data": data });
         let t = caption(&artworks(&body), "q");
         assert!(t.contains("📊 *ʜᴀsɪʟ:* 10 artwork\n"), "{t}");
         assert!(t.contains("*10.* Art 9\n"), "{t}");
@@ -350,12 +350,12 @@ mod tests {
     #[test]
     fn every_empty_or_broken_shape_reports_no_result() {
         for body in [
-            json!({ "status": false, "data": [ { "title": "x" } ] }),
-            json!({ "status": true, "data": [] }),
-            json!({ "status": true }),
-            json!({}),
-            json!(null),
-            json!("bukan json"),
+            serde_json::json!({ "status": false, "data": [ { "title": "x" } ] }),
+            serde_json::json!({ "status": true, "data": [] }),
+            serde_json::json!({ "status": true }),
+            serde_json::json!({}),
+            serde_json::json!(null),
+            serde_json::json!("bukan json"),
         ] {
             assert!(kosong(&body), "body {body}");
             let r = run(Stub::with(body), "rem");
@@ -371,7 +371,7 @@ mod tests {
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "rem");
-        assert_eq!(text_of(&r), error_template(".", "pixiv"));
+        assert_eq!(text_of(&r), crate::common::error_template(".", "pixiv"));
         assert_eq!(reaction_of(&r), Some("☢"));
     }
 
@@ -386,17 +386,17 @@ mod tests {
     #[test]
     fn odd_and_very_long_queries_do_not_panic() {
         for input in ["<b>", "a|b", "🎨", "'\"", "a\u{202e}b", "%zz"] {
-            let r = run(Stub::with(json!({ "status": true, "data": [] })), input);
+            let r = run(Stub::with(serde_json::json!({ "status": true, "data": [] })), input);
             assert!(text_of(&r).contains("Tidak ditemukan"), "input {input:?}");
         }
         let panjang = "a".repeat(5000);
         let r = run(Stub::offline(), &panjang);
-        assert_eq!(text_of(&r), error_template(".", "pixiv"));
+        assert_eq!(text_of(&r), crate::common::error_template(".", "pixiv"));
     }
 
     #[test]
     fn missing_artwork_fields_print_undefined() {
-        let body = json!({ "status": true, "data": [ {} ] });
+        let body = serde_json::json!({ "status": true, "data": [ {} ] });
         let t = caption(&artworks(&body), "q");
         assert!(t.contains("*1.* undefined\n   👤 undefined\n   📐 undefinedxundefined"), "{t}");
     }

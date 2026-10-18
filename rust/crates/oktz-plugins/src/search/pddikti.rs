@@ -11,7 +11,6 @@
 use oktz_plugin_api::{Ctx, HttpCall, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::error_template;
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `pddikti.js:16-18`.
@@ -339,7 +338,7 @@ pub fn pddikti(ctx: Ctx) -> Reply {
         }
         let call = request(&detail_path(&ctx.args[1]));
         let Ok(res) = ctx.http.call(&call) else {
-            return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+            return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
         };
         if res.status != 200 {
             return Reply::text(format!(
@@ -367,7 +366,7 @@ pub fn pddikti(ctx: Ctx) -> Reply {
     };
 
     let Ok(res) = ctx.http.call(&request(&path)) else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
     if res.status != 200 {
         return Reply::text(format!("❌ {}", http_error(res.status, &res.text())))
@@ -391,7 +390,6 @@ pub fn pddikti(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -424,7 +422,7 @@ mod tests {
     impl HttpGet for Stub {
         fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
             self.seen.lock().unwrap().push(url.to_string());
-            Err(HttpError {
+            Err(oktz_plugin_api::HttpError {
                 message: "cuma dipakai lewat call()".into(),
             })
         }
@@ -450,7 +448,7 @@ mod tests {
                 .iter()
                 .find(|(u, _, _)| req.url.starts_with(u.as_str()));
             let Some((_, status, body)) = hit else {
-                return Err(HttpError {
+                return Err(oktz_plugin_api::HttpError {
                     message: "tidak ada stub untuk URL ini".into(),
                 });
             };
@@ -615,9 +613,9 @@ mod tests {
 
     #[test]
     fn mode_all_lists_three_of_each_category() {
-        let body = json!({
-            "mahasiswa": (0..5).map(|i| json!({ "nama": format!("Mhs {i}"), "nim": format!("22{i}"), "nama_prodi": "TI", "nama_pt": "PT" })).collect::<Vec<_>>(),
-            "dosen": (0..4).map(|i| json!({ "nama": format!("Dosen {i}"), "nidn": format!("00{i}"), "nama_prodi": "TI", "nama_pt": "PT" })).collect::<Vec<_>>(),
+        let body = serde_json::json!({
+            "mahasiswa": (0..5).map(|i| serde_json::json!({ "nama": format!("Mhs {i}"), "nim": format!("22{i}"), "nama_prodi": "TI", "nama_pt": "PT" })).collect::<Vec<_>>(),
+            "dosen": (0..4).map(|i| serde_json::json!({ "nama": format!("Dosen {i}"), "nidn": format!("00{i}"), "nama_prodi": "TI", "nama_pt": "PT" })).collect::<Vec<_>>(),
             "pt": [ { "nama": "ITB", "nama_singkat": "ITB" } ],
             "prodi": [ { "nama": "S1 Informatika", "nama_pt": "ITB" } ],
         });
@@ -633,22 +631,22 @@ mod tests {
 
     #[test]
     fn a_pt_without_a_short_name_falls_back_to_the_acronym_field() {
-        let body = json!({ "pt": [ { "nama": "Institut Teknologi", "sinkatan_pt": "IT" } ] });
+        let body = serde_json::json!({ "pt": [ { "nama": "Institut Teknologi", "sinkatan_pt": "IT" } ] });
         assert!(all_block(&body, "q").contains("- Institut Teknologi (IT)\n"));
-        let body = json!({ "pt": [ { "nama": "Tanpa apa-apa" } ] });
+        let body = serde_json::json!({ "pt": [ { "nama": "Tanpa apa-apa" } ] });
         assert!(all_block(&body, "q").contains("- Tanpa apa-apa (-)\n"));
     }
 
     #[test]
     fn an_empty_all_object_produces_only_the_headline() {
-        let t = all_block(&json!({}), " gibran ");
+        let t = all_block(&serde_json::json!({}), " gibran ");
         assert_eq!(t, "*🔍 0 hasil untuk \" gibran \" (0 mhs, 0 dosen, 0 pt, 0 prodi)*\n\n");
     }
 
     #[test]
     fn student_rows_carry_id_and_cap_at_ten() {
         let items: Vec<Value> = (0..13)
-            .map(|i| json!({ "nama": format!("S{i}"), "nim": "1", "nama_prodi": "P", "nama_pt": "U", "id": format!("id-{i}") }))
+            .map(|i| serde_json::json!({ "nama": format!("S{i}"), "nim": "1", "nama_prodi": "P", "nama_pt": "U", "id": format!("id-{i}") }))
             .collect();
         let t = list_block(&items, "mhs", "s", 13);
         assert!(t.starts_with("*🔍 13 hasil mhs untuk \"s\"*\n\n"), "{t}");
@@ -668,24 +666,24 @@ mod tests {
     #[test]
     fn the_four_non_all_modes_render_their_own_row_shape() {
         // Tanpa `nama_singkat`, JS memakai `?? "-"` — bukan `nama` itu sendiri.
-        let pt = vec![json!({ "nama": "ITB", "kode": "1" })];
+        let pt = vec![serde_json::json!({ "nama": "ITB", "kode": "1" })];
         assert!(list_block(&pt, "pt", "q", 1).contains("*#1 ITB (-)*\n- Kode: 1\n\n"));
-        let pt = vec![json!({ "nama": "ITB", "nama_singkat": "ITB", "kode": "1" })];
+        let pt = vec![serde_json::json!({ "nama": "ITB", "nama_singkat": "ITB", "kode": "1" })];
         assert!(list_block(&pt, "pt", "q", 1).contains("*#1 ITB (ITB)*\n- Kode: 1\n\n"));
-        let pt = vec![json!({ "nama": "ITB", "nama_singkat": "", "kode": 0 })];
+        let pt = vec![serde_json::json!({ "nama": "ITB", "nama_singkat": "", "kode": 0 })];
         assert!(
             list_block(&pt, "pt", "q", 1).contains("*#1 ITB ()*\n- Kode: -\n\n"),
             "`??` bukan `||`: string kosong tetap tampil"
         );
-        let dosen = vec![json!({ "nama": "D", "nidn": "1" })];
+        let dosen = vec![serde_json::json!({ "nama": "D", "nidn": "1" })];
         assert!(list_block(&dosen, "dosen", "q", 1).contains("*#1 D [NIDN 1]*\n- 📚 undefined @ undefined\n\n"));
-        let prodi = vec![json!({ "nama": "P" })];
+        let prodi = vec![serde_json::json!({ "nama": "P" })];
         assert!(list_block(&prodi, "prodi", "q", 1).contains("*#1 P*\n- @ -\n\n"));
     }
 
     #[test]
     fn detail_renders_all_nine_labelled_lines() {
-        let data = json!({
+        let data = serde_json::json!({
             "nama": "Gibran", "nim": "22", "jenis_kelamin": "L", "jenjang": "S1",
             "prodi": "Informatika", "nama_pt": "ITB", "tanggal_masuk": "2020-09-01",
             "status_saat_ini": "Aktif", "jenis_daftar": "Reguler",
@@ -695,17 +693,17 @@ mod tests {
         assert!(t.contains("- 👤 Jenis Kelamin : *Laki-laki*\n"), "{t}");
         assert!(t.contains("- 💼 Jenis Daftar  : *Reguler*\n"), "{t}");
         assert!(detail_message(&data).starts_with("🎓 Gibran — 22 | Informatika @ ITB"));
-        assert_eq!(detail_message(&json!({})), "🎓 Detail mahasiswa");
+        assert_eq!(detail_message(&serde_json::json!({})), "🎓 Detail mahasiswa");
     }
 
     #[test]
     fn an_unknown_gender_prints_the_dash_fallback() {
-        assert_eq!(jenis_kelamin(Some(&json!("L"))), Some("Laki-laki"));
-        assert_eq!(jenis_kelamin(Some(&json!("P"))), Some("Perempuan"));
-        assert_eq!(jenis_kelamin(Some(&json!("X"))), None);
+        assert_eq!(jenis_kelamin(Some(&serde_json::json!("L"))), Some("Laki-laki"));
+        assert_eq!(jenis_kelamin(Some(&serde_json::json!("P"))), Some("Perempuan"));
+        assert_eq!(jenis_kelamin(Some(&serde_json::json!("X"))), None);
         assert_eq!(jenis_kelamin(None), None);
-        assert!(detail_block(&json!({})).contains("Jenis Kelamin : *-*\n"));
-        assert!(detail_block(&json!({})).contains("Nama          : *undefined*\n"));
+        assert!(detail_block(&serde_json::json!({})).contains("Jenis Kelamin : *-*\n"));
+        assert!(detail_block(&serde_json::json!({})).contains("Nama          : *undefined*\n"));
     }
 
     #[test]
@@ -765,7 +763,7 @@ mod tests {
     #[test]
     fn a_transport_failure_falls_back_to_the_error_template() {
         let r = run(Stub::offline(), "all gibran");
-        assert_eq!(text_of(&r), error_template(".", "pddikti"));
+        assert_eq!(text_of(&r), crate::common::error_template(".", "pddikti"));
         assert_eq!(reaction_of(&r), Some("☢"));
     }
 

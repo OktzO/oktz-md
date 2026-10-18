@@ -7,7 +7,7 @@
 //! karena hanya satu writer.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::common::jid_number;
 use crate::rpg::heal::rpg_map;
@@ -177,11 +177,11 @@ pub fn guild(ctx: Ctx) -> Reply {
             let id = format!("guild_{}", crate::common::now_ms());
             all.insert(
                 id.clone(),
-                json!({ "id": id, "name": name, "leader": ctx.sender,
+                serde_json::json!({ "id": id, "name": name, "leader": ctx.sender,
                        "members": [ctx.sender.clone()], "treasury": 0, "level": 1,
                        "exp": 0, "createdAt": crate::common::now_ms() }),
             );
-            rpg.insert("guildId".into(), json!(id));
+            rpg.insert("guildId".into(), serde_json::json!(id));
 
             Reply::Text {
                 text: format!(
@@ -199,7 +199,7 @@ pub fn guild(ctx: Ctx) -> Reply {
                 save(all),
                 Mutation::SetUser {
                     jid: ctx.sender.clone(),
-                    data: json!({ "koin": koin - CREATE_COST, "rpg": rpg }),
+                    data: serde_json::json!({ "koin": koin - CREATE_COST, "rpg": rpg }),
                 },
             ])
         }
@@ -230,11 +230,11 @@ pub fn guild(ctx: Ctx) -> Reply {
             }
             members.push(ctx.sender.clone());
             if let Some(obj) = target.as_object_mut() {
-                obj.insert("members".into(), json!(members));
+                obj.insert("members".into(), serde_json::json!(members));
             }
             all.insert(id.clone(), target);
             // JS: `user.rpg.guildId = targetGuild.id`, bukan nama yang diketik.
-            rpg.insert("guildId".into(), json!(id));
+            rpg.insert("guildId".into(), serde_json::json!(id));
 
             let target_name = all
                 .values()
@@ -248,7 +248,7 @@ pub fn guild(ctx: Ctx) -> Reply {
             ))
             .mutating(vec![save(all), Mutation::SetUser {
                 jid: ctx.sender.clone(),
-                data: json!({ "rpg": rpg }),
+                data: serde_json::json!({ "rpg": rpg }),
             }])
         }
 
@@ -263,7 +263,7 @@ pub fn guild(ctx: Ctx) -> Reply {
                 )
                 .with_mutation(Mutation::SetUser {
                     jid: ctx.sender.clone(),
-                    data: json!({ "rpg": rpg }),
+                    data: serde_json::json!({ "rpg": rpg }),
                 });
             };
 
@@ -281,7 +281,7 @@ pub fn guild(ctx: Ctx) -> Reply {
                 .unwrap_or("Unknown")
                 .to_string();
             if let Some(obj) = current.as_object_mut() {
-                obj.insert("members".into(), json!(members));
+                obj.insert("members".into(), serde_json::json!(members));
             }
             if member_list(&current).is_empty() {
                 all.remove(&id);
@@ -295,7 +295,7 @@ pub fn guild(ctx: Ctx) -> Reply {
             ))
             .mutating(vec![save(all), Mutation::SetUser {
                 jid: ctx.sender.clone(),
-                data: json!({ "rpg": rpg }),
+                data: serde_json::json!({ "rpg": rpg }),
             }])
         }
 
@@ -375,7 +375,7 @@ pub fn guild(ctx: Ctx) -> Reply {
 
             let new_treasury = treasury(&current) + amount;
             if let Some(obj) = current.as_object_mut() {
-                obj.insert("treasury".into(), json!(new_treasury));
+                obj.insert("treasury".into(), serde_json::json!(new_treasury));
             }
             all.insert(id, current);
 
@@ -388,7 +388,7 @@ pub fn guild(ctx: Ctx) -> Reply {
             ))
             .mutating(vec![save(all), Mutation::SetUser {
                 jid: ctx.sender.clone(),
-                data: json!({ "koin": koin - amount }),
+                data: serde_json::json!({ "koin": koin - amount }),
             }])
         }
     }
@@ -398,7 +398,6 @@ pub fn guild(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: Value, settings: Value, args: &[&str]) -> Reply {
         let ctx = Ctx {
@@ -420,13 +419,13 @@ mod tests {
     }
 
     fn existing_guild() -> Value {
-        json!({ "guilds": { "guild_1": {
+        serde_json::json!({ "guilds": { "guild_1": {
             "id": "guild_1", "name": "DragonSlayers", "leader": "628222@s.whatsapp.net",
             "members": ["628222@s.whatsapp.net"], "treasury": 500, "level": 3, "exp": 0 } } })
     }
 
     fn member() -> Value {
-        json!({ "rpg": { "guildId": "guild_1" } })
+        serde_json::json!({ "rpg": { "guildId": "guild_1" } })
     }
 
     fn setting_of(r: &Reply) -> Value {
@@ -473,7 +472,7 @@ mod tests {
 
     #[test]
     fn the_menu_names_every_command_and_the_membership_state() {
-        let lonely_reply = run(json!({}), json!({}), &[]);
+        let lonely_reply = run(serde_json::json!({}), serde_json::json!({}), &[]);
         let lonely = text_of(&lonely_reply);
         assert!(lonely.starts_with("🏰 *SERIKAT GUILD RPG*"), "{lonely}");
         for cmd in ["create", "join", "leave", "info", "members", "deposit", "list"] {
@@ -490,18 +489,18 @@ mod tests {
 
     #[test]
     fn an_unknown_action_falls_through_to_the_menu() {
-        let r = run(json!({}), json!({}), &["destroy"]);
+        let r = run(serde_json::json!({}), serde_json::json!({}), &["destroy"]);
         assert!(text_of(&r).starts_with("🏰 *SERIKAT GUILD RPG*"));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn the_top_list_is_empty_until_someone_creates_a_guild() {
-        let r = run(json!({}), json!({}), &["list"]);
+        let r = run(serde_json::json!({}), serde_json::json!({}), &["list"]);
         assert!(text_of(&r).starts_with("Belum ada guild di server ini!"));
         assert!(r.mutations().is_empty());
 
-        let r = run(json!({}), existing_guild(), &["list"]);
+        let r = run(serde_json::json!({}), existing_guild(), &["list"]);
         let t = text_of(&r);
         assert!(t.starts_with("🏆 *DAFTAR TOP GUILD*"), "{t}");
         assert!(t.contains("🏰 *DragonSlayers* (Lv. 3)"), "{t}");
@@ -511,19 +510,19 @@ mod tests {
 
     #[test]
     fn founding_a_guild_costs_ten_thousand_and_registers_the_founder() {
-        let r = run(json!({ "koin": 50_000 }), json!({}), &["create", "Night", "Riders"]);
+        let r = run(serde_json::json!({ "koin": 50_000 }), serde_json::json!({}), &["create", "Night", "Riders"]);
         let t = text_of(&r);
         assert!(t.starts_with("🎉 *GUILD RESMI BERDIRI!*"), "{t}");
         assert!(t.contains("👑 Ketua: @628111"), "{t}");
         assert!(t.contains("💸 Biaya Bangunan: *-Rp 10.000*"), "{t}");
         let me = user_of(&r, "628111@s.whatsapp.net");
-        assert_eq!(me["koin"], json!(40_000));
+        assert_eq!(me["koin"], serde_json::json!(40_000));
         let guilds = setting_of(&r);
         let created = guilds.as_object().unwrap().values().next().unwrap().clone();
-        assert_eq!(created["name"], json!("Night Riders"));
-        assert_eq!(created["leader"], json!("628111@s.whatsapp.net"));
-        assert_eq!(created["members"], json!(["628111@s.whatsapp.net"]));
-        assert_eq!(created["level"], json!(1));
+        assert_eq!(created["name"], serde_json::json!("Night Riders"));
+        assert_eq!(created["leader"], serde_json::json!("628111@s.whatsapp.net"));
+        assert_eq!(created["members"], serde_json::json!(["628111@s.whatsapp.net"]));
+        assert_eq!(created["level"], serde_json::json!(1));
         assert_eq!(me["rpg"]["guildId"], created["id"]);
     }
 
@@ -533,7 +532,7 @@ mod tests {
             (vec!["create", "ab"], "minimal *3 huruf*"),
             (vec!["create", "abcdefghijklmnopqrstu"], "maksimal *20 huruf*"),
         ] {
-            let r = run(json!({ "koin": 0 }), json!({}), &name);
+            let r = run(serde_json::json!({ "koin": 0 }), serde_json::json!({}), &name);
             assert!(text_of(&r).contains(expect), "args {name:?}: {}", text_of(&r));
             assert!(r.mutations().is_empty(), "args {name:?}");
         }
@@ -541,11 +540,11 @@ mod tests {
 
     #[test]
     fn a_taken_name_and_an_empty_wallet_each_stop_a_new_guild() {
-        let r = run(json!({ "koin": 99_999 }), existing_guild(), &["create", "dragonslayers"]);
+        let r = run(serde_json::json!({ "koin": 99_999 }), existing_guild(), &["create", "dragonslayers"]);
         assert!(text_of(&r).starts_with("Yahh, nama *dragonslayers* udah dipake kelompok lain!"));
         assert!(r.mutations().is_empty());
 
-        let r = run(json!({ "koin": 9_999 }), json!({}), &["create", "Bocah"]);
+        let r = run(serde_json::json!({ "koin": 9_999 }), serde_json::json!({}), &["create", "Bocah"]);
         assert!(text_of(&r).starts_with("Miskin amat mau jadi ketua?"));
         assert!(r.mutations().is_empty());
     }
@@ -559,7 +558,7 @@ mod tests {
 
     #[test]
     fn joining_is_case_insensitive_and_appends_the_member() {
-        let r = run(json!({}), existing_guild(), &["join", "dragonslayers"]);
+        let r = run(serde_json::json!({}), existing_guild(), &["join", "dragonslayers"]);
         assert!(
             text_of(&r).starts_with("✅ Selamat datang di barak!"),
             "{}",
@@ -569,26 +568,26 @@ mod tests {
         let guild = guilds["guild_1"].clone();
         assert_eq!(
             guild["members"],
-            json!(["628222@s.whatsapp.net", "628111@s.whatsapp.net"])
+            serde_json::json!(["628222@s.whatsapp.net", "628111@s.whatsapp.net"])
         );
         // `user.rpg.guildId = targetGuild.id` — bukan nama yang diketik.
-        assert_eq!(user_of(&r, "628111@s.whatsapp.net")["rpg"]["guildId"], json!("guild_1"));
+        assert_eq!(user_of(&r, "628111@s.whatsapp.net")["rpg"]["guildId"], serde_json::json!("guild_1"));
     }
 
     #[test]
     fn joining_needs_a_name_that_exists_and_room_to_sit() {
-        let r = run(json!({}), existing_guild(), &["join"]);
+        let r = run(serde_json::json!({}), existing_guild(), &["join"]);
         assert!(text_of(&r).starts_with("Tulis nama guild yang mau dimasukin!"));
         assert!(text_of(&r).contains(".guild join DragonSlayers"));
 
-        let r = run(json!({ }), existing_guild(), &["join", "Nope"]);
+        let r = run(serde_json::json!({ }), existing_guild(), &["join", "Nope"]);
         assert!(text_of(&r).starts_with("Guild *Nope* nggak ketemu!"));
 
-        let full = json!({ "guilds": { "g": { "id": "g", "name": "Penuh",
+        let full = serde_json::json!({ "guilds": { "g": { "id": "g", "name": "Penuh",
             "leader": "628222@s.whatsapp.net",
             "members": (0..50).map(|i| format!("{i}@s.whatsapp.net")).collect::<Vec<_>>(),
             "treasury": 0, "level": 1 } } });
-        let r = run(json!({}), full, &["join", "Penuh"]);
+        let r = run(serde_json::json!({}), full, &["join", "Penuh"]);
         assert!(text_of(&r).starts_with("Maaf bang, kapasitas markas guild *Penuh* udah full (50/50)!"));
     }
 
@@ -601,18 +600,18 @@ mod tests {
 
     #[test]
     fn leaving_removes_only_the_caller_and_keeps_the_guild_alive() {
-        let two = json!({ "rpg": { "guildId": "guild_1" } });
-        let settings = json!({ "guilds": { "guild_1": {
+        let two = serde_json::json!({ "rpg": { "guildId": "guild_1" } });
+        let settings = serde_json::json!({ "guilds": { "guild_1": {
             "id": "guild_1", "name": "DragonSlayers", "leader": "628222@s.whatsapp.net",
             "members": ["628222@s.whatsapp.net", "628111@s.whatsapp.net"],
             "treasury": 0, "level": 1 } } });
         let _ = two;
-        let r = run(json!({ "rpg": { "guildId": "guild_1" } }), settings, &["leave"]);
+        let r = run(serde_json::json!({ "rpg": { "guildId": "guild_1" } }), settings, &["leave"]);
         assert!(text_of(&r).starts_with("🏃 Lu cabut dari markas *DragonSlayers*"));
         let guilds = setting_of(&r);
         assert_eq!(
             guilds["guild_1"]["members"],
-            json!(["628222@s.whatsapp.net"]),
+            serde_json::json!(["628222@s.whatsapp.net"]),
             "ketua tetap di dalam"
         );
         assert_eq!(user_of(&r, "628111@s.whatsapp.net")["rpg"]["guildId"], Value::Null);
@@ -620,31 +619,31 @@ mod tests {
 
     #[test]
     fn the_last_member_out_deletes_the_guild() {
-        let settings = json!({ "guilds": { "guild_1": {
+        let settings = serde_json::json!({ "guilds": { "guild_1": {
             "id": "guild_1", "name": "LastOne", "leader": "628222@s.whatsapp.net",
             "members": ["628111@s.whatsapp.net"], "treasury": 0, "level": 1 } } });
-        let r = run(json!({ "rpg": { "guildId": "guild_1" } }), settings, &["leave"]);
+        let r = run(serde_json::json!({ "rpg": { "guildId": "guild_1" } }), settings, &["leave"]);
         assert!(setting_of(&r).as_object().unwrap().is_empty(), "guild dihapus");
     }
 
     #[test]
     fn a_leader_with_members_may_not_walk_out() {
-        let settings = json!({ "guilds": { "guild_1": {
+        let settings = serde_json::json!({ "guilds": { "guild_1": {
             "id": "guild_1", "name": "Kepemimpinan", "leader": "628111@s.whatsapp.net",
             "members": ["628111@s.whatsapp.net", "628222@s.whatsapp.net"],
             "treasury": 0, "level": 1 } } });
-        let r = run(json!({ "rpg": { "guildId": "guild_1" } }), settings, &["leave"]);
+        let r = run(serde_json::json!({ "rpg": { "guildId": "guild_1" } }), settings, &["leave"]);
         assert!(text_of(&r).starts_with("Woy ketua! Masa mau ninggalin anggota gitu aja?"));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn leaving_without_a_guild_or_after_a_dissolution_resets_the_pointer() {
-        let r = run(json!({}), json!({}), &["leave"]);
+        let r = run(serde_json::json!({}), serde_json::json!({}), &["leave"]);
         assert!(text_of(&r).starts_with("Lu aja belum masuk guild mana-mana"));
         assert!(r.mutations().is_empty());
 
-        let r = run(member(), json!({}), &["leave"]);
+        let r = run(member(), serde_json::json!({}), &["leave"]);
         assert!(text_of(&r).starts_with("Guild lu kayaknya udah bubar"));
         assert_eq!(user_of(&r, "628111@s.whatsapp.net")["rpg"]["guildId"], Value::Null);
     }
@@ -664,7 +663,7 @@ mod tests {
 
     #[test]
     fn the_member_roll_crowns_the_leader_and_arms_the_rest() {
-        let settings = json!({ "guilds": { "guild_1": {
+        let settings = serde_json::json!({ "guilds": { "guild_1": {
             "id": "guild_1", "name": "Antrean", "leader": "628222@s.whatsapp.net",
             "members": ["628222@s.whatsapp.net", "628111@s.whatsapp.net"],
             "treasury": 0, "level": 1 } } });
@@ -681,16 +680,16 @@ mod tests {
 
     #[test]
     fn guildless_info_and_members_are_refused() {
-        assert!(text_of(&run(json!({ }), json!({}), &["info"])).starts_with("Lu nggak punya guild bos!"));
-        assert!(text_of(&run(json!({}), json!({}), &["members"])).starts_with("Cieee nggak punya guild..."));
-        assert!(text_of(&run(json!({}), json!({}), &["deposit", "500"]))
+        assert!(text_of(&run(serde_json::json!({ }), serde_json::json!({}), &["info"])).starts_with("Lu nggak punya guild bos!"));
+        assert!(text_of(&run(serde_json::json!({}), serde_json::json!({}), &["members"])).starts_with("Cieee nggak punya guild..."));
+        assert!(text_of(&run(serde_json::json!({}), serde_json::json!({}), &["deposit", "500"]))
             .starts_with("Lu mau donasi ke panti asuhan mana?"));
     }
 
     #[test]
     fn a_donation_moves_money_into_the_treasury() {
         let r = run(
-            json!({ "koin": 10_000, "rpg": { "guildId": "guild_1" } }),
+            serde_json::json!({ "koin": 10_000, "rpg": { "guildId": "guild_1" } }),
             existing_guild(),
             &["deposit", "1000"],
         );
@@ -698,20 +697,20 @@ mod tests {
         assert!(t.starts_with("✅ *DONASI KAS BERHASIL!*"), "{t}");
         assert!(t.contains("Rp 1.000"), "{t}");
         assert!(t.contains("Total Kas Sekarang: *Rp 1.500*"), "{t}");
-        assert_eq!(setting_of(&r)["guild_1"]["treasury"], json!(1_500));
-        assert_eq!(user_of(&r, "628111@s.whatsapp.net")["koin"], json!(9_000));
+        assert_eq!(setting_of(&r)["guild_1"]["treasury"], serde_json::json!(1_500));
+        assert_eq!(user_of(&r, "628111@s.whatsapp.net")["koin"], serde_json::json!(9_000));
     }
 
     #[test]
     fn a_small_or_unaffordable_donation_is_refused() {
-        let base = json!({ "koin": 10_000, "rpg": { "guildId": "guild_1" } });
+        let base = serde_json::json!({ "koin": 10_000, "rpg": { "guildId": "guild_1" } });
         for amount in ["0", "99", "abc"] {
             let r = run(base.clone(), existing_guild(), &["deposit", amount]);
             assert!(text_of(&r).starts_with("Pelit amat! Minimal donasi kas *Rp 100* lah!"), "amount {amount}");
             assert!(r.mutations().is_empty(), "amount {amount}");
         }
         let r = run(
-            json!({ "koin": 99, "rpg": { "guildId": "guild_1" } }),
+            serde_json::json!({ "koin": 99, "rpg": { "guildId": "guild_1" } }),
             existing_guild(),
             &["deposit", "5000"],
         );
@@ -722,7 +721,7 @@ mod tests {
     #[test]
     fn a_missing_guild_row_blocks_every_guild_scoped_command() {
         for args in [vec!["info"], vec!["members"], vec!["deposit", "1000"]] {
-            let r = run(json!({ "rpg": { "guildId": "ghost" } }), json!({}), &args);
+            let r = run(serde_json::json!({ "rpg": { "guildId": "ghost" } }), serde_json::json!({}), &args);
             assert!(text_of(&r).starts_with("Guild tidak ditemukan!"), "args {args:?}");
             assert!(r.mutations().is_empty(), "args {args:?}");
         }

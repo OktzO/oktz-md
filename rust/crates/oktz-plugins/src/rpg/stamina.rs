@@ -6,7 +6,7 @@
 //! tapi terkirim sebagai balasan biasa tanpa kartu preview.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::rpg::heal::{coalesce, or_default, rpg_map};
 
@@ -80,7 +80,7 @@ pub fn stamina(ctx: Ctx) -> Reply {
         }
 
         let restored = max - current;
-        rpg.insert("stamina".into(), json!(max));
+        rpg.insert("stamina".into(), serde_json::json!(max));
 
         return Reply::text(format!(
             "⚡ *sᴛᴀᴍɪɴᴀ ᴅɪɪsɪ*\n\n\
@@ -93,7 +93,7 @@ pub fn stamina(ctx: Ctx) -> Reply {
         .with_reaction("⚡")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "koin": koin - POTION_COST, "rpg": rpg }),
+            data: serde_json::json!({ "koin": koin - POTION_COST, "rpg": rpg }),
         });
     }
 
@@ -173,7 +173,7 @@ mod tests {
 
     #[test]
     fn the_status_card_shows_the_bar_and_the_restore_hint() {
-        let r = run(json!({"koin": 0, "rpg": {"stamina": 50, "maxStamina": 100}}), None);
+        let r = run(serde_json::json!({"koin": 0, "rpg": {"stamina": 50, "maxStamina": 100}}), None);
         let t = text_of(&r);
         assert!(t.starts_with("⚡ *sᴛᴀᴍɪɴᴀ sᴛᴀᴛᴜs*\n\n"), "{t}");
         assert!(t.contains("> ⚡ Stamina: *50/100*\n"), "{t}");
@@ -186,7 +186,7 @@ mod tests {
 
     #[test]
     fn missing_rpg_defaults_to_a_full_bar() {
-        let r = run(json!(null), None);
+        let r = run(serde_json::json!(null), None);
         assert!(text_of(&r).contains("> ⚡ Stamina: *100/100*"), "{}", text_of(&r));
         assert!(text_of(&r).contains("[██████████]"), "{}", text_of(&r));
     }
@@ -194,7 +194,7 @@ mod tests {
     /// `user.rpg.stamina ?? 100` bukan `|| 100`: 0 tetap 0.
     #[test]
     fn zero_stamina_stays_zero_while_zero_max_falls_back_to_one_hundred() {
-        let r = run(json!({"rpg": {"stamina": 0, "maxStamina": 0}}), None);
+        let r = run(serde_json::json!({"rpg": {"stamina": 0, "maxStamina": 0}}), None);
         let t = text_of(&r);
         assert!(t.contains("> ⚡ Stamina: *0/100*"), "{t}");
         assert!(t.contains("[░░░░░░░░░░]"), "{t}");
@@ -202,7 +202,7 @@ mod tests {
 
     #[test]
     fn restoring_costs_five_thousand_and_refills_the_bar() {
-        let r = run(json!({"koin": 20_000, "rpg": {"stamina": 25, "maxStamina": 100}}), Some("isi"));
+        let r = run(serde_json::json!({"koin": 20_000, "rpg": {"stamina": 25, "maxStamina": 100}}), Some("isi"));
         let t = text_of(&r);
         assert!(t.starts_with("⚡ *sᴛᴀᴍɪɴᴀ ᴅɪɪsɪ*\n\n"), "{t}");
         assert!(t.contains("*💊 *ʀᴇsᴛᴏʀᴇ:*\n\n"), "{t}");
@@ -212,27 +212,27 @@ mod tests {
         assert_eq!(reaction_of(&r), Some("⚡"));
 
         let data = data_of(&r);
-        assert_eq!(data["koin"], json!(15_000));
-        assert_eq!(data["rpg"]["stamina"], json!(100));
-        assert_eq!(data["rpg"]["maxStamina"], json!(100));
+        assert_eq!(data["koin"], serde_json::json!(15_000));
+        assert_eq!(data["rpg"]["stamina"], serde_json::json!(100));
+        assert_eq!(data["rpg"]["maxStamina"], serde_json::json!(100));
     }
 
     #[test]
     fn restore_and_heal_are_read_case_insensitively() {
         for arg in ["isi", "restore", "heal", "ISI", "Restore", "HEAL"] {
-            let r = run(json!({"koin": 9_000, "rpg": {"stamina": 10}}), Some(arg));
+            let r = run(serde_json::json!({"koin": 9_000, "rpg": {"stamina": 10}}), Some(arg));
             assert!(text_of(&r).starts_with("⚡ *sᴛᴀᴍɪɴᴀ ᴅɪɪsɪ*"), "{arg}");
         }
         // Sub-command lain tetap jatuh ke kartu status.
         for arg in ["", "penuh", "isi2"] {
-            let r = run(json!({"koin": 9_000, "rpg": {"stamina": 10}}), Some(arg));
+            let r = run(serde_json::json!({"koin": 9_000, "rpg": {"stamina": 10}}), Some(arg));
             assert!(text_of(&r).starts_with("⚡ *sᴛᴀᴍɪɴᴀ sᴛᴀᴛᴜs*"), "{arg}");
         }
     }
 
     #[test]
     fn a_full_bar_is_refused_before_the_purse_is_read() {
-        let r = run(json!({"koin": 0, "rpg": {"stamina": 100, "maxStamina": 100}}), Some("isi"));
+        let r = run(serde_json::json!({"koin": 0, "rpg": {"stamina": 100, "maxStamina": 100}}), Some("isi"));
         assert_eq!(
             text_of(&r),
             "⚡ *sᴛᴀᴍɪɴᴀ ᴘᴇɴᴜʜ*\n\n> Stamina kamu sudah penuh!"
@@ -242,7 +242,7 @@ mod tests {
 
     #[test]
     fn too_little_coin_reports_the_cost_and_the_balance() {
-        let r = run(json!({"koin": 4_999, "rpg": {"stamina": 10}}), Some("isi"));
+        let r = run(serde_json::json!({"koin": 4_999, "rpg": {"stamina": 10}}), Some("isi"));
         let t = text_of(&r);
         assert!(t.starts_with("❌ *sᴀʟᴅᴏ ᴛɪᴅᴀᴋ ᴄᴜᴋᴜᴘ*\n\n"), "{t}");
         assert!(t.contains("> Biaya: Rp 5.000"), "{t}");
@@ -276,18 +276,18 @@ mod tests {
     #[test]
     fn unrelated_rpg_fields_survive_the_restore() {
         let r = run(
-            json!({"koin": 20_000, "rpg": {"stamina": 10, "bank": 500, "pet": {"type": "dog"}}}),
+            serde_json::json!({"koin": 20_000, "rpg": {"stamina": 10, "bank": 500, "pet": {"type": "dog"}}}),
             Some("restore"),
         );
         let data = data_of(&r);
-        assert_eq!(data["rpg"]["bank"], json!(500));
-        assert_eq!(data["rpg"]["pet"], json!({"type": "dog"}));
+        assert_eq!(data["rpg"]["bank"], serde_json::json!(500));
+        assert_eq!(data["rpg"]["pet"], serde_json::json!({"type": "dog"}));
     }
 
     #[test]
     fn a_non_numeric_field_falls_back_instead_of_panicking() {
-        for rpg in [json!({"stamina": "abc", "maxStamina": "abc"}), json!("bukan objek")] {
-            let r = run(json!({"rpg": rpg}), None);
+        for rpg in [serde_json::json!({"stamina": "abc", "maxStamina": "abc"}), serde_json::json!("bukan objek")] {
+            let r = run(serde_json::json!({"rpg": rpg}), None);
             assert!(
                 text_of(&r).starts_with("⚡ *sᴛᴀᴍɪɴᴀ sᴛᴀᴛᴜs*"),
                 "{}",

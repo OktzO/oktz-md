@@ -78,7 +78,6 @@ pub fn public(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(sender: &str, is_owner: bool, settings: Value) -> Reply {
         let ctx = Ctx {
@@ -131,21 +130,21 @@ mod tests {
 
     #[test]
     fn the_owner_switches_the_mode_and_writes_botmode() {
-        let r = run("6285608953677@s.whatsapp.net", true, json!({"botMode": "self"}));
+        let r = run("6285608953677@s.whatsapp.net", true, serde_json::json!({"botMode": "self"}));
         assert_eq!(text_of(&r), PUBLIC_TEXT);
         assert_eq!(written_mode(&r), Some("public".to_string()));
     }
 
     #[test]
     fn a_stored_public_mode_is_only_reported_never_rewritten() {
-        let r = run("6285608953677@s.whatsapp.net", true, json!({"botMode": "public"}));
+        let r = run("6285608953677@s.whatsapp.net", true, serde_json::json!({"botMode": "public"}));
         assert_eq!(text_of(&r), ALREADY);
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn a_missing_or_empty_setting_falls_back_to_the_js_default_mode() {
-        for settings in [json!({}), json!({"botMode": ""})] {
+        for settings in [serde_json::json!({}), serde_json::json!({"botMode": ""})] {
             let r = run("6285608953677@s.whatsapp.net", true, settings);
             assert_eq!(text_of(&r), ALREADY, "config.mode default 'public'");
             assert!(r.mutations().is_empty());
@@ -154,7 +153,7 @@ mod tests {
 
     #[test]
     fn a_non_owner_is_rejected_even_when_the_number_matches() {
-        let r = run("6285608953677@s.whatsapp.net", false, json!({}));
+        let r = run("6285608953677@s.whatsapp.net", false, serde_json::json!({}));
         assert_eq!(text_of(&r), DENIED);
         assert!(r.mutations().is_empty());
     }
@@ -163,7 +162,7 @@ mod tests {
     fn an_owner_flagged_sender_outside_the_number_list_is_rejected() {
         // `isOwner` di JS sudah berarti cfg, tapi `validateOwner` cek ulang —
         // dua-duanya harus benar.
-        let r = run("628999999999@s.whatsapp.net", true, json!({}));
+        let r = run("628999999999@s.whatsapp.net", true, serde_json::json!({}));
         assert_eq!(text_of(&r), DENIED);
         assert!(r.mutations().is_empty());
     }

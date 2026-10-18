@@ -162,7 +162,6 @@ mod tests {
 
     use oktz_plugin_api::{Participant, QuotedMessage};
     use oktz_plugin_api::registry::GroupRoster;
-    use serde_json::json;
 
     const ADMIN: &str = "628111@s.whatsapp.net";
 
@@ -258,7 +257,7 @@ mod tests {
 
     #[test]
     fn no_target_at_all_prints_the_usage_and_writes_nothing() {
-        let r = plain(json!({}), &[], &[]);
+        let r = plain(serde_json::json!({}), &[], &[]);
         assert_eq!(
             text_of(&r),
             "🔇 *MUTE MEMBER*\n\n\
@@ -274,8 +273,8 @@ mod tests {
 
     #[test]
     fn a_mention_is_stored_verbatim_and_counted() {
-        let r = plain(json!({}), &[], &["628333@s.whatsapp.net"]);
-        assert_eq!(group_write(&r), json!(["628333@s.whatsapp.net"]));
+        let r = plain(serde_json::json!({}), &[], &["628333@s.whatsapp.net"]);
+        assert_eq!(group_write(&r), serde_json::json!(["628333@s.whatsapp.net"]));
         assert_eq!(
             text_of(&r),
             "🔇 *MEMBER DIMUTE*\n\n\
@@ -292,7 +291,7 @@ mod tests {
 
     #[test]
     fn the_success_branch_reacts_with_a_bell() {
-        match plain(json!({}), &[], &["628333@s.whatsapp.net"]).without_mutations() {
+        match plain(serde_json::json!({}), &[], &["628333@s.whatsapp.net"]).without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "🔇"),
             other => panic!("harus Reaction, dapat {other:?}"),
         }
@@ -300,8 +299,8 @@ mod tests {
 
     #[test]
     fn a_bare_number_argument_gets_the_whatsapp_server_suffix() {
-        let r = plain(json!({}), &["62-812-345"], &[]);
-        assert_eq!(group_write(&r), json!(["62812345@s.whatsapp.net"]));
+        let r = plain(serde_json::json!({}), &["62-812-345"], &[]);
+        assert_eq!(group_write(&r), serde_json::json!(["62812345@s.whatsapp.net"]));
         assert!(text_of(&r).contains("👤 ᴍᴇᴍʙᴇʀ: @62812345"), "{}", text_of(&r));
     }
 
@@ -309,32 +308,32 @@ mod tests {
     fn a_leading_zero_number_is_not_rewritten_to_62_here() {
         // `getpp` melakukan normalisasi `0` → `62`; `mutemember` tidak, dan
         // teks harus mengikuti apa adanya.
-        let r = plain(json!({}), &["0812345"], &[]);
-        assert_eq!(group_write(&r), json!(["0812345@s.whatsapp.net"]));
+        let r = plain(serde_json::json!({}), &["0812345"], &[]);
+        assert_eq!(group_write(&r), serde_json::json!(["0812345@s.whatsapp.net"]));
     }
 
     #[test]
     fn the_quote_wins_over_the_mention_and_the_argument() {
         let r = run(
-            json!({}),
+            serde_json::json!({}),
             &["628999@s.whatsapp.net"],
             &["628888@s.whatsapp.net"],
             Some("628777@s.whatsapp.net"),
             GroupRoster::default(),
         );
-        assert_eq!(group_write(&r), json!(["628777@s.whatsapp.net"]));
+        assert_eq!(group_write(&r), serde_json::json!(["628777@s.whatsapp.net"]));
     }
 
     #[test]
     fn a_lid_target_is_stored_as_a_phone_jid() {
-        let r = plain(json!({}), &[], &["123456789@lid"]);
-        assert_eq!(group_write(&r), json!(["123456789@s.whatsapp.net"]));
+        let r = plain(serde_json::json!({}), &[], &["123456789@lid"]);
+        assert_eq!(group_write(&r), serde_json::json!(["123456789@s.whatsapp.net"]));
     }
 
     #[test]
     fn an_admin_cannot_be_muted() {
         let r = run(
-            json!({}),
+            serde_json::json!({}),
             &[],
             &["628333@s.whatsapp.net"],
             None,
@@ -347,19 +346,19 @@ mod tests {
     #[test]
     fn a_plain_member_is_not_blocked_by_the_admin_check() {
         let r = run(
-            json!({}),
+            serde_json::json!({}),
             &[],
             &["628333@s.whatsapp.net"],
             None,
             roster("628333@s.whatsapp.net", false),
         );
-        assert_eq!(group_write(&r), json!(["628333@s.whatsapp.net"]));
+        assert_eq!(group_write(&r), serde_json::json!(["628333@s.whatsapp.net"]));
     }
 
     #[test]
     fn an_already_muted_number_is_not_added_twice() {
         let r = plain(
-            json!({"mutedMembers": ["628333@s.whatsapp.net"]}),
+            serde_json::json!({"mutedMembers": ["628333@s.whatsapp.net"]}),
             &[],
             &["628333@s.whatsapp.net"],
         );
@@ -373,7 +372,7 @@ mod tests {
         // `endsWith` di JS membandingkan string apa adanya, `628333:9` tidak
         // berakhir dengan `628333` dan sebaliknya.
         let r = plain(
-            json!({"mutedMembers": ["628333@s.whatsapp.net"]}),
+            serde_json::json!({"mutedMembers": ["628333@s.whatsapp.net"]}),
             &[],
             &["628333@s.whatsapp.net"],
         );
@@ -384,20 +383,20 @@ mod tests {
     #[test]
     fn a_different_number_is_appended_and_the_total_grows() {
         let r = plain(
-            json!({"mutedMembers": ["628222@s.whatsapp.net"]}),
+            serde_json::json!({"mutedMembers": ["628222@s.whatsapp.net"]}),
             &[],
             &["628333@s.whatsapp.net"],
         );
         assert_eq!(
             group_write(&r),
-            json!(["628222@s.whatsapp.net", "628333@s.whatsapp.net"])
+            serde_json::json!(["628222@s.whatsapp.net", "628333@s.whatsapp.net"])
         );
         assert!(text_of(&r).contains("`2` ᴍᴇᴍʙᴇʀ"), "{}", text_of(&r));
     }
 
     #[test]
     fn a_non_array_stored_value_reads_as_an_empty_list() {
-        let r = plain(json!({"mutedMembers": "bukan-array"}), &[], &["628333@s.whatsapp.net"]);
-        assert_eq!(group_write(&r), json!(["628333@s.whatsapp.net"]));
+        let r = plain(serde_json::json!({"mutedMembers": "bukan-array"}), &[], &["628333@s.whatsapp.net"]);
+        assert_eq!(group_write(&r), serde_json::json!(["628333@s.whatsapp.net"]));
     }
 }

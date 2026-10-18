@@ -171,7 +171,6 @@ pub fn slowmode(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
 
-    use serde_json::json;
 
     fn run(group: Value, args: &[&str]) -> Reply {
         let ctx = Ctx {
@@ -225,7 +224,7 @@ mod tests {
 
     #[test]
     fn the_status_branch_lists_every_preset_in_js_order() {
-        let r = run(json!({}), &[]);
+        let r = run(serde_json::json!({}), &[]);
         let t = text_of(&r);
         assert!(t.starts_with("🐢 *SLOWMODE*\n\nStatus: ❌ OFF\nMode: *all*"), "{t}");
         for (name, sec) in PRESETS {
@@ -242,7 +241,7 @@ mod tests {
     #[test]
     fn the_status_keyword_and_missing_keyword_share_one_branch() {
         for args in [vec![], vec!["status"]] {
-            let r = run(json!({}), &args);
+            let r = run(serde_json::json!({}), &args);
             assert!(text_of(&r).starts_with("🐢 *SLOWMODE*"), "args {args:?}");
             assert!(r.mutations().is_empty());
         }
@@ -250,7 +249,7 @@ mod tests {
 
     #[test]
     fn a_stored_configuration_is_reported_verbatim() {
-        let r = run(json!({"slowmode": {"enabled": true, "delay": 45, "mode": "onlycommand"}}), &[]);
+        let r = run(serde_json::json!({"slowmode": {"enabled": true, "delay": 45, "mode": "onlycommand"}}), &[]);
         let t = text_of(&r);
         assert!(t.contains("Status: ✅ ON (45s)"), "{t}");
         assert!(t.contains("Mode: *onlycommand*"), "{t}");
@@ -258,39 +257,39 @@ mod tests {
 
     #[test]
     fn a_missing_delay_or_mode_falls_back_to_thirty_and_all() {
-        let r = run(json!({"slowmode": {"enabled": true}}), &[]);
+        let r = run(serde_json::json!({"slowmode": {"enabled": true}}), &[]);
         assert!(text_of(&r).contains("Status: ✅ ON (30s)"), "{}", text_of(&r));
         assert!(text_of(&r).contains("Mode: *all*"), "{}", text_of(&r));
     }
 
     #[test]
     fn off_disables_without_touching_delay_or_mode() {
-        let r = run(json!({"slowmode": {"enabled": true, "delay": 45}}), &["off"]);
+        let r = run(serde_json::json!({"slowmode": {"enabled": true, "delay": 45}}), &["off"]);
         assert_eq!(text_of(&r), "✅ Slowmode *dinonaktifkan*");
-        assert_eq!(slowmode_write(&r), json!({"enabled": false}));
+        assert_eq!(slowmode_write(&r), serde_json::json!({"enabled": false}));
     }
 
     #[test]
     fn on_takes_the_delay_from_the_second_argument() {
-        let r = run(json!({}), &["on", "30"]);
-        assert_eq!(slowmode_write(&r), json!({"enabled": true, "delay": 30, "mode": "all"}));
+        let r = run(serde_json::json!({}), &["on", "30"]);
+        assert_eq!(slowmode_write(&r), serde_json::json!({"enabled": true, "delay": 30, "mode": "all"}));
         assert!(text_of(&r).contains("Delay: *30 detik* (normal)"), "{}", text_of(&r));
         assert!(text_of(&r).contains("Semua pesan + command dihapus"), "{}", text_of(&r));
     }
 
     #[test]
     fn on_without_a_delay_falls_back_to_thirty() {
-        let r = run(json!({}), &["on"]);
-        assert_eq!(slowmode_write(&r)["delay"], json!(30));
+        let r = run(serde_json::json!({}), &["on"]);
+        assert_eq!(slowmode_write(&r)["delay"], serde_json::json!(30));
     }
 
     #[test]
     fn onlycommand_and_its_shortcut_both_switch_the_mode() {
         for sub in ["onlycommand", "oc"] {
-            let r = run(json!({}), &[sub, "45"]);
+            let r = run(serde_json::json!({}), &[sub, "45"]);
             assert_eq!(
                 slowmode_write(&r),
-                json!({"enabled": true, "delay": 45, "mode": "onlycommand"}),
+                serde_json::json!({"enabled": true, "delay": 45, "mode": "onlycommand"}),
                 "sub {sub}"
             );
             assert!(text_of(&r).contains("Command di-silent, chat biasa tetap jalan"));
@@ -299,8 +298,8 @@ mod tests {
 
     #[test]
     fn a_bare_number_is_accepted_as_the_delay() {
-        let r = run(json!({}), &["90"]);
-        assert_eq!(slowmode_write(&r), json!({"enabled": true, "delay": 90, "mode": "all"}));
+        let r = run(serde_json::json!({}), &["90"]);
+        assert_eq!(slowmode_write(&r), serde_json::json!({"enabled": true, "delay": 90, "mode": "all"}));
         assert!(
             text_of(&r).contains("Delay: *90 detik*\n"),
             "delay tanpa preset tidak boleh dapat label: {}",
@@ -310,34 +309,34 @@ mod tests {
 
     #[test]
     fn a_preset_subcommand_can_also_switch_the_mode() {
-        let r = run(json!({}), &["ketat", "onlycommand"]);
-        assert_eq!(slowmode_write(&r), json!({"enabled": true, "delay": 60, "mode": "onlycommand"}));
+        let r = run(serde_json::json!({}), &["ketat", "onlycommand"]);
+        assert_eq!(slowmode_write(&r), serde_json::json!({"enabled": true, "delay": 60, "mode": "onlycommand"}));
         assert!(text_of(&r).contains("Delay: *60 detik* (ketat)"), "{}", text_of(&r));
 
-        let r = run(json!({}), &["santai", "oc"]);
-        assert_eq!(slowmode_write(&r), json!({"enabled": true, "delay": 10, "mode": "onlycommand"}));
+        let r = run(serde_json::json!({}), &["santai", "oc"]);
+        assert_eq!(slowmode_write(&r), serde_json::json!({"enabled": true, "delay": 10, "mode": "onlycommand"}));
 
-        let r = run(json!({}), &["santai", "ngapain"]);
-        assert_eq!(slowmode_write(&r)["mode"], json!("all"), "bukan mode yang dikenal -> all");
+        let r = run(serde_json::json!({}), &["santai", "ngapain"]);
+        assert_eq!(slowmode_write(&r)["mode"], serde_json::json!("all"), "bukan mode yang dikenal -> all");
     }
 
     #[test]
     fn the_delay_argument_of_on_also_accepts_a_preset_name() {
-        let r = run(json!({}), &["on", "max"]);
-        assert_eq!(slowmode_write(&r)["delay"], json!(300));
+        let r = run(serde_json::json!({}), &["on", "max"]);
+        assert_eq!(slowmode_write(&r)["delay"], serde_json::json!(300));
         assert!(text_of(&r).contains("(max)"));
     }
 
     #[test]
     fn delays_outside_five_to_six_hundred_are_refused() {
         for d in ["4", "601", "-1", "1000000"] {
-            let r = run(json!({}), &["on", d]);
+            let r = run(serde_json::json!({}), &["on", d]);
             assert_eq!(text_of(&r), BAD_DELAY, "delay {d}");
             assert!(r.mutations().is_empty(), "delay {d}");
         }
         for d in [5, 600] {
-            let r = run(json!({}), &["on", &d.to_string()]);
-            assert_eq!(slowmode_write(&r)["delay"], json!(d), "batas {d} harus boleh");
+            let r = run(serde_json::json!({}), &["on", &d.to_string()]);
+            assert_eq!(slowmode_write(&r)["delay"], serde_json::json!(d), "batas {d} harus boleh");
         }
     }
 
@@ -345,15 +344,15 @@ mod tests {
     fn a_zero_delay_is_falsy_in_js_so_it_falls_back_to_thirty() {
         // `parseInt('0') || 30` — bukan error.
         for args in [&["on", "0"][..], &["0"][..]] {
-            let r = run(json!({}), args);
-            assert_eq!(slowmode_write(&r)["delay"], json!(30), "args {args:?}");
+            let r = run(serde_json::json!({}), args);
+            assert_eq!(slowmode_write(&r)["delay"], serde_json::json!(30), "args {args:?}");
         }
     }
 
     #[test]
     fn a_non_numeric_subcommand_is_refused() {
         for sub in ["nyanyi", "onx"] {
-            let r = run(json!({}), &[sub]);
+            let r = run(serde_json::json!({}), &[sub]);
             assert_eq!(text_of(&r), BAD_SUBCMD, "sub {sub}");
             assert!(r.mutations().is_empty());
         }
@@ -363,7 +362,7 @@ mod tests {
     fn set_is_an_alias_for_on_inside_the_plugin_body() {
         // `set` bukan alias yang terdaftar, tapi tubuh JS memperlakukannya
         // sama dengan `on`.
-        let r = run(json!({}), &["set", "20"]);
-        assert_eq!(slowmode_write(&r), json!({"enabled": true, "delay": 20, "mode": "all"}));
+        let r = run(serde_json::json!({}), &["set", "20"]);
+        assert_eq!(slowmode_write(&r), serde_json::json!({"enabled": true, "delay": 20, "mode": "all"}));
     }
 }

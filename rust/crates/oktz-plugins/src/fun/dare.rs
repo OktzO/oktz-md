@@ -121,7 +121,7 @@ mod tests {
 
     #[test]
     fn the_reply_wraps_the_dare_in_a_code_fence_without_quotes() {
-        // JS: `` `\`\`\`${challenge}\`\`\`` — tanpa kutip, beda dari bucin.js.
+        // JS: `` ````${challenge}```` — tanpa kutip, beda dari bucin.js.
         for _ in 0..50 {
             let t = text_of(&run("")).to_string();
             assert!(t.starts_with("```") && t.ends_with("```"), "{t}");

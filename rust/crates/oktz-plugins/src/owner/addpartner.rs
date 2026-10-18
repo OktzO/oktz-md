@@ -8,7 +8,6 @@
 //! per user lewat `isPartner`.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::json;
 
 use crate::common::{now_ms, parse_int};
 
@@ -194,11 +193,11 @@ pub fn addpartner(ctx: Ctx) -> Reply {
             if renewed {
                 for v in &mut list {
                     if v.get("id").and_then(|x| x.as_str()) == Some(number.as_str()) {
-                        v["expired"] = json!(new_expired);
+                        v["expired"] = serde_json::json!(new_expired);
                     }
                 }
             } else {
-                list.push(json!({ "id": number, "expired": new_expired, "addedAt": now }));
+                list.push(serde_json::json!({ "id": number, "expired": new_expired, "addedAt": now }));
             }
 
             Reply::Text {
@@ -283,7 +282,7 @@ mod tests {
     #[test]
     fn adding_without_a_target_shows_help_and_writes_nothing() {
         for text in ["", "abc", "123"] {
-            let r = run("addpartner", text, json!({}), None);
+            let r = run("addpartner", text, serde_json::json!({}), None);
             assert!(text_of(&r).starts_with("🤝 *ᴀᴅᴅ ᴘᴀʀᴛɴᴇʀ*"), "input {text:?}");
             assert!(r.mutations().is_empty(), "input {text:?}");
         }
@@ -291,29 +290,29 @@ mod tests {
 
     #[test]
     fn a_ten_to_fifteen_digit_number_becomes_a_partner_entry() {
-        let r = run("addpartner", "6281234567890 30", json!({}), None);
+        let r = run("addpartner", "6281234567890 30", serde_json::json!({}), None);
         let list = written(&r);
         assert_eq!(list.len(), 1);
-        assert_eq!(list[0]["id"], json!("6281234567890"));
+        assert_eq!(list[0]["id"], serde_json::json!("6281234567890"));
         assert!(text_of(&r).contains("✅ Berhasil menambahkan partner @6281234567890"));
         assert!(text_of(&r).contains("selama *30 hari*"));
     }
 
     #[test]
     fn an_eight_prefixed_number_is_rewritten_to_sixty_two() {
-        let r = run("addpartner", "081234567890", json!({}), None);
-        assert_eq!(written(&r)[0]["id"], json!("6281234567890"));
+        let r = run("addpartner", "081234567890", serde_json::json!({}), None);
+        assert_eq!(written(&r)[0]["id"], serde_json::json!("6281234567890"));
     }
 
     #[test]
     fn a_mention_wins_over_the_number_in_the_text() {
-        let r = run("addpartner", "628999000000 5", json!({}), Some("628777@s.whatsapp.net"));
-        assert_eq!(written(&r)[0]["id"], json!("628777"));
+        let r = run("addpartner", "628999000000 5", serde_json::json!({}), Some("628777@s.whatsapp.net"));
+        assert_eq!(written(&r)[0]["id"], serde_json::json!("628777"));
     }
 
     #[test]
     fn renewing_an_existing_partner_replaces_the_expiry_in_place() {
-        let existing = json!({ "partnerList": [{ "id": "6281234567890", "expired": 4_000_000_000_000i64 }] });
+        let existing = serde_json::json!({ "partnerList": [{ "id": "6281234567890", "expired": 4_000_000_000_000i64 }] });
         let r = run("addpartner", "6281234567890 1", existing, None);
         let list = written(&r);
         assert_eq!(list.len(), 1, "tidak boleh menambah entri ganda");
@@ -322,7 +321,7 @@ mod tests {
 
     #[test]
     fn deleting_an_unknown_partner_is_refused_and_writes_nothing() {
-        let existing = json!({ "partnerList": [{ "id": "6281234567890", "expired": 1 }] });
+        let existing = serde_json::json!({ "partnerList": [{ "id": "6281234567890", "expired": 1 }] });
         let r = run("delpartner", "628999000000", existing, None);
         assert_eq!(text_of(&r), NOT_PARTNER);
         assert!(r.mutations().is_empty());
@@ -330,34 +329,34 @@ mod tests {
 
     #[test]
     fn deleting_removes_only_the_named_partner() {
-        let existing = json!({ "partnerList": [
+        let existing = serde_json::json!({ "partnerList": [
             { "id": "6281234567890", "expired": 1 },
             { "id": "628999000000", "expired": 1 },
         ]});
         let r = run("delpartner", "6281234567890", existing, None);
         let list = written(&r);
         assert_eq!(list.len(), 1);
-        assert_eq!(list[0]["id"], json!("628999000000"));
+        assert_eq!(list[0]["id"], serde_json::json!("628999000000"));
         assert!(text_of(&r).contains("✅ Berhasil menghapus @6281234567890"));
     }
 
     #[test]
     fn deleting_without_a_target_is_refused() {
-        let r = run("delpartner", "", json!({}), None);
+        let r = run("delpartner", "", serde_json::json!({}), None);
         assert_eq!(text_of(&r), NO_TARGET);
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn listing_an_empty_store_says_so_and_writes_nothing() {
-        let r = run("listpartner", "", json!({}), None);
+        let r = run("listpartner", "", serde_json::json!({}), None);
         assert_eq!(text_of(&r), EMPTY);
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn listing_numbers_the_partners_and_mentions_each_one() {
-        let existing = json!({ "partnerList": [
+        let existing = serde_json::json!({ "partnerList": [
             { "id": "6281234567890", "expired": 4_000_000_000_000i64 },
             { "id": "628999000000", "expired": 1 },
         ]});
@@ -378,7 +377,7 @@ mod tests {
 
     #[test]
     fn a_malformed_partner_entry_is_skipped_instead_of_panicking() {
-        let existing = json!({ "partnerList": ["bukan objek", { "expired": 5 }] });
+        let existing = serde_json::json!({ "partnerList": ["bukan objek", { "expired": 5 }] });
         let r = run("listpartner", "", existing, None);
         assert_eq!(text_of(&r), EMPTY);
         assert!(r.mutations().is_empty());

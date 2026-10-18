@@ -116,7 +116,6 @@ pub fn unmutemember(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
 
-    use serde_json::json;
 
     fn run(command: &str, group: Value, args: &[&str], mentioned: &[&str]) -> Reply {
         let ctx = Ctx {
@@ -198,7 +197,7 @@ mod tests {
 
     #[test]
     fn without_a_target_the_plugin_prints_the_usage() {
-        let r = run("unmutemember", json!({}), &[], &[]);
+        let r = run("unmutemember", serde_json::json!({}), &[], &[]);
         assert_eq!(
             text_of(&r),
             "🔊 *UNMUTE MEMBER*\n\n\
@@ -215,11 +214,11 @@ mod tests {
     fn a_muted_member_is_removed_and_the_remainder_is_written_back() {
         let r = run(
             "unmutemember",
-            json!({"mutedMembers": ["628222@s.whatsapp.net", "628333@s.whatsapp.net"]}),
+            serde_json::json!({"mutedMembers": ["628222@s.whatsapp.net", "628333@s.whatsapp.net"]}),
             &[],
             &["628333@s.whatsapp.net"],
         );
-        assert_eq!(group_write(&r), json!(["628222@s.whatsapp.net"]));
+        assert_eq!(group_write(&r), serde_json::json!(["628222@s.whatsapp.net"]));
         assert_eq!(
             text_of(&r),
             "🔊 *MEMBER DIUNMUTE*\n\n\
@@ -236,7 +235,7 @@ mod tests {
     fn the_success_branch_reacts_with_a_speaker() {
         match run(
             "unmutemember",
-            json!({"mutedMembers": ["628333@s.whatsapp.net"]}),
+            serde_json::json!({"mutedMembers": ["628333@s.whatsapp.net"]}),
             &[],
             &["628333@s.whatsapp.net"],
         )
@@ -252,16 +251,16 @@ mod tests {
         // `findIndex` di JS — duplikat nama tidak dibersihkan semua.
         let r = run(
             "unmutemember",
-            json!({"mutedMembers": ["628333@s.whatsapp.net", "628333:1@s.whatsapp.net"]}),
+            serde_json::json!({"mutedMembers": ["628333@s.whatsapp.net", "628333:1@s.whatsapp.net"]}),
             &[],
             &["628333@s.whatsapp.net"],
         );
-        assert_eq!(group_write(&r), json!(["628333:1@s.whatsapp.net"]));
+        assert_eq!(group_write(&r), serde_json::json!(["628333:1@s.whatsapp.net"]));
     }
 
     #[test]
     fn a_member_who_is_not_muted_is_reported_without_writing() {
-        for stored in [json!({}), json!({"mutedMembers": []})] {
+        for stored in [serde_json::json!({}), serde_json::json!({"mutedMembers": []})] {
             let r = run("unmutemember", stored.clone(), &[], &["628333@s.whatsapp.net"]);
             assert_eq!(text_of(&r), "❌ *ɢᴀɢᴀʟ*\n\n> Member @628333 tidak sedang dimute", "input {stored}");
             assert_eq!(mentions_of(&r), ["628333@s.whatsapp.net"]);
@@ -273,7 +272,7 @@ mod tests {
     fn the_list_aliases_print_the_table_and_never_write() {
         let r = run(
             "listmute",
-            json!({"mutedMembers": ["628222@s.whatsapp.net", "628333:1@s.whatsapp.net"]}),
+            serde_json::json!({"mutedMembers": ["628222@s.whatsapp.net", "628333:1@s.whatsapp.net"]}),
             &[],
             &[],
         );
@@ -294,7 +293,7 @@ mod tests {
         // JS mengecek `m.command` DULUAN, sebelum `resolveTarget`.
         let r = run(
             "listmutemember",
-            json!({"mutedMembers": ["628222@s.whatsapp.net"]}),
+            serde_json::json!({"mutedMembers": ["628222@s.whatsapp.net"]}),
             &[],
             &["628333@s.whatsapp.net"],
         );
@@ -304,7 +303,7 @@ mod tests {
 
     #[test]
     fn an_empty_list_says_there_is_nobody_muted() {
-        let r = run("listmutemember", json!({"mutedMembers": []}), &[], &[]);
+        let r = run("listmutemember", serde_json::json!({"mutedMembers": []}), &[], &[]);
         assert_eq!(
             text_of(&r),
             "🔇 *LIST MUTED MEMBERS*\n\n> Tidak ada member yang dimute di grup ini"

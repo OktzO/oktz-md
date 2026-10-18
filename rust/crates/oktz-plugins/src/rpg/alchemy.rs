@@ -6,7 +6,7 @@
 //! menimpa.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::rpg::heal::{apply_exp, inventory_map, or_default, rpg_map};
 
@@ -41,7 +41,7 @@ fn have(inv: &Map<String, Value>, material: &str) -> i64 {
     inv.get(material).and_then(Value::as_i64).unwrap_or(0)
 }
 
-/// `Object.entries(pot.materials).map(([m, qty]) => \`${qty}x ${m}\`)`.
+/// `Object.entries(pot.materials).map(([m, qty]) => `${qty}x ${m}`)`.
 fn materials_line(materials: &[(&'static str, i64)]) -> String {
     materials
         .iter()
@@ -117,10 +117,10 @@ pub fn alchemy(ctx: Ctx) -> Reply {
         if left <= 0 {
             inv.remove(*material);
         } else {
-            inv.insert((*material).to_string(), json!(left));
+            inv.insert((*material).to_string(), serde_json::json!(left));
         }
     }
-    inv.insert(result.to_string(), json!(have(&inv, result) + 1));
+    inv.insert(result.to_string(), serde_json::json!(have(&inv, result) + 1));
 
     let old_exp = or_default(ctx.user_field("exp").and_then(Value::as_i64), 0);
     let new_exp = apply_exp(&mut rpg, old_exp, exp);
@@ -136,14 +136,13 @@ pub fn alchemy(ctx: Ctx) -> Reply {
     .with_reaction("✅")
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "inventory": inv, "exp": new_exp, "rpg": rpg }),
+        data: serde_json::json!({ "inventory": inv, "exp": new_exp, "rpg": rpg }),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: Value, arg: &str) -> Reply {
         let ctx = Ctx {
@@ -197,7 +196,7 @@ mod tests {
 
     #[test]
     fn without_an_argument_the_whole_recipe_book_is_listed_in_order() {
-        let t_reply = run(json!({}), "");
+        let t_reply = run(serde_json::json!({}), "");
         let t = text_of(&t_reply);
         assert!(t.starts_with("Halo Alchemist!"), "{t}");
         assert!(t.ends_with("dari `.garden` atau `.dungeon`! 🌱"), "{t}");
@@ -213,7 +212,7 @@ mod tests {
     #[test]
     fn an_unknown_recipe_name_is_refused_and_nothing_is_written() {
         for bad in ["sword", "POTION", "health", "healthpotionn"] {
-            let r = run(json!({ "inventory": { "herb": 99 } }), bad);
+            let r = run(serde_json::json!({ "inventory": { "herb": 99 } }), bad);
             assert!(text_of(&r).starts_with("Waduh, itu racikan berbahaya"), "arg {bad}");
             assert!(r.mutations().is_empty(), "arg {bad}");
         }
@@ -221,7 +220,7 @@ mod tests {
 
     #[test]
     fn a_recipe_name_is_case_insensitive() {
-        let r = run(json!({ "inventory": { "herb": 3 } }), "HeAlThPoTiOn");
+        let r = run(serde_json::json!({ "inventory": { "herb": 3 } }), "HeAlThPoTiOn");
         assert!(text_of(&r).contains("CLLINGGG"), "{}", text_of(&r));
     }
 
@@ -229,24 +228,24 @@ mod tests {
     /// hilang dari tas, bukan jadi 0.
     #[test]
     fn a_spent_material_disappears_from_the_bag_while_a_surplus_stays() {
-        let r = run(json!({ "inventory": { "herb": 4, "gold": 2 }, "exp": 0 }), "exppotion");
+        let r = run(serde_json::json!({ "inventory": { "herb": 4, "gold": 2 }, "exp": 0 }), "exppotion");
         let inv = write_of(&r)["inventory"].as_object().unwrap().clone();
         assert!(!inv.contains_key("herb"), "4 - 4 = 0 -> dihapus");
         assert!(!inv.contains_key("gold"), "2 - 2 = 0 -> dihapus");
-        assert_eq!(inv["exppotion"], json!(1));
+        assert_eq!(inv["exppotion"], serde_json::json!(1));
     }
 
     #[test]
     fn a_partly_spent_material_keeps_the_remainder() {
-        let r = run(json!({ "inventory": { "herb": 10, "gold": 4 } }), "exppotion");
+        let r = run(serde_json::json!({ "inventory": { "herb": 10, "gold": 4 } }), "exppotion");
         let inv = write_of(&r)["inventory"].as_object().unwrap().clone();
-        assert_eq!(inv["herb"], json!(6), "10 - 4");
-        assert_eq!(inv["gold"], json!(2), "4 - 2");
+        assert_eq!(inv["herb"], serde_json::json!(6), "10 - 4");
+        assert_eq!(inv["gold"], serde_json::json!(2), "4 - 2");
     }
 
     #[test]
     fn every_missing_material_is_listed_with_have_over_need() {
-        let r = run(json!({ "inventory": { "herb": 1, "gold": 0 } }), "elixir");
+        let r = run(serde_json::json!({ "inventory": { "herb": 1, "gold": 0 } }), "elixir");
         let t = text_of(&r);
         assert!(t.starts_with("Eits, bahannya belum cukup"), "{t}");
         for line in ["• herb: 1/10", "• gold: 0/5", "• diamond: 0/2"] {
@@ -257,16 +256,16 @@ mod tests {
 
     #[test]
     fn an_exact_stock_is_enough_and_pays_the_recipe_exp() {
-        let r = run(json!({ "inventory": { "herb": 2 }, "exp": 0 }), "antidote");
+        let r = run(serde_json::json!({ "inventory": { "herb": 2 }, "exp": 0 }), "antidote");
         let data = write_of(&r);
-        assert_eq!(data["exp"], json!(50), "exp resep antidote");
-        assert_eq!(data["inventory"]["antidote"], json!(1));
+        assert_eq!(data["exp"], serde_json::json!(50), "exp resep antidote");
+        assert_eq!(data["inventory"]["antidote"], serde_json::json!(1));
     }
 
     #[test]
     fn the_result_stack_accumulates_across_brews() {
-        let r = run(json!({ "inventory": { "herb": 6 } }), "healthpotion");
-        assert_eq!(write_of(&r)["inventory"]["healthpotion"], json!(1));
+        let r = run(serde_json::json!({ "inventory": { "herb": 6 } }), "healthpotion");
+        assert_eq!(write_of(&r)["inventory"]["healthpotion"], serde_json::json!(1));
     }
 
     #[test]

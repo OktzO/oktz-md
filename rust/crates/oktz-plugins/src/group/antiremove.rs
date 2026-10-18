@@ -58,7 +58,6 @@ pub fn antiremove(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -120,7 +119,7 @@ mod tests {
 
     #[test]
     fn a_missing_setting_reads_as_off_without_writing() {
-        let r = run(json!({}), "");
+        let r = run(serde_json::json!({}), "");
         assert!(
             text_of(&r).contains("> Status: *❌ Nonaktif*"),
             "{}",
@@ -134,11 +133,11 @@ mod tests {
         // JS `status === 'on'` — nilai lain (termasuk boolean `true`) jatuh ke
         // cabang nonaktif, bukan dianggap aktif.
         assert!(
-            text_of(&run(json!({"antiremove": "on"}), "")).contains("✅ Aktif"),
+            text_of(&run(serde_json::json!({"antiremove": "on"}), "")).contains("✅ Aktif"),
             "{}",
-            text_of(&run(json!({"antiremove": "on"}), ""))
+            text_of(&run(serde_json::json!({"antiremove": "on"}), ""))
         );
-        for group in [json!({"antiremove": true}), json!({"antiremove": "ON"})] {
+        for group in [serde_json::json!({"antiremove": true}), serde_json::json!({"antiremove": "ON"})] {
             let r = run(group.clone(), "");
             assert!(
                 text_of(&r).contains("❌ Nonaktif"),
@@ -150,19 +149,19 @@ mod tests {
 
     #[test]
     fn on_and_off_write_a_string_not_a_boolean() {
-        let on = run(json!({}), "on");
+        let on = run(serde_json::json!({}), "on");
         assert_eq!(text_of(&on), ON);
-        assert_eq!(written(&on), &json!({ "antiremove": "on" }));
+        assert_eq!(written(&on), &serde_json::json!({ "antiremove": "on" }));
 
-        let off = run(json!({"antiremove": "on"}), "off");
+        let off = run(serde_json::json!({"antiremove": "on"}), "off");
         assert_eq!(text_of(&off), OFF);
-        assert_eq!(written(&off), &json!({ "antiremove": "off" }));
+        assert_eq!(written(&off), &serde_json::json!({ "antiremove": "off" }));
     }
 
     #[test]
     fn each_branch_carries_its_own_reaction() {
         for (text, emoji) in [("on", "✅"), ("off", "❌")] {
-            match run(json!({}), text).without_mutations() {
+            match run(serde_json::json!({}), text).without_mutations() {
                 Reply::Reaction { emoji: e, .. } => assert_eq!(e, emoji, "{text}"),
                 other => panic!("harus Reaction, dapat {other:?}"),
             }
@@ -171,14 +170,14 @@ mod tests {
 
     #[test]
     fn an_unknown_action_is_refused_and_nothing_is_written() {
-        let r = run(json!({}), "mungkin");
+        let r = run(serde_json::json!({}), "mungkin");
         assert_eq!(text_of(&r), BAD_ACTION);
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn other_group_fields_are_left_alone_by_the_patch() {
-        let r = run(json!({"antiremove": "off", "welcome": true}), "on");
-        assert_eq!(written(&r), &json!({ "antiremove": "on" }));
+        let r = run(serde_json::json!({"antiremove": "off", "welcome": true}), "on");
+        assert_eq!(written(&r), &serde_json::json!({ "antiremove": "on" }));
     }
 }

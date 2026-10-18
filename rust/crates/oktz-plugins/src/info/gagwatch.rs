@@ -130,7 +130,6 @@ pub fn gagwatch(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
 
-    use serde_json::json;
 
     fn run() -> Reply {
         let ctx = Ctx {
@@ -154,7 +153,7 @@ mod tests {
     }
 
     fn stock() -> Value {
-        json!({
+        serde_json::json!({
             "message": "Update selesai",
             "restockInLabel": "2j 15m",
             "seeds": [{"name": "Carrot", "quantity": 3}],
@@ -196,7 +195,7 @@ mod tests {
     #[test]
     fn the_header_uses_a_dash_when_the_value_is_falsy() {
         let s =
-            json!({"message": "", "restockInLabel": null, "seeds": [], "gear": [], "crates": []});
+            serde_json::json!({"message": "", "restockInLabel": null, "seeds": [], "gear": [], "crates": []});
         assert_eq!(
             render(&s).unwrap(),
             "🌱 *GAG2 STOCK MONITOR*\n\n\
@@ -223,7 +222,7 @@ mod tests {
 
     #[test]
     fn an_active_weather_block_prints_the_uppercased_type_and_first_effect() {
-        let s = json!({
+        let s = serde_json::json!({
             "message": "ok", "restockInLabel": "1m",
             "weather": {"active": true, "type": "rain", "effects": ["Wet", "Slow"]},
             "seeds": [], "gear": [], "crates": [],
@@ -245,7 +244,7 @@ mod tests {
 
     #[test]
     fn an_inactive_weather_block_is_skipped_entirely() {
-        let s = json!({
+        let s = serde_json::json!({
             "message": "ok", "restockInLabel": "1m",
             "weather": {"active": false, "type": "rain", "effects": ["Wet"]},
             "seeds": [], "gear": [], "crates": [],
@@ -267,7 +266,7 @@ mod tests {
 
     #[test]
     fn an_active_weather_without_a_type_is_an_error_too() {
-        let s = json!({
+        let s = serde_json::json!({
             "message": "ok", "restockInLabel": "1m",
             "weather": {"active": true, "effects": []},
             "seeds": [], "gear": [], "crates": [],

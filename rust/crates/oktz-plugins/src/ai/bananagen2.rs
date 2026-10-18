@@ -10,7 +10,7 @@
 //! seperti `src/lib/axios`/`UreqHttp` sudah dipakai plugin lain di folder ini.
 
 use oktz_plugin_api::{Ctx, HttpGet, MediaSource, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::js_truthy;
 
@@ -21,7 +21,7 @@ const ENDPOINT: &str = "https://api.yuulabs.web.id/api/ai/flux-img";
 /// "Gagal membuat gambar"` (`seaart.js:86`), atau pesan `HttpGet` kalau
 /// kegagalannya di transport.
 fn flux_image(http: &dyn HttpGet, prompt: &str) -> Result<String, String> {
-    let body = json!({ "message": prompt, "ratio": "1:1" });
+    let body = serde_json::json!({ "message": prompt, "ratio": "1:1" });
     let res = http.post_json(ENDPOINT, &body).map_err(|e| e.message)?;
     let data: Value = res.json().unwrap_or(Value::Null);
 
@@ -110,7 +110,7 @@ mod tests {
         }
         fn respond(&self) -> Result<HttpResponse, HttpError> {
             let Some(text) = &self.resp else {
-                return Err(HttpError {
+                return Err(oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 });
             };

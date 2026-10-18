@@ -6,7 +6,7 @@
 //! level-up yang butuh canvas.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::rpg::heal::{apply_exp, or_default, rpg_int, rpg_map, roll_incl, roll_percent};
 use crate::tools::kalkulatormbg::thousands_id;
@@ -72,7 +72,7 @@ pub fn adventure(ctx: Ctx) -> Reply {
         ))
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "koin": crate::common::int_field(&ctx, "koin") + money_gain,
+            data: serde_json::json!({ "koin": crate::common::int_field(&ctx, "koin") + money_gain,
                           "exp": new_exp,
                           "rpg": rpg }),
         });
@@ -80,7 +80,7 @@ pub fn adventure(ctx: Ctx) -> Reply {
 
     let health_loss = roll_incl(10, 39);
     let left = (health - health_loss).max(0);
-    rpg.insert("health".into(), json!(left));
+    rpg.insert("health".into(), serde_json::json!(left));
 
     let mut msg = format!(
         "☠️ *DISERGAP MONSTER!!* ☠️\n\n\
@@ -103,8 +103,8 @@ pub fn adventure(ctx: Ctx) -> Reply {
     };
 
     let data = match exp_after {
-        Some(exp) => json!({ "exp": exp, "rpg": rpg }),
-        None => json!({ "rpg": rpg }),
+        Some(exp) => serde_json::json!({ "exp": exp, "rpg": rpg }),
+        None => serde_json::json!({ "rpg": rpg }),
     };
     Reply::text(msg).with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
@@ -115,7 +115,6 @@ pub fn adventure(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: Value) -> Reply {
         let ctx = Ctx {
@@ -172,7 +171,7 @@ mod tests {
     fn a_weak_body_is_turned_away_without_writing_anything() {
         // `user.rpg.health || 100`: 0 berarti "belum diisi" -> 100, bukan sekarat.
         for health in [1, 10, 29] {
-            let r = run(json!({ "rpg": { "health": health }, "koin": 100 }));
+            let r = run(serde_json::json!({ "rpg": { "health": health }, "koin": 100 }));
             let t = text_of(&r);
             assert!(
                 t.starts_with("Aduh kak, HP kamu sekarat"),
@@ -188,7 +187,7 @@ mod tests {
     fn the_threshold_is_exactly_thirty() {
         let mut went_through = false;
         for _ in 0..200 {
-            let r = run(json!({ "rpg": { "health": 30 }, "koin": 0 }));
+            let r = run(serde_json::json!({ "rpg": { "health": 30 }, "koin": 0 }));
             if !text_of(&r).starts_with("Aduh kak, HP kamu sekarat") {
                 went_through = true;
                 assert_eq!(r.mutations().len(), 1);
@@ -199,7 +198,7 @@ mod tests {
 
     #[test]
     fn an_absent_health_reads_as_one_hundred_and_is_never_blocked() {
-        for user in [json!(null), json!({}), json!({ "rpg": null })] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({ "rpg": null })] {
             let r = run(user.clone());
             assert!(
                 !text_of(&r).starts_with("Aduh kak, HP kamu sekarat"),
@@ -212,14 +211,14 @@ mod tests {
     fn a_win_pays_coins_and_exp_and_leaves_health_alone() {
         let mut won = false;
         for _ in 0..400 {
-            let r = run(json!({ "rpg": { "health": 100 }, "koin": 500, "exp": 0 }));
+            let r = run(serde_json::json!({ "rpg": { "health": 100 }, "koin": 500, "exp": 0 }));
             let t = text_of(&r);
             if !t.starts_with("🗡️ *PETUALANGAN BERHASIL!!*") {
                 continue;
             }
             won = true;
             let data = write_of(&r);
-            assert_eq!(data["rpg"], json!({ "health": 100 }), "k menang tak boleh dikurangi HP");
+            assert_eq!(data["rpg"], serde_json::json!({ "health": 100 }), "k menang tak boleh dikurangi HP");
             let gained_koin = data["koin"].as_i64().unwrap() - 500;
             let gained_exp = data["exp"].as_i64().unwrap();
             assert!((2_000..=11_999).contains(&gained_koin), "koin {gained_koin}");
@@ -234,7 +233,7 @@ mod tests {
     fn a_loss_without_death_only_costs_hp_and_keeps_exp() {
         let mut lost = false;
         for _ in 0..400 {
-            let r = run(json!({ "rpg": { "health": 60 }, "koin": 500, "exp": 900 }));
+            let r = run(serde_json::json!({ "rpg": { "health": 60 }, "koin": 500, "exp": 900 }));
             let t = text_of(&r);
             if !t.starts_with("☠️ *DISERGAP MONSTER!!*") {
                 continue;
@@ -256,15 +255,15 @@ mod tests {
     fn dying_clamps_health_to_zero_and_halves_the_exp() {
         let mut died = false;
         for _ in 0..400 {
-            let r = run(json!({ "rpg": { "health": 30 }, "koin": 7, "exp": 901 }));
+            let r = run(serde_json::json!({ "rpg": { "health": 30 }, "koin": 7, "exp": 901 }));
             let t = text_of(&r);
             if !t.contains("💀 *KAMU MATI!*") {
                 continue;
             }
             died = true;
             let data = write_of(&r);
-            assert_eq!(data["rpg"]["health"], json!(0));
-            assert_eq!(data["exp"], json!(450), "Math.floor(901 / 2), bukan 451");
+            assert_eq!(data["rpg"]["health"], serde_json::json!(0));
+            assert_eq!(data["exp"], serde_json::json!(450), "Math.floor(901 / 2), bukan 451");
             assert!(data.get("koin").is_none(), "kalah tak menulis koin sama sekali");
         }
         assert!(died, "dalam 400 percobaan harus ada yang mati");
@@ -273,7 +272,7 @@ mod tests {
     #[test]
     fn the_location_is_always_one_of_the_six() {
         for _ in 0..200 {
-            let r = run(json!({ "rpg": { "health": 100 } }));
+            let r = run(serde_json::json!({ "rpg": { "health": 100 } }));
             let t = text_of(&r);
             assert!(
                 LOCATIONS

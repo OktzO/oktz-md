@@ -9,7 +9,7 @@
 //! TERAKHIR), dan kartu level-up dari `checkAndNotifyLevelUp` yang butuh canvas.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::common::int_field;
 use crate::tools::kalkulatormbg::thousands_id;
@@ -91,13 +91,13 @@ pub(crate) fn apply_exp(rpg: &mut Map<String, Value>, old_exp: i64, gain: i64) -
     let new_exp = exp_gain_only(old_exp, gain);
     let new_level = crate::user::exp::calculate_level(new_exp);
     if new_level > crate::user::exp::calculate_level(old_exp) {
-        rpg.insert("level".into(), json!(new_level));
-        rpg.insert("maxHealth".into(), json!(100 + (new_level - 1) * 10));
-        rpg.insert("maxMana".into(), json!(100 + (new_level - 1) * 5));
-        rpg.insert("maxStamina".into(), json!(100 + (new_level - 1) * 5));
-        rpg.insert("health".into(), json!(100 + (new_level - 1) * 10));
-        rpg.insert("mana".into(), json!(100 + (new_level - 1) * 5));
-        rpg.insert("stamina".into(), json!(100 + (new_level - 1) * 5));
+        rpg.insert("level".into(), serde_json::json!(new_level));
+        rpg.insert("maxHealth".into(), serde_json::json!(100 + (new_level - 1) * 10));
+        rpg.insert("maxMana".into(), serde_json::json!(100 + (new_level - 1) * 5));
+        rpg.insert("maxStamina".into(), serde_json::json!(100 + (new_level - 1) * 5));
+        rpg.insert("health".into(), serde_json::json!(100 + (new_level - 1) * 10));
+        rpg.insert("mana".into(), serde_json::json!(100 + (new_level - 1) * 5));
+        rpg.insert("stamina".into(), serde_json::json!(100 + (new_level - 1) * 5));
     }
     new_exp
 }
@@ -170,7 +170,7 @@ pub fn jualan(ctx: Ctx) -> Reply {
              Jualan butuh *{STAMINA_COST} Stamina*, sisa stamina kamu *{stamina}*. Ngiyup bentar! 🏖️"
         ));
     }
-    rpg.insert("stamina".into(), json!(stamina - STAMINA_COST));
+    rpg.insert("stamina".into(), serde_json::json!(stamina - STAMINA_COST));
 
     let koin = int_field(&ctx, "koin");
     let old_exp = or_default(ctx.user_field("exp").and_then(Value::as_i64), 0);
@@ -191,7 +191,7 @@ pub fn jualan(ctx: Ctx) -> Reply {
         .with_reaction("🌧️")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "koin": koin, "rpg": rpg }),
+            data: serde_json::json!({ "koin": koin, "rpg": rpg }),
         });
     }
 
@@ -224,7 +224,7 @@ pub fn jualan(ctx: Ctx) -> Reply {
     .with_reaction(react)
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": koin + earning, "exp": new_exp, "rpg": rpg }),
+        data: serde_json::json!({ "koin": koin + earning, "exp": new_exp, "rpg": rpg }),
     })
 }
 
@@ -287,7 +287,7 @@ mod tests {
     fn zero_stamina_is_still_zero_because_the_js_guard_uses_nullish_coalescing() {
         // `user.rpg.stamina ?? 100` — unlike `|| 100`, 0 survives, so a user
         // who spent all stamina really is told off.
-        let r = run(json!({"rpg": {"stamina": 0}}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 0}}));
         let t = text_of(&r);
         assert!(t.starts_with("Kaki lemes kebanyakan keliling!"), "{t}");
         assert!(t.contains("sisa stamina kamu *0*"), "{t}");
@@ -296,25 +296,25 @@ mod tests {
 
     #[test]
     fn a_user_without_rpg_row_starts_from_the_full_stamina_bar() {
-        for user in [json!(null), json!({}), json!({"rpg": null}), json!({"rpg": {}})] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"rpg": null}), serde_json::json!({"rpg": {}})] {
             let r = run(user.clone());
             assert!(
                 !text_of(&r).starts_with("Kaki lemes"),
                 "stamina default 100 harus cukup: {user}"
             );
-            assert_eq!(written(&r)["rpg"]["stamina"], json!(82), "input {user}");
+            assert_eq!(written(&r)["rpg"]["stamina"], serde_json::json!(82), "input {user}");
         }
     }
 
     #[test]
     fn stamina_exactly_at_the_cost_is_allowed_and_drops_to_zero() {
-        let r = run(json!({"rpg": {"stamina": 18}}));
-        assert_eq!(written(&r)["rpg"]["stamina"], json!(0));
+        let r = run(serde_json::json!({"rpg": {"stamina": 18}}));
+        assert_eq!(written(&r)["rpg"]["stamina"], serde_json::json!(0));
     }
 
     #[test]
     fn one_point_below_the_cost_is_refused() {
-        let r = run(json!({"rpg": {"stamina": 17}}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 17}}));
         assert!(text_of(&r).contains("sisa stamina kamu *17*"));
         assert!(r.mutations().is_empty());
     }
@@ -322,8 +322,8 @@ mod tests {
     #[test]
     fn a_successful_sale_always_costs_exactly_eighteen_stamina() {
         for _ in 0..200 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 1000, "exp": 0}));
-            assert_eq!(written(&r)["rpg"]["stamina"], json!(82));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 1000, "exp": 0}));
+            assert_eq!(written(&r)["rpg"]["stamina"], serde_json::json!(82));
         }
     }
 
@@ -332,7 +332,7 @@ mod tests {
         let mut seen_brotmon = false;
         let mut seen_standar = false;
         for _ in 0..2000 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
             let d = written(&r);
             let koin = d["koin"].as_i64().unwrap();
             let t = text_of(&r);
@@ -356,12 +356,12 @@ mod tests {
     fn the_rain_branch_takes_money_but_never_gives_exp() {
         let mut seen = false;
         for _ in 0..3000 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 20000, "exp": 5000}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 20000, "exp": 5000}));
             let d = written(&r);
             if text_of(&r).starts_with("HUJAN DERAS") {
                 seen = true;
                 assert!(d.get("exp").is_none(), "cabang rugi tidak menyentuh exp");
-                assert_eq!(d["rpg"]["stamina"], json!(82));
+                assert_eq!(d["rpg"]["stamina"], serde_json::json!(82));
                 assert!(d["koin"].as_i64().unwrap() <= 15000, "koin {}", d["koin"]);
                 break;
             }
@@ -374,7 +374,7 @@ mod tests {
         // `Math.max(0, koin - rugi)` — koin 0 dan rugi besar tetap 0, bukan
         // negatif.
         for _ in 0..200 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
             assert!(written(&r)["koin"].as_i64().unwrap() >= 0);
         }
     }
@@ -383,9 +383,9 @@ mod tests {
     fn an_infinite_exp_user_stays_infinite() {
         // `user.exp !== -1` jadi -1 berarti "exp dimatikan", bukan nol.
         for _ in 0..200 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": -1}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": -1}));
             if let Some(exp) = written(&r).get("exp") {
-                assert_eq!(exp, &json!(-1), "exp -1 harus tetap -1");
+                assert_eq!(exp, &serde_json::json!(-1), "exp -1 harus tetap -1");
             }
         }
     }
@@ -394,13 +394,13 @@ mod tests {
     fn a_level_crossing_overwrites_the_stamina_we_just_spent() {
         // 9999 EXP -> 10000 = level 2. `checkAndNotifyLevelUp` mengisi ulang
         // stamina ke maxStamina = 105, menimpa pengurangan 18.
-        let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 9999}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 9999}));
         let d = written(&r);
         if d.get("exp").and_then(Value::as_i64).is_some_and(|e| e > 9999) {
-            assert_eq!(d["rpg"]["level"], json!(2));
-            assert_eq!(d["rpg"]["maxStamina"], json!(105));
-            assert_eq!(d["rpg"]["stamina"], json!(105));
-            assert_eq!(d["rpg"]["maxHealth"], json!(110));
+            assert_eq!(d["rpg"]["level"], serde_json::json!(2));
+            assert_eq!(d["rpg"]["maxStamina"], serde_json::json!(105));
+            assert_eq!(d["rpg"]["stamina"], serde_json::json!(105));
+            assert_eq!(d["rpg"]["maxHealth"], serde_json::json!(110));
         }
     }
 

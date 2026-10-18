@@ -15,7 +15,6 @@
 
 use oktz_plugin_api::{Ctx, HttpCall, Reply, plugin};
 
-use crate::common::error_template;
 
 /// `QUERIES` (`pap.js:31-35`) — urutan query per tipe; yang pertama yang
 /// menjawab dengan pin dipakai.
@@ -140,7 +139,7 @@ pub fn pap(ctx: Ctx) -> Reply {
         Ok(_urls) => Reply::text(GAMBAR_TIDAK_TERSEDIA).with_reaction("❌"),
         // `pap.js:266-273` — `CapabilityError` jadi template error biasa;
         // `m.pushName` tidak ada di `Ctx` sehingga tetap "User".
-        Err(()) => Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
+        Err(()) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
     }
 }
 
@@ -220,7 +219,7 @@ mod tests {
     fn a_valid_type_reaches_the_error_branch_while_the_resolver_is_missing() {
         for tipe in VALID_TYPES {
             let r = run(tipe);
-            assert_eq!(text_of(&r), error_template(".", "pap"), "tipe {tipe}");
+            assert_eq!(text_of(&r), crate::common::error_template(".", "pap"), "tipe {tipe}");
             assert_eq!(reaction_of(&r), Some("☢"), "tipe {tipe}");
         }
     }

@@ -12,7 +12,7 @@
 use oktz_plugin_api::{Ctx, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::{error_template, js_truthy};
+use crate::common::{js_truthy};
 
 /// `npm.js:34` — `size=10`, meski hanya 8 yang ditampilkan.
 pub(crate) fn api_url(query: &str) -> String {
@@ -134,7 +134,7 @@ pub fn npm(ctx: Ctx) -> Reply {
     // `await m.react("🕕")` di `:30` sudah jalan sebelum request, jadi reaksi
     // terakhir pada cabang gagal adalah "☢".
     let Ok(res) = ctx.http.get(&api_url(&query)) else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
 
     // `fetch` tidak melempar untuk status 4xx/5xx; `ctx.http.get` sudah
@@ -154,7 +154,6 @@ pub fn npm(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -186,7 +185,7 @@ mod tests {
             let v = self
                 .body
                 .clone()
-                .ok_or_else(|| HttpError { message: "offline".into() })?;
+                .ok_or_else(|| oktz_plugin_api::HttpError { message: "offline".into() })?;
             Ok(HttpResponse {
                 status: 200,
                 body: HttpBody::Bytes {
@@ -281,7 +280,7 @@ mod tests {
 
     #[test]
     fn the_query_is_url_encoded_in_the_registry_search() {
-        let http = Stub::with(json!({ "objects": [], "total": 0 }));
+        let http = Stub::with(serde_json::json!({ "objects": [], "total": 0 }));
         let _ = run(http.clone(), "@babel/core");
         assert_eq!(
             http.seen.lock().unwrap()[0],
@@ -291,7 +290,7 @@ mod tests {
 
     #[test]
     fn a_hit_renders_one_block_per_package() {
-        let http = Stub::with(json!({
+        let http = Stub::with(serde_json::json!({
             "total": 1234,
             "objects": [
                 { "package": {
@@ -319,10 +318,10 @@ mod tests {
     #[test]
     fn packages_run_together_because_the_js_loop_adds_no_newline() {
         let objects = vec![
-            json!({ "package": { "name": "a" }, "score": { "final": 0.5 } }),
-            json!({ "package": { "name": "b" }, "score": { "final": 0.5 } }),
+            serde_json::json!({ "package": { "name": "a" }, "score": { "final": 0.5 } }),
+            serde_json::json!({ "package": { "name": "b" }, "score": { "final": 0.5 } }),
         ];
-        let t = build_text(&objects, "q", Some(&json!(2)));
+        let t = build_text(&objects, "q", Some(&serde_json::json!(2)));
         assert!(
             t.contains("> ⭐ Score: 50%2. *b*"),
             "tidak ada newline di akhir blok: {t:?}"
@@ -332,13 +331,13 @@ mod tests {
     #[test]
     fn a_description_longer_than_fifty_characters_is_cut_with_an_ellipsis() {
         let desc = "x".repeat(51);
-        let objects = vec![json!({ "package": { "name": "p", "description": desc } })];
+        let objects = vec![serde_json::json!({ "package": { "name": "p", "description": desc } })];
         let t = build_text(&objects, "q", None);
         assert!(t.contains(&format!("> 📝 {}...\n", "x".repeat(50))), "{t}");
         assert_eq!(t.matches('x').count(), 50);
 
         let desc = "y".repeat(50);
-        let objects = vec![json!({ "package": { "name": "p", "description": desc } })];
+        let objects = vec![serde_json::json!({ "package": { "name": "p", "description": desc } })];
         let t = build_text(&objects, "q", None);
         assert!(t.contains(&format!("> 📝 {}\n", "y".repeat(50))), "{t}");
         assert!(!t.contains("..."), "tepat 50 tidak dipotong: {t}");
@@ -347,7 +346,7 @@ mod tests {
     #[test]
     fn only_eight_packages_are_listed_even_though_ten_were_requested() {
         let objects: Vec<Value> = (0..10)
-            .map(|i| json!({ "package": { "name": format!("p{i}") } }))
+            .map(|i| serde_json::json!({ "package": { "name": format!("p{i}") } }))
             .collect();
         let t = build_text(&objects, "q", None);
         assert!(t.contains("8. *p7*"), "{t}");
@@ -356,19 +355,19 @@ mod tests {
 
     #[test]
     fn the_score_rounds_halves_up_like_math_round() {
-        assert_eq!(score_persen(&json!({ "score": { "final": 0.5 } })), 50);
-        assert_eq!(score_persen(&json!({ "score": { "final": 0.999 } })), 100);
-        assert_eq!(score_persen(&json!({ "score": { "final": 0.005 } })), 1);
-        assert_eq!(score_persen(&json!({ "score": {} })), 0);
-        assert_eq!(score_persen(&json!({})), 0);
-        assert_eq!(score_persen(&json!({ "score": { "final": null } })), 0);
+        assert_eq!(score_persen(&serde_json::json!({ "score": { "final": 0.5 } })), 50);
+        assert_eq!(score_persen(&serde_json::json!({ "score": { "final": 0.999 } })), 100);
+        assert_eq!(score_persen(&serde_json::json!({ "score": { "final": 0.005 } })), 1);
+        assert_eq!(score_persen(&serde_json::json!({ "score": {} })), 0);
+        assert_eq!(score_persen(&serde_json::json!({})), 0);
+        assert_eq!(score_persen(&serde_json::json!({ "score": { "final": null } })), 0);
         // `|| 0` menutup nilai 0 dan string kosong, jadi keduanya jadi 0.
-        assert_eq!(score_persen(&json!({ "score": { "final": 0 } })), 0);
+        assert_eq!(score_persen(&serde_json::json!({ "score": { "final": 0 } })), 0);
     }
 
     #[test]
     fn an_empty_or_absent_objects_field_reports_not_found() {
-        for body in [json!({ "objects": [] }), json!({}), json!("bukan json")] {
+        for body in [serde_json::json!({ "objects": [] }), serde_json::json!({}), serde_json::json!("bukan json")] {
             let r = run(Stub::with(body), "zzz");
             assert_eq!(
                 text_of(&r),
@@ -381,7 +380,7 @@ mod tests {
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "axios");
-        assert_eq!(text_of(&r), error_template(".", "npm"));
+        assert_eq!(text_of(&r), crate::common::error_template(".", "npm"));
         assert_eq!(reaction_of(&r), Some("☢"));
     }
 
@@ -389,20 +388,20 @@ mod tests {
     fn odd_and_very_long_queries_do_not_panic() {
         for input in ["<b>", "a|b", "🎨", "'\"", "a\u{202e}b", "?#&="] {
             let r = run(
-                Stub::with(json!({ "objects": [], "total": 0 })),
+                Stub::with(serde_json::json!({ "objects": [], "total": 0 })),
                 input,
             );
             assert!(text_of(&r).contains("tidak ditemukan"), "input {input:?}");
         }
         let panjang = "a".repeat(5000);
-        let r = run(Stub::with(json!({ "objects": [], "total": 0 })), &panjang);
+        let r = run(Stub::with(serde_json::json!({ "objects": [], "total": 0 })), &panjang);
         assert!(text_of(&r).contains(&panjang.chars().take(200).collect::<String>()));
     }
 
     #[test]
     fn a_missing_total_field_prints_undefined() {
-        let objects = vec![json!({ "package": { "name": "x" } })];
+        let objects = vec![serde_json::json!({ "package": { "name": "x" } })];
         assert!(build_text(&objects, "q", None).contains("> Found: undefined packages"));
-        assert!(build_text(&objects, "q", Some(&json!(null))).contains("> Found: undefined packages"));
+        assert!(build_text(&objects, "q", Some(&serde_json::json!(null))).contains("> Found: undefined packages"));
     }
 }

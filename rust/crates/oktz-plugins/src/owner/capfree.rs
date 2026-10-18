@@ -4,7 +4,6 @@
 //! dipakai lewat `capenergi::apply_cap`.
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
-use serde_json::json;
 
 use crate::owner::capenergi::apply_cap;
 
@@ -47,7 +46,7 @@ pub fn capfree(ctx: Ctx) -> Reply {
         &ctx,
         "capprem",
         &ctx.args,
-        json!(false),
+        serde_json::json!(false),
         |success| {
             (!success.is_empty()).then(|| {
                 format!(
@@ -127,7 +126,7 @@ mod tests {
     #[test]
     fn no_argument_shows_help_and_writes_nothing() {
         for text in ["", "   "] {
-            let r = run(text, json!({}));
+            let r = run(text, serde_json::json!({}));
             assert!(text_of(&r).starts_with("🆓 *SISTEM CAP FREE*"), "input {text:?}");
             assert!(r.mutations().is_empty(), "input {text:?}");
         }
@@ -135,8 +134,8 @@ mod tests {
 
     #[test]
     fn a_known_feature_is_written_as_false_under_its_canonical_name() {
-        let r = run("baik", json!({}));
-        assert_eq!(stored(&r), json!({ "cekbaik": false }));
+        let r = run("baik", serde_json::json!({}));
+        assert_eq!(stored(&r), serde_json::json!({ "cekbaik": false }));
         let t = text_of(&r);
         assert!(t.contains("Berhasil (FREE 🆓):"), "{t}");
         assert!(t.contains("- cekbaik"), "{t}");
@@ -148,17 +147,17 @@ mod tests {
 
     #[test]
     fn several_features_are_freed_in_one_call() {
-        let r = run("baik cekgacha cekcupu", json!({}));
+        let r = run("baik cekgacha cekcupu", serde_json::json!({}));
         assert_eq!(
             stored(&r),
-            json!({ "cekbaik": false, "cekgacha": false, "cekcupu": false })
+            serde_json::json!({ "cekbaik": false, "cekgacha": false, "cekcupu": false })
         );
     }
 
     #[test]
     fn an_unknown_feature_only_appears_in_the_failed_list() {
-        let r = run("tidakada", json!({}));
-        assert_eq!(stored(&r), json!({}));
+        let r = run("tidakada", serde_json::json!({}));
+        assert_eq!(stored(&r), serde_json::json!({}));
         assert!(text_of(&r).contains("Gagal (Tidak ditemukan):"), "{}", text_of(&r));
     }
 
@@ -166,16 +165,16 @@ mod tests {
     fn an_existing_premium_override_is_kept() {
         // Dua plugin ini menulis key yang sama; menimpa satu sama lain akan
         // mematikan override premium yang sudah dipasang.
-        let settings = json!({ "capprem": { "cekweit": true } });
+        let settings = serde_json::json!({ "capprem": { "cekweit": true } });
         let __balasan = run("baik", settings);
         let s = stored(&__balasan);
-        assert_eq!(s["cekweit"], json!(true), "override premium lain hilang");
-        assert_eq!(s["cekbaik"], json!(false));
+        assert_eq!(s["cekweit"], serde_json::json!(true), "override premium lain hilang");
+        assert_eq!(s["cekbaik"], serde_json::json!(false));
     }
 
     #[test]
     fn the_success_reply_reacts_and_is_paired_with_the_write() {
-        let r = run("baik", json!({}));
+        let r = run("baik", serde_json::json!({}));
         match r.without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅"),
             other => panic!("harus Reaction, dapat {other:?}"),

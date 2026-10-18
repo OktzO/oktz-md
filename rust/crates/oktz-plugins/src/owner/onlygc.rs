@@ -86,7 +86,7 @@ pub fn onlygc(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(settings: Value, text: &str) -> Reply {
         let mut args: Vec<String> = text.split_whitespace().map(str::to_string).collect();
@@ -156,9 +156,9 @@ mod tests {
     #[test]
     fn no_argument_reports_status_and_writes_nothing() {
         for (settings, expected) in [
-            (json!({}), "Nonaktif ❌"),
-            (json!({"onlyGc": false}), "Nonaktif ❌"),
-            (json!({"onlyGc": true}), "Aktif ✅"),
+            (serde_json::json!({}), "Nonaktif ❌"),
+            (serde_json::json!({"onlyGc": false}), "Nonaktif ❌"),
+            (serde_json::json!({"onlyGc": true}), "Aktif ✅"),
         ] {
             let r = run(settings.clone(), "");
             assert!(
@@ -175,7 +175,7 @@ mod tests {
         // `db.setting("onlyGc") || false` — string apa pun yang truthy di JS
         // sebenarnya akan tampil "Aktif", tapi `as_bool` tidak bisa meniru
         // kejujuran `||`; yang diuji adalah fallback tidak panic.
-        let r = run(json!({"onlyGc": "ya"}), "");
+        let r = run(serde_json::json!({"onlyGc": "ya"}), "");
         assert!(text_of(&r).contains("Nonaktif ❌"));
         assert_eq!(count_of(&r), 0);
     }
@@ -188,7 +188,7 @@ mod tests {
             command: "onlygc".into(),
             text: String::new(),
             args,
-            settings: json!({}),
+            settings: serde_json::json!({}),
             ..Default::default()
         };
         let out = status_text(&ctx);
@@ -200,12 +200,12 @@ mod tests {
 
     #[test]
     fn on_writes_onlygc_true_and_also_forces_onlypc_false() {
-        let r = run(json!({"onlyGc": false, "onlyPc": true}), "on");
+        let r = run(serde_json::json!({"onlyGc": false, "onlyPc": true}), "on");
         assert_eq!(count_of(&r), 2, "dua setting ditulis pada cabang on");
-        assert_eq!(setting_of(&r, "onlyGc"), Some(json!(true)));
+        assert_eq!(setting_of(&r, "onlyGc"), Some(serde_json::json!(true)));
         assert_eq!(
             setting_of(&r, "onlyPc"),
-            Some(json!(false)),
+            Some(serde_json::json!(false)),
             "onlyGc on harus mematikan onlyPc — itu isi reply-nya juga"
         );
         assert_eq!(reaction_of(&r), Some("✅"));
@@ -214,9 +214,9 @@ mod tests {
 
     #[test]
     fn off_writes_only_onlygc_false() {
-        let r = run(json!({"onlyGc": true, "onlyPc": true}), "off");
+        let r = run(serde_json::json!({"onlyGc": true, "onlyPc": true}), "off");
         assert_eq!(count_of(&r), 1, "cabang off tidak menyentuh onlyPc");
-        assert_eq!(setting_of(&r, "onlyGc"), Some(json!(false)));
+        assert_eq!(setting_of(&r, "onlyGc"), Some(serde_json::json!(false)));
         assert_eq!(setting_of(&r, "onlyPc"), None);
         assert_eq!(reaction_of(&r), Some("❌"));
         assert_eq!(text_of(&r), OFF_MSG);
@@ -226,8 +226,8 @@ mod tests {
     fn the_on_and_off_replies_are_each_paired_with_the_write_that_makes_them_true() {
         // Reply "aktif" tanpa mutasi akan berbohong; ini yang membuat test ini
         // gagal kalau `set_only_gc` dipecah jadi cabang yang salah.
-        assert!(!run(json!({}), "on").mutations().is_empty());
-        assert!(!run(json!({}), "off").mutations().is_empty());
+        assert!(!run(serde_json::json!({}), "on").mutations().is_empty());
+        assert!(!run(serde_json::json!({}), "off").mutations().is_empty());
     }
 
     // -- cabang argumen tidak valid -----------------------------------------
@@ -235,7 +235,7 @@ mod tests {
     #[test]
     fn an_unknown_option_is_rejected_and_writes_nothing() {
         for bad in ["onx", "enable", "1", "ya"] {
-            let r = run(json!({}), bad);
+            let r = run(serde_json::json!({}), bad);
             assert!(
                 text_of(&r).starts_with("❌ *Opsi Tidak Valid*"),
                 "input {bad} harus ditolak"
@@ -252,10 +252,10 @@ mod tests {
     #[test]
     fn matching_is_case_insensitive_because_the_command_is_lowercased() {
         // JS: `m.text?.toLowerCase()` — jadi "ON" dan "on" sama.
-        assert_eq!(setting_of(&run(json!({}), "ON"), "onlyGc"), Some(json!(true)));
+        assert_eq!(setting_of(&run(serde_json::json!({}), "ON"), "onlyGc"), Some(serde_json::json!(true)));
         assert_eq!(
-            setting_of(&run(json!({}), "Off"), "onlyGc"),
-            Some(json!(false))
+            setting_of(&run(serde_json::json!({}), "Off"), "onlyGc"),
+            Some(serde_json::json!(false))
         );
     }
 }

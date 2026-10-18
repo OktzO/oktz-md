@@ -4,7 +4,7 @@
 //! dikirim adalah hasil akhir beserta reaksi terakhir.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::int_field;
 use crate::rpg::jualan::{apply_exp, coalesce, math_random, or_default, roll_incl, rpg_int, rpg_map};
@@ -42,7 +42,7 @@ pub fn kurir(ctx: Ctx) -> Reply {
         ));
     }
     let stamina = stamina - STAMINA_COST;
-    rpg.insert("stamina".into(), json!(stamina));
+    rpg.insert("stamina".into(), serde_json::json!(stamina));
 
     let koin = int_field(&ctx, "koin");
     let old_exp = or_default(ctx.user_field("exp").and_then(Value::as_i64), 0);
@@ -50,7 +50,7 @@ pub fn kurir(ctx: Ctx) -> Reply {
 
     if gacha < 0.2 {
         let extra = 10;
-        rpg.insert("stamina".into(), json!((stamina - extra).max(0)));
+        rpg.insert("stamina".into(), serde_json::json!((stamina - extra).max(0)));
         let new_exp = apply_exp(&mut rpg, old_exp, 500);
         return Reply::text(format!(
             "GUK GUK GUK! DIKEJAR ANJING GALAK! 🐕💨\n\n\
@@ -63,7 +63,7 @@ pub fn kurir(ctx: Ctx) -> Reply {
         .with_reaction("🐕")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "exp": new_exp, "rpg": rpg }),
+            data: serde_json::json!({ "exp": new_exp, "rpg": rpg }),
         });
     }
 
@@ -97,7 +97,7 @@ pub fn kurir(ctx: Ctx) -> Reply {
         .with_reaction("✅")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "koin": koin + total, "exp": new_exp, "rpg": rpg }),
+            data: serde_json::json!({ "koin": koin + total, "exp": new_exp, "rpg": rpg }),
         })
 }
 
@@ -158,7 +158,7 @@ mod tests {
 
     #[test]
     fn zero_stamina_stays_zero_and_is_reported_verbatim() {
-        let r = run(json!({"rpg": {"stamina": 0}}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 0}}));
         let t = text_of(&r);
         assert!(t.starts_with("Pinggang encok kebanyakan bawa kardus!"), "{t}");
         assert!(t.contains("sisa stamina kamu *0*"), "{t}");
@@ -167,7 +167,7 @@ mod tests {
 
     #[test]
     fn the_missing_stamina_row_defaults_to_the_full_bar() {
-        for user in [json!(null), json!({}), json!({"rpg": {}})] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"rpg": {}})] {
             let r = run(user.clone());
             assert!(!text_of(&r).starts_with("Pinggang encok"), "{user}");
             let d = written(&r);
@@ -181,13 +181,13 @@ mod tests {
     #[test]
     fn the_delivery_branch_costs_fifteen_stamina_and_earns_in_range() {
         for _ in 0..300 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
             let d = written(&r);
             let t = text_of(&r);
             if t.starts_with("GUK GUK GUK") {
                 continue;
             }
-            assert_eq!(d["rpg"]["stamina"], json!(85));
+            assert_eq!(d["rpg"]["stamina"], serde_json::json!(85));
             let koin = d["koin"].as_i64().unwrap();
             assert!((5000..=26998).contains(&koin), "total {koin}");
             let exp = d["exp"].as_i64().unwrap();
@@ -201,7 +201,7 @@ mod tests {
         let mut with_tips = 0;
         let mut without_tips = 0;
         for _ in 0..3000 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
             let t = text_of(&r);
             if t.starts_with("GUK GUK GUK") {
                 continue;
@@ -222,11 +222,11 @@ mod tests {
     #[test]
     fn being_chased_costs_a_second_chunk_of_stamina_and_pays_flat_exp() {
         for _ in 0..3000 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 999, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 999, "exp": 0}));
             let d = written(&r);
             if text_of(&r).starts_with("GUK GUK GUK") {
-                assert_eq!(d["rpg"]["stamina"], json!(75), "100 - 15 - 10");
-                assert_eq!(d["exp"], json!(500));
+                assert_eq!(d["rpg"]["stamina"], serde_json::json!(75), "100 - 15 - 10");
+                assert_eq!(d["exp"], serde_json::json!(500));
                 assert!(d.get("koin").is_none(), "tidak dapat uang");
                 break;
             }
@@ -237,7 +237,7 @@ mod tests {
     fn the_extra_stamina_penalty_never_dips_below_zero() {
         // stamina 15 -> 0 setelah biaya 15, penalti 10 tidak boleh menjatuhkannya.
         for _ in 0..3000 {
-            let r = run(json!({"rpg": {"stamina": 15}, "koin": 0, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 15}, "koin": 0, "exp": 0}));
             let d = written(&r);
             assert!(d["rpg"]["stamina"].as_i64().unwrap() >= 0);
         }

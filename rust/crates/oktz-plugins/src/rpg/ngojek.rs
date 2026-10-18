@@ -3,7 +3,7 @@
 //! Reaksi + pesan antara sebelum jeda `setTimeout` tidak masuk `Reply`.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::int_field;
 use crate::rpg::jualan::{
@@ -43,7 +43,7 @@ pub fn ngojek(ctx: Ctx) -> Reply {
              Ngojek butuh *{STAMINA_COST} Stamina*, sisa stamina kamu *{stamina}* doang. Ngopi dulu gih! ☕"
         ));
     }
-    rpg.insert("stamina".into(), json!(stamina - STAMINA_COST));
+    rpg.insert("stamina".into(), serde_json::json!(stamina - STAMINA_COST));
 
     // `distance` hanya muncul di pesan antara yang tidak bisa dikirim di sini.
     let (kind, _distance, min, max) = ORDERS[crate::common::random_index(ORDERS.len())];
@@ -83,7 +83,7 @@ pub fn ngojek(ctx: Ctx) -> Reply {
         .with_reaction("✅")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "koin": int_field(&ctx, "koin") + total, "exp": new_exp, "rpg": rpg }),
+            data: serde_json::json!({ "koin": int_field(&ctx, "koin") + total, "exp": new_exp, "rpg": rpg }),
         })
 }
 
@@ -144,7 +144,7 @@ mod tests {
 
     #[test]
     fn a_hot_engine_ends_the_shift() {
-        let r = run(json!({"rpg": {"stamina": 14}}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 14}}));
         let t = text_of(&r);
         assert!(t.starts_with("Mesin motornya udah panas banget kak"), "{t}");
         assert!(t.contains("sisa stamina kamu *14* doang"), "{t}");
@@ -154,8 +154,8 @@ mod tests {
     #[test]
     fn every_ride_costs_fifteen_stamina() {
         for _ in 0..300 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
-            assert_eq!(written(&r)["rpg"]["stamina"], json!(85));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            assert_eq!(written(&r)["rpg"]["stamina"], serde_json::json!(85));
         }
     }
 
@@ -163,7 +163,7 @@ mod tests {
     fn the_fare_stays_inside_the_band_of_the_printed_order_type() {
         let mut seen = [false; 5];
         for _ in 0..2000 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
             let t = text_of(&r);
             let (_, _, min, max) = ORDERS
                 .iter()
@@ -184,10 +184,10 @@ mod tests {
         let mut with = 0;
         let mut without = 0;
         for _ in 0..3000 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
             let t = text_of(&r);
             let koin = written(&r)["koin"].as_i64().unwrap();
-            assert_eq!(written(&r)["exp"], json!(koin / 20), "{t}");
+            assert_eq!(written(&r)["exp"], serde_json::json!(koin / 20), "{t}");
             if t.contains("Tips Customer") {
                 with += 1;
                 assert!((fare_of(t) + 1000..=fare_of(t) + 5999).contains(&koin), "{t}");

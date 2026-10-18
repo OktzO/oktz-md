@@ -76,7 +76,7 @@ pub fn setlimitdefault(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(args: &str, settings: Value) -> Reply {
         let ctx = Ctx {
@@ -127,28 +127,28 @@ mod tests {
 
     #[test]
     fn a_valid_number_is_stored_and_echoed() {
-        let r = run("50", json!({}));
-        assert_eq!(written(&r), Some(json!(50)));
+        let r = run("50", serde_json::json!({}));
+        assert_eq!(written(&r), Some(serde_json::json!(50)));
         assert!(text_of(&r).contains("> Default limit diubah menjadi: `50`"));
     }
 
     #[test]
     fn out_of_range_numbers_are_rejected_without_writing() {
         for bad in ["0", "-1", "1001"] {
-            let r = run(bad, json!({}));
+            let r = run(bad, serde_json::json!({}));
             assert_eq!(text_of(&r), RANGE_ERR, "arg {bad}");
             assert!(r.mutations().is_empty(), "arg {bad}");
         }
         // batas inklusif
         for good in ["1", "1000"] {
-            assert!(written(&run(good, json!({}))).is_some(), "arg {good}");
+            assert!(written(&run(good, serde_json::json!({}))).is_some(), "arg {good}");
         }
     }
 
     #[test]
     fn a_missing_or_unparsable_argument_shows_usage_and_writes_nothing() {
         for bad in ["", "abc", "abc def"] {
-            let r = run(bad, json!({}));
+            let r = run(bad, serde_json::json!({}));
             assert!(text_of(&r).starts_with("📊 *sᴇᴛ ᴅᴇғᴀᴜʟᴛ ʟɪᴍɪᴛ*"), "arg {bad:?}");
             assert!(r.mutations().is_empty(), "arg {bad:?}");
         }
@@ -156,9 +156,9 @@ mod tests {
 
     #[test]
     fn usage_reports_the_stored_value_then_falls_back_to_the_config_default() {
-        let r = run("", json!({"defaultLimit": 75}));
+        let r = run("", serde_json::json!({"defaultLimit": 75}));
         assert!(text_of(&r).contains("> Limit default saat ini: `75`"));
-        let r = run("", json!({}));
+        let r = run("", serde_json::json!({}));
         assert!(text_of(&r).contains("> Limit default saat ini: `25`"));
     }
 
@@ -167,7 +167,7 @@ mod tests {
         let ctx = Ctx {
             prefix: "!".into(),
             command: "setlimitdefault".into(),
-            settings: json!({}),
+            settings: serde_json::json!({}),
             ..Default::default()
         };
         let out = usage(&ctx);

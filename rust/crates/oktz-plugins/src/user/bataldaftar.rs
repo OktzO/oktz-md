@@ -59,7 +59,7 @@ pub fn bataldaftar(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{Ctx, SessionStore, new_session_store};
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(sessions: Value, sender: &str) -> (Reply, bool) {
         let store: SessionStore = new_session_store();
@@ -116,13 +116,13 @@ mod tests {
 
     #[test]
     fn without_a_session_it_says_there_is_none() {
-        let (r, _) = run(json!({}), "628111@s.whatsapp.net");
+        let (r, _) = run(serde_json::json!({}), "628111@s.whatsapp.net");
         assert_eq!(text_of(&r), NONE);
     }
 
     #[test]
     fn an_existing_session_is_cleared_and_confirmed() {
-        let (r, had) = run(json!({"628111": {"step": "name"}}), "628111@s.whatsapp.net");
+        let (r, had) = run(serde_json::json!({"628111": {"step": "name"}}), "628111@s.whatsapp.net");
         assert!(had, "sesi harus ada sebelum handler jalan");
         let t = text_of(&r);
         assert!(t.starts_with("✅ Sesi pendaftaran berhasil dibatalkan."), "{t}");
@@ -135,7 +135,7 @@ mod tests {
         store
             .lock()
             .unwrap()
-            .insert("628111".into(), json!({"step": "name"}));
+            .insert("628111".into(), serde_json::json!({"step": "name"}));
         let ctx = Ctx {
             prefix: ".".into(),
             command: "bataldaftar".into(),
@@ -151,7 +151,7 @@ mod tests {
     #[test]
     fn a_session_belonging_to_someone_else_is_untouched() {
         let store = new_session_store();
-        store.lock().unwrap().insert("628999".into(), json!({"step": "name"}));
+        store.lock().unwrap().insert("628999".into(), serde_json::json!({"step": "name"}));
         let ctx = Ctx {
             prefix: ".".into(),
             command: "bataldaftar".into(),
@@ -180,7 +180,7 @@ mod tests {
         };
 
         let store = new_session_store();
-        store.lock().unwrap().insert("6281115".into(), json!({"step": "age"}));
+        store.lock().unwrap().insert("6281115".into(), serde_json::json!({"step": "age"}));
         assert!(
             clear(store).starts_with("✅ Sesi pendaftaran berhasil dibatalkan."),
             "kunci digit-only `6281115` harus ketemu"
@@ -190,7 +190,7 @@ mod tests {
         store
             .lock()
             .unwrap()
-            .insert("628111".into(), json!({"step": "age"}));
+            .insert("628111".into(), serde_json::json!({"step": "age"}));
         assert_eq!(clear(store), NONE, "suffix device menggeser kunci, bukan diabaikan");
     }
 
@@ -202,7 +202,7 @@ mod tests {
         store
             .lock()
             .unwrap()
-            .insert("628111@s.whatsapp.net".into(), json!({"step": "name"}));
+            .insert("628111@s.whatsapp.net".into(), serde_json::json!({"step": "name"}));
         let ctx = Ctx {
             prefix: ".".into(),
             command: "bataldaftar".into(),

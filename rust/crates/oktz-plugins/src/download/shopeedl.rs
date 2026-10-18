@@ -141,7 +141,6 @@ pub fn shopeedl(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpError, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug)]
@@ -190,7 +189,7 @@ mod tests {
             let text = self
                 .body
                 .clone()
-                .map_err(|()| HttpError { message: "offline".into() })?;
+                .map_err(|()| oktz_plugin_api::HttpError { message: "offline".into() })?;
             Ok(HttpResponse {
                 status: 200,
                 body: HttpBody::Bytes {
@@ -228,7 +227,7 @@ mod tests {
     }
 
     fn stream(quality: &str) -> Value {
-        json!({ "quality": quality, "stream_url": format!("https://cdn/{quality}.mp4") })
+        serde_json::json!({ "quality": quality, "stream_url": format!("https://cdn/{quality}.mp4") })
     }
 
     #[test]
@@ -259,7 +258,7 @@ mod tests {
 
     #[test]
     fn a_missing_or_foreign_link_is_refused_without_any_request() {
-        let http = Stub::body(json!({ "success": true }));
+        let http = Stub::body(serde_json::json!({ "success": true }));
         for text in ["", "   ", "https://tokopedia.com/x"] {
             let r = run(http.clone(), text);
             assert_eq!(text_of(&r), BAD_URL, "input {text:?}");
@@ -270,7 +269,7 @@ mod tests {
 
     #[test]
     fn the_link_is_posted_as_a_multipart_form_field() {
-        let http = Stub::body(json!({ "success": true, "streams_array": [stream("V1080P")] }));
+        let http = Stub::body(serde_json::json!({ "success": true, "streams_array": [stream("V1080P")] }));
         let _ = run(http.clone(), "https://shopee.co.id/universal-link/video/1");
         assert_eq!(
             http.seen.lock().unwrap().clone(),
@@ -311,7 +310,7 @@ mod tests {
     #[test]
     fn a_resolved_video_replies_with_the_caption_and_a_green_tick() {
         let r = run(
-            Stub::body(json!({
+            Stub::body(serde_json::json!({
                 "success": true,
                 "username": "toko_saya",
                 "streams_array": [stream("V360P"), stream("V720P")]
@@ -331,9 +330,9 @@ mod tests {
     #[test]
     fn the_username_line_is_skipped_when_it_is_falsy() {
         for body in [
-            json!({ "success": true, "streams_array": [stream("V720P")] }),
-            json!({ "success": true, "username": "", "streams_array": [stream("V720P")] }),
-            json!({ "success": true, "username": null, "streams_array": [stream("V720P")] }),
+            serde_json::json!({ "success": true, "streams_array": [stream("V720P")] }),
+            serde_json::json!({ "success": true, "username": "", "streams_array": [stream("V720P")] }),
+            serde_json::json!({ "success": true, "username": null, "streams_array": [stream("V720P")] }),
         ] {
             let r = run(Stub::body(body.clone()), "https://shopee.co.id/x");
             assert!(!text_of(&r).contains("Username"), "body {body}: {}", text_of(&r));
@@ -343,9 +342,9 @@ mod tests {
     #[test]
     fn an_empty_stream_list_gets_the_extraction_warning() {
         for body in [
-            json!({ "success": true, "streams_array": [] }),
-            json!({ "success": true }),
-            json!({ "success": true, "streams_array": null }),
+            serde_json::json!({ "success": true, "streams_array": [] }),
+            serde_json::json!({ "success": true }),
+            serde_json::json!({ "success": true, "streams_array": null }),
         ] {
             let r = run(Stub::body(body.clone()), "https://shopee.co.id/x");
             assert_eq!(text_of(&r), NO_STREAM, "body {body}");
@@ -356,8 +355,8 @@ mod tests {
     #[test]
     fn a_failed_extraction_reports_the_send_failure() {
         for http in [
-            Stub::body(json!({ "success": false, "error": "Extraction failed" })),
-            Stub::body(json!({})),
+            Stub::body(serde_json::json!({ "success": false, "error": "Extraction failed" })),
+            Stub::body(serde_json::json!({})),
             Stub::offline(),
         ] {
             let r = run(http, "https://shopee.co.id/x");

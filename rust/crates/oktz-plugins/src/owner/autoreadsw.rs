@@ -62,7 +62,7 @@ pub fn autoreadsw(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(settings: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -117,16 +117,16 @@ mod tests {
 
     #[test]
     fn on_and_off_write_a_whole_replacement_object() {
-        assert_eq!(stored(&run(json!({}), "on")), json!({"enabled": true}));
-        assert_eq!(stored(&run(json!({}), "off")), json!({"enabled": false}));
+        assert_eq!(stored(&run(serde_json::json!({}), "on")), serde_json::json!({"enabled": true}));
+        assert_eq!(stored(&run(serde_json::json!({}), "off")), serde_json::json!({"enabled": false}));
     }
 
     #[test]
     fn no_argument_reports_status_and_writes_nothing() {
         for s in [
-            json!({}),
-            json!({"autoReadSW": {"enabled": true}}),
-            json!({"autoReadSW": {"enabled": false}}),
+            serde_json::json!({}),
+            serde_json::json!({"autoReadSW": {"enabled": true}}),
+            serde_json::json!({"autoReadSW": {"enabled": false}}),
         ] {
             let r = run(s.clone(), "");
             assert!(text_of(&r).starts_with("👁️ *ᴀᴜᴛᴏ ʀᴇᴀᴅ sᴛᴏʀʏ*"), "input {s}");
@@ -136,22 +136,22 @@ mod tests {
 
     #[test]
     fn the_status_line_reads_the_nested_enabled_flag() {
-        assert!(text_of(&run(json!({"autoReadSW": {"enabled": true}}), "")).contains("✅ ON"));
-        assert!(text_of(&run(json!({"autoReadSW": {"enabled": false}}), "")).contains("❌ OFF"));
+        assert!(text_of(&run(serde_json::json!({"autoReadSW": {"enabled": true}}), "")).contains("✅ ON"));
+        assert!(text_of(&run(serde_json::json!({"autoReadSW": {"enabled": false}}), "")).contains("❌ OFF"));
         // `|| { enabled: false }` — key hilang tetap OFF.
-        assert!(text_of(&run(json!({}), "")).contains("❌ OFF"));
+        assert!(text_of(&run(serde_json::json!({}), "")).contains("❌ OFF"));
     }
 
     #[test]
     fn a_stored_value_without_the_enabled_field_reads_as_off() {
-        assert!(text_of(&run(json!({"autoReadSW": {}}), "")).contains("❌ OFF"));
-        assert!(text_of(&run(json!({"autoReadSW": true}), "")).contains("❌ OFF"));
+        assert!(text_of(&run(serde_json::json!({"autoReadSW": {}}), "")).contains("❌ OFF"));
+        assert!(text_of(&run(serde_json::json!({"autoReadSW": true}), "")).contains("❌ OFF"));
     }
 
     #[test]
     fn an_unknown_option_shows_status_and_writes_nothing() {
         for bad in ["maybe", "1", "enable", "ON!"] {
-            let r = run(json!({}), bad);
+            let r = run(serde_json::json!({}), bad);
             assert!(
                 text_of(&r).starts_with("👁️ *ᴀᴜᴛᴏ ʀᴇᴀᴅ sᴛᴏʀʏ*"),
                 "input {bad}"
@@ -163,7 +163,7 @@ mod tests {
     #[test]
     fn both_switch_branches_react_with_a_check_mark() {
         for arg in ["on", "off"] {
-            match run(json!({}), arg).without_mutations() {
+            match run(serde_json::json!({}), arg).without_mutations() {
                 Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅", "arg {arg}"),
                 other => panic!("harus Reaction, dapat {other:?}"),
             }
@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn switching_off_replaces_the_object_so_no_stale_field_survives() {
-        let r = run(json!({"autoReadSW": {"enabled": true, "extra": 1}}), "off");
-        assert_eq!(stored(&r), json!({"enabled": false}));
+        let r = run(serde_json::json!({"autoReadSW": {"enabled": true, "extra": 1}}), "off");
+        assert_eq!(stored(&r), serde_json::json!({"enabled": false}));
     }
 }

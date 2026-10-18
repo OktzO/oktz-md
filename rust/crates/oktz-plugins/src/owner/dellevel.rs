@@ -138,7 +138,7 @@ pub fn dellevel(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{Participant, QuotedKind, QuotedMessage};
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn quoted(sender: &str) -> Option<QuotedMessage> {
         Some(QuotedMessage {
@@ -158,7 +158,7 @@ mod tests {
             jid: jid.into(),
             is_admin: false,
             is_owner: false,
-            data: json!({ "exp": exp }),
+            data: serde_json::json!({ "exp": exp }),
         }
     }
 
@@ -174,7 +174,7 @@ mod tests {
             args,
             mentioned: mentioned.iter().map(|s| s.to_string()).collect(),
             quoted: quoted_from.and_then(quoted),
-            user_data: json!({ "exp": exp }),
+            user_data: serde_json::json!({ "exp": exp }),
             roster: oktz_plugin_api::registry::GroupRoster {
                 participants: vec![member("628999@s.whatsapp.net", 250_000)],
                 is_bot_admin: false,
@@ -217,7 +217,7 @@ mod tests {
         let r = run(&["5"], &[], Some("628999@s.whatsapp.net"), 0);
         let (jid, exp) = written_exp(&r);
         assert_eq!(jid, "628999@s.whatsapp.net");
-        assert_eq!(exp, json!(200_000), "250.000 - 5 * 10.000");
+        assert_eq!(exp, serde_json::json!(200_000), "250.000 - 5 * 10.000");
         // calculateLevel = floor(exp / 10.000) + 1, jadi 250.000 -> 26.
         assert!(text_of(&r).contains("*26 → 21*"));
         assert!(text_of(&r).contains("*-50.000*"), "exp pakai format id-ID");
@@ -234,7 +234,7 @@ mod tests {
         let r = run(&["1"], &[], None, 20_000);
         let (jid, exp) = written_exp(&r);
         assert_eq!(jid, "628111@s.whatsapp.net");
-        assert_eq!(exp, json!(10_000));
+        assert_eq!(exp, serde_json::json!(10_000));
         assert!(text_of(&r).contains("@628111"));
     }
 

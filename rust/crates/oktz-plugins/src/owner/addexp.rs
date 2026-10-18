@@ -1,7 +1,6 @@
 //! `plugins/owner/addexp.js` — tambah exp user (plafon 9 miliar).
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::json;
 
 use crate::common::{jid_number, parse_int};
 use crate::user::exp::calculate_level;
@@ -107,13 +106,13 @@ pub fn addexp(ctx: Ctx) -> Reply {
         .unwrap_or_default();
     let new_level = calculate_level(new_exp);
     if new_level > calculate_level(old) {
-        rpg.insert("level".into(), json!(new_level));
-        rpg.insert("maxHealth".into(), json!(100 + (new_level - 1) * 10));
-        rpg.insert("maxMana".into(), json!(100 + (new_level - 1) * 5));
-        rpg.insert("maxStamina".into(), json!(100 + (new_level - 1) * 5));
-        rpg.insert("health".into(), json!(100 + (new_level - 1) * 10));
-        rpg.insert("mana".into(), json!(100 + (new_level - 1) * 5));
-        rpg.insert("stamina".into(), json!(100 + (new_level - 1) * 5));
+        rpg.insert("level".into(), serde_json::json!(new_level));
+        rpg.insert("maxHealth".into(), serde_json::json!(100 + (new_level - 1) * 10));
+        rpg.insert("maxMana".into(), serde_json::json!(100 + (new_level - 1) * 5));
+        rpg.insert("maxStamina".into(), serde_json::json!(100 + (new_level - 1) * 5));
+        rpg.insert("health".into(), serde_json::json!(100 + (new_level - 1) * 10));
+        rpg.insert("mana".into(), serde_json::json!(100 + (new_level - 1) * 5));
+        rpg.insert("stamina".into(), serde_json::json!(100 + (new_level - 1) * 5));
     }
 
     Reply::text(format!(
@@ -124,7 +123,7 @@ pub fn addexp(ctx: Ctx) -> Reply {
     .with_reaction("✅")
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "exp": new_exp, "rpg": rpg }),
+        data: serde_json::json!({ "exp": new_exp, "rpg": rpg }),
     })
 }
 
@@ -199,7 +198,7 @@ mod tests {
     #[test]
     fn no_amount_shows_help_and_writes_nothing() {
         for msg in ["", "@628999", "abc"] {
-            let r = run(msg, json!({}), Some(OTHER));
+            let r = run(msg, serde_json::json!({}), Some(OTHER));
             assert!(text_of(&r).starts_with("⭐ *ᴀᴅᴅ ᴇxᴘ*"), "input {msg:?}");
             assert!(r.mutations().is_empty(), "input {msg:?}");
         }
@@ -207,14 +206,14 @@ mod tests {
 
     #[test]
     fn a_mention_without_an_amount_is_still_help() {
-        let r = run("0", json!({}), Some(OTHER));
+        let r = run("0", serde_json::json!({}), Some(OTHER));
         assert!(text_of(&r).starts_with("⭐ *ᴀᴅᴅ ᴇxᴘ*"));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn a_bare_amount_writes_to_the_sender() {
-        let r = run("10000", json!({ "exp": 5_000 }), None);
+        let r = run("10000", serde_json::json!({ "exp": 5_000 }), None);
         assert_eq!(written(&r), (SENDER.to_string(), 15_000));
         assert!(text_of(&r).contains("*10.00K*"), "{}", text_of(&r));
         assert!(text_of(&r).contains("ke *@628111*"), "{}", text_of(&r));
@@ -247,7 +246,7 @@ mod tests {
 
     #[test]
     fn the_cap_is_nine_billion_and_is_clamped_before_writing() {
-        let r = run("99999999999", json!({ "exp": 0 }), None);
+        let r = run("99999999999", serde_json::json!({ "exp": 0 }), None);
         assert_eq!(written(&r).1, MAX_EXP);
         assert!(text_of(&r).contains("*9.00B*"), "{}", text_of(&r));
     }
@@ -255,13 +254,13 @@ mod tests {
     #[test]
     fn an_unlimited_exp_user_keeps_minus_one() {
         // `user.exp === -1` → `newExp = oldExp`, jadi tidak naik.
-        let r = run("500", json!({ "exp": -1 }), None);
+        let r = run("500", serde_json::json!({ "exp": -1 }), None);
         assert_eq!(written(&r).1, -1);
     }
 
     #[test]
     fn the_success_reply_reacts_and_is_paired_with_the_write() {
-        let r = run("100", json!({}), None);
+        let r = run("100", serde_json::json!({}), None);
         match r.without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅"),
             other => panic!("harus Reaction, dapat {other:?}"),
@@ -280,25 +279,25 @@ mod tests {
     #[test]
     fn rpg_stats_are_written_only_when_the_level_actually_rises() {
         // exp 9.999 → 10.009 lewat 10.000: level 1 → 2, jadi stats ikut.
-        let up = run("10", json!({ "exp": 9_999 }), None);
+        let up = run("10", serde_json::json!({ "exp": 9_999 }), None);
         let rpg = written_rpg(&up);
-        assert_eq!(rpg["level"], json!(2));
-        assert_eq!(rpg["maxHealth"], json!(110));
-        assert_eq!(rpg["maxMana"], json!(105));
-        assert_eq!(rpg["maxStamina"], json!(105));
-        assert_eq!(rpg["health"], json!(110));
-        assert_eq!(rpg["mana"], json!(105));
-        assert_eq!(rpg["stamina"], json!(105));
+        assert_eq!(rpg["level"], serde_json::json!(2));
+        assert_eq!(rpg["maxHealth"], serde_json::json!(110));
+        assert_eq!(rpg["maxMana"], serde_json::json!(105));
+        assert_eq!(rpg["maxStamina"], serde_json::json!(105));
+        assert_eq!(rpg["health"], serde_json::json!(110));
+        assert_eq!(rpg["mana"], serde_json::json!(105));
+        assert_eq!(rpg["stamina"], serde_json::json!(105));
 
         // Masih level 1 → `rpg` tetap object kosong, tanpa field level.
-        let flat = run("10", json!({ "exp": 0 }), None);
-        assert_eq!(written_rpg(&flat), json!({}));
+        let flat = run("10", serde_json::json!({ "exp": 0 }), None);
+        assert_eq!(written_rpg(&flat), serde_json::json!({}));
     }
 
     #[test]
     fn existing_rpg_fields_survive_the_write() {
-        let r = run("1", json!({ "exp": 0, "rpg": { "gold": 12 } }), None);
+        let r = run("1", serde_json::json!({ "exp": 0, "rpg": { "gold": 12 } }), None);
         let rpg = written_rpg(&r);
-        assert_eq!(rpg["gold"], json!(12), "field lain tidak boleh hilang");
+        assert_eq!(rpg["gold"], serde_json::json!(12), "field lain tidak boleh hilang");
     }
 }

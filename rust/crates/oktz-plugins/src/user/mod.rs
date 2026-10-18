@@ -11,3 +11,5 @@ pub mod level;
 pub mod levelup;
 pub mod notiflimit;
 pub mod setbirthday;
+
+// Ditambahkan scripts/pasang-modul.mjs.

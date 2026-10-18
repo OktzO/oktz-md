@@ -11,7 +11,7 @@
 //! `Date#toISOString`, persis seperti yang ditulis JS).
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::{JAKARTA_OFFSET_SECS, days_from_civil, jakarta_parts, jid_number, js_truthy_value, now_ms};
 
@@ -125,12 +125,12 @@ pub fn mulaiabsen(ctx: Ctx) -> Reply {
 
     ctx.session_update(ABSENSI, |v| {
         if !v.is_object() {
-            *v = json!({});
+            *v = serde_json::json!({});
         }
         if let Some(map) = v.as_object_mut() {
             map.insert(
                 ctx.chat.clone(),
-                json!({
+                serde_json::json!({
                     "keterangan": keterangan,
                     "createdBy": ctx.sender,
                     "createdAt": iso_utc(now_ms()),
@@ -218,9 +218,9 @@ mod tests {
         let s = fresh();
         let r = run(s.clone(), "Rapat Mingguan");
         let entry = session_of(&s, CHAT).expect("sesi harus tersimpan");
-        assert_eq!(entry["keterangan"], json!("Rapat Mingguan"));
-        assert_eq!(entry["createdBy"], json!("628111@s.whatsapp.net"));
-        assert_eq!(entry["peserta"], json!([]));
+        assert_eq!(entry["keterangan"], serde_json::json!("Rapat Mingguan"));
+        assert_eq!(entry["createdBy"], serde_json::json!("628111@s.whatsapp.net"));
+        assert_eq!(entry["peserta"], serde_json::json!([]));
         assert!(entry["createdAt"].as_str().unwrap().ends_with('Z'), "{entry}");
         assert!(r.mutations().is_empty(), "absensi bukan data store");
     }
@@ -232,7 +232,7 @@ mod tests {
             run(s.clone(), text);
             assert_eq!(
                 session_of(&s, CHAT).unwrap()["keterangan"],
-                json!(DEFAULT_PESAN),
+                serde_json::json!(DEFAULT_PESAN),
                 "input {text:?}"
             );
         }
@@ -269,7 +269,7 @@ mod tests {
         assert_eq!(text_of(&r), STILL_RUNNING);
         assert_eq!(
             session_of(&s, CHAT).unwrap()["keterangan"],
-            json!("Pertama"),
+            serde_json::json!("Pertama"),
             "sesi yang sudah jalan tidak boleh ditimpa"
         );
     }
@@ -306,7 +306,7 @@ mod tests {
                 };
                 map.insert(
                     format!("chat{i}@g.us"),
-                    json!({"createdAt": created, "peserta": []}),
+                    serde_json::json!({"createdAt": created, "peserta": []}),
                 );
             }
             guard.insert(ABSENSI.to_string(), Value::Object(map));
@@ -332,7 +332,7 @@ mod tests {
             let mut guard = s.lock().unwrap();
             guard.insert(
                 ABSENSI.to_string(),
-                json!({"chat@g.us": {"createdAt": iso_utc(0), "peserta": []}}),
+                serde_json::json!({"chat@g.us": {"createdAt": iso_utc(0), "peserta": []}}),
             );
         }
         let ctx = Ctx {

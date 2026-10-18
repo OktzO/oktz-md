@@ -123,7 +123,6 @@ pub fn delstickercmd(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(args: &[&str], settings: serde_json::Value) -> Reply {
         let ctx = Ctx {
@@ -158,7 +157,7 @@ mod tests {
     }
 
     fn full() -> serde_json::Value {
-        json!({"stickerCommands": {
+        serde_json::json!({"stickerCommands": {
             "hashaaa": {"command": "menu", "addedBy": "628111", "addedAt": 1},
             "hashbbb": {"command": "promo", "addedBy": "628222", "addedAt": 2}
         }})
@@ -209,7 +208,7 @@ mod tests {
 
     #[test]
     fn an_absent_store_lists_nothing_registered() {
-        for s in [json!({}), json!({"stickerCommands": {}})] {
+        for s in [serde_json::json!({}), serde_json::json!({"stickerCommands": {}})] {
             let __balasan = run(&[], s.clone());
             let t = body(&__balasan);
             assert!(t.starts_with("🖼️ *sᴛɪᴄᴋᴇʀ ᴄᴏᴍᴍᴀɴᴅs*"), "{s}: {t}");
@@ -241,7 +240,7 @@ mod tests {
             assert_eq!(body(&r), deleted_msg("menu"), "input {input}");
             assert_eq!(
                 store_after(&r)["hashbbb"],
-                json!({"command": "promo", "addedBy": "628222", "addedAt": 2}),
+                serde_json::json!({"command": "promo", "addedBy": "628222", "addedAt": 2}),
                 "input {input}: `menu` yang terhapus, `promo` yang tersisa"
             );
         }

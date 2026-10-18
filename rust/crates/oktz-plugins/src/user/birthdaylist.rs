@@ -125,7 +125,7 @@ mod tests {
     use super::*;
     use oktz_plugin_api::Participant;
     use oktz_plugin_api::registry::GroupRoster;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(participants: Vec<(&str, Value)>) -> Reply {
         let ctx = Ctx {
@@ -164,7 +164,7 @@ mod tests {
     fn with_bday<'a>(jid: &'a str, b: &'a str) -> (&'a str, Value) {
         (
             jid,
-            json!({"name": "Someone", "birthday": b}),
+            serde_json::json!({"name": "Someone", "birthday": b}),
         )
     }
 
@@ -196,7 +196,7 @@ mod tests {
     #[test]
     fn a_roster_without_any_birthday_says_there_is_no_data() {
         let r = run(vec![
-            ("628111@s.whatsapp.net", json!({"name": "Tanpa"})),
+            ("628111@s.whatsapp.net", serde_json::json!({"name": "Tanpa"})),
             ("628222@s.whatsapp.net", Value::Null),
         ]);
         assert_eq!(text_of(&r), NONE);
@@ -270,7 +270,7 @@ mod tests {
             .map(|i| {
                 (
                     format!("628{:03}@s.whatsapp.net", i),
-                    json!({"birthday": format!("{:02}-01", i + 1)}),
+                    serde_json::json!({"birthday": format!("{:02}-01", i + 1)}),
                 )
             })
             .collect();
@@ -293,9 +293,9 @@ mod tests {
     fn a_malformed_birthday_value_is_skipped_instead_of_panicking() {
         let r = run(vec![
             with_bday("1@s.whatsapp.net", "25-12"),
-            ("2@s.whatsapp.net", json!({"birthday": "bukan-angka"})),
-            ("3@s.whatsapp.net", json!({"birthday": "25"})),
-            ("4@s.whatsapp.net", json!({"birthday": 2512})),
+            ("2@s.whatsapp.net", serde_json::json!({"birthday": "bukan-angka"})),
+            ("3@s.whatsapp.net", serde_json::json!({"birthday": "25"})),
+            ("4@s.whatsapp.net", serde_json::json!({"birthday": 2512})),
         ]);
         let t = text_of(&r);
         assert!(t.contains("1 ᴍᴇᴍʙᴇʀ"), "hanya yang valid: {t}");

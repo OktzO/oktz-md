@@ -17,7 +17,6 @@
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 use serde_json::Value;
 
-use crate::fun::tod::error_template;
 
 /// `likeedl.js:31` — `/likee\.(video|com)/i`, tidak dikunci ke host.
 pub(crate) fn is_likee_url(url: &str) -> bool {
@@ -109,7 +108,7 @@ pub fn likeedl(ctx: Ctx) -> Reply {
     // kosong, dan `catch` di plugin ikut membawa `te(...)` dengan reaksi jam
     // yang sudah menyala sejak baris 35.
     let Ok(value) = oktz_scraper::likee::likee(ctx.http.as_ref(), url) else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("🕕");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("🕕");
     };
 
     let data = hasil_dari(&value);
@@ -182,7 +181,7 @@ mod tests {
             let text = self
                 .balasan
                 .clone()
-                .map_err(|message| HttpError { message })?;
+                .map_err(|message| oktz_plugin_api::HttpError { message })?;
             Ok(HttpResponse {
                 status: 200,
                 body: HttpBody::Bytes {
@@ -363,14 +362,14 @@ mod tests {
             serde_json::json!({ "template": "" }),
         ] {
             let r = run(Stub::body(body.clone()), "https://likee.video/@x");
-            assert_eq!(text_of(&r), error_template(".", "lkdl"), "body {body}");
+            assert_eq!(text_of(&r), crate::common::error_template(".", "lkdl"), "body {body}");
         }
     }
 
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "https://likee.video/@x");
-        assert_eq!(text_of(&r), error_template(".", "lkdl"));
+        assert_eq!(text_of(&r), crate::common::error_template(".", "lkdl"));
     }
 
     #[test]

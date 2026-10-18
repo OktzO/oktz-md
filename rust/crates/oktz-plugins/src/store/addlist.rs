@@ -97,7 +97,6 @@ pub fn addlist(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(settings: serde_json::Value, text: &str, is_group: bool) -> Reply {
         let ctx = Ctx {
@@ -158,25 +157,25 @@ mod tests {
 
     #[test]
     fn the_group_branch_is_rejected_and_writes_nothing() {
-        let r = run(json!({}), "S&K|isi", true);
+        let r = run(serde_json::json!({}), "S&K|isi", true);
         assert!(text_of(&r).starts_with("🚫 *Akses Ditolak*"));
         assert!(r.mutations().is_empty(), "command di grup tidak boleh menulis");
     }
 
     #[test]
     fn a_missing_pipe_shows_usage_and_writes_nothing() {
-        let r = run(json!({}), "cuma nama", false);
+        let r = run(serde_json::json!({}), "cuma nama", false);
         assert!(text_of(&r).starts_with("➕ *TAMBAH INFORMASI TOKO*"));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn a_too_short_name_or_body_is_rejected_before_touching_the_store() {
-        let short_name = run(json!({"storeLists": [{"name": "lama"}]}), "a|isi panjang", false);
+        let short_name = run(serde_json::json!({"storeLists": [{"name": "lama"}]}), "a|isi panjang", false);
         assert!(text_of(&short_name).contains("Nama terlalu pendek."));
         assert!(short_name.mutations().is_empty());
 
-        let short_body = run(json!({"storeLists": [{"name": "lama"}]}), "Nama|ab", false);
+        let short_body = run(serde_json::json!({"storeLists": [{"name": "lama"}]}), "Nama|ab", false);
         assert!(text_of(&short_body).contains("Isi informasi terlalu pendek."));
         assert!(short_body.mutations().is_empty());
     }
@@ -185,7 +184,7 @@ mod tests {
 
     #[test]
     fn a_new_entry_is_appended_and_the_whole_list_is_written_back() {
-        let r = run(json!({"storeLists": [{"name": "lama", "content": "x"}]}), "S&K|baris1;;baris2", false);
+        let r = run(serde_json::json!({"storeLists": [{"name": "lama", "content": "x"}]}), "S&K|baris1;;baris2", false);
         let stored = setting_of(&r, "storeLists");
         assert_eq!(stored.as_array().unwrap().len(), 2, "entri lama harus utuh");
         let added = &stored.as_array().unwrap()[1];
@@ -204,7 +203,7 @@ mod tests {
     // kemampuan menulis, reply "ditambahkan" hanya akan berbohong.
     #[test]
     fn the_reply_claiming_success_is_paired_with_the_write_that_makes_it_true() {
-        let r = run(json!({}), "S&K|isi memanjang", false);
+        let r = run(serde_json::json!({}), "S&K|isi memanjang", false);
         assert!(text_of(&r).contains("✅ *INFORMASI DITAMBAHKAN*"));
         assert_eq!(
             r.mutations().len(),
@@ -215,7 +214,7 @@ mod tests {
 
     #[test]
     fn an_absent_setting_starts_from_an_empty_list() {
-        let r = run(json!({}), "S&K|isi memanjang", false);
+        let r = run(serde_json::json!({}), "S&K|isi memanjang", false);
         let stored = setting_of(&r, "storeLists");
         assert_eq!(stored.as_array().unwrap().len(), 1);
         assert!(text_of(&r).contains("✏️ _Edit: `.editlist 1`_"));
@@ -224,7 +223,7 @@ mod tests {
     #[test]
     fn the_description_preview_flattens_newlines_and_caps_length() {
         let long = "x".repeat(100);
-        let r = run(json!({}), &format!("Nama|{long}"), false);
+        let r = run(serde_json::json!({}), &format!("Nama|{long}"), false);
         let stored = setting_of(&r, "storeLists");
         let desc = stored[0]["description"].as_str().unwrap();
         assert_eq!(desc.chars().count(), 80, "preview dibatasi 80 karakter");

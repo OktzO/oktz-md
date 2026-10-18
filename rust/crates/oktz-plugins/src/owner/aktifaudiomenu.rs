@@ -84,7 +84,7 @@ pub fn aktifaudiomenu(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(settings: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -147,24 +147,24 @@ mod tests {
         // `db.setting('audioMenu') !== false` — undefined !== false, jadi
         // aktif. Default `false` akan mematikan audio untuk instalasi baru.
         assert!(current_enabled(&Ctx::default()));
-        assert!(text_of(&run(json!({}), "")).contains("✅ Aktif"));
+        assert!(text_of(&run(serde_json::json!({}), "")).contains("✅ Aktif"));
     }
 
     #[test]
     fn only_an_explicit_boolean_false_turns_it_off() {
         assert!(current_enabled(&Ctx {
-            settings: json!({"audioMenu": true}),
+            settings: serde_json::json!({"audioMenu": true}),
             ..Default::default()
         }));
         assert!(!current_enabled(&Ctx {
-            settings: json!({"audioMenu": false}),
+            settings: serde_json::json!({"audioMenu": false}),
             ..Default::default()
         }));
         // `!== false` berarti bentuk lain tetap "aktif".
-        for weird in [json!(0), json!(""), json!(null)] {
+        for weird in [serde_json::json!(0), serde_json::json!(""), serde_json::json!(null)] {
             assert!(
                 current_enabled(&Ctx {
-                    settings: json!({ "audioMenu": weird }),
+                    settings: serde_json::json!({ "audioMenu": weird }),
                     ..Default::default()
                 }),
                 "nilai non-false tidak mematikan audio"
@@ -175,20 +175,20 @@ mod tests {
     #[test]
     fn every_spelling_of_yes_activates_and_of_no_deactivates() {
         for on in ["ya", "on", "1", "aktif"] {
-            assert_eq!(stored(&run(json!({"audioMenu": false}), on)), json!(true), "arg {on}");
+            assert_eq!(stored(&run(serde_json::json!({"audioMenu": false}), on)), serde_json::json!(true), "arg {on}");
         }
         for off in ["gak", "off", "0", "nonaktif"] {
-            assert_eq!(stored(&run(json!({"audioMenu": true}), off)), json!(false), "arg {off}");
+            assert_eq!(stored(&run(serde_json::json!({"audioMenu": true}), off)), serde_json::json!(false), "arg {off}");
         }
     }
 
     #[test]
     fn re_selecting_the_current_state_is_refused_and_writes_nothing() {
-        let already_on = run(json!({"audioMenu": true}), "ya");
+        let already_on = run(serde_json::json!({"audioMenu": true}), "ya");
         assert_eq!(text_of(&already_on), "⚠️ Audio menu sudah aktif!");
         assert!(already_on.mutations().is_empty());
 
-        let already_off = run(json!({"audioMenu": false}), "gak");
+        let already_off = run(serde_json::json!({"audioMenu": false}), "gak");
         assert_eq!(text_of(&already_off), "⚠️ Audio menu sudah nonaktif!");
         assert!(already_off.mutations().is_empty());
     }
@@ -196,15 +196,15 @@ mod tests {
     #[test]
     fn a_fresh_store_accepts_the_off_switch_directly() {
         // Default `true`, jadi `gak` adalah perubahan nyata.
-        let r = run(json!({}), "gak");
-        assert_eq!(stored(&r), json!(false));
+        let r = run(serde_json::json!({}), "gak");
+        assert_eq!(stored(&r), serde_json::json!(false));
         assert!(text_of(&r).contains("❌ Audio menu *dinonaktifkan*!"));
     }
 
     #[test]
     fn an_unknown_option_shows_status_and_writes_nothing() {
         for bad in ["", "mungkin", "2", "ya2", "benar"] {
-            let r = run(json!({}), bad);
+            let r = run(serde_json::json!({}), bad);
             assert!(
                 text_of(&r).starts_with("🔊 *ᴀᴜᴅɪᴏ ᴍᴇɴᴜ sᴇᴛᴛɪɴɢ*"),
                 "input {bad:?}"
@@ -215,7 +215,7 @@ mod tests {
 
     #[test]
     fn the_change_reply_reacts_and_is_paired_with_the_write() {
-        let r = run(json!({"audioMenu": false}), "ya");
+        let r = run(serde_json::json!({"audioMenu": false}), "ya");
         match r.without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅"),
             other => panic!("harus Reaction, dapat {other:?}"),

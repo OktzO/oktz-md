@@ -68,7 +68,6 @@ pub fn antiswgc(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -129,7 +128,7 @@ mod tests {
 
     #[test]
     fn no_argument_lists_the_detected_types_and_writes_nothing() {
-        let r = run(json!({}), "");
+        let r = run(serde_json::json!({}), "");
         assert!(
             text_of(&r).contains("> Status: *❌ Nonaktif*"),
             "{}",
@@ -145,37 +144,37 @@ mod tests {
 
     #[test]
     fn only_the_exact_string_on_counts_as_active() {
-        let r = run(json!({"antiswgc": "on"}), "");
+        let r = run(serde_json::json!({"antiswgc": "on"}), "");
         assert!(text_of(&r).contains("✅ Aktif"), "{}", text_of(&r));
 
-        let r = run(json!({"antiswgc": true}), "");
+        let r = run(serde_json::json!({"antiswgc": true}), "");
         assert!(text_of(&r).contains("❌ Nonaktif"), "{}", text_of(&r));
     }
 
     #[test]
     fn on_and_off_write_a_string_and_do_not_react() {
-        let on = run(json!({}), "on");
+        let on = run(serde_json::json!({}), "on");
         assert_eq!(text_of(&on), ON);
-        assert_eq!(written(&on), &json!({ "antiswgc": "on" }));
+        assert_eq!(written(&on), &serde_json::json!({ "antiswgc": "on" }));
         assert!(
             !matches!(on.without_mutations(), Reply::Reaction { .. }),
             "tidak ada m.react di JS untuk plugin ini"
         );
 
-        let off = run(json!({"antiswgc": "on"}), "off");
+        let off = run(serde_json::json!({"antiswgc": "on"}), "off");
         assert_eq!(text_of(&off), OFF);
-        assert_eq!(written(&off), &json!({ "antiswgc": "off" }));
+        assert_eq!(written(&off), &serde_json::json!({ "antiswgc": "off" }));
     }
 
     #[test]
     fn an_unknown_action_is_refused_and_nothing_is_written() {
-        let r = run(json!({}), "mungkin");
+        let r = run(serde_json::json!({}), "mungkin");
         assert_eq!(text_of(&r), BAD_ACTION);
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn the_action_is_lowercased_before_matching() {
-        assert_eq!(written(&run(json!({}), "ON")), &json!({ "antiswgc": "on" }));
+        assert_eq!(written(&run(serde_json::json!({}), "ON")), &serde_json::json!({ "antiswgc": "on" }));
     }
 }

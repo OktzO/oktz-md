@@ -7,7 +7,7 @@
 //! Polanya berbeda dari `addexp.js` yang menulis `user.rpg.level`.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::rpg::jualan::{coalesce, or_default, roll_incl, rpg_int, rpg_map};
 
@@ -56,9 +56,9 @@ pub fn meditation(ctx: Ctx) -> Reply {
     let new_health = (cur_health + health_back).min(max_health);
     let new_mana = (cur_mana + mana_back).min(max_mana);
 
-    rpg.insert("stamina".into(), json!(new_stamina));
-    rpg.insert("health".into(), json!(new_health));
-    rpg.insert("mana".into(), json!(new_mana));
+    rpg.insert("stamina".into(), serde_json::json!(new_stamina));
+    rpg.insert("health".into(), serde_json::json!(new_health));
+    rpg.insert("mana".into(), serde_json::json!(new_mana));
 
     Reply::text(format!(
         "✨ *ɪsᴛɪʀᴀʜᴀᴛ sᴇʟᴇsᴀɪ!*\n\n\
@@ -72,7 +72,7 @@ pub fn meditation(ctx: Ctx) -> Reply {
     .with_reaction("✨")
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "rpg": rpg }),
+        data: serde_json::json!({ "rpg": rpg }),
     })
 }
 
@@ -133,7 +133,7 @@ mod tests {
 
     #[test]
     fn the_rest_cap_is_a_no_op_and_writes_nothing() {
-        let r = run(json!({"rpg": {"stamina": 100, "health": 105, "mana": 53}}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 100, "health": 105, "mana": 53}}));
         let t = text_of(&r);
         assert!(t.starts_with("💤 *sᴜᴅᴀʜ ꜰᴜʟʟ*"), "{t}");
         assert!(t.contains("> ⚡ Stamina: 100/100"), "{t}");
@@ -146,10 +146,10 @@ mod tests {
     fn a_user_with_no_rpg_row_is_already_at_the_cap_because_of_the_defaults() {
         // stamina `?? 100` = 100, health `|| 100` = 100 (cap 105), mana `|| 50`
         // = 50 (cap 53) — jadi health dan mana masih di bawah cap.
-        let r = run(json!({}));
+        let r = run(serde_json::json!({}));
         let d = written(&r);
         let rpg = &d["rpg"];
-        assert_eq!(rpg["stamina"], json!(100), "stamina sudah penuh");
+        assert_eq!(rpg["stamina"], serde_json::json!(100), "stamina sudah penuh");
         assert!(rpg["health"].as_i64().unwrap() > 100);
         assert!(rpg["mana"].as_i64().unwrap() > 50);
     }
@@ -160,7 +160,7 @@ mod tests {
         // bukan dari 0. Level 20 lifting cap (200 HP / 110 mana) supaya
         // pemulihan tidak pennies up ke batas dan titik mulainya terlihat.
         for _ in 0..20 {
-            let r = run(json!({"level": 20, "rpg": {"stamina": 100, "health": 0, "mana": 0}}));
+            let r = run(serde_json::json!({"level": 20, "rpg": {"stamina": 100, "health": 0, "mana": 0}}));
             let t = text_of(&r);
             let rpg = written(&r)["rpg"].clone();
             for (label, start, cap) in [("❤️ Health", 100i64, 200i64), ("💙 Mana", 50, 110)] {
@@ -188,7 +188,7 @@ mod tests {
     #[test]
     fn recovery_never_exceeds_the_cap() {
         for _ in 0..300 {
-            let r = run(json!({"rpg": {"stamina": 10, "health": 10, "mana": 10}}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 10, "health": 10, "mana": 10}}));
             let rpg = written(&r)["rpg"].clone();
             let s = rpg["stamina"].as_i64().unwrap();
             let h = rpg["health"].as_i64().unwrap();
@@ -202,7 +202,7 @@ mod tests {
     #[test]
     fn the_reported_gain_matches_the_actual_delta() {
         for _ in 0..300 {
-            let r = run(json!({"rpg": {"stamina": 40, "health": 60, "mana": 20}}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 40, "health": 60, "mana": 20}}));
             let t = text_of(&r);
             let rpg = &written(&r)["rpg"];
             let gain = |label: &str| -> i64 {
@@ -221,7 +221,7 @@ mod tests {
     #[test]
     fn a_higher_level_raises_only_the_health_and_mana_caps() {
         // level 10 -> maxHealth 150, maxMana 80; maxStamina tetap 100.
-        let r = run(json!({"level": 10, "rpg": {"stamina": 0, "health": 0, "mana": 0}}));
+        let r = run(serde_json::json!({"level": 10, "rpg": {"stamina": 0, "health": 0, "mana": 0}}));
         let t = text_of(&r);
         let line = |label: &str| {
             t.lines()

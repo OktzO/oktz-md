@@ -3,7 +3,7 @@
 //! Reaksi + pesan antara sebelum jeda `setTimeout` tidak masuk `Reply`.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::int_field;
 use crate::rpg::jualan::{
@@ -44,7 +44,7 @@ pub fn mulung(ctx: Ctx) -> Reply {
              Stamina kamu sisa *{stamina}*, padahal butuh *{STAMINA_COST}*. Istirahat gih! 🛌💤"
         ));
     }
-    rpg.insert("stamina".into(), json!(stamina - STAMINA_COST));
+    rpg.insert("stamina".into(), serde_json::json!(stamina - STAMINA_COST));
 
     let mut inv = inventory_map(&ctx);
     let mut results: Vec<(&'static str, i64)> = Vec::new();
@@ -52,9 +52,9 @@ pub fn mulung(ctx: Ctx) -> Reply {
     for &(item, name, min, max) in DROPS.iter() {
         let qty = roll_incl(min, max);
         if qty > 0 {
-            let slot = inv.entry(item.to_string()).or_insert(json!(0));
+            let slot = inv.entry(item.to_string()).or_insert(serde_json::json!(0));
             let have = slot.as_i64().unwrap_or(0);
-            *slot = json!(have + qty);
+            *slot = serde_json::json!(have + qty);
             results.push((name, qty));
             // `Math.floor(Math.random() * 50 + 10)` — diacak PER ITEM, jadi
             // barang yang banyak tidak otomatis lebih mahal.
@@ -83,7 +83,7 @@ pub fn mulung(ctx: Ctx) -> Reply {
         .with_reaction("✅")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "koin": int_field(&ctx, "koin") + money, "exp": new_exp, "rpg": rpg, "inventory": inv }),
+            data: serde_json::json!({ "koin": int_field(&ctx, "koin") + money, "exp": new_exp, "rpg": rpg, "inventory": inv }),
         })
 }
 
@@ -144,7 +144,7 @@ mod tests {
 
     #[test]
     fn a_scavenger_with_no_energy_is_sent_home() {
-        let r = run(json!({"rpg": {"stamina": 0}}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 0}}));
         let t = text_of(&r);
         assert!(t.starts_with("Yaela kak, mulung aja butuh tenaga kali!"), "{t}");
         assert!(t.contains("Stamina kamu sisa *0*"), "{t}");
@@ -154,9 +154,9 @@ mod tests {
     #[test]
     fn every_pile_costs_fifteen_stamina_and_lands_in_the_exp_band() {
         for _ in 0..400 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
             let d = written(&r);
-            assert_eq!(d["rpg"]["stamina"], json!(85));
+            assert_eq!(d["rpg"]["stamina"], serde_json::json!(85));
             let exp = d["exp"].as_i64().unwrap();
             assert!((50..=249).contains(&exp), "exp {exp}");
         }
@@ -165,7 +165,7 @@ mod tests {
     #[test]
     fn listed_scrap_matches_the_bag_and_never_lists_a_zero_pile() {
         for _ in 0..400 {
-            let r = run(json!({"rpg": {"stamina": 100}, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "exp": 0}));
             let t = text_of(&r);
             let inv = written(&r)["inventory"].as_object().unwrap().clone();
             for (item, name, _, _) in DROPS {
@@ -180,7 +180,7 @@ mod tests {
     fn the_newspaper_sometimes_comes_back_empty() {
         // `koran` min 0, jadi sometime-sometime nol dan barisnya hilang.
         for _ in 0..3000 {
-            let r = run(json!({"rpg": {"stamina": 100}, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "exp": 0}));
             let t = text_of(&r);
             let qty = written(&r)["inventory"]
                 .get("koran")
@@ -196,7 +196,7 @@ mod tests {
 
     #[test]
     fn the_sale_proceeds_are_added_to_the_purse_not_replacing_it() {
-        let r = run(json!({"rpg": {"stamina": 100}, "koin": 1234, "exp": 0}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 1234, "exp": 0}));
         let d = written(&r);
         let koin = d["koin"].as_i64().unwrap();
         assert!(koin > 1234, "tambah hasil jual, dapat {koin}");

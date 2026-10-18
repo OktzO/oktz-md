@@ -78,7 +78,6 @@ pub fn koin(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: serde_json::Value, mentioned: Vec<&str>, is_owner: bool) -> String {
         let ctx = Ctx {
@@ -136,7 +135,7 @@ mod tests {
 
     #[test]
     fn an_absent_user_row_reads_zero_and_free() {
-        for user in [json!(null), json!({}), json!({"koin": null})] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"koin": null})] {
             let out = run(user.clone(), vec![], false);
             assert!(out.starts_with("*〔 💰 KOIN INFO 〕*\n\n*〔 👤 User 〕* Kamu\n*〔 💰 Koin 〕* 0\n*〔 💎 Status 〕* Free\n"), "{user}");
         }
@@ -144,17 +143,17 @@ mod tests {
 
     #[test]
     fn a_stored_balance_is_formatted_and_shown() {
-        let out = run(json!({"koin": 1250000}), vec![], false);
+        let out = run(serde_json::json!({"koin": 1250000}), vec![], false);
         assert!(out.contains("*〔 💰 Koin 〕* 1.25M\n"));
         assert!(out.contains("*〔 💎 Status 〕* Free\n"));
     }
 
     #[test]
     fn premium_and_owner_both_replace_free_in_the_status_line() {
-        assert!(run(json!({"isPremium": true}), vec![], false).contains("Status 〕* Premium"));
-        assert!(run(json!({"isPremium": true}), vec![], true).contains("Status 〕* Owner"));
+        assert!(run(serde_json::json!({"isPremium": true}), vec![], false).contains("Status 〕* Premium"));
+        assert!(run(serde_json::json!({"isPremium": true}), vec![], true).contains("Status 〕* Owner"));
         assert!(
-            run(json!({"isPremium": false}), vec![], false).contains("Status 〕* Free"),
+            run(serde_json::json!({"isPremium": false}), vec![], false).contains("Status 〕* Free"),
             "`false` harus tetap Free, bukan `undefined`"
         );
     }
@@ -163,11 +162,11 @@ mod tests {
 
     #[test]
     fn the_shop_block_only_appears_for_the_sender() {
-        let self_out = run(json!({"koin": 5}), vec![], false);
+        let self_out = run(serde_json::json!({"koin": 5}), vec![], false);
         assert!(self_out.contains("〔 🛒 SHOP 〕"));
         assert!(self_out.ends_with("_🎮 Main game untuk dapat koin!_"));
 
-        let other_out = run(json!({"koin": 5}), vec!["628999@s.whatsapp.net"], false);
+        let other_out = run(serde_json::json!({"koin": 5}), vec!["628999@s.whatsapp.net"], false);
         assert!(!other_out.contains("🛒 SHOP"));
         assert!(other_out.contains("*〔 👤 User 〕* 628999\n"));
         assert!(other_out.ends_with("*〔 💎 Status 〕* Free\n"));
@@ -175,7 +174,7 @@ mod tests {
 
     #[test]
     fn a_lid_target_is_numbered_without_the_server() {
-        let out = run(json!({"koin": 1}), vec!["628999@lid"], false);
+        let out = run(serde_json::json!({"koin": 1}), vec!["628999@lid"], false);
         assert!(out.contains("*〔 👤 User 〕* 628999\n"));
         assert!(!out.contains("SHOP"));
     }

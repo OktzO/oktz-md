@@ -7,7 +7,6 @@
 //! capability-nya tersedia.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::json;
 
 /// `db.setting("autobio_interval") || 60000`.
 pub(crate) const DEFAULT_INTERVAL_MS: i64 = 60_000;
@@ -108,7 +107,7 @@ pub fn autobio(ctx: Ctx) -> Reply {
         .with_reaction(if on { "✅" } else { "❌" })
         .with_mutation(Mutation::SetSetting {
             key: "autobio_status".into(),
-            value: json!(on),
+            value: serde_json::json!(on),
         });
     }
 
@@ -149,7 +148,7 @@ pub fn autobio(ctx: Ctx) -> Reply {
         .with_reaction("✅")
         .with_mutation(Mutation::SetSetting {
             key: "autobio_interval".into(),
-            value: json!(ms),
+            value: serde_json::json!(ms),
         });
     }
 
@@ -159,7 +158,7 @@ pub fn autobio(ctx: Ctx) -> Reply {
     .with_reaction("✅")
     .with_mutation(Mutation::SetSetting {
         key: "autobio_text".into(),
-        value: json!(arg),
+        value: serde_json::json!(arg),
     })
 }
 
@@ -222,7 +221,7 @@ mod tests {
 
     #[test]
     fn no_argument_shows_status_and_writes_nothing() {
-        let r = run("", json!({}));
+        let r = run("", serde_json::json!({}));
         assert!(text_of(&r).starts_with("📝 *AUTO BIO SETTINGS*"), "{}", text_of(&r));
         assert!(r.mutations().is_empty());
         // Default: status mati, interval 60 detik, teks bawaan.
@@ -235,7 +234,7 @@ mod tests {
     fn status_reflects_the_stored_values() {
         let r = run(
             "",
-            json!({"autobio_status": true, "autobio_interval": 30000, "autobio_text": "hai"}),
+            serde_json::json!({"autobio_status": true, "autobio_interval": 30000, "autobio_text": "hai"}),
         );
         let t = text_of(&r);
         assert!(t.contains("Aktif ✅"), "{t}");
@@ -245,13 +244,13 @@ mod tests {
 
     #[test]
     fn on_and_off_write_their_own_flag_and_react_to_match() {
-        let (k, v) = stored(&run("on", json!({})));
+        let (k, v) = stored(&run("on", serde_json::json!({})));
         assert_eq!(k, "autobio_status");
-        assert_eq!(v, json!(true));
-        let (k, v) = stored(&run("off", json!({"autobio_status": true})));
+        assert_eq!(v, serde_json::json!(true));
+        let (k, v) = stored(&run("off", serde_json::json!({"autobio_status": true})));
         assert_eq!(k, "autobio_status");
-        assert_eq!(v, json!(false));
-        match run("off", json!({})).without_mutations() {
+        assert_eq!(v, serde_json::json!(false));
+        match run("off", serde_json::json!({})).without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "❌"),
             other => panic!("harus Reaction, dapat {other:?}"),
         }
@@ -259,9 +258,9 @@ mod tests {
 
     #[test]
     fn a_unitless_number_defaults_to_minutes() {
-        let (k, v) = stored(&run("ganti_setiap 5", json!({})));
+        let (k, v) = stored(&run("ganti_setiap 5", serde_json::json!({})));
         assert_eq!(k, "autobio_interval");
-        assert_eq!(v, json!(300_000));
+        assert_eq!(v, serde_json::json!(300_000));
     }
 
     #[test]
@@ -284,7 +283,7 @@ mod tests {
     #[test]
     fn an_interval_below_ten_seconds_is_refused() {
         // 5.000 ms masih di bawah batas 10.000, walau nilainya > 0.
-        let r = run("ganti_setiap 5 detik", json!({}));
+        let r = run("ganti_setiap 5 detik", serde_json::json!({}));
         assert!(text_of(&r).starts_with("❌ *Gagal*"), "{}", text_of(&r));
         assert!(r.mutations().is_empty());
     }
@@ -292,7 +291,7 @@ mod tests {
     #[test]
     fn a_bare_unit_is_rejected_before_parsing() {
         for text in ["ganti_setiap", "ganti_setiap   "] {
-            let r = run(text, json!({}));
+            let r = run(text, serde_json::json!({}));
             assert_eq!(text_of(&r), BAD_FORMAT, "input {text:?}");
             assert!(r.mutations().is_empty(), "input {text:?}");
         }
@@ -300,9 +299,9 @@ mod tests {
 
     #[test]
     fn free_text_is_stored_verbatim_as_the_bio_template() {
-        let (k, v) = stored(&run("Halo {botname} v{version}", json!({})));
+        let (k, v) = stored(&run("Halo {botname} v{version}", serde_json::json!({})));
         assert_eq!(k, "autobio_text");
-        assert_eq!(v, json!("Halo {botname} v{version}"));
-        assert!(text_of(&run("Halo", json!({}))).contains("> Halo"));
+        assert_eq!(v, serde_json::json!("Halo {botname} v{version}"));
+        assert!(text_of(&run("Halo", serde_json::json!({}))).contains("> Halo"));
     }
 }

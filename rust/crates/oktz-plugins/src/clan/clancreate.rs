@@ -7,7 +7,7 @@
 //! isinya sama dengan JS; hanya lokasinya yang berbeda.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::common::jid_number;
 use crate::tools::kalkulatormbg::thousands_id;
@@ -305,7 +305,7 @@ pub fn clancreate(ctx: Ctx) -> Reply {
     let emblem = random_emblem();
     let clan_id = short_id(&clan_name, |id| clans.contains_key(id));
 
-    let clan = json!({
+    let clan = serde_json::json!({
         "id": clan_id,
         "name": clan_name,
         "emblem": emblem,
@@ -329,7 +329,7 @@ pub fn clancreate(ctx: Ctx) -> Reply {
     .with_mutation(save_clans(clans))
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({
+        data: serde_json::json!({
             "clanId": clan_id,
             "koin": add_koin(koin, -(CLAN_CREATE_COST as i64)),
         }),
@@ -347,7 +347,6 @@ pub(crate) fn iso_now() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: Value, text: &str, clans: Value) -> Reply {
         let ctx = Ctx {
@@ -358,7 +357,7 @@ mod tests {
             text: text.into(),
             args: text.split_whitespace().map(str::to_string).collect(),
             user_data: user,
-            settings: json!({ CLANS_KEY: clans }),
+            settings: serde_json::json!({ CLANS_KEY: clans }),
             ..Default::default()
         };
         (oktz_plugin_api::find("clancreate").unwrap().handler)(ctx)
@@ -424,7 +423,7 @@ mod tests {
     #[test]
     fn an_empty_name_shows_help_and_writes_nothing() {
         for msg in ["", "   "] {
-            let r = run(json!({"koin": 100_000}), msg, json!({}));
+            let r = run(serde_json::json!({"koin": 100_000}), msg, serde_json::json!({}));
             assert!(text_of(&r).starts_with("⚔️ *CREATE CLAN*"), "input {msg:?}");
             assert!(text_of(&r).contains("Biaya: *Rp 50.000*"), "{}", text_of(&r));
             assert!(r.mutations().is_empty(), "input {msg:?}");
@@ -433,18 +432,18 @@ mod tests {
 
     #[test]
     fn a_successful_create_writes_the_clan_and_charges_koin() {
-        let r = run(json!({"koin": 120_000}), "DragonSlayer", json!({}));
+        let r = run(serde_json::json!({"koin": 120_000}), "DragonSlayer", serde_json::json!({}));
         let clans = set_clans(&r);
         assert_eq!(clans.len(), 1);
         let clan = &clans["DRA"];
-        assert_eq!(clan["name"], json!("DragonSlayer"));
-        assert_eq!(clan["leader"], json!("628111@s.whatsapp.net"));
-        assert_eq!(clan["members"], json!(["628111@s.whatsapp.net"]));
-        assert_eq!(clan["level"], json!(1));
-        assert_eq!(clan["wins"], json!(0));
-        assert_eq!(clan["isOpen"], json!(true));
-        assert_eq!(set_user(&r)["clanId"], json!("DRA"));
-        assert_eq!(set_user(&r)["koin"], json!(70_000));
+        assert_eq!(clan["name"], serde_json::json!("DragonSlayer"));
+        assert_eq!(clan["leader"], serde_json::json!("628111@s.whatsapp.net"));
+        assert_eq!(clan["members"], serde_json::json!(["628111@s.whatsapp.net"]));
+        assert_eq!(clan["level"], serde_json::json!(1));
+        assert_eq!(clan["wins"], serde_json::json!(0));
+        assert_eq!(clan["isOpen"], serde_json::json!(true));
+        assert_eq!(set_user(&r)["clanId"], serde_json::json!("DRA"));
+        assert_eq!(set_user(&r)["koin"], serde_json::json!(70_000));
         assert!(text_of(&r).contains("Status: Open · 1/50 members"));
         assert!(text_of(&r).contains("Leader: @628111"));
     }
@@ -474,7 +473,7 @@ mod tests {
 
     #[test]
     fn invalid_names_are_refused_before_anything_is_written() {
-        let r = run(json!({"koin": 100_000}), "clan@evil", json!({}));
+        let r = run(serde_json::json!({"koin": 100_000}), "clan@evil", serde_json::json!({}));
         assert_eq!(
             text_of(&r),
             "❌ Nama clan hanya boleh huruf, angka, dan spasi"
@@ -482,7 +481,7 @@ mod tests {
         assert!(r.mutations().is_empty());
 
         let long = "a".repeat(MAX_CLAN_NAME + 1);
-        let r = run(json!({"koin": 100_000}), &long, json!({}));
+        let r = run(serde_json::json!({"koin": 100_000}), &long, serde_json::json!({}));
         assert_eq!(
             text_of(&r),
             format!("❌ Nama clan maksimal {MAX_CLAN_NAME} karakter")
@@ -491,14 +490,14 @@ mod tests {
 
         // Tepat 20 huruf masih diterima.
         let ok = "a".repeat(MAX_CLAN_NAME);
-        let r = run(json!({"koin": 100_000}), &ok, json!({}));
+        let r = run(serde_json::json!({"koin": 100_000}), &ok, serde_json::json!({}));
         assert_eq!(set_clans(&r).len(), 1);
     }
 
     #[test]
     fn an_existing_clan_name_blocks_creation_case_insensitively() {
-        let existing = json!({ "ABC": { "id": "ABC", "name": "Dragon" } });
-        let r = run(json!({"koin": 100_000}), "dragon", existing);
+        let existing = serde_json::json!({ "ABC": { "id": "ABC", "name": "Dragon" } });
+        let r = run(serde_json::json!({"koin": 100_000}), "dragon", existing);
         assert_eq!(text_of(&r), "❌ Nama *dragon* sudah dipakai");
         assert!(r.mutations().is_empty());
     }
@@ -507,21 +506,21 @@ mod tests {
     fn a_member_of_another_clan_is_refused_before_the_coin_check() {
         // `user.clanId` dicek sebelum koin, jadi guild member tanpa koin tetap
         // dapat pesan "sudah punya clan".
-        let r = run(json!({"clanId": "XYZ"}), "Baru", json!({}));
+        let r = run(serde_json::json!({"clanId": "XYZ"}), "Baru", serde_json::json!({}));
         assert_eq!(text_of(&r), "❌ Kamu sudah punya clan\nKeluar dulu: *.clanleave*");
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn not_enough_koin_reports_both_sides_and_never_deducts() {
-        let r = run(json!({"koin": 49_999}), "Baru", json!({}));
+        let r = run(serde_json::json!({"koin": 49_999}), "Baru", serde_json::json!({}));
         assert_eq!(text_of(&r), not_enough(49_999.0));
         assert!(text_of(&r).contains("Punya: *Rp 49.999*"), "{}", text_of(&r));
         assert!(r.mutations().is_empty());
 
         // Tepat cukup → boleh.
-        let r = run(json!({"koin": 50_000}), "Baru", json!({}));
-        assert_eq!(set_user(&r)["koin"], json!(0), "50.000 - 50.000");
+        let r = run(serde_json::json!({"koin": 50_000}), "Baru", serde_json::json!({}));
+        assert_eq!(set_user(&r)["koin"], serde_json::json!(0), "50.000 - 50.000");
         assert_eq!(set_user(&r)["koin"].as_i64(), Some(0));
     }
 
@@ -535,8 +534,8 @@ mod tests {
 
     #[test]
     fn a_user_row_without_koin_is_treated_as_zero() {
-        for user in [json!(null), json!({}), json!({"koin": null})] {
-            let r = run(user.clone(), "Baru", json!({}));
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"koin": null})] {
+            let r = run(user.clone(), "Baru", serde_json::json!({}));
             assert_eq!(text_of(&r), not_enough(0.0), "input {user}");
             assert!(r.mutations().is_empty(), "input {user}");
         }
@@ -546,12 +545,12 @@ mod tests {
     fn missing_clan_map_reads_as_an_empty_registry() {
         let ctx = Ctx::default();
         assert!(clans(&ctx).is_empty());
-        assert_eq!(clans(&Ctx { settings: json!("bukan object"), ..Default::default() }).len(), 0);
+        assert_eq!(clans(&Ctx { settings: serde_json::json!("bukan object"), ..Default::default() }).len(), 0);
     }
 
     #[test]
     fn field_readers_mirror_js_falsy_fallbacks() {
-        let c = json!({"name": "", "wins": 0, "level": null, "exp": 7, "isOpen": true});
+        let c = serde_json::json!({"name": "", "wins": 0, "level": null, "exp": 7, "isOpen": true});
         assert_eq!(field_str(&c, "name"), "");
         assert_eq!(field_str_or(&c, "name", "🏰"), "🏰");
         assert_eq!(field_num(&c, "wins"), 0.0);
@@ -563,7 +562,7 @@ mod tests {
 
     #[test]
     fn find_clan_falls_back_from_id_to_name_to_lowercase_id() {
-        let map: Map<String, Value> = json!({
+        let map: Map<String, Value> = serde_json::json!({
             "ABC": { "id": "AbC", "name": "Naga" },
         })
         .as_object()

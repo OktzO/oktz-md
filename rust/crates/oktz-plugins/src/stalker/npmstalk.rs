@@ -12,7 +12,6 @@
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::error_template;
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `NEXRAY_BASES[0]` — hanya basis pertama yang dipakai `fetchNpmProfile`.
@@ -250,7 +249,7 @@ pub fn npmstalk(ctx: Ctx) -> Reply {
     }
 
     let Some(profil) = profil else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
 
     let teks = caption(&profil);
@@ -266,7 +265,6 @@ pub fn npmstalk(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -298,7 +296,7 @@ mod tests {
             self.seen.lock().unwrap().push(url.to_string());
             let mut b = self.balasan.lock().unwrap();
             if b.is_empty() {
-                return Err(HttpError {
+                return Err(oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 });
             }
@@ -444,20 +442,20 @@ mod tests {
 
     #[test]
     fn short_num_mengikuti_pembagian_dan_pemotongan_nol() {
-        assert_eq!(short_num(&json!(0)), "0");
-        assert_eq!(short_num(&json!(999)), "999");
-        assert_eq!(short_num(&json!(1000)), "1K");
-        assert_eq!(short_num(&json!(1500)), "1.5K");
-        assert_eq!(short_num(&json!(1_000_000)), "1M");
-        assert_eq!(short_num(&json!(1_500_000_000)), "1.5B");
+        assert_eq!(short_num(&serde_json::json!(0)), "0");
+        assert_eq!(short_num(&serde_json::json!(999)), "999");
+        assert_eq!(short_num(&serde_json::json!(1000)), "1K");
+        assert_eq!(short_num(&serde_json::json!(1500)), "1.5K");
+        assert_eq!(short_num(&serde_json::json!(1_000_000)), "1M");
+        assert_eq!(short_num(&serde_json::json!(1_500_000_000)), "1.5B");
         // `parseInt("12.9")` = 12, bukan 12.9.
-        assert_eq!(short_num(&json!("12.9")), "12");
+        assert_eq!(short_num(&serde_json::json!("12.9")), "12");
     }
 
     #[test]
     fn caption_maksimal_lima_package_dan_kosong_jadi_tanda_hubung() {
         let paket: Vec<Value> = (0..8)
-            .map(|i| json!({"name": format!("p{i}"), "version": "1.0.0", "downloads_monthly": 10, "description": "d"}))
+            .map(|i| serde_json::json!({"name": format!("p{i}"), "version": "1.0.0", "downloads_monthly": 10, "description": "d"}))
             .collect();
         let p = Profil {
             username: "u".into(),
@@ -479,7 +477,7 @@ mod tests {
 
     #[test]
     fn profil_nexray_menormalkan_bentuk_berbeda() {
-        let r = json!({"name":"zann","author":{"name":"Zann","email":"z@x.io"},"description":"bio"});
+        let r = serde_json::json!({"name":"zann","author":{"name":"Zann","email":"z@x.io"},"description":"bio"});
         let p = dari_nexray(&r);
         assert_eq!(p.username, "zann");
         assert_eq!(p.name, "Zann");
@@ -494,7 +492,7 @@ mod tests {
     fn profil_firefly_menyalin_description_dari_name() {
         // `stalker-fallback.js:229` menulis `description: d.name`. Itu yang
         // di-copy, bukan `d.description`.
-        let d = json!({"username":"u","name":"Nama","email":"e","description":"BIO","profile":"p"});
+        let d = serde_json::json!({"username":"u","name":"Nama","email":"e","description":"BIO","profile":"p"});
         let p = dari_firefly(&d);
         assert_eq!(p.description, "Nama");
     }

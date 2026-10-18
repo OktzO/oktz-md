@@ -14,7 +14,6 @@
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::error_template;
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `mangatoon.js:50` — kartu pakai saat `m.text` kosong.
@@ -169,11 +168,11 @@ pub fn mangatoon(ctx: Ctx) -> Reply {
         .http
         .call(
             &oktz_plugin_api::HttpCall::get(api_url(query, &ctx.config().api_keys.cuki))
-                .header("x-api-key", ctx.config().api_keys.cuki)
+                .header("x-api-key", &ctx.config().api_keys.cuki)
                 .header("user-agent", "Mozilla/5.0"),
         )
     else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
 
     // `if (!data?.status || !data?.data?.results) throw` (`:39`) — `results`
@@ -181,10 +180,10 @@ pub fn mangatoon(ctx: Ctx) -> Reply {
     // `results`-nya.
     let body = res.json().unwrap_or(Value::Null);
     let Some(data) = body.get("data") else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
     if !crate::common::js_truthy(body.get("status")) || data.get("results").is_none() {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     }
 
     let items = flat_items(data);
@@ -210,7 +209,6 @@ pub fn mangatoon(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -233,7 +231,7 @@ mod tests {
     impl HttpGet for Stub {
         fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
             self.seen.lock().unwrap().push(url.to_string());
-            Err(HttpError {
+            Err(oktz_plugin_api::HttpError {
                 message: "offline".into(),
             })
         }
@@ -384,7 +382,7 @@ mod tests {
 
     #[test]
     fn comic_groups_flatten_into_one_numbered_caption() {
-        let data = json!({
+        let data = serde_json::json!({
             "query": "love",
             "total": 42,
             "source": "mangatoon.mobi",
@@ -410,7 +408,7 @@ mod tests {
 
     #[test]
     fn missing_caption_fields_fall_back_the_way_js_does() {
-        let data = json!({ "query": "", "total": 0, "source": "", "results": {} });
+        let data = serde_json::json!({ "query": "", "total": 0, "source": "", "results": {} });
         let items = flat_items(&data);
         assert!(items.is_empty());
         let t = caption(&items, &data, "cari");
@@ -423,7 +421,7 @@ mod tests {
 
     #[test]
     fn an_item_without_a_link_prints_undefined() {
-        let data = json!({ "results": { "komik": [ { "items": [ { "title": "Tanpa link" } ] } ] } });
+        let data = serde_json::json!({ "results": { "komik": [ { "items": [ { "title": "Tanpa link" } ] } ] } });
         let items = flat_items(&data);
         let t = caption(&items, &data, "q");
         assert!(t.ends_with("*1.* Tanpa link\n   ├ undefined"), "`item.link` undefined: {t}");
@@ -434,9 +432,9 @@ mod tests {
     #[test]
     fn at_most_ten_comics_are_listed() {
         let semua: Vec<Value> = (0..14)
-            .map(|i| json!({ "title": format!("Komik {i}"), "link": format!("https://a/{i}") }))
+            .map(|i| serde_json::json!({ "title": format!("Komik {i}"), "link": format!("https://a/{i}") }))
             .collect();
-        let data = json!({ "results": { "komik": [ { "items": semua } ] } });
+        let data = serde_json::json!({ "results": { "komik": [ { "items": semua } ] } });
         let items = flat_items(&data);
         assert_eq!(items.len(), 10);
         let t = caption(&items, &data, "q");
@@ -448,8 +446,8 @@ mod tests {
     fn a_missing_results_key_flattens_to_nothing() {
         // `data.results` ada tapi bukan objek dengan `komik` — `flatMap` JS
         // menolak `entry?.items` yang bukan array.
-        let data = json!({ "results": { "komik": "bukan array" } });
+        let data = serde_json::json!({ "results": { "komik": "bukan array" } });
         assert!(flat_items(&data).is_empty());
-        assert!(flat_items(&json!({})).is_empty());
+        assert!(flat_items(&serde_json::json!({})).is_empty());
     }
 }

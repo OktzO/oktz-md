@@ -6,7 +6,7 @@
 //! `sellall`.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::rpg::heal::{apply_exp, inventory_map, or_default, rpg_map};
 
@@ -115,10 +115,10 @@ pub fn blacksmith(ctx: Ctx) -> Reply {
         if left <= 0 {
             inv.remove(*material);
         } else {
-            inv.insert((*material).to_string(), json!(left));
+            inv.insert((*material).to_string(), serde_json::json!(left));
         }
     }
-    inv.insert(result.to_string(), json!(have(&inv, result) + qty));
+    inv.insert(result.to_string(), serde_json::json!(have(&inv, result) + qty));
 
     let old_exp = or_default(ctx.user_field("exp").and_then(Value::as_i64), 0);
     let new_exp = apply_exp(&mut rpg, old_exp, exp);
@@ -134,14 +134,13 @@ pub fn blacksmith(ctx: Ctx) -> Reply {
     .with_reaction("✅")
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "inventory": inv, "exp": new_exp, "rpg": rpg }),
+        data: serde_json::json!({ "inventory": inv, "exp": new_exp, "rpg": rpg }),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: Value, arg: &str) -> Reply {
         let ctx = Ctx {
@@ -194,7 +193,7 @@ mod tests {
 
     #[test]
     fn without_an_argument_the_whole_catalogue_is_listed_in_order() {
-        let t_reply = run(json!({}), "");
+        let t_reply = run(serde_json::json!({}), "");
         let t = text_of(&t_reply);
         assert!(t.starts_with("Halo petualang!"), "{t}");
         assert!(t.ends_with("`.mining` atau `.hunt` lho!"), "{t}");
@@ -211,7 +210,7 @@ mod tests {
     #[test]
     fn an_unknown_item_name_is_refused_and_nothing_is_written() {
         for bad in ["potion", "Sword!", "arrow2"] {
-            let r = run(json!({ "inventory": { "iron": 99 } }), bad);
+            let r = run(serde_json::json!({ "inventory": { "iron": 99 } }), bad);
             assert!(text_of(&r).starts_with("Hadeh, panduan bikin apaan tuh"), "arg {bad}");
             assert!(r.mutations().is_empty(), "arg {bad}");
         }
@@ -220,42 +219,42 @@ mod tests {
     /// `qty` hanya ada di `arrow`; sisanya `recipe.qty || 1`.
     #[test]
     fn arrow_is_the_only_recipe_that_yields_more_than_one() {
-        let arrow = run(json!({ "inventory": { "wood": 1, "iron": 1 }, "exp": 0 }), "arrow");
+        let arrow = run(serde_json::json!({ "inventory": { "wood": 1, "iron": 1 }, "exp": 0 }), "arrow");
         let data = write_of(&arrow);
-        assert_eq!(data["inventory"]["arrow"], json!(10));
+        assert_eq!(data["inventory"]["arrow"], serde_json::json!(10));
         assert!(text_of(&arrow).contains("📊 Jumlah: *+10*"));
 
-        let sword = run(json!({ "inventory": { "iron": 3, "wood": 2 }, "exp": 0 }), "sword");
-        assert_eq!(write_of(&sword)["inventory"]["sword"], json!(1));
+        let sword = run(serde_json::json!({ "inventory": { "iron": 3, "wood": 2 }, "exp": 0 }), "sword");
+        assert_eq!(write_of(&sword)["inventory"]["sword"], serde_json::json!(1));
         assert!(text_of(&sword).contains("📊 Jumlah: *+1*"));
     }
 
     #[test]
     fn a_spent_material_leaves_the_bag_and_a_surplus_stays() {
         let r = run(
-            json!({ "inventory": { "iron": 4, "wood": 3 }, "exp": 0 }),
+            serde_json::json!({ "inventory": { "iron": 4, "wood": 3 }, "exp": 0 }),
             "sword",
         );
         let inv = write_of(&r)["inventory"].as_object().unwrap().clone();
-        assert_eq!(inv["iron"], json!(1), "4 - 3");
-        assert_eq!(inv["wood"], json!(1), "3 - 2");
+        assert_eq!(inv["iron"], serde_json::json!(1), "4 - 3");
+        assert_eq!(inv["wood"], serde_json::json!(1), "3 - 2");
     }
 
     #[test]
     fn an_exactly_empty_material_is_removed_from_the_bag() {
         let r = run(
-            json!({ "inventory": { "iron": 3, "wood": 2 }, "exp": 0 }),
+            serde_json::json!({ "inventory": { "iron": 3, "wood": 2 }, "exp": 0 }),
             "sword",
         );
         let inv = write_of(&r)["inventory"].as_object().unwrap().clone();
         assert!(!inv.contains_key("iron"), "3 - 3 = 0 -> dihapus");
         assert!(!inv.contains_key("wood"), "2 - 2 = 0 -> dihapus");
-        assert_eq!(inv["sword"], json!(1));
+        assert_eq!(inv["sword"], serde_json::json!(1));
     }
 
     #[test]
     fn every_short_material_is_listed_with_have_over_need() {
-        let r = run(json!({ "inventory": { "iron": 1 } }), "sword");
+        let r = run(serde_json::json!({ "inventory": { "iron": 1 } }), "sword");
         let t = text_of(&r);
         assert!(t.starts_with("Eits, bahannya belum cukup"), "{t}");
         assert!(t.contains("• iron: 1/3"), "{t}");
@@ -266,12 +265,12 @@ mod tests {
     #[test]
     fn forging_pays_the_recipe_exp_and_leaves_other_items_alone() {
         let r = run(
-            json!({ "inventory": { "iron": 3, "wood": 2, "potion": 7 }, "exp": 0 }),
+            serde_json::json!({ "inventory": { "iron": 3, "wood": 2, "potion": 7 }, "exp": 0 }),
             "sword",
         );
         let data = write_of(&r);
-        assert_eq!(data["exp"], json!(200));
-        assert_eq!(data["inventory"]["potion"], json!(7), "barang lain tak boleh hilang");
+        assert_eq!(data["exp"], serde_json::json!(200));
+        assert_eq!(data["inventory"]["potion"], serde_json::json!(7), "barang lain tak boleh hilang");
     }
 
     #[test]

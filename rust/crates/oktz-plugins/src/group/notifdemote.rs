@@ -37,7 +37,6 @@ mod tests {
     use crate::group::notifclosegroup::ADMIN_ONLY;
     use oktz_plugin_api::{Mutation, Participant};
     use serde_json::Value;
-    use serde_json::json;
 
     fn run(group: Value, arg: Option<&str>, admin: bool) -> Reply {
         let ctx = Ctx {
@@ -91,13 +90,13 @@ mod tests {
 
     #[test]
     fn only_the_own_field_name_differs_between_the_four_toggles() {
-        let r = run(json!({}), Some("on"), true);
-        assert_eq!(group_write(&r), &json!({"notifDemote": true}));
+        let r = run(serde_json::json!({}), Some("on"), true);
+        assert_eq!(group_write(&r), &serde_json::json!({"notifDemote": true}));
     }
 
     #[test]
     fn the_status_header_uses_the_demote_title_and_avatar() {
-        let r = run(json!({"notifDemote": true}), None, true);
+        let r = run(serde_json::json!({"notifDemote": true}), None, true);
         assert!(
             text_of(&r).starts_with("👤 *ɴᴏᴛɪꜰ ᴅᴇᴍᴏᴛᴇ*\n\n> Status: ✅ Aktif"),
             "{}",
@@ -110,19 +109,19 @@ mod tests {
     #[test]
     fn on_and_off_use_this_plugin_own_wording() {
         assert_eq!(
-            text_of(&run(json!({}), Some("on"), true)),
+            text_of(&run(serde_json::json!({}), Some("on"), true)),
             "✅ *ɴᴏᴛɪꜰ ᴅᴇᴍᴏᴛᴇ ᴅɪᴀᴋᴛɪꜰᴋᴀɴ*"
         );
         assert_eq!(
-            text_of(&run(json!({}), Some("off"), true)),
+            text_of(&run(serde_json::json!({}), Some("off"), true)),
             "❌ *ɴᴏᴛɪꜰ ᴅᴇᴍᴏᴛᴇ ᴅɪɴᴏɴᴀᴋᴛɪꜰᴋᴀɴ*"
         );
-        assert_eq!(group_write(&run(json!({}), Some("off"), true)), &json!({"notifDemote": false}));
+        assert_eq!(group_write(&run(serde_json::json!({}), Some("off"), true)), &serde_json::json!({"notifDemote": false}));
     }
 
     #[test]
     fn a_plain_member_is_rejected() {
-        let r = run(json!({}), Some("on"), false);
+        let r = run(serde_json::json!({}), Some("on"), false);
         assert_eq!(text_of(&r), ADMIN_ONLY);
         assert!(r.mutations().is_empty());
     }

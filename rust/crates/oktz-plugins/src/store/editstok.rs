@@ -195,7 +195,7 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(settings: Value, text: &str, is_group: bool) -> Reply {
         let ctx = Ctx {
@@ -228,7 +228,7 @@ mod tests {
     }
 
     fn sample() -> Value {
-        json!({"storeProducts": [
+        serde_json::json!({"storeProducts": [
             {"name": "Netflix", "type": "digital", "price": 25000,
              "stockItems": [{"detail": "lama1@mail"}, {"detail": "lama2@mail"}], "stock": 2},
             {"name": "Kaos", "type": "fisik", "price": 50000, "stock": 10},
@@ -264,14 +264,14 @@ mod tests {
     #[test]
     fn the_group_branch_is_rejected_before_the_store_is_read() {
         // Dicek paling awal — termasuk ketika store kosong.
-        let r = run(json!({}), "1 1|baru", true);
+        let r = run(serde_json::json!({}), "1 1|baru", true);
         assert_eq!(text_of(&r), denied());
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn an_empty_product_list_is_reported_and_nothing_is_written() {
-        for s in [json!({}), json!({"storeProducts": []})] {
+        for s in [serde_json::json!({}), serde_json::json!({"storeProducts": []})] {
             let r = run(s.clone(), "1 1|baru", false);
             assert!(text_of(&r).starts_with("📭 *Belum ada produk.*"), "input {s}");
             assert!(r.mutations().is_empty(), "input {s}");
@@ -297,8 +297,8 @@ mod tests {
         let r = run(sample(), "1 2|baru@mail.com", false);
         let items = products_write(&r)[0]["stockItems"].as_array().unwrap().clone();
         assert_eq!(items.len(), 2);
-        assert_eq!(items[0]["detail"], json!("lama1@mail"), "yang lain utuh");
-        assert_eq!(items[1]["detail"], json!("baru@mail.com"));
+        assert_eq!(items[0]["detail"], serde_json::json!("lama1@mail"), "yang lain utuh");
+        assert_eq!(items[1]["detail"], serde_json::json!("baru@mail.com"));
         assert!(
             items[1]["updatedAt"].as_str().unwrap().ends_with('Z'),
             "stempel ISO-8601: {:?}",
@@ -311,7 +311,7 @@ mod tests {
         let r = run(sample(), "1 1|satu;;dua;;tiga", false);
         assert_eq!(
             products_write(&r)[0]["stockItems"][0]["detail"],
-            json!("satu\ndua\ntiga")
+            serde_json::json!("satu\ndua\ntiga")
         );
     }
 
@@ -386,7 +386,7 @@ mod tests {
     #[test]
     fn exactly_three_characters_is_accepted() {
         let r = run(sample(), "1 1|abc", false);
-        assert_eq!(products_write(&r)[0]["stockItems"][0]["detail"], json!("abc"));
+        assert_eq!(products_write(&r)[0]["stockItems"][0]["detail"], serde_json::json!("abc"));
     }
 
     #[test]

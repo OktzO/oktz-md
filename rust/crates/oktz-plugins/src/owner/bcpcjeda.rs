@@ -1,7 +1,6 @@
 //! `plugins/owner/bcpcjeda.js` — setelan jeda broadcast private chat.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::json;
 
 const DEFAULT_DELAY_MS: i64 = 5_000;
 
@@ -100,7 +99,7 @@ pub fn bcpcjeda(ctx: Ctx) -> Reply {
     ))
     .with_mutation(Mutation::SetSetting {
         key: "jedaBcpc".into(),
-        value: json!(ms),
+        value: serde_json::json!(ms),
     })
 }
 
@@ -164,7 +163,7 @@ mod tests {
 
     #[test]
     fn no_argument_shows_the_current_delay_and_writes_nothing() {
-        let r = run("", json!({}));
+        let r = run("", serde_json::json!({}));
         assert!(
             text_of(&r).starts_with("⏱️ *JEDA BROADCAST PRIVATE*"),
             "{}",
@@ -177,7 +176,7 @@ mod tests {
     #[test]
     fn a_stored_zero_falls_back_to_the_default_like_js_or_does() {
         // `|| 5000`, bukan `?? 5000` — 0 yang tersimpan jadi 5 detik.
-        assert!(text_of(&run("", json!({"jedaBcpc": 0}))).contains("5 detik"));
+        assert!(text_of(&run("", serde_json::json!({"jedaBcpc": 0}))).contains("5 detik"));
     }
 
     #[test]
@@ -192,7 +191,7 @@ mod tests {
     #[test]
     fn a_malformed_value_is_refused_and_writes_nothing() {
         for bad in ["5", "5x", "s", "-5s", "5 s", "1.5m"] {
-            let r = run(bad, json!({}));
+            let r = run(bad, serde_json::json!({}));
             assert_eq!(text_of(&r), BAD_FORMAT, "input {bad:?}");
             assert!(r.mutations().is_empty(), "input {bad:?}");
         }
@@ -200,14 +199,14 @@ mod tests {
 
     #[test]
     fn an_interval_below_one_second_is_refused() {
-        let r = run("0s", json!({}));
+        let r = run("0s", serde_json::json!({}));
         assert_eq!(text_of(&r), BAD_FORMAT, "0s itu 0 ms");
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn setting_a_delay_writes_it_and_names_both_sides() {
-        let r = run("2m", json!({}));
+        let r = run("2m", serde_json::json!({}));
         assert_eq!(stored(&r), 120_000);
         let t = text_of(&r);
         assert!(t.contains("Sebelumnya: *5 detik*"), "{t}");

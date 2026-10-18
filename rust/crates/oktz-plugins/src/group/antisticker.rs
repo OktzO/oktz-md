@@ -57,7 +57,7 @@ pub fn antisticker(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -113,7 +113,7 @@ mod tests {
 
     #[test]
     fn no_argument_reports_status_without_writing() {
-        let r = run(json!({}), "");
+        let r = run(serde_json::json!({}), "");
         assert!(
             text_of(&r).contains("> Status: *❌ OFF*"),
             "{}",
@@ -121,26 +121,26 @@ mod tests {
         );
         assert!(r.mutations().is_empty());
 
-        let on = run(json!({"antisticker": true}), "");
+        let on = run(serde_json::json!({"antisticker": true}), "");
         assert!(text_of(&on).contains("> Status: *✅ ON*"), "{}", text_of(&on));
         assert!(on.mutations().is_empty());
     }
 
     #[test]
     fn on_and_off_write_a_boolean() {
-        let on = run(json!({}), "on");
+        let on = run(serde_json::json!({}), "on");
         assert_eq!(text_of(&on), ON);
-        assert_eq!(written(&on), &json!({ "antisticker": true }));
+        assert_eq!(written(&on), &serde_json::json!({ "antisticker": true }));
 
-        let off = run(json!({"antisticker": true}), "off");
+        let off = run(serde_json::json!({"antisticker": true}), "off");
         assert_eq!(text_of(&off), OFF);
-        assert_eq!(written(&off), &json!({ "antisticker": false }));
+        assert_eq!(written(&off), &serde_json::json!({ "antisticker": false }));
     }
 
     #[test]
     fn each_branch_carries_its_own_reaction() {
         for (text, emoji) in [("on", "✅"), ("off", "❌")] {
-            match run(json!({}), text).without_mutations() {
+            match run(serde_json::json!({}), text).without_mutations() {
                 Reply::Reaction { emoji: e, .. } => assert_eq!(e, emoji, "{text}"),
                 other => panic!("harus Reaction, dapat {other:?}"),
             }
@@ -149,7 +149,7 @@ mod tests {
 
     #[test]
     fn an_unknown_action_is_refused_and_nothing_is_written() {
-        let r = run(json!({}), "mungkin");
+        let r = run(serde_json::json!({}), "mungkin");
         assert_eq!(text_of(&r), BAD_ACTION);
         assert!(r.mutations().is_empty());
     }
@@ -157,8 +157,8 @@ mod tests {
     #[test]
     fn the_action_is_lowercased_before_matching() {
         assert_eq!(
-            written(&run(json!({}), "OFF")),
-            &json!({ "antisticker": false })
+            written(&run(serde_json::json!({}), "OFF")),
+            &serde_json::json!({ "antisticker": false })
         );
     }
 }

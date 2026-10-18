@@ -216,6 +216,7 @@ pub(crate) const EFEK_TAK_ADA: &str = "❌ Efek tidak ditemukan";
 /// `te(m.prefix, m.command, m.pushName)` dengan `config.errorTemplate`
 /// (`config.js:153`). `m.pushName` tidak ada di `Ctx`, jadi fallback `'User'`
 /// yang dipakai — sama seperti `tod.rs`/`wwkill.rs`.
+#[allow(dead_code)]
 pub(crate) fn error_template(prefix: &str, command: &str) -> String {
     format!(
         "☢ Kayaknya command `{prefix}{command}` lagi ada kendala\n\
@@ -282,7 +283,7 @@ pub fn glitchtext(ctx: Ctx) -> Reply {
         // `sock.sendMedia(..., null, m, { type: 'image' })` — caption null,
         // jadi caption kosong dan yang dibawa hanya URL gambarnya.
         Ok(image_url) => Reply::image(MediaSource::url(image_url), "").with_reaction("✅"),
-        Err(_) => Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
+        Err(_) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
     }
 }
 

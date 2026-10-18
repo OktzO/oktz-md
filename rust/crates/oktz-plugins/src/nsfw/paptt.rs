@@ -13,7 +13,6 @@
 
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 
-use crate::common::error_template;
 
 /// `paptt.js:22` — URL tanpa query, templatenya tidak pernah berubah.
 pub(crate) const API_URL: &str = "https://kyzznekoo.zone.id/api/asupan/paptt";
@@ -43,7 +42,7 @@ pub fn paptt(ctx: Ctx) -> Reply {
     // `await m.react("🕕")` pembuka di JS digantikan reaksi penutup: `Reply`
     // hanya menyimpan satu reaksi, jadi yang terakhir (`✅`/`❌`) yang pegang.
     let Ok(res) = ctx.http.get(API_URL) else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("❌");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("❌");
     };
 
     Reply::image(MediaSource::bytes(res.body.bytes().to_vec()), CAPTION).with_reaction("✅")
@@ -239,7 +238,7 @@ mod tests {
         };
         let r = run(ctx);
         assert!(!r.has_media());
-        assert_eq!(text_of(&r), error_template("!", "paptt"));
+        assert_eq!(text_of(&r), crate::common::error_template("!", "paptt"));
         assert_eq!(reaction_of(&r), Some("❌"));
     }
 
@@ -250,7 +249,7 @@ mod tests {
             command: String::new(),
             ..Default::default()
         });
-        assert_eq!(text_of(&r), error_template("", ""));
+        assert_eq!(text_of(&r), crate::common::error_template("", ""));
         assert_eq!(reaction_of(&r), Some("❌"));
     }
 

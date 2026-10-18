@@ -59,7 +59,7 @@ pub fn antidocument(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -115,11 +115,11 @@ mod tests {
     #[test]
     fn no_argument_reports_status_without_writing() {
         for (group, want) in [
-            (json!({}), "❌ OFF"),
-            (json!({"antidocument": true}), "✅ ON"),
+            (serde_json::json!({}), "❌ OFF"),
+            (serde_json::json!({"antidocument": true}), "✅ ON"),
             // Nilai non-boolean tetap dihitung sebagai aktif, seperti
             // `groupData.antidocument` yang dipakai sebagai operand `if`.
-            (json!({"antidocument": "ya"}), "✅ ON"),
+            (serde_json::json!({"antidocument": "ya"}), "✅ ON"),
         ] {
             let r = run(group.clone(), "");
             assert!(
@@ -133,19 +133,19 @@ mod tests {
 
     #[test]
     fn on_and_off_write_a_boolean_not_a_string() {
-        let on = run(json!({}), "on");
+        let on = run(serde_json::json!({}), "on");
         assert_eq!(text_of(&on), ON);
-        assert_eq!(written(&on), &json!({ "antidocument": true }));
+        assert_eq!(written(&on), &serde_json::json!({ "antidocument": true }));
 
-        let off = run(json!({"antidocument": true}), "off");
+        let off = run(serde_json::json!({"antidocument": true}), "off");
         assert_eq!(text_of(&off), OFF);
-        assert_eq!(written(&off), &json!({ "antidocument": false }));
+        assert_eq!(written(&off), &serde_json::json!({ "antidocument": false }));
     }
 
     #[test]
     fn each_branch_carries_its_own_reaction() {
         for (text, emoji) in [("on", "✅"), ("off", "❌")] {
-            match run(json!({}), text).without_mutations() {
+            match run(serde_json::json!({}), text).without_mutations() {
                 Reply::Reaction { emoji: e, .. } => assert_eq!(e, emoji, "{text}"),
                 other => panic!("harus Reaction, dapat {other:?}"),
             }
@@ -154,7 +154,7 @@ mod tests {
 
     #[test]
     fn an_unknown_action_is_refused_and_nothing_is_written() {
-        let r = run(json!({}), "maybe");
+        let r = run(serde_json::json!({}), "maybe");
         assert_eq!(text_of(&r), BAD_ACTION);
         assert!(r.mutations().is_empty());
         assert!(
@@ -165,6 +165,6 @@ mod tests {
 
     #[test]
     fn the_action_is_lowercased_before_matching() {
-        assert_eq!(written(&run(json!({}), "ON")), &json!({ "antidocument": true }));
+        assert_eq!(written(&run(serde_json::json!({}), "ON")), &serde_json::json!({ "antidocument": true }));
     }
 }

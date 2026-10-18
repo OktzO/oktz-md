@@ -92,7 +92,7 @@ pub fn checkban(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(settings: Value) -> Reply {
         let ctx = Ctx {
@@ -129,7 +129,7 @@ mod tests {
 
     #[test]
     fn an_empty_list_reports_not_banned_and_writes_nothing() {
-        let r = run(json!({}));
+        let r = run(serde_json::json!({}));
         let t = text_of(&r);
         assert!(t.starts_with("DEBUG BAN (628979985621@s.whatsapp.net)"), "{t}");
         assert!(t.contains("cleanNumber: 628979985621"), "{t}");
@@ -140,7 +140,7 @@ mod tests {
 
     #[test]
     fn the_hardcoded_target_on_the_list_reports_banned() {
-        let r = run(json!({ "bannedUsers": ["628979985621"] }));
+        let r = run(serde_json::json!({ "bannedUsers": ["628979985621"] }));
         let t = text_of(&r);
         assert!(t.contains("isBannedDirect: true"), "{t}");
         assert!(t.contains("config.isBanned(): true"), "{t}");
@@ -149,13 +149,13 @@ mod tests {
 
     #[test]
     fn a_different_number_on_the_list_reports_not_banned() {
-        let r = run(json!({ "bannedUsers": ["628123456789"] }));
+        let r = run(serde_json::json!({ "bannedUsers": ["628123456789"] }));
         assert!(text_of(&r).contains("config.isBanned(): false"), "{}", text_of(&r));
     }
 
     #[test]
     fn stored_entries_are_normalised_before_they_are_printed() {
-        let r = run(json!({ "bannedUsers": ["628979985621:3@s.whatsapp.net"] }));
+        let r = run(serde_json::json!({ "bannedUsers": ["628979985621:3@s.whatsapp.net"] }));
         let t = text_of(&r);
         assert!(t.contains("cleanNumber: 628979985621"), "{t}");
         assert!(t.contains("config.isBanned(): true"), "sufiks device dihapus: {t}");

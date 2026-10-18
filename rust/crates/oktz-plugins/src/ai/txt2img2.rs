@@ -14,7 +14,7 @@
 //! dipakai tetap sama, hanya waktunya tidak bisa dipotong.
 
 use oktz_plugin_api::{Ctx, HttpGet, MediaSource, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::roll;
 
@@ -147,7 +147,7 @@ fn read_queue_sse(raw: &str, event_id: &str) -> Generate {
 fn txt2img2(http: &dyn HttpGet, prompt: &str) -> Generate {
     // `checkPrompt` (`txt2img2.js:16-39`): kegagalan apa pun di dalamnya
     // ditelan `catch` dan dianggap "tidak flagged, tidak rate limited".
-    if let Ok(res) = http.post_json(UPSAMPLER_URL, &json!([prompt])) {
+    if let Ok(res) = http.post_json(UPSAMPLER_URL, &serde_json::json!([prompt])) {
         let body = res.text();
         if body.contains("\"flagged\":true") {
             return Err("Prompt terdeteksi tidak aman".to_string());
@@ -158,7 +158,7 @@ fn txt2img2(http: &dyn HttpGet, prompt: &str) -> Generate {
     }
 
     let session = session_hash();
-    let join = json!({
+    let join = serde_json::json!({
         "data": [prompt, [], "Distilled (4 steps)", 0, true, 1024, 1024, 4, 1, false],
         "event_data": Value::Null,
         "fn_index": 6,
@@ -258,7 +258,7 @@ mod tests {
         fn pick(&self, url: &str) -> Result<HttpResponse, HttpError> {
             let Some((_, Some(body))) = self.routes.iter().find(|(frag, _)| url.contains(*frag))
             else {
-                return Err(HttpError {
+                return Err(oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 });
             };
@@ -494,7 +494,7 @@ mod tests {
 
     #[test]
     fn extract_url_picks_the_leftmost_gradio_path() {
-        let out = json!({"a": "/tmp/gradio/abc.webp", "b": "/tmp/gradio/abc.png"});
+        let out = serde_json::json!({"a": "/tmp/gradio/abc.webp", "b": "/tmp/gradio/abc.png"});
         assert_eq!(
             extract_url(&out),
             format!("{SPACE_URL}/gradio_api/file=/tmp/gradio/abc.webp")
@@ -520,12 +520,12 @@ mod tests {
 
     #[test]
     fn a_full_gradio_url_wins_over_the_tmp_path_regex() {
-        let out = json!({
+        let out = serde_json::json!({
             "tmp": "/tmp/gradio/aaa.png",
             "cdn": format!("{FULL_URL_PREFIX}bbb.webp"),
         });
         assert_eq!(extract_url(&out), "https://black-forest-labs-flux-2-klein-4b.hf.space/gradio_api/file=bbb.webp");
-        assert_eq!(extract_url(&json!("tidak ada url")), "");
+        assert_eq!(extract_url(&serde_json::json!("tidak ada url")), "");
     }
 
     #[test]

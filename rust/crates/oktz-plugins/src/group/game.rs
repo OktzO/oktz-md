@@ -87,7 +87,6 @@ pub fn game(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use serde_json::Value;
-    use serde_json::json;
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -145,7 +144,7 @@ mod tests {
     #[test]
     fn an_unrecognised_option_shows_help_and_writes_nothing() {
         for bad in ["", "enable", "1", "on off", "onn"] {
-            let r = run(json!({"game": false}), bad);
+            let r = run(serde_json::json!({"game": false}), bad);
             assert!(
                 text_of(&r).starts_with("🎮 *FITUR GAME GRUP*"),
                 "input {bad:?} harus menampilkan help"
@@ -158,7 +157,7 @@ mod tests {
     fn the_help_branch_never_reads_the_stored_flag() {
         // Argumen diperiksa duluan; store dengan `game`Whatever tidak
         // boleh mengubah balasannya.
-        for g in [json!({"game": true}), json!({"game": false}), json!({}), json!(null)] {
+        for g in [serde_json::json!({"game": true}), serde_json::json!({"game": false}), serde_json::json!({}), serde_json::json!(null)] {
             let r = run(g.clone(), "");
             assert!(text_of(&r).starts_with("🎮 *FITUR GAME GRUP*"), "input {g}");
         }
@@ -169,33 +168,33 @@ mod tests {
         // `setGroup` default `game: true` — grup baru sudah AKTIF, jadi
         // `.game on` harus bilang "sudah AKTIF", bukan menulis ulang.
         assert!(current(&Ctx::default()));
-        let r = run(json!({}), "on");
+        let r = run(serde_json::json!({}), "on");
         assert_eq!(text_of(&r), already(true));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn turning_it_off_from_a_fresh_group_writes_false() {
-        let r = run(json!({}), "off");
-        assert_eq!(group_write(&r)["game"], json!(false));
+        let r = run(serde_json::json!({}), "off");
+        assert_eq!(group_write(&r)["game"], serde_json::json!(false));
         assert!(text_of(&r).contains("MENONAKTIFKAN"));
         assert!(text_of(&r).contains("tidak akan bisa"));
     }
 
     #[test]
     fn turning_it_back_on_writes_true_after_a_real_off() {
-        let r = run(json!({"game": false}), "on");
-        assert_eq!(group_write(&r)["game"], json!(true));
+        let r = run(serde_json::json!({"game": false}), "on");
+        assert_eq!(group_write(&r)["game"], serde_json::json!(true));
         assert!(text_of(&r).contains("MENGAKTIFKAN"));
     }
 
     #[test]
     fn an_explicit_no_op_is_reported_without_writing() {
-        let already_on = run(json!({"game": true}), "on");
+        let already_on = run(serde_json::json!({"game": true}), "on");
         assert_eq!(text_of(&already_on), already(true));
         assert!(already_on.mutations().is_empty());
 
-        let already_off = run(json!({"game": false}), "off");
+        let already_off = run(serde_json::json!({"game": false}), "off");
         assert_eq!(text_of(&already_off), already(false));
         assert!(already_off.mutations().is_empty());
     }
@@ -207,13 +206,13 @@ mod tests {
         // jadi hanya key yang HILANG yang berarti "seperti default".
         // Key yang ada tapi falsy (`0`, `""`) tetap dibaca apa adanya.
         let g = |v: Value| Ctx {
-            group_data: json!({ "game": v }),
+            group_data: serde_json::json!({ "game": v }),
             ..Default::default()
         };
-        assert!(current(&g(json!(true))));
-        assert!(!current(&g(json!(false))));
-        assert!(!current(&g(json!(0))), "0 falsy di JS");
-        assert!(!current(&g(json!(""))), "string kosong falsy di JS");
+        assert!(current(&g(serde_json::json!(true))));
+        assert!(!current(&g(serde_json::json!(false))));
+        assert!(!current(&g(serde_json::json!(0))), "0 falsy di JS");
+        assert!(!current(&g(serde_json::json!(""))), "string kosong falsy di JS");
         assert!(current(&Ctx::default()), "key hilang = default setGroup");
     }
 
@@ -223,23 +222,23 @@ mod tests {
         // Diuji dari state `false` supaya "dikenali" berarti "menulis",
         // karena dari state default `true`, "on" adalah no-op.
         for arg in ["ON", "On", "on"] {
-            let r = run(json!({"game": false}), arg);
+            let r = run(serde_json::json!({"game": false}), arg);
             assert_eq!(
                 group_write(&r)["game"],
-                json!(true),
+                serde_json::json!(true),
                 "arg {arg:?} harus dikenali sebagai on"
             );
         }
         for arg in ["OFF", "Off", "off"] {
-            let r = run(json!({"game": true}), arg);
-            assert_eq!(group_write(&r)["game"], json!(false), "arg {arg:?}");
+            let r = run(serde_json::json!({"game": true}), arg);
+            assert_eq!(group_write(&r)["game"], serde_json::json!(false), "arg {arg:?}");
         }
     }
 
     #[test]
     fn a_uppercase_option_never_falls_through_to_help() {
         for arg in ["ON", "OFF"] {
-            let r = run(json!({"game": false}), arg);
+            let r = run(serde_json::json!({"game": false}), arg);
             assert!(
                 !text_of(&r).starts_with("🎮 *FITUR GAME GRUP*"),
                 "arg {arg:?} jatuh ke help"
@@ -249,7 +248,7 @@ mod tests {
 
     #[test]
     fn the_applied_reply_is_paired_with_the_write() {
-        let r = run(json!({"game": false}), "on");
+        let r = run(serde_json::json!({"game": false}), "on");
         assert!(text_of(&r).contains("Berhasil"));
         assert_eq!(r.mutations().len(), 1);
     }

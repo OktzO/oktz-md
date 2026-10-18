@@ -1,7 +1,6 @@
 //! `plugins/owner/custompayment.js` — teks custom untuk `.payment`.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::json;
 
 fn help(ctx: &Ctx, current: &str) -> String {
     format!(
@@ -57,7 +56,7 @@ pub fn custompayment(ctx: Ctx) -> Reply {
     if input.to_lowercase() == "reset" {
         return Reply::text(RESET_MSG).with_mutation(Mutation::SetSetting {
             key: "customPaymentText".into(),
-            value: json!(""),
+            value: serde_json::json!(""),
         });
     }
 
@@ -66,7 +65,7 @@ pub fn custompayment(ctx: Ctx) -> Reply {
     ))
     .with_mutation(Mutation::SetSetting {
         key: "customPaymentText".into(),
-        value: json!(input),
+        value: serde_json::json!(input),
     })
 }
 
@@ -139,7 +138,7 @@ mod tests {
     #[test]
     fn an_empty_text_shows_the_panel_and_writes_nothing() {
         for text in ["", "   "] {
-            let r = run(text, json!({}));
+            let r = run(text, serde_json::json!({}));
             assert!(
                 text_of(&r).starts_with("📝 *CUSTOM PAYMENT TEXT*"),
                 "input {text:?}"
@@ -154,7 +153,7 @@ mod tests {
 
     #[test]
     fn the_stored_text_is_shown_verbatim() {
-        let r = run("", json!({ "customPaymentText": "Halo {owner}" }));
+        let r = run("", serde_json::json!({ "customPaymentText": "Halo {owner}" }));
         let t = text_of(&r);
         assert!(t.contains("Teks saat ini:\nHalo {owner}"), "{t}");
         assert!(!t.contains("belum diatur"), "{t}");
@@ -164,23 +163,23 @@ mod tests {
     #[test]
     fn reset_clears_the_text_regardless_of_case() {
         for text in ["reset", "RESET", " Reset "] {
-            let r = run(text, json!({ "customPaymentText": "lama" }));
+            let r = run(text, serde_json::json!({ "customPaymentText": "lama" }));
             assert_eq!(text_of(&r), RESET_MSG, "input {text:?}");
-            assert_eq!(stored(&r), json!(""), "input {text:?}");
+            assert_eq!(stored(&r), serde_json::json!(""), "input {text:?}");
         }
     }
 
     #[test]
     fn a_word_containing_reset_is_kept_as_text() {
         // Guard: `=== 'reset'`, bukan `.includes('reset')`.
-        let r = run("reset dulu ya", json!({}));
-        assert_eq!(stored(&r), json!("reset dulu ya"));
+        let r = run("reset dulu ya", serde_json::json!({}));
+        assert_eq!(stored(&r), serde_json::json!("reset dulu ya"));
     }
 
     #[test]
     fn the_preview_repeats_the_saved_text() {
-        let r = run("Bayar ke {methods}", json!({}));
-        assert_eq!(stored(&r), json!("Bayar ke {methods}"));
+        let r = run("Bayar ke {methods}", serde_json::json!({}));
+        assert_eq!(stored(&r), serde_json::json!("Bayar ke {methods}"));
         assert!(
             text_of(&r).contains("Preview:\nBayar ke {methods}"),
             "{}",

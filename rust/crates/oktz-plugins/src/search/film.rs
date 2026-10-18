@@ -8,7 +8,7 @@
 use oktz_plugin_api::{Ctx, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::{error_template, js_truthy};
+use crate::common::{js_truthy};
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `config.APIkey?.neoxr || ''` — lihat catatan `ponytail:` di
@@ -29,9 +29,9 @@ pub(crate) fn help(prefix: &str) -> String {
         "🎬 *ꜰɪʟᴍ sᴇᴀʀᴄʜ*\n\n\
          > Cari dan nonton film online\n\n\
          *Format:*\n\
-         > \\`{prefix}film <judul>\\`\n\n\
+         > `{prefix}film <judul>`\n\n\
          *Contoh:*\n\
-         > \\`{prefix}film civil war\\`"
+         > `{prefix}film civil war`"
     )
 }
 
@@ -108,7 +108,7 @@ pub fn film(ctx: Ctx) -> Reply {
     }
 
     let Some(resp) = ctx.http.get(&api_url(&query)).ok() else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
     let data = resp.json().unwrap_or(Value::Null);
 
@@ -118,7 +118,7 @@ pub fn film(ctx: Ctx) -> Reply {
     // String non-kosong lolos guard lalu `films.forEach` melempar TypeError
     // di JS -> `catch` -> template error.
     let Some(films) = data.get("data").and_then(Value::as_array) else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
     let films = &films[..films.len().min(10)];
 
@@ -132,7 +132,6 @@ pub fn film(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug)]
@@ -159,7 +158,7 @@ mod tests {
     impl HttpGet for Stub {
         fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
             self.seen.lock().unwrap().push(url.to_string());
-            let body = self.body.clone().ok_or_else(|| HttpError {
+            let body = self.body.clone().ok_or_else(|| oktz_plugin_api::HttpError {
                 message: "offline".into(),
             })?;
             Ok(HttpResponse {
@@ -193,7 +192,7 @@ mod tests {
             sender: "628111@s.whatsapp.net".into(),
             chat: "628111@s.whatsapp.net".into(),
             text: text.into(),
-            args: text.split_whitespace().collect(),
+            args: text.split_whitespace().map(str::to_string).collect(),
             http,
             ..Default::default()
         };
@@ -274,7 +273,7 @@ mod tests {
         );
         assert!(body.ends_with("> _Pilih film dari list di bawah_"), "{body}");
         assert_eq!(reaction_of(&r), Some("✅"));
-        assert!(matches!(r.without_mutations(), Reply::Interactive { .. }));
+        assert!(matches!(r.without_mutations().tanpa_reaksi(), Reply::Interactive { .. }));
         assert_eq!(
             http.seen.lock().unwrap()[0],
             "https://api.neoxr.eu/api/film?q=civil%20war&apikey="
@@ -284,9 +283,9 @@ mod tests {
     #[test]
     fn only_ten_films_are_listed_and_counted() {
         let films: Vec<Value> = (0..14)
-            .map(|i| json!({"title": format!("Film {i}")}))
+            .map(|i| serde_json::json!({"title": format!("Film {i}")}))
             .collect();
-        let body = format!("{{\"status\": true, \"data\": {}}}", json!(films));
+        let body = format!("{{\"status\": true, \"data\": {}}}", serde_json::json!(films));
         let out = body_of(&run(Stub::new(&body), "film"));
         assert!(out.contains("> Ditemukan *10* film"), "{out}");
         assert!(out.contains("*10. Film 9*"), "{out}");
@@ -320,7 +319,7 @@ mod tests {
     #[test]
     fn a_non_array_payload_hits_the_catch_branch_like_the_foreach_type_error() {
         let r = run(Stub::new(r#"{"status": true, "data": "x"}"#), "q");
-        assert_eq!(body_of(&r), error_template(".", "film"));
+        assert_eq!(body_of(&r), crate::common::error_template(".", "film"));
         assert_eq!(reaction_of(&r), Some("☢"));
     }
 

@@ -13,7 +13,7 @@
 //! jadi gerbang itu dilewati — pola yang sama dengan `kick.rs`/`delete.rs`.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::{jid_number, now_ms, parse_int};
 use crate::group::kick::find_participant;
@@ -113,11 +113,11 @@ fn catat_warning(ctx: &Ctx, target: &str, reason: &str) -> Mutation {
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    list.push(json!({ "reason": reason, "by": ctx.sender, "time": now_ms() }));
+    list.push(serde_json::json!({ "reason": reason, "by": ctx.sender, "time": now_ms() }));
     warnings.insert(target.to_string(), Value::Array(list));
     Mutation::SetGroup {
         jid: ctx.chat.clone(),
-        data: json!({ "warnings": Value::Object(warnings) }),
+        data: serde_json::json!({ "warnings": Value::Object(warnings) }),
     }
 }
 
@@ -157,7 +157,7 @@ pub fn warn(ctx: Ctx) -> Reply {
         ))
         .with_mutation(Mutation::SetGroup {
             jid: ctx.chat.clone(),
-            data: json!({ "maxWarnings": n }),
+            data: serde_json::json!({ "maxWarnings": n }),
         });
     }
 
@@ -224,7 +224,6 @@ mod tests {
     use oktz_plugin_api::find;
     use oktz_plugin_api::registry::GroupRoster;
     use oktz_plugin_api::{QuotedKind, QuotedMessage};
-    use serde_json::json;
 
     fn participant(jid: &str, admin: bool) -> oktz_plugin_api::Participant {
         oktz_plugin_api::Participant {
@@ -307,7 +306,7 @@ mod tests {
     #[test]
     fn the_help_reflects_a_custom_max_from_the_group() {
         let ctx = Ctx {
-            group_data: json!({ "maxWarnings": 7 }),
+            group_data: serde_json::json!({ "maxWarnings": 7 }),
             ..ctx_base()
         };
         assert!(text_of(&run(ctx)).contains("Batas Warning: *7 kali*"));
@@ -352,7 +351,7 @@ mod tests {
                 r.mutations()[0],
                 Mutation::SetGroup {
                     jid: "120363@g.us".into(),
-                    data: json!({ "maxWarnings": n }),
+                    data: serde_json::json!({ "maxWarnings": n }),
                 }
             );
         }
@@ -434,7 +433,7 @@ mod tests {
             args: vec!["@628999".into(), "lagi".into()],
             text: "@628999 lagi".into(),
             mentioned: vec!["628999@s.whatsapp.net".into()],
-            group_data: json!({
+            group_data: serde_json::json!({
                 "maxWarnings": 3,
                 "warnings": {
                     "628999@s.whatsapp.net": [{"reason": "pertama", "by": "628111@s.whatsapp.net", "time": 1}],
@@ -547,7 +546,7 @@ mod tests {
             args: vec!["@628999".into(), "spam".into()],
             text: "@628999 spam".into(),
             mentioned: vec!["628999@s.whatsapp.net".into()],
-            group_data: json!({ "maxWarnings": 1 }),
+            group_data: serde_json::json!({ "maxWarnings": 1 }),
             ..ctx_base()
         };
         let r = run(ctx);
@@ -561,7 +560,7 @@ mod tests {
             args: vec!["@628999".into(), "spam".into()],
             text: "@628999 spam".into(),
             mentioned: vec!["628999@s.whatsapp.net".into()],
-            group_data: json!({ "warnings": { "628999@s.whatsapp.net": "bukan-array" } }),
+            group_data: serde_json::json!({ "warnings": { "628999@s.whatsapp.net": "bukan-array" } }),
             ..ctx_base()
         };
         assert!(text_of(&run(ctx)).contains("(SP1)!"));

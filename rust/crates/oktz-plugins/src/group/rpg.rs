@@ -81,7 +81,6 @@ pub fn rpg(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use serde_json::Value;
-    use serde_json::json;
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -139,7 +138,7 @@ mod tests {
     #[test]
     fn an_unrecognised_option_shows_help_and_writes_nothing() {
         for bad in ["", "nyala", "1", "of", "onn"] {
-            let r = run(json!({"rpg": false}), bad);
+            let r = run(serde_json::json!({"rpg": false}), bad);
             assert!(
                 text_of(&r).starts_with("⚔️ *FITUR RPG GRUP*"),
                 "input {bad:?} harus help"
@@ -150,7 +149,7 @@ mod tests {
 
     #[test]
     fn the_help_branch_never_reads_the_stored_flag() {
-        for g in [json!({"rpg": true}), json!({"rpg": false}), json!({}), json!(null)] {
+        for g in [serde_json::json!({"rpg": true}), serde_json::json!({"rpg": false}), serde_json::json!({}), serde_json::json!(null)] {
             assert!(
                 text_of(&run(g.clone(), "")).starts_with("⚔️ *FITUR RPG GRUP*"),
                 "input {g}"
@@ -162,27 +161,27 @@ mod tests {
     fn a_fresh_group_defaults_to_rpg_enabled() {
         // `setGroup` default `rpg: true` — `on` pada grup baru itu no-op.
         assert!(current(&Ctx::default()));
-        let r = run(json!({}), "on");
+        let r = run(serde_json::json!({}), "on");
         assert_eq!(text_of(&r), already(true));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn off_writes_false_and_on_writes_true_from_the_other_state() {
-        let off = run(json!({}), "off");
-        assert_eq!(group_write(&off)["rpg"], json!(false));
+        let off = run(serde_json::json!({}), "off");
+        assert_eq!(group_write(&off)["rpg"], serde_json::json!(false));
         assert!(text_of(&off).contains("MENONAKTIFKAN"));
 
-        let on = run(json!({"rpg": false}), "on");
-        assert_eq!(group_write(&on)["rpg"], json!(true));
+        let on = run(serde_json::json!({"rpg": false}), "on");
+        assert_eq!(group_write(&on)["rpg"], serde_json::json!(true));
         assert!(text_of(&on).contains("MENGAKTIFKAN"));
     }
 
     #[test]
     fn both_explicit_no_ops_are_reported_without_writing() {
         for (g, arg, label) in [
-            (json!({"rpg": true}), "on", "AKTIF"),
-            (json!({"rpg": false}), "off", "NONAKTIF"),
+            (serde_json::json!({"rpg": true}), "on", "AKTIF"),
+            (serde_json::json!({"rpg": false}), "off", "NONAKTIF"),
         ] {
             let r = run(g.clone(), arg);
             assert!(text_of(&r).contains(label), "input {g} arg {arg}");
@@ -193,12 +192,12 @@ mod tests {
     #[test]
     fn a_key_that_exists_but_is_falsy_is_not_treated_as_missing() {
         let g = |v: Value| Ctx {
-            group_data: json!({ "rpg": v }),
+            group_data: serde_json::json!({ "rpg": v }),
             ..Default::default()
         };
-        assert!(!current(&g(json!(0))));
-        assert!(!current(&g(json!(""))));
-        assert!(!current(&g(json!(false))));
+        assert!(!current(&g(serde_json::json!(0))));
+        assert!(!current(&g(serde_json::json!(""))));
+        assert!(!current(&g(serde_json::json!(false))));
         assert!(current(&Ctx::default()));
     }
 
@@ -208,23 +207,23 @@ mod tests {
         // Diuji dari state yang berlawanan supaya "dikenali" berarti
         // "menulis"; dari state default `true`, "on" adalah no-op.
         for arg in ["ON", "On", "on"] {
-            let r = run(json!({"rpg": false}), arg);
+            let r = run(serde_json::json!({"rpg": false}), arg);
             assert_eq!(
                 group_write(&r)["rpg"],
-                json!(true),
+                serde_json::json!(true),
                 "arg {arg:?} harus dikenali sebagai on"
             );
         }
         for arg in ["OFF", "Off", "off"] {
-            let r = run(json!({"rpg": true}), arg);
-            assert_eq!(group_write(&r)["rpg"], json!(false), "arg {arg:?}");
+            let r = run(serde_json::json!({"rpg": true}), arg);
+            assert_eq!(group_write(&r)["rpg"], serde_json::json!(false), "arg {arg:?}");
         }
     }
 
     #[test]
     fn a_uppercase_option_never_falls_through_to_help() {
         for arg in ["ON", "OFF"] {
-            let r = run(json!({"rpg": false}), arg);
+            let r = run(serde_json::json!({"rpg": false}), arg);
             assert!(
                 !text_of(&r).starts_with("⚔️ *FITUR RPG GRUP*"),
                 "arg {arg:?} jatuh ke help"
@@ -234,7 +233,7 @@ mod tests {
 
     #[test]
     fn the_applied_reply_is_paired_with_the_write() {
-        let r = run(json!({"rpg": false}), "on");
+        let r = run(serde_json::json!({"rpg": false}), "on");
         assert!(text_of(&r).contains("Berhasil"));
         assert_eq!(r.mutations().len(), 1);
     }

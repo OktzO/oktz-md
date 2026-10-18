@@ -11,7 +11,6 @@
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
 use serde_json::Value;
-use serde_json::json;
 
 use crate::rpg::heal::{
     apply_exp, inventory_map, or_default, rpg_int, rpg_map, roll_percent,
@@ -71,11 +70,11 @@ pub fn hunt(ctx: Ctx) -> Reply {
              Stamina kamu sisa: *{stamina}*"
         ));
     }
-    rpg.insert("stamina".into(), json!(stamina - STAMINA_COST));
+    rpg.insert("stamina".into(), serde_json::json!(stamina - STAMINA_COST));
 
     let (name, item, exp_reward) = caught();
     let have = or_default(inv.get(item).and_then(Value::as_i64), 0);
-    inv.insert(item.to_string(), json!(have + 1));
+    inv.insert(item.to_string(), serde_json::json!(have + 1));
 
     let old_exp = or_default(ctx.user_field("exp").and_then(Value::as_i64), 0);
     let new_exp = apply_exp(&mut rpg, old_exp, exp_reward);
@@ -90,14 +89,13 @@ pub fn hunt(ctx: Ctx) -> Reply {
     ))
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "inventory": inv, "exp": new_exp, "rpg": rpg }),
+        data: serde_json::json!({ "inventory": inv, "exp": new_exp, "rpg": rpg }),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: Value) -> Reply {
         let ctx = Ctx {
@@ -155,7 +153,7 @@ mod tests {
     #[test]
     fn not_enough_stamina_blocks_the_hunt() {
         for stamina in [1, 24] {
-            let r = run(json!({ "rpg": { "stamina": stamina } }));
+            let r = run(serde_json::json!({ "rpg": { "stamina": stamina } }));
             let t = text_of(&r);
             assert!(t.starts_with("⚡ Aduh kak, stamina kamu habis!"), "stamina {stamina}: {t}");
             assert!(t.contains(&format!("sisa: *{stamina}*")), "{t}");
@@ -174,19 +172,19 @@ mod tests {
     fn every_shot_lands_one_animal_with_its_own_exp() {
         let mut seen = std::collections::BTreeSet::new();
         for _ in 0..900 {
-            let r = run(json!({ "rpg": { "stamina": 100 }, "exp": 0 }));
+            let r = run(serde_json::json!({ "rpg": { "stamina": 100 }, "exp": 0 }));
             let t = text_of(&r);
             assert!(t.starts_with("🏹 *TANGKAPAN BERHASIL!*"), "{t}");
             let data = write_of(&r);
             let inv = data["inventory"].as_object().unwrap().clone();
             assert_eq!(inv.len(), 1, "tepat satu hewan: {data}");
             let (item, qty) = inv.iter().next().unwrap();
-            assert_eq!(*qty, json!(1));
+            assert_eq!(*qty, serde_json::json!(1));
             let exp = data["exp"].as_i64().unwrap();
             let row = ANIMALS.iter().find(|(_, i, ..)| i == item).expect("hewan di luar tabel");
             assert_eq!(exp, row.3);
             assert!(t.contains(&format!("✨ EXP Bertambah: *+{exp}*")), "{t}");
-            assert_eq!(data["rpg"]["stamina"], json!(75));
+            assert_eq!(data["rpg"]["stamina"], serde_json::json!(75));
             seen.insert(item.to_string());
         }
         assert!(seen.len() >= 3, "hanya terlihat {seen:?}");
@@ -202,10 +200,10 @@ mod tests {
     fn a_zero_stamina_reads_as_one_hundred_because_of_or() {
         let mut ran = false;
         for _ in 0..50 {
-            let r = run(json!({ "rpg": { "stamina": 0 } }));
+            let r = run(serde_json::json!({ "rpg": { "stamina": 0 } }));
             if !text_of(&r).starts_with("⚡ Aduh kak, stamina kamu habis!") {
                 ran = true;
-                assert_eq!(write_of(&r)["rpg"]["stamina"], json!(75), "0 -> 100 -> 75");
+                assert_eq!(write_of(&r)["rpg"]["stamina"], serde_json::json!(75), "0 -> 100 -> 75");
             }
         }
         assert!(ran, "stamina 0 harus jadi 100");
@@ -215,7 +213,7 @@ mod tests {
     fn an_existing_stack_grows_by_one() {
         for _ in 0..300 {
             let r = run(
-                json!({ "rpg": { "stamina": 100 }, "inventory": { "rabbit": 6 } }),
+                serde_json::json!({ "rpg": { "stamina": 100 }, "inventory": { "rabbit": 6 } }),
             );
             let inv = write_of(&r)["inventory"].as_object().unwrap().clone();
             // `user.inventory[item] = (user.inventory[item] || 0) + 1` — tumpukan
@@ -228,7 +226,7 @@ mod tests {
                         .iter()
                         .find(|(k, _)| k.as_str() != "rabbit")
                         .expect("kelinci lama + satu hewan baru");
-                    assert_eq!(*qty, json!(1), "0 + 1 untuk {item}");
+                    assert_eq!(*qty, serde_json::json!(1), "0 + 1 untuk {item}");
                 }
                 other => panic!("rabbit bukan 6 atau 7: {other:?} — {inv:?}"),
             }
@@ -237,7 +235,7 @@ mod tests {
 
     #[test]
     fn a_missing_user_row_never_panics() {
-        for user in [json!(null), json!({}), json!({ "rpg": null })] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({ "rpg": null })] {
             let r = run(user.clone());
             assert!(!text_of(&r).is_empty(), "input {user}");
         }

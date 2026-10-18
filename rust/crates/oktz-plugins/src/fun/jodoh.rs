@@ -276,7 +276,7 @@ pub fn jodoh(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::registry::{GroupRoster, Participant};
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn member(jid: &str, data: Value) -> Participant {
         Participant {
@@ -305,7 +305,7 @@ mod tests {
 
     fn plain(n: usize) -> Vec<Participant> {
         (0..n)
-            .map(|i| member(&format!("62811{i}@s.whatsapp.net"), json!({})))
+            .map(|i| member(&format!("62811{i}@s.whatsapp.net"), serde_json::json!({})))
             .collect()
     }
 
@@ -356,7 +356,7 @@ mod tests {
     #[test]
     fn fewer_than_two_members_takes_the_guard_branch() {
         for n in [0usize, 1] {
-            let (text, mentions) = split(&run(ctx_of(plain(n), json!({}))));
+            let (text, mentions) = split(&run(ctx_of(plain(n), serde_json::json!({}))));
             assert_eq!(text, format!("{ERR_META}\n\n{ERR_MIN_TWO}"), "n={n}");
             assert!(mentions.is_empty(), "n={n}");
         }
@@ -364,7 +364,7 @@ mod tests {
 
     #[test]
     fn the_normal_branch_mentions_two_different_members_of_the_roster() {
-        let roster = ctx_of(plain(5), json!({}));
+        let roster = ctx_of(plain(5), serde_json::json!({}));
         let jids: Vec<String> = roster.roster.member_jids();
         for _ in 0..60 {
             let (text, mentions) = split(&run(roster.clone()));
@@ -390,8 +390,8 @@ mod tests {
 
     fn text_has_band(pct: u32) -> bool {
         let out = render(
-            ("1@s.whatsapp.net", &json!({})),
-            ("2@s.whatsapp.net", &json!({})),
+            ("1@s.whatsapp.net", &serde_json::json!({})),
+            ("2@s.whatsapp.net", &serde_json::json!({})),
             pct,
             false,
             false,
@@ -415,12 +415,12 @@ mod tests {
     #[test]
     fn registered_members_of_both_genders_always_get_paired_across() {
         let members = vec![
-            member("1@s.whatsapp.net", json!({"isRegistered": true, "regGender": "Laki-laki", "regName": "Budi"})),
-            member("2@s.whatsapp.net", json!({"isRegistered": true, "regGender": "Perempuan", "regName": "Sari"})),
-            member("3@s.whatsapp.net", json!({})),
+            member("1@s.whatsapp.net", serde_json::json!({"isRegistered": true, "regGender": "Laki-laki", "regName": "Budi"})),
+            member("2@s.whatsapp.net", serde_json::json!({"isRegistered": true, "regGender": "Perempuan", "regName": "Sari"})),
+            member("3@s.whatsapp.net", serde_json::json!({})),
         ];
         for _ in 0..40 {
-            let (text, mentions) = split(&run(ctx_of(members.clone(), json!({}))));
+            let (text, mentions) = split(&run(ctx_of(members.clone(), serde_json::json!({}))));
             assert!(
                 text.contains("> ✨ _Dijodohkan berdasarkan data registrasi_"),
                 "{text}"
@@ -437,11 +437,11 @@ mod tests {
     #[test]
     fn a_single_gender_falls_back_to_a_shuffle_of_the_registered_pool() {
         let members = vec![
-            member("1@s.whatsapp.net", json!({"isRegistered": true, "regGender": "Laki-laki"})),
-            member("2@s.whatsapp.net", json!({"isRegistered": true, "regGender": "Laki-laki"})),
-            member("3@s.whatsapp.net", json!({})),
+            member("1@s.whatsapp.net", serde_json::json!({"isRegistered": true, "regGender": "Laki-laki"})),
+            member("2@s.whatsapp.net", serde_json::json!({"isRegistered": true, "regGender": "Laki-laki"})),
+            member("3@s.whatsapp.net", serde_json::json!({})),
         ];
-        let (text, mentions) = split(&run(ctx_of(members, json!({}))));
+        let (text, mentions) = split(&run(ctx_of(members, serde_json::json!({}))));
         assert!(text.contains("Dijodohkan berdasarkan data registrasi"), "{text}");
         assert!(mentions.iter().all(|m| m.ends_with("1@s.whatsapp.net") || m.ends_with("2@s.whatsapp.net")), "{text}");
     }
@@ -449,10 +449,10 @@ mod tests {
     #[test]
     fn registration_mode_blocks_unregistered_groups() {
         let members = vec![
-            member("1@s.whatsapp.net", json!({"isRegistered": true})),
-            member("2@s.whatsapp.net", json!({})),
+            member("1@s.whatsapp.net", serde_json::json!({"isRegistered": true})),
+            member("2@s.whatsapp.net", serde_json::json!({})),
         ];
-        let (text, mentions) = split(&run(ctx_of(members, json!({"registrationRequired": true}))));
+        let (text, mentions) = split(&run(ctx_of(members, serde_json::json!({"registrationRequired": true}))));
         assert_eq!(text, format!("{ERR_META}\n\n{ERR_REGISTRATION}"));
         assert!(mentions.is_empty());
     }
@@ -460,11 +460,11 @@ mod tests {
     #[test]
     fn registration_mode_pairs_from_the_registered_pool_only() {
         let members = vec![
-            member("1@s.whatsapp.net", json!({"isRegistered": true})),
-            member("2@s.whatsapp.net", json!({"isRegistered": true})),
-            member("3@s.whatsapp.net", json!({})),
+            member("1@s.whatsapp.net", serde_json::json!({"isRegistered": true})),
+            member("2@s.whatsapp.net", serde_json::json!({"isRegistered": true})),
+            member("3@s.whatsapp.net", serde_json::json!({})),
         ];
-        let (text, mentions) = split(&run(ctx_of(members, json!({"registrationRequired": true}))));
+        let (text, mentions) = split(&run(ctx_of(members, serde_json::json!({"registrationRequired": true}))));
         assert!(mentions.iter().all(|m| m.ends_with("1@s.whatsapp.net") || m.ends_with("2@s.whatsapp.net")), "{text}");
         assert!(text.contains("> 🔒 _Mode wajib daftar aktif, hanya member terdaftar yang dipilih_"), "{text}");
     }
@@ -474,9 +474,9 @@ mod tests {
         let out = render(
             (
                 "628111@s.whatsapp.net",
-                &json!({"regGender": "Laki-laki", "regName": "Budi"}),
+                &serde_json::json!({"regGender": "Laki-laki", "regName": "Budi"}),
             ),
-            ("628222@s.whatsapp.net", &json!({"regGender": "Perempuan"})),
+            ("628222@s.whatsapp.net", &serde_json::json!({"regGender": "Perempuan"})),
             74,
             false,
             false,
@@ -489,6 +489,6 @@ mod tests {
 
     #[test]
     fn the_reply_only_reads_the_roster() {
-        assert!(run(ctx_of(plain(4), json!({}))).mutations().is_empty());
+        assert!(run(ctx_of(plain(4), serde_json::json!({}))).mutations().is_empty());
     }
 }

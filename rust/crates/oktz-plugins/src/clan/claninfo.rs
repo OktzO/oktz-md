@@ -185,7 +185,7 @@ fn parse_created(raw: &str) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(user: Value, text: &str, clans: Value) -> Reply {
         let ctx = Ctx {
@@ -196,14 +196,14 @@ mod tests {
             text: text.into(),
             args: text.split_whitespace().map(str::to_string).collect(),
             user_data: user,
-            settings: json!({ crate::clan::clancreate::CLANS_KEY: clans }),
+            settings: serde_json::json!({ crate::clan::clancreate::CLANS_KEY: clans }),
             ..Default::default()
         };
         (oktz_plugin_api::find("claninfo").unwrap().handler)(ctx)
     }
 
     fn clan(extra: Value) -> Value {
-        let mut c = json!({
+        let mut c = serde_json::json!({
             "id": "DRG",
             "name": "Dragon",
             "emblem": "🐉",
@@ -252,21 +252,21 @@ mod tests {
 
     #[test]
     fn without_an_id_or_a_clan_id_the_user_is_told_how_to_get_one() {
-        let r = run(json!({}), "", json!({}));
+        let r = run(serde_json::json!({}), "", serde_json::json!({}));
         assert_eq!(text_of(&r), no_clan());
         assert!(r.mutations().is_empty(), "baca tidak boleh menulis");
     }
 
     #[test]
     fn an_unknown_id_is_reported_as_not_found() {
-        let r = run(json!({}), "Zzz", json!({}));
+        let r = run(serde_json::json!({}), "Zzz", serde_json::json!({}));
         assert_eq!(text_of(&r), not_found());
     }
 
     #[test]
     fn the_lookup_falls_back_from_id_to_name() {
         for arg in ["DRG", "Dragon", "dragon"] {
-            let r = run(json!({}), arg, json!({ "DRG": clan(json!({})) }));
+            let r = run(serde_json::json!({}), arg, serde_json::json!({ "DRG": clan(serde_json::json!({})) }));
             assert!(text_of(&r).contains("Dragon"), "arg {arg}: {}", text_of(&r));
         }
     }
@@ -274,16 +274,16 @@ mod tests {
     #[test]
     fn a_clan_id_argument_overrides_the_senders_own_clan() {
         let r = run(
-            json!({ "clanId": "DRG" }),
+            serde_json::json!({ "clanId": "DRG" }),
             "Naga",
-            json!({ "DRG": clan(json!({})), "NG": clan(json!({"id":"NG","name":"Naga"})) }),
+            serde_json::json!({ "DRG": clan(serde_json::json!({})), "NG": clan(serde_json::json!({"id":"NG","name":"Naga"})) }),
         );
         assert!(text_of(&r).contains("Naga"), "{}", text_of(&r));
     }
 
     #[test]
     fn a_full_clan_renders_leader_members_status_and_created_date() {
-        let r = run(json!({}), "DRG", json!({ "DRG": clan(json!({})) }));
+        let r = run(serde_json::json!({}), "DRG", serde_json::json!({ "DRG": clan(serde_json::json!({})) }));
         let t = text_of(&r);
         assert!(t.starts_with("🐉 *Dragon*"), "{t}");
         assert!(t.contains("🥉 Bronze · Level 1"), "{t}");
@@ -306,9 +306,9 @@ mod tests {
     #[test]
     fn a_closed_clan_with_a_description_shows_both() {
         let r = run(
-            json!({}),
+            serde_json::json!({}),
             "DRG",
-            json!({ "DRG": clan(json!({"isOpen": false, "description": "Elite", "emblem": null})) }),
+            serde_json::json!({ "DRG": clan(serde_json::json!({"isOpen": false, "description": "Elite", "emblem": null})) }),
         );
         let t = text_of(&r);
         assert!(t.starts_with("🏰 *Dragon*"), "emblem null → default: {t}");
@@ -320,9 +320,9 @@ mod tests {
     fn war_stats_and_exp_bar_scale_with_progress() {
         // Target = level * 10000, jadi level 2 dengan 10.000 EXP = 50%.
         let r = run(
-            json!({}),
+            serde_json::json!({}),
             "DRG",
-            json!({ "DRG": clan(json!({"wins": 7, "losses": 3, "level": 2, "exp": 10_000})) }),
+            serde_json::json!({ "DRG": clan(serde_json::json!({"wins": 7, "losses": 3, "level": 2, "exp": 10_000})) }),
         );
         let t = text_of(&r);
         assert!(t.contains("🥉 Bronze · Level 2"), "level 2 belum Silver: {t}");
@@ -331,9 +331,9 @@ mod tests {
 
         // Level 30 → Diamond, dan 300.000 EXP = tepat satu target.
         let dia = run(
-            json!({}),
+            serde_json::json!({}),
             "DRG",
-            json!({ "DRG": clan(json!({"level": 30, "exp": 300_000})) }),
+            serde_json::json!({ "DRG": clan(serde_json::json!({"level": 30, "exp": 300_000})) }),
         );
         let t = text_of(&dia);
         assert!(t.contains("💎 Diamond · Level 30"), "{t}");
@@ -341,9 +341,9 @@ mod tests {
 
         // Level 1 dengan 10.000 EXP = bar penuh.
         let full = run(
-            json!({}),
+            serde_json::json!({}),
             "DRG",
-            json!({ "DRG": clan(json!({"level": 1, "exp": 10_000})) }),
+            serde_json::json!({ "DRG": clan(serde_json::json!({"level": 1, "exp": 10_000})) }),
         );
         assert!(text_of(&full).contains("EXP  ██████████ 100%"), "{}", text_of(&full));
     }
@@ -384,13 +384,13 @@ mod tests {
 
     #[test]
     fn a_missing_level_reads_as_one_and_a_missing_emblem_as_the_castle() {
-        let c = clan(json!({ "level": null, "exp": null }));
+        let c = clan(serde_json::json!({ "level": null, "exp": null }));
         let level = {
             let l = field_i64(&c, "level");
             if l == 0 { 1 } else { l }
         };
         assert_eq!(level, 1);
         assert_eq!(emblem(&c), "🐉");
-        assert_eq!(emblem(&json!({})), "🏰");
+        assert_eq!(emblem(&serde_json::json!({})), "🏰");
     }
 }

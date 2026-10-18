@@ -40,7 +40,7 @@ pub fn resetgoodbye(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
 
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(group: Value) -> Reply {
         let ctx = Ctx {
@@ -95,13 +95,13 @@ mod tests {
     #[test]
     fn an_absent_or_falsy_message_is_reported_as_default() {
         for g in [
-            json!(null),
-            json!({}),
-            json!({"jid": "120363@g.us"}),
-            json!({"goodbyeMsg": null}),
-            json!({"goodbyeMsg": ""}),
-            json!({"goodbyeMsg": 0}),
-            json!({"goodbyeMsg": false}),
+            serde_json::json!(null),
+            serde_json::json!({}),
+            serde_json::json!({"jid": "120363@g.us"}),
+            serde_json::json!({"goodbyeMsg": null}),
+            serde_json::json!({"goodbyeMsg": ""}),
+            serde_json::json!({"goodbyeMsg": 0}),
+            serde_json::json!({"goodbyeMsg": false}),
         ] {
             let r = run(g.clone());
             assert_eq!(text_of(&r), ALREADY_DEFAULT, "input {g}");
@@ -111,22 +111,22 @@ mod tests {
 
     #[test]
     fn an_empty_object_is_truthy_in_js_so_the_reset_still_runs() {
-        let r = run(json!({"goodbyeMsg": {}}));
+        let r = run(serde_json::json!({"goodbyeMsg": {}}));
         assert_eq!(text_of(&r), DONE);
         assert_eq!(group_write(&r)["goodbyeMsg"], Value::Null);
     }
 
     #[test]
     fn a_stored_message_is_cleared_to_null_not_deleted() {
-        let r = run(json!({"goodbyeMsg": "Sampai jumpa"}));
-        assert_eq!(group_write(&r), &json!({"goodbyeMsg": null}));
+        let r = run(serde_json::json!({"goodbyeMsg": "Sampai jumpa"}));
+        assert_eq!(group_write(&r), &serde_json::json!({"goodbyeMsg": null}));
         assert_eq!(group_write(&r).as_object().unwrap().len(), 1);
         assert_eq!(text_of(&r), DONE);
     }
 
     #[test]
     fn the_reset_reacts_with_a_check_mark() {
-        match run(json!({"goodbyeMsg": "x"})).without_mutations() {
+        match run(serde_json::json!({"goodbyeMsg": "x"})).without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅"),
             other => panic!("harus Reaction, dapat {other:?}"),
         }

@@ -13,7 +13,7 @@
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::{error_template, js_truthy};
+use crate::common::{js_truthy};
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `config.APIkey?.neoxr || ''` — lihat catatan `ponytail:` di
@@ -95,13 +95,13 @@ pub fn apkmod_get(ctx: Ctx) -> Reply {
     }
 
     let Some(resp) = ctx.http.get(&api_url(&query, &no)).ok() else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
     let data = resp.json().unwrap_or(Value::Null);
 
     // `!data?.status || !data?.data` -> `throw new Error(...)` -> `catch`.
     if !js_truthy(data.get("status")) || !js_truthy(data.get("data")) {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     }
     let app = data.get("data").unwrap_or(&Value::Null);
 
@@ -149,7 +149,7 @@ mod tests {
     impl HttpGet for Stub {
         fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
             self.seen.lock().unwrap().push(url.to_string());
-            let body = self.body.clone().ok_or_else(|| HttpError {
+            let body = self.body.clone().ok_or_else(|| oktz_plugin_api::HttpError {
                 message: "offline".into(),
             })?;
             Ok(HttpResponse {
@@ -183,7 +183,7 @@ mod tests {
             sender: "628111@s.whatsapp.net".into(),
             chat: "628111@s.whatsapp.net".into(),
             text: text.into(),
-            args: text.split_whitespace().collect(),
+            args: text.split_whitespace().map(str::to_string).collect(),
             http,
             ..Default::default()
         };
@@ -317,7 +317,7 @@ mod tests {
             "<html>bukan json</html>",
         ] {
             let r = run(Stub::new(body), "1 vpn");
-            assert_eq!(body_of(&r), error_template(".", "apkmod-get"), "{body}");
+            assert_eq!(body_of(&r), crate::common::error_template(".", "apkmod-get"), "{body}");
             assert_eq!(reaction_of(&r), Some("☢"), "{body}");
         }
     }

@@ -7,7 +7,7 @@
 //! sengaja dipertahankan karena `woodcut.js`/`work.js` memakai pola yang sama.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::rpg::jualan::{
     apply_exp, inventory_map, math_random, or_default, rpg_int, rpg_map, roll_incl,
@@ -47,7 +47,7 @@ pub fn mining(ctx: Ctx) -> Reply {
              Nambang batu tuh berat, butuh *{STAMINA_COST} Stamina*. Stamina kamu sisa *{stamina}* doang. Istirahat gih! 🛌💤"
         ));
     }
-    rpg.insert("stamina".into(), json!(stamina - STAMINA_COST));
+    rpg.insert("stamina".into(), serde_json::json!(stamina - STAMINA_COST));
 
     let mut inv = inventory_map(&ctx);
     let mut results: Vec<(&'static str, i64)> = Vec::new();
@@ -55,16 +55,16 @@ pub fn mining(ctx: Ctx) -> Reply {
         // `<=` di JS, bukan `<` — peluang 80 berarti praktis 80%.
         if math_random() * 100.0 <= chance {
             let qty = roll_incl(min, max);
-            let slot = inv.entry(item.to_string()).or_insert(json!(0));
+            let slot = inv.entry(item.to_string()).or_insert(serde_json::json!(0));
             let have = slot.as_i64().unwrap_or(0);
-            *slot = json!(have + qty);
+            *slot = serde_json::json!(have + qty);
             results.push((name, qty));
         }
     }
     if results.is_empty() {
-        let slot = inv.entry("rock".to_string()).or_insert(json!(0));
+        let slot = inv.entry("rock".to_string()).or_insert(serde_json::json!(0));
         let have = slot.as_i64().unwrap_or(0);
-        *slot = json!(have + 1);
+        *slot = serde_json::json!(have + 1);
         results.push(("🪨 Batu", 1));
     }
 
@@ -86,7 +86,7 @@ pub fn mining(ctx: Ctx) -> Reply {
         .with_reaction("✅")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "exp": new_exp, "rpg": rpg, "inventory": inv }),
+            data: serde_json::json!({ "exp": new_exp, "rpg": rpg, "inventory": inv }),
         })
 }
 
@@ -153,15 +153,15 @@ mod tests {
 
     #[test]
     fn an_empty_stamina_bar_still_lets_the_miner_in_because_the_js_uses_or() {
-        let r = run(json!({"rpg": {"stamina": 0}, "exp": 0}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 0}, "exp": 0}));
         let t = text_of(&r);
         assert!(!t.starts_with("Aduh kak"), "0 || 100 -> 100: {t}");
-        assert_eq!(written(&r)["rpg"]["stamina"], json!(80), "100 - 20");
+        assert_eq!(written(&r)["rpg"]["stamina"], serde_json::json!(80), "100 - 20");
     }
 
     #[test]
     fn nineteen_stamina_is_not_enough() {
-        let r = run(json!({"rpg": {"stamina": 19}}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 19}}));
         let t = text_of(&r);
         assert!(t.starts_with("Aduh kak, badan kamu udah remuk duluan!"), "{t}");
         assert!(t.contains("Stamina kamu sisa *19* doang"), "{t}");
@@ -171,15 +171,15 @@ mod tests {
     #[test]
     fn every_swing_costs_exactly_twenty_stamina() {
         for _ in 0..200 {
-            let r = run(json!({"rpg": {"stamina": 100}, "exp": 0}));
-            assert_eq!(written(&r)["rpg"]["stamina"], json!(80));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "exp": 0}));
+            assert_eq!(written(&r)["rpg"]["stamina"], serde_json::json!(80));
         }
     }
 
     #[test]
     fn the_reply_lines_always_match_the_written_inventory() {
         for _ in 0..400 {
-            let r = run(json!({"rpg": {"stamina": 100}, "exp": 0, "inventory": {"rock": 5}}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "exp": 0, "inventory": {"rock": 5}}));
             let t = text_of(&r);
             let inv = written(&r)["inventory"].as_object().unwrap().clone();
             for (item, name, _, min, max) in DROPS {
@@ -220,7 +220,7 @@ mod tests {
     #[test]
     fn an_empty_haul_still_yields_one_rock_and_a_listed_line() {
         for _ in 0..6000 {
-            let r = run(json!({"rpg": {"stamina": 100}, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "exp": 0}));
             let t = text_of(&r);
             // Drop `rock` selalu 2..=5, jadi baris `+1` hanya bisa fallback.
             if t.contains("• 🪨 Batu: *+1*") {
@@ -229,7 +229,7 @@ mod tests {
                     1,
                     "fallback hanya jalan kalau nol drop: {t}"
                 );
-                assert_eq!(written(&r)["inventory"]["rock"], json!(1));
+                assert_eq!(written(&r)["inventory"]["rock"], serde_json::json!(1));
                 return;
             }
         }
@@ -239,7 +239,7 @@ mod tests {
     #[test]
     fn experience_is_always_inside_the_documented_band() {
         for _ in 0..400 {
-            let r = run(json!({"rpg": {"stamina": 100}, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "exp": 0}));
             let t = text_of(&r);
             let exp: i64 = t
                 .lines()
@@ -247,7 +247,7 @@ mod tests {
                 .and_then(|s| s.trim_end_matches('*').parse().ok())
                 .unwrap();
             assert!((100..=599).contains(&exp), "exp {exp}");
-            assert_eq!(written(&r)["exp"], json!(exp));
+            assert_eq!(written(&r)["exp"], serde_json::json!(exp));
         }
     }
 }

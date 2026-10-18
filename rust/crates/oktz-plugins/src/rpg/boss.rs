@@ -9,7 +9,7 @@
 //! 3. `toLocaleString()` tanpa locale memakai koma (`5,000`), bukan titik.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::rpg::heal::{
     apply_exp, coalesce, inventory_map, math_random, or_default, rpg_int, rpg_map, thousands_en,
@@ -144,7 +144,7 @@ pub fn boss(ctx: Ctx) -> Reply {
              Stamina kamu sisa: *{stamina}*"
         ));
     }
-    rpg.insert("stamina".into(), json!(stamina - STAMINA_COST));
+    rpg.insert("stamina".into(), serde_json::json!(stamina - STAMINA_COST));
 
     let chosen = pool[crate::common::random_index(pool.len())];
     let user_attack = or_default(rpg_int(&rpg, "attack"), 10) + level * 3;
@@ -163,7 +163,7 @@ pub fn boss(ctx: Ctx) -> Reply {
             if math_random() > 0.5 {
                 let qty = crate::common::roll(3) as i64 + 1;
                 let have = or_default(inv.get(*drop).and_then(Value::as_i64), 0);
-                inv.insert((*drop).to_string(), json!(have + qty));
+                inv.insert((*drop).to_string(), serde_json::json!(have + qty));
                 dropped.push(format!("{drop} (x{qty})"));
             }
         }
@@ -189,7 +189,7 @@ pub fn boss(ctx: Ctx) -> Reply {
             f.my_hp.max(0)
         ));
 
-        let mut data = json!({ "koin": crate::common::int_field(&ctx, "koin") + gold_reward,
+        let mut data = serde_json::json!({ "koin": crate::common::int_field(&ctx, "koin") + gold_reward,
                                "exp": new_exp,
                                "rpg": rpg });
         if !dropped.is_empty() {
@@ -210,7 +210,7 @@ pub fn boss(ctx: Ctx) -> Reply {
     // Kalah: `Math.max(1, (health || 100) - 50)` — HP tidak boleh 0.
     let gold_loss = loss_gold(crate::common::int_field(&ctx, "koin"));
     let left_hp = loss_health(or_default(rpg_int(&rpg, "health"), 100));
-    rpg.insert("health".into(), json!(left_hp));
+    rpg.insert("health".into(), serde_json::json!(left_hp));
 
     Reply::text(format!(
         "⚔️ *Sengitnya Pertarungan...*\n\n{}\n\n\
@@ -227,7 +227,7 @@ pub fn boss(ctx: Ctx) -> Reply {
     .with_reaction("💀")
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": (crate::common::int_field(&ctx, "koin") - gold_loss).max(0),
+        data: serde_json::json!({ "koin": (crate::common::int_field(&ctx, "koin") - gold_loss).max(0),
                       "rpg": rpg }),
     })
 }
@@ -236,7 +236,6 @@ pub fn boss(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: Value) -> Reply {
         let ctx = Ctx {
@@ -289,9 +288,9 @@ mod tests {
     #[test]
     fn a_new_player_is_locked_out_of_every_boss() {
         for user in [
-            json!({}),
-            json!({ "level": 1 }),
-            json!({ "level": 7, "rpg": { "stamina": 100 } }),
+            serde_json::json!({}),
+            serde_json::json!({ "level": 1 }),
+            serde_json::json!({ "level": 7, "rpg": { "stamina": 100 } }),
         ] {
             let r = run(user.clone());
             let t = text_of(&r);
@@ -312,7 +311,7 @@ mod tests {
     #[test]
     fn a_player_without_stamina_is_turned_away_after_unlocking_the_gate() {
         for stamina in [0, 49] {
-            let r = run(json!({ "level": 10, "rpg": { "stamina": stamina } }));
+            let r = run(serde_json::json!({ "level": 10, "rpg": { "stamina": stamina } }));
             let t = text_of(&r);
             assert!(t.starts_with("⚡ Yahh stamina kamu habis"), "stamina {stamina}: {t}");
             assert!(t.contains(&format!("sisa: *{stamina}*")), "{t}");
@@ -324,7 +323,7 @@ mod tests {
     fn a_win_pays_the_boss_rewards_plus_random_rolls_and_marks_a_reaction() {
         let mut won = 0;
         for _ in 0..400 {
-            let r = run(json!({ "level": 30, "rpg": { "stamina": 100, "attack": 5_000, "defense": 5_000, "health": 100 }, "koin": 0, "exp": 0 }));
+            let r = run(serde_json::json!({ "level": 30, "rpg": { "stamina": 100, "attack": 5_000, "defense": 5_000, "health": 100 }, "koin": 0, "exp": 0 }));
             let t = text_of(&r);
             if !t.contains("🏆 *BOSS BERHASIL DIKALAHKAN!!*") {
                 continue;
@@ -334,7 +333,7 @@ mod tests {
             assert!(t.contains("⚔️ *Sengitnya Pertarungan..."), "{t}");
             assert!(data["koin"].as_i64().unwrap() >= 4000);
             assert!(data["exp"].as_i64().unwrap() >= 1500);
-            assert_eq!(data["rpg"]["stamina"], json!(50));
+            assert_eq!(data["rpg"]["stamina"], serde_json::json!(50));
         }
         assert!(won > 0, "dalam 400 percobaan harus ada kemenangan");
     }
@@ -350,14 +349,14 @@ mod tests {
         // Level 8 = satu-satunya boss yang terbuka (Undead King, atk 45):
         // serangan pemain mustahil menghabiskan 350 HP dalam 15 ronde, jadi
         // kalah bisa terjadi dan cabang penalti ikut teruji.
-        let r = run(json!({ "level": 8, "rpg": { "stamina": 100, "attack": 1, "defense": 1, "health": 100 }, "koin": 10_000, "exp": 0 }));
+        let r = run(serde_json::json!({ "level": 8, "rpg": { "stamina": 100, "attack": 1, "defense": 1, "health": 100 }, "koin": 10_000, "exp": 0 }));
         let t = text_of(&r);
         assert!(t.contains("💀 *YAH... KAMU TERPURUK...*"), "{t}");
         assert!(t.contains("💸 Koin Terjatuh: *-Rp 1,500*"), "{t}");
         let data = write_of(&r);
-        assert_eq!(data["rpg"]["health"], json!(50));
-        assert_eq!(data["koin"], json!(8_500), "15% dari 10.000");
-        assert_eq!(data["rpg"]["stamina"], json!(50), "stamina tetap kepotong saat kalah");
+        assert_eq!(data["rpg"]["health"], serde_json::json!(50));
+        assert_eq!(data["koin"], serde_json::json!(8_500), "15% dari 10.000");
+        assert_eq!(data["rpg"]["stamina"], serde_json::json!(50), "stamina tetap kepotong saat kalah");
         assert!(data.get("exp").is_none(), "kalah tak memberi exp");
         assert!(data.get("inventory").is_none(), "kalah tak melepas loot");
     }
@@ -375,9 +374,9 @@ mod tests {
         // pertama — lantai 1 HP benar-benar tertulis ke store.
         // (`attack` 1 + level 8 * 3 = 25, damage minimal 20 per ronde, jadi
         // 350 HP boss mustahil habis dalam 15 ronde.)
-        let r = run(json!({ "level": 8, "rpg": { "stamina": 100, "attack": 1, "defense": 1, "health": 1 }, "koin": 0 }));
+        let r = run(serde_json::json!({ "level": 8, "rpg": { "stamina": 100, "attack": 1, "defense": 1, "health": 1 }, "koin": 0 }));
         assert!(text_of(&r).contains("TERPURUK"), "{}", text_of(&r));
-        assert_eq!(write_of(&r)["rpg"]["health"], json!(1));
+        assert_eq!(write_of(&r)["rpg"]["health"], serde_json::json!(1));
     }
 
     #[test]

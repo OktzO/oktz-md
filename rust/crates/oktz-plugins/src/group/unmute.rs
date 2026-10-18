@@ -45,7 +45,6 @@ pub fn unmute(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
 
-    use serde_json::json;
 
     fn run(group: serde_json::Value) -> Reply {
         let ctx = Ctx {
@@ -97,13 +96,13 @@ mod tests {
 
     #[test]
     fn unmuting_writes_false_and_mentions_the_sender() {
-        let r = run(json!({"name": "Grup Diskusi", "mute": true}));
+        let r = run(serde_json::json!({"name": "Grup Diskusi", "mute": true}));
         assert_eq!(
             text_of(&r),
             "✅ Grup *Grup Diskusi* berhasil di-unmute oleh @628111:3\n\n\
              Semua member sekarang bisa mengirim pesan."
         );
-        assert_eq!(group_write(&r), &json!({"mute": false}));
+        assert_eq!(group_write(&r), &serde_json::json!({"mute": false}));
         match r.without_mutations() {
             Reply::Text { mentions, .. } => assert_eq!(mentions, &["628111:3@s.whatsapp.net".to_string()]),
             other => panic!("harus Text, dapat {other:?}"),
@@ -112,7 +111,7 @@ mod tests {
 
     #[test]
     fn a_group_that_is_not_muted_is_left_alone() {
-        for falsy in [json!({}), json!({"mute": false}), json!({"mute": 0}), json!({"mute": ""})] {
+        for falsy in [serde_json::json!({}), serde_json::json!({"mute": false}), serde_json::json!({"mute": 0}), serde_json::json!({"mute": ""})] {
             let r = run(falsy.clone());
             assert_eq!(text_of(&r), NOT_MUTED, "input {falsy}");
             assert!(r.mutations().is_empty(), "tidak boleh menulis: {falsy}");
@@ -121,7 +120,7 @@ mod tests {
 
     #[test]
     fn only_the_mute_flag_travels_to_the_store() {
-        let r = run(json!({"mute": true, "antilink": true, "warnings": {}}));
+        let r = run(serde_json::json!({"mute": true, "antilink": true, "warnings": {}}));
         assert_eq!(
             group_write(&r).as_object().unwrap().len(),
             1,

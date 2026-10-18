@@ -8,7 +8,7 @@
 //! `rpg.spouse` bisa terlewat — lihat catatan helper itu.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::int_field;
 use crate::common::now_ms;
@@ -101,10 +101,10 @@ pub fn marry(ctx: Ctx) -> Reply {
 
     let now = now_ms();
     let mut rpg = rpg_map(&ctx);
-    rpg.insert("spouse".into(), json!(target));
-    rpg.insert("marriedAt".into(), json!(now));
-    partner_rpg.insert("spouse".into(), json!(ctx.sender));
-    partner_rpg.insert("marriedAt".into(), json!(now));
+    rpg.insert("spouse".into(), serde_json::json!(target));
+    rpg.insert("marriedAt".into(), serde_json::json!(now));
+    partner_rpg.insert("spouse".into(), serde_json::json!(ctx.sender));
+    partner_rpg.insert("marriedAt".into(), serde_json::json!(now));
 
     Reply::Text {
         text: format!(
@@ -124,11 +124,11 @@ pub fn marry(ctx: Ctx) -> Reply {
     .mutating(vec![
         Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "koin": koin - MARRIAGE_COST, "rpg": rpg }),
+            data: serde_json::json!({ "koin": koin - MARRIAGE_COST, "rpg": rpg }),
         },
         Mutation::SetUser {
             jid: target,
-            data: json!({ "rpg": partner_rpg }),
+            data: serde_json::json!({ "rpg": partner_rpg }),
         },
     ])
 }
@@ -234,7 +234,7 @@ mod tests {
 
     #[test]
     fn without_a_target_it_prints_the_civil_registry_notice() {
-        let r = run(json!({"koin": 999_999}), None, json!({}));
+        let r = run(serde_json::json!({"koin": 999_999}), None, serde_json::json!({}));
         let t = text_of(&r);
         assert!(t.starts_with("💒 *CATATAN SIPIL RPG*"), "{t}");
         assert!(t.contains("👉 `.marry @user`"), "{t}");
@@ -243,14 +243,14 @@ mod tests {
 
     #[test]
     fn a_quoted_message_works_as_the_target_too() {
-        let r = run_quoted(json!({"koin": 100_000}), json!({}));
+        let r = run_quoted(serde_json::json!({"koin": 100_000}), serde_json::json!({}));
         assert!(text_of(&r).contains("MEREKA RESMI MENJADI PASANGAN!"));
         assert_eq!(writes(&r).len(), 2);
     }
 
     #[test]
     fn proposing_to_yourself_is_refused_before_the_price_is_ever_read() {
-        let r = run(json!({}), Some(SENDER), json!({}));
+        let r = run(serde_json::json!({}), Some(SENDER), serde_json::json!({}));
         assert!(text_of(&r).contains("jomblo kronis"));
         assert!(r.mutations().is_empty());
     }
@@ -258,9 +258,9 @@ mod tests {
     #[test]
     fn a_paired_proposer_is_sent_to_the_divorce_desk() {
         let r = run(
-            json!({"koin": 100_000, "rpg": {"spouse": "628777@s.whatsapp.net"}}),
+            serde_json::json!({"koin": 100_000, "rpg": {"spouse": "628777@s.whatsapp.net"}}),
             Some(TARGET),
-            json!({}),
+            serde_json::json!({}),
         );
         let t = text_of(&r);
         assert!(t.starts_with("HEH! Lu kan udah punya pasangan si @628777!"), "{t}");
@@ -277,9 +277,9 @@ mod tests {
     #[test]
     fn a_paired_partner_puts_the_proposer_in_the_friendzone() {
         let r = run(
-            json!({"koin": 100_000}),
+            serde_json::json!({"koin": 100_000}),
             Some(TARGET),
-            json!({"rpg": {"spouse": "628888@s.whatsapp.net"}}),
+            serde_json::json!({"rpg": {"spouse": "628888@s.whatsapp.net"}}),
         );
         let t = text_of(&r);
         assert!(t.contains("@628999 ternyata udah nikah sama orang lain!"), "{t}");
@@ -289,7 +289,7 @@ mod tests {
 
     #[test]
     fn a_broke_proposer_is_turned_away_with_their_actual_balance() {
-        let r = run(json!({"koin": 49_999}), Some(TARGET), json!({}));
+        let r = run(serde_json::json!({"koin": 49_999}), Some(TARGET), serde_json::json!({}));
         let t = text_of(&r);
         assert!(t.starts_with("Astaga... miskin kok nekat mau nikah?"), "{t}");
         assert!(t.contains("*Rp 49.999*"), "{t}");
@@ -298,14 +298,14 @@ mod tests {
 
     #[test]
     fn a_wedding_writes_both_rows_and_mentions_both_people() {
-        let r = run(json!({"koin": 100_000}), Some(TARGET), json!({"rpg": {}}));
+        let r = run(serde_json::json!({"koin": 100_000}), Some(TARGET), serde_json::json!({"rpg": {}}));
         let w = writes(&r);
         assert_eq!(w.len(), 2, "dua bar harus ditulis");
         assert_eq!(w[0].0, SENDER);
         assert_eq!(w[1].0, TARGET);
-        assert_eq!(w[0].1["koin"], json!(50_000), "50.000 terpakai");
-        assert_eq!(w[0].1["rpg"]["spouse"], json!(TARGET));
-        assert_eq!(w[1].1["rpg"]["spouse"], json!(SENDER));
+        assert_eq!(w[0].1["koin"], serde_json::json!(50_000), "50.000 terpakai");
+        assert_eq!(w[0].1["rpg"]["spouse"], serde_json::json!(TARGET));
+        assert_eq!(w[1].1["rpg"]["spouse"], serde_json::json!(SENDER));
         assert_eq!(
             w[0].1["rpg"]["marriedAt"], w[1].1["rpg"]["marriedAt"],
             "kedua pihak getting timestamp yang sama"
@@ -328,7 +328,7 @@ mod tests {
 
     #[test]
     fn the_wedding_reaction_wraps_the_announcement() {
-        let r = run(json!({"koin": 100_000}), Some(TARGET), json!({}));
+        let r = run(serde_json::json!({"koin": 100_000}), Some(TARGET), serde_json::json!({}));
         match r.without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "💍"),
             other => panic!("harus Reaction, dapat {other:?}"),

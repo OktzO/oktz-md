@@ -46,7 +46,6 @@ pub fn self_mode(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(sender: &str, is_owner: bool, settings: Value) -> Reply {
         let ctx = Ctx {
@@ -101,21 +100,21 @@ mod tests {
 
     #[test]
     fn the_owner_switches_the_mode_and_writes_botmode() {
-        let r = run("6285608953677@s.whatsapp.net", true, json!({"botMode": "public"}));
+        let r = run("6285608953677@s.whatsapp.net", true, serde_json::json!({"botMode": "public"}));
         assert_eq!(text_of(&r), SELF_TEXT);
         assert_eq!(written_mode(&r), Some("self".to_string()));
     }
 
     #[test]
     fn a_stored_self_mode_is_only_reported_never_rewritten() {
-        let r = run("6285608953677@s.whatsapp.net", true, json!({"botMode": "self"}));
+        let r = run("6285608953677@s.whatsapp.net", true, serde_json::json!({"botMode": "self"}));
         assert_eq!(text_of(&r), ALREADY_SELF);
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn self_and_public_share_the_denied_reply() {
-        let denied = run("628999999999@s.whatsapp.net", true, json!({}));
+        let denied = run("628999999999@s.whatsapp.net", true, serde_json::json!({}));
         assert_eq!(text_of(&denied), DENIED);
         assert!(denied.mutations().is_empty());
     }

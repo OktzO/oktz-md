@@ -82,7 +82,6 @@ pub fn delantilink(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use serde_json::Value;
-    use serde_json::json;
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -138,7 +137,7 @@ mod tests {
 
     #[test]
     fn no_argument_on_an_empty_list_says_the_list_is_empty() {
-        for g in [json!(null), json!({}), json!({"antilinkList": []}), json!({"antilinkList": null})] {
+        for g in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"antilinkList": []}), serde_json::json!({"antilinkList": null})] {
             let r = run(g.clone(), "");
             assert_eq!(text_of(&r), empty_list(), "input {g}");
             assert!(r.mutations().is_empty());
@@ -147,7 +146,7 @@ mod tests {
 
     #[test]
     fn no_argument_on_a_populated_list_numbers_every_entry_from_one() {
-        let r = run(json!({"antilinkList": ["a.com", "b.com", "c.com"]}), "");
+        let r = run(serde_json::json!({"antilinkList": ["a.com", "b.com", "c.com"]}), "");
         let t = text_of(&r);
         assert!(t.starts_with("🔗 *ᴅᴀꜰᴛᴀʀ ᴀɴᴛɪʟɪɴᴋ*"));
         assert!(t.contains("> 1. `a.com`\n> 2. `b.com`\n> 3. `c.com`"), "{t}");
@@ -158,22 +157,22 @@ mod tests {
 
     #[test]
     fn removing_the_first_entry_keeps_the_rest_in_order() {
-        let r = run(json!({"antilinkList": ["a.com", "b.com", "c.com"]}), "a.com");
+        let r = run(serde_json::json!({"antilinkList": ["a.com", "b.com", "c.com"]}), "a.com");
         let list = list_write(&r);
-        assert_eq!(list, &vec![json!("b.com"), json!("c.com")]);
+        assert_eq!(list, &vec![serde_json::json!("b.com"), serde_json::json!("c.com")]);
         assert!(text_of(&r).contains("> Sisa: *2* link"));
     }
 
     #[test]
     fn removing_the_last_entry_leaves_an_empty_but_present_list() {
-        let r = run(json!({"antilinkList": ["only.com"]}), "only.com");
+        let r = run(serde_json::json!({"antilinkList": ["only.com"]}), "only.com");
         assert!(list_write(&r).is_empty(), "list jadi array kosong, bukan hilang");
         assert!(text_of(&r).contains("> Sisa: *0* link"));
     }
 
     #[test]
     fn a_missing_link_is_reported_and_nothing_is_written() {
-        let r = run(json!({"antilinkList": ["a.com"]}), "tiktok.com");
+        let r = run(serde_json::json!({"antilinkList": ["a.com"]}), "tiktok.com");
         assert_eq!(text_of(&r), not_found("tiktok.com"));
         assert!(r.mutations().is_empty());
     }
@@ -182,7 +181,7 @@ mod tests {
     fn matching_is_whole_string_not_substring() {
         // `l === link`, bukan `includes` — "com" tidak boleh menghapus
         // "tiktok.com".
-        let r = run(json!({"antilinkList": ["tiktok.com"]}), "com");
+        let r = run(serde_json::json!({"antilinkList": ["tiktok.com"]}), "com");
         assert!(text_of(&r).starts_with("⚠️"));
         assert!(r.mutations().is_empty());
     }
@@ -191,13 +190,13 @@ mod tests {
     fn the_argument_is_joined_trimmed_and_lowercased() {
         // `m.args.join(' ').trim().toLowerCase()` — tiga transformasi, dan
         // trim-nya TIDAK ada di `addantilink`.
-        let r = run(json!({"antilinkList": ["a.com", "b.com"]}), "  A.com  ");
-        assert_eq!(list_write(&r), &vec![json!("b.com")]);
+        let r = run(serde_json::json!({"antilinkList": ["a.com", "b.com"]}), "  A.com  ");
+        assert_eq!(list_write(&r), &vec![serde_json::json!("b.com")]);
     }
 
     #[test]
     fn a_non_string_entry_is_skipped_not_matched() {
-        let r = run(json!({"antilinkList": [1, null, "a.com"]}), "1");
+        let r = run(serde_json::json!({"antilinkList": [1, null, "a.com"]}), "1");
         // `1` adalah number, bukan string "1" — `l === link` tidak cocok.
         assert!(text_of(&r).starts_with("⚠️"), "angka tidak boleh ikut terhapus");
         assert!(r.mutations().is_empty());
@@ -205,7 +204,7 @@ mod tests {
 
     #[test]
     fn the_removed_reply_is_paired_with_the_write() {
-        let r = run(json!({"antilinkList": ["a.com"]}), "a.com");
+        let r = run(serde_json::json!({"antilinkList": ["a.com"]}), "a.com");
         assert!(text_of(&r).contains("ᴅɪʜᴀᴘᴜs"));
         assert_eq!(r.mutations().len(), 1);
     }

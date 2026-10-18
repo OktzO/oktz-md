@@ -96,7 +96,6 @@ pub fn tafsirmimpi(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse, NoHttp};
-    use serde_json::json;
     use std::sync::Arc;
 
     #[derive(Debug)]
@@ -149,7 +148,7 @@ mod tests {
     fn hasil(n: usize) -> Value {
         Value::Array(
             (1..=n)
-                .map(|i| json!({ "mimpi": format!("mimpi {i}"), "tafsir": format!("tafsir {i}") }))
+                .map(|i| serde_json::json!({ "mimpi": format!("mimpi {i}"), "tafsir": format!("tafsir {i}") }))
                 .collect(),
         )
     }
@@ -187,7 +186,7 @@ mod tests {
     #[test]
     fn a_small_result_list_is_numbered_from_one() {
         let r = run_with(
-            Arc::new(Stub(json!({
+            Arc::new(Stub(serde_json::json!({
                 "status": true,
                 "data": { "keyword": "bertemu", "total": 3, "hasil": hasil(3) }
             }))),
@@ -206,7 +205,7 @@ mod tests {
     #[test]
     fn more_than_ten_results_are_capped_and_counted() {
         let r = run_with(
-            Arc::new(Stub(json!({
+            Arc::new(Stub(serde_json::json!({
                 "status": true,
                 "data": { "keyword": "bangun", "total": 25, "hasil": hasil(25) }
             }))),
@@ -222,11 +221,11 @@ mod tests {
     #[test]
     fn an_empty_or_missing_result_array_gives_the_failure_message() {
         for body in [
-            json!({ "status": true, "data": { "hasil": [] } }),
-            json!({ "status": true, "data": {} }),
-            json!({ "status": true, "data": { "hasil": null } }),
-            json!({ "status": false, "data": { "hasil": [1] } }),
-            json!({}),
+            serde_json::json!({ "status": true, "data": { "hasil": [] } }),
+            serde_json::json!({ "status": true, "data": {} }),
+            serde_json::json!({ "status": true, "data": { "hasil": null } }),
+            serde_json::json!({ "status": false, "data": { "hasil": [1] } }),
+            serde_json::json!({}),
         ] {
             let r = run_with(Arc::new(Stub(body.clone())), &["bertemu"]);
             assert_eq!(

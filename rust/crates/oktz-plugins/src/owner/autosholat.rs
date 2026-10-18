@@ -17,10 +17,10 @@
 //!    punya lapisan cache dan itu tidak mengubah balasannya.
 
 use oktz_plugin_api::{Ctx, HttpError, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::{
-    error_template, jakarta_parts, js_truthy, js_truthy_value, now_ms, pad2, parse_int,
+    jakarta_parts, js_truthy, js_truthy_value, now_ms, pad2, parse_int,
 };
 use crate::download::pixeldraindl::encode_uri_component;
 
@@ -73,7 +73,7 @@ fn write_setting(ctx: &Ctx, key: &str, value: Value) -> Mutation {
     if ctx.is_group {
         Mutation::SetGroup {
             jid: ctx.chat.clone(),
-            data: json!({ key: value }),
+            data: serde_json::json!({ key: value }),
         }
     } else {
         Mutation::SetSetting {
@@ -85,7 +85,7 @@ fn write_setting(ctx: &Ctx, key: &str, value: Value) -> Mutation {
 
 /// `|| { id: "1301", nama: "KOTA JAKARTA" }` (`autosholat.js:55`).
 fn default_kota() -> Value {
-    json!({ "id": "1301", "nama": "KOTA JAKARTA" })
+    serde_json::json!({ "id": "1301", "nama": "KOTA JAKARTA" })
 }
 
 /// Fallback cabang `on` (`autosholat.js:103`) TIDAK punya `id` — objeknya
@@ -93,7 +93,7 @@ fn default_kota() -> Value {
 fn kota_for_on(ctx: &Ctx) -> Value {
     match setting_or_group(ctx, "autoSholatKota") {
         Some(v) if js_truthy(Some(v)) => v.clone(),
-        _ => json!({ "nama": "KOTA JAKARTA" }),
+        _ => serde_json::json!({ "nama": "KOTA JAKARTA" }),
     }
 }
 
@@ -249,14 +249,14 @@ pub fn autosholat(ctx: Ctx) -> Reply {
             interp(kota_for_on(&ctx).get("nama"))
         ))
         .with_reaction("✅")
-        .with_mutation(write_setting(&ctx, "autoSholat", json!(true))),
+        .with_mutation(write_setting(&ctx, "autoSholat", serde_json::json!(true))),
 
         "off" => Reply::text(
             "❌ **Sistem Pengingat Sholat Dinonaktifkan.**\n\n\
              Baiklah, aku tidak akan lagi menyiarkan jadwal sholat dan memutarkan audio adzan secara otomatis ke grup-grup.",
         )
         .with_reaction("❌")
-        .with_mutation(write_setting(&ctx, "autoSholat", json!(false))),
+        .with_mutation(write_setting(&ctx, "autoSholat", serde_json::json!(false))),
 
         "close" => match ctx.args.get(1).map(|a| a.to_lowercase()).as_deref() {
             Some("on") => Reply::text(
@@ -264,13 +264,13 @@ pub fn autosholat(ctx: Ctx) -> Reply {
                  Saat waktu sholat tiba, aku akan secara otomatis menutup akses obrolan grup agar semuanya bisa fokus beribadah terlebih dahulu. Keren, kan?",
             )
             .with_reaction("🔒")
-            .with_mutation(write_setting(&ctx, "autoSholatCloseGroup", json!(true))),
+            .with_mutation(write_setting(&ctx, "autoSholatCloseGroup", serde_json::json!(true))),
             Some("off") => Reply::text(
                 "🔓 **Fitur Tutup Grup Otomatis Dimatikan.**\n\n\
                  Sekarang grup tidak akan ditutup saat azan berkumandang, sehingga obrolan bisa terus berjalan tanpa hambatan.",
             )
             .with_reaction("🔓")
-            .with_mutation(write_setting(&ctx, "autoSholatCloseGroup", json!(false))),
+            .with_mutation(write_setting(&ctx, "autoSholatCloseGroup", serde_json::json!(false))),
             _ => Reply::text(format!(
                 "Oh, maaf. Formatnya sedikit keliru. Silakan gunakan `{p}autosholat close on` atau `{p}autosholat close off`.",
                 p = ctx.prefix
@@ -287,7 +287,7 @@ pub fn autosholat(ctx: Ctx) -> Reply {
                      Nantinya, akses obrolan di grup akan dikunci selama **{d} menit** berturut-turut pada setiap jadwal sholat sebelum kubuka kembali secara otomatis."
                 ))
                 .with_reaction("⏱️")
-                .with_mutation(write_setting(&ctx, "autoSholatDuration", json!(d))),
+                .with_mutation(write_setting(&ctx, "autoSholatDuration", serde_json::json!(d))),
                 _ => Reply::text(
                     "Tolong masukkan angka antara 1 sampai 60 untuk durasi penutupan grup (dalam menit).",
                 ),
@@ -318,14 +318,14 @@ pub fn autosholat(ctx: Ctx) -> Reply {
                     .with_mutation(write_setting(
                         &ctx,
                         "autoSholatKota",
-                        json!({ "id": id, "nama": lokasi }),
+                        serde_json::json!({ "id": id, "nama": lokasi }),
                     ))
                 }
                 Ok(None) => Reply::text(format!(
                     "Aduh, aku sudah mencari di database MyQuran tapi nama daerah **{}** tidak dapat kutemukan. Coba nama kota yang lain?",
                     nama
                 )),
-                Err(_) => Reply::text(error_template(&ctx.prefix, &ctx.command)),
+                Err(_) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)),
             }
         }
 
@@ -338,7 +338,6 @@ pub fn autosholat(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     const GRUP: &str = "120363000000000000@g.us";
 
@@ -483,8 +482,8 @@ mod tests {
     fn the_group_value_wins_over_the_global_setting() {
         let r = run_group(
             &[],
-            json!({ "autoSholat": true, "autoSholatCloseGroup": true, "autoSholatDuration": 12 }),
-            json!({ "autoSholat": false }),
+            serde_json::json!({ "autoSholat": true, "autoSholatCloseGroup": true, "autoSholatDuration": 12 }),
+            serde_json::json!({ "autoSholat": false }),
         );
         let t = text_of(&r);
         assert!(t.contains("- **Status Pengingat**: Aktif ✅"), "{t}");
@@ -496,8 +495,8 @@ mod tests {
     fn a_null_group_field_still_wins_because_the_check_is_not_equals_undefined() {
         let r = run_group(
             &[],
-            json!({ "autoSholat": null }),
-            json!({ "autoSholat": true }),
+            serde_json::json!({ "autoSholat": null }),
+            serde_json::json!({ "autoSholat": true }),
         );
         assert!(
             text_of(&r).contains("- **Status Pengingat**: Nonaktif ❌"),
@@ -508,13 +507,13 @@ mod tests {
 
     #[test]
     fn a_zero_duration_falls_back_to_five_because_of_the_or_operator() {
-        let r = run_with(&[], json!({ "autoSholatDuration": 0 }));
+        let r = run_with(&[], serde_json::json!({ "autoSholatDuration": 0 }));
         assert!(text_of(&r).contains("- **Durasi Penutupan**: 5 menit"), "{}", text_of(&r));
     }
 
     #[test]
     fn a_stored_city_name_replaces_the_default() {
-        let r = run_with(&[], json!({ "autoSholatKota": { "id": "1216", "nama": "KOTA SURABAYA" } }));
+        let r = run_with(&[], serde_json::json!({ "autoSholatKota": { "id": "1216", "nama": "KOTA SURABAYA" } }));
         assert!(
             text_of(&r).contains("- **Lokasi Pengingat Saat Ini**: KOTA SURABAYA"),
             "{}",
@@ -524,11 +523,11 @@ mod tests {
 
     #[test]
     fn on_writes_the_group_flag_and_reacts_with_a_check_mark() {
-        let r = run_group(&["on"], Value::Null, json!({}));
+        let r = run_group(&["on"], Value::Null, serde_json::json!({}));
         assert_eq!(emoji_of(&r), "✅");
         let (jid, value) = group_write_of(&r, "autoSholat");
         assert_eq!(jid, GRUP);
-        assert_eq!(value, json!(true));
+        assert_eq!(value, serde_json::json!(true));
         let t = text_of(&r);
         assert!(t.starts_with("✅ **Sistem Pengingat Sholat Berhasil Diaktifkan!**"), "{t}");
         assert!(t.ends_with("sesuaikan dengan zona waktu di **KOTA JAKARTA** ya!"), "{t}");
@@ -536,16 +535,16 @@ mod tests {
 
     #[test]
     fn on_in_private_writes_the_global_setting() {
-        let r = run_with(&["ON"], json!({}));
+        let r = run_with(&["ON"], serde_json::json!({}));
         assert_eq!(emoji_of(&r), "✅");
-        assert_eq!(setting_of(&r, "autoSholat"), json!(true));
+        assert_eq!(setting_of(&r, "autoSholat"), serde_json::json!(true));
     }
 
     #[test]
     fn off_writes_false_and_reacts_with_a_cross() {
-        let r = run_with(&["off"], json!({ "autoSholat": true }));
+        let r = run_with(&["off"], serde_json::json!({ "autoSholat": true }));
         assert_eq!(emoji_of(&r), "❌");
-        assert_eq!(setting_of(&r, "autoSholat"), json!(false));
+        assert_eq!(setting_of(&r, "autoSholat"), serde_json::json!(false));
         assert!(
             text_of(&r)
                 .starts_with("❌ **Sistem Pengingat Sholat Dinonaktifkan.**"),
@@ -557,11 +556,11 @@ mod tests {
     #[test]
     fn close_on_and_close_off_toggle_the_flag() {
         for (args, emoji, expected) in [
-            (vec!["close", "on"], "🔒", json!(true)),
-            (vec!["close", "off"], "🔓", json!(false)),
-            (vec!["CLOSE", "ON"], "🔒", json!(true)),
+            (vec!["close", "on"], "🔒", serde_json::json!(true)),
+            (vec!["close", "off"], "🔓", serde_json::json!(false)),
+            (vec!["CLOSE", "ON"], "🔒", serde_json::json!(true)),
         ] {
-            let r = run_with(&args, json!({}));
+            let r = run_with(&args, serde_json::json!({}));
             assert_eq!(emoji_of(&r), emoji, "input {args:?}");
             assert_eq!(setting_of(&r, "autoSholatCloseGroup"), expected, "input {args:?}");
         }
@@ -575,7 +574,7 @@ mod tests {
             vec!["close", "ON!"],
             vec!["close", "1"],
         ] {
-            let r = run_with(&args, json!({}));
+            let r = run_with(&args, serde_json::json!({}));
             assert_eq!(
                 text_of(&r),
                 "Oh, maaf. Formatnya sedikit keliru. Silakan gunakan `.autosholat close on` atau `.autosholat close off`.",
@@ -593,9 +592,9 @@ mod tests {
     fn duration_accepts_one_through_sixty() {
         for n in [1, 30, 60] {
             let arg = n.to_string();
-            let r = run_with(&["duration", &arg], json!({}));
+            let r = run_with(&["duration", &arg], serde_json::json!({}));
             assert_eq!(emoji_of(&r), "⏱️", "input {n}");
-            assert_eq!(setting_of(&r, "autoSholatDuration"), json!(n), "input {n}");
+            assert_eq!(setting_of(&r, "autoSholatDuration"), serde_json::json!(n), "input {n}");
             assert!(
                 text_of(&r).contains(&format!("selama **{n} menit**")),
                 "input {n} -> {}",
@@ -614,7 +613,7 @@ mod tests {
             vec!["duration", "-5"],
             vec!["duration", "  "],
         ] {
-            let r = run_with(&bad, json!({}));
+            let r = run_with(&bad, serde_json::json!({}));
             assert_eq!(
                 text_of(&r),
                 "Tolong masukkan angka antara 1 sampai 60 untuk durasi penutupan grup (dalam menit).",
@@ -628,16 +627,16 @@ mod tests {
     fn duration_stops_at_the_first_non_digit_like_parse_int() {
         // `parseInt('30menit')` = 30 dan `parseInt('1.5')` = 1 — keduanya
         // sah, bukan error.
-        let r = run_with(&["duration", "30menit"], json!({}));
-        assert_eq!(setting_of(&r, "autoSholatDuration"), json!(30));
-        let r = run_with(&["duration", "1.5"], json!({}));
-        assert_eq!(setting_of(&r, "autoSholatDuration"), json!(1));
+        let r = run_with(&["duration", "30menit"], serde_json::json!({}));
+        assert_eq!(setting_of(&r, "autoSholatDuration"), serde_json::json!(30));
+        let r = run_with(&["duration", "1.5"], serde_json::json!({}));
+        assert_eq!(setting_of(&r, "autoSholatDuration"), serde_json::json!(1));
     }
 
     #[test]
     fn kota_without_a_name_asks_for_one() {
         for args in [vec!["kota"], vec!["kota", "   "]] {
-            let r = run_with(&args, json!({}));
+            let r = run_with(&args, serde_json::json!({}));
             assert_eq!(
                 text_of(&r),
                 "Tolong sebutkan nama kotanya juga! Misalnya, `.autosholat kota Surabaya`.",
@@ -649,8 +648,8 @@ mod tests {
 
     #[test]
     fn an_unreachable_kota_search_returns_the_error_template() {
-        let r = run_with(&["kota", "Surabaya"], json!({}));
-        assert_eq!(text_of(&r), error_template(".", "autosholat"));
+        let r = run_with(&["kota", "Surabaya"], serde_json::json!({}));
+        assert_eq!(text_of(&r), crate::common::error_template(".", "autosholat"));
         assert!(r.mutations().is_empty());
         match r.without_mutations() {
             Reply::Text { .. } => {}
@@ -661,7 +660,7 @@ mod tests {
     #[test]
     fn an_unknown_parameter_lists_the_valid_ones() {
         for bad in ["nyala", "ON!", "1"] {
-            let r = run_with(&[bad], json!({}));
+            let r = run_with(&[bad], serde_json::json!({}));
             assert!(
                 text_of(&r).starts_with("Perintah yang kamu masukkan kurang tepat."),
                 "input {bad} -> {}",
@@ -673,7 +672,7 @@ mod tests {
 
     #[test]
     fn the_status_flag_is_read_from_settings_when_there_is_no_group() {
-        let r = run_with(&[], json!({ "autoSholat": true, "autoSholatCloseGroup": true, "autoSholatDuration": 45 }));
+        let r = run_with(&[], serde_json::json!({ "autoSholat": true, "autoSholatCloseGroup": true, "autoSholatDuration": 45 }));
         let t = text_of(&r);
         assert!(t.contains("- **Status Pengingat**: Aktif ✅"), "{t}");
         assert!(t.contains("- **Penutupan Grup Otomatis**: Ya ✅"), "{t}");
@@ -696,7 +695,7 @@ mod tests {
 
     #[test]
     fn the_schedule_is_rendered_in_the_declared_order_with_a_capital_first_letter() {
-        let out = render_jadwal(&json!({
+        let out = render_jadwal(&serde_json::json!({
             "jadwal": { "imsak": "04:12 (WIB)", "subuh": "04:22 (WIB)", "isya": "18:31 (WIB)" }
         }));
         assert_eq!(
@@ -715,14 +714,14 @@ mod tests {
     #[test]
     fn a_schedule_without_the_jadwal_wrapper_is_read_as_the_schedule_itself() {
         // `jadwalData.jadwal || jadwalData`.
-        let out = render_jadwal(&json!({ "maghrib": "17:55 (WIB)" }));
+        let out = render_jadwal(&serde_json::json!({ "maghrib": "17:55 (WIB)" }));
         assert!(out.contains("- **Maghrib**: 17:55 (WIB)"), "{out}");
         assert!(out.starts_with("- **Imsak**: -"), "{out}");
     }
 
     #[test]
     fn a_falsy_time_becomes_a_dash_not_an_empty_cell() {
-        let out = render_jadwal(&json!({ "jadwal": { "subuh": "", "ashar": "15:10 (WIB)" } }));
+        let out = render_jadwal(&serde_json::json!({ "jadwal": { "subuh": "", "ashar": "15:10 (WIB)" } }));
         assert!(out.contains("- **Subuh**: -\n"), "{out}");
         assert!(out.contains("- **Ashar**: 15:10 (WIB)\n"), "{out}");
     }
@@ -738,20 +737,20 @@ mod tests {
     fn interpolation_mirrors_the_js_template_literal() {
         assert_eq!(interp(None), "undefined");
         assert_eq!(interp(Some(&Value::Null)), "null");
-        assert_eq!(interp(Some(&json!("KOTA JAKARTA"))), "KOTA JAKARTA");
-        assert_eq!(interp(Some(&json!(1301))), "1301");
-        assert_eq!(interp(Some(&json!(true))), "true");
+        assert_eq!(interp(Some(&serde_json::json!("KOTA JAKARTA"))), "KOTA JAKARTA");
+        assert_eq!(interp(Some(&serde_json::json!(1301))), "1301");
+        assert_eq!(interp(Some(&serde_json::json!(true))), "true");
     }
 
     #[test]
     fn writing_goes_to_the_group_store_only_in_a_group() {
-        let di_private = write_setting(&ctx_for(&[], false), "autoSholat", json!(true));
+        let di_private = write_setting(&ctx_for(&[], false), "autoSholat", serde_json::json!(true));
         assert!(matches!(di_private, Mutation::SetSetting { .. }));
-        let di_grup = write_setting(&ctx_for(&[], true), "autoSholat", json!(true));
+        let di_grup = write_setting(&ctx_for(&[], true), "autoSholat", serde_json::json!(true));
         match di_grup {
             Mutation::SetGroup { jid, data } => {
                 assert_eq!(jid, GRUP);
-                assert_eq!(data, json!({ "autoSholat": true }));
+                assert_eq!(data, serde_json::json!({ "autoSholat": true }));
             }
             other => panic!("harus SetGroup, dapat {other:?}"),
         }

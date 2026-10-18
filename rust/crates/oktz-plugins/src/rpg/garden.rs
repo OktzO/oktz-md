@@ -6,7 +6,7 @@
 //! per petak, bukan dikali qty.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::rpg::heal::{apply_exp, inventory_map, or_default, rpg_map};
 
@@ -178,7 +178,7 @@ pub fn garden(ctx: Ctx) -> Reply {
 
             let key = seed_key(&crop_name);
             let have = or_default(inv.get(&key).and_then(Value::as_i64), 0);
-            inv.insert(key, json!(have + qty));
+            inv.insert(key, serde_json::json!(have + qty));
 
             Reply::text(format!(
                 "Makasih udah belanja di Toko Tani! 🛒🌱\n\n\
@@ -190,7 +190,7 @@ pub fn garden(ctx: Ctx) -> Reply {
             ))
             .with_mutation(Mutation::SetUser {
                 jid: ctx.sender.clone(),
-                data: json!({ "koin": koin - cost, "inventory": inv }),
+                data: serde_json::json!({ "koin": koin - cost, "inventory": inv }),
             })
         }
 
@@ -227,9 +227,9 @@ pub fn garden(ctx: Ctx) -> Reply {
             if left <= 0 {
                 inv.remove(&key);
             } else {
-                inv.insert(key.clone(), json!(left));
+                inv.insert(key.clone(), serde_json::json!(left));
             }
-            all.push(json!({ "crop": crop_name, "plantedAt": now }));
+            all.push(serde_json::json!({ "crop": crop_name, "plantedAt": now }));
             rpg.insert("plots".into(), Value::Null);
             let mut garden_obj = rpg
                 .get("garden")
@@ -237,7 +237,7 @@ pub fn garden(ctx: Ctx) -> Reply {
                 .cloned()
                 .unwrap_or_default();
             garden_obj.insert("plots".into(), Value::Array(all));
-            garden_obj.entry("maxPlots").or_insert(json!(MAX_PLOTS));
+            garden_obj.entry("maxPlots").or_insert(serde_json::json!(MAX_PLOTS));
             rpg.insert("garden".into(), Value::Object(garden_obj));
 
             Reply::text(format!(
@@ -247,7 +247,7 @@ pub fn garden(ctx: Ctx) -> Reply {
             ))
             .with_mutation(Mutation::SetUser {
                 jid: ctx.sender.clone(),
-                data: json!({ "inventory": inv, "rpg": rpg }),
+                data: serde_json::json!({ "inventory": inv, "rpg": rpg }),
             })
         }
 
@@ -279,7 +279,7 @@ pub fn garden(ctx: Ctx) -> Reply {
                 };
                 let qty = crate::common::roll(3) as i64 + 2;
                 let have = or_default(inv.get(key).and_then(Value::as_i64), 0);
-                inv.insert(key.to_string(), json!(have + qty));
+                inv.insert(key.to_string(), serde_json::json!(have + qty));
                 total_exp += exp;
                 lines.push(format!("• {name} x{qty}"));
             }
@@ -298,7 +298,7 @@ pub fn garden(ctx: Ctx) -> Reply {
                 .cloned()
                 .unwrap_or_default();
             garden_obj.insert("plots".into(), Value::Array(pending));
-            garden_obj.entry("maxPlots").or_insert(json!(MAX_PLOTS));
+            garden_obj.entry("maxPlots").or_insert(serde_json::json!(MAX_PLOTS));
             rpg.insert("garden".into(), Value::Object(garden_obj));
 
             let old_exp = or_default(ctx.user_field("exp").and_then(Value::as_i64), 0);
@@ -315,7 +315,7 @@ pub fn garden(ctx: Ctx) -> Reply {
             .with_reaction("✅")
             .with_mutation(Mutation::SetUser {
                 jid: ctx.sender.clone(),
-                data: json!({ "inventory": inv, "exp": new_exp, "rpg": rpg }),
+                data: serde_json::json!({ "inventory": inv, "exp": new_exp, "rpg": rpg }),
             })
         }
     }
@@ -325,7 +325,6 @@ pub fn garden(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: Value, args: &[&str]) -> Reply {
         let ctx = Ctx {
@@ -357,7 +356,7 @@ mod tests {
     }
 
     fn planted(crop: &str, planted_at: i64) -> Value {
-        json!({ "rpg": { "garden": { "plots": [{ "crop": crop, "plantedAt": planted_at }], "maxPlots": 3 } } })
+        serde_json::json!({ "rpg": { "garden": { "plots": [{ "crop": crop, "plantedAt": planted_at }], "maxPlots": 3 } } })
     }
 
     #[test]
@@ -393,7 +392,7 @@ mod tests {
     #[test]
     fn an_unknown_action_shows_the_menu_with_every_seed() {
         for args in [vec![], vec!["water"], vec!["PLANT!"]] {
-            let r = run(json!({}), &args);
+            let r = run(serde_json::json!({}), &args);
             let t = text_of(&r);
             assert!(t.starts_with("Halo Juragan Kebun!"), "args {args:?}: {t}");
             for (key, name, grow, _, sell, seed) in CROPS {
@@ -407,11 +406,11 @@ mod tests {
 
     #[test]
     fn buying_needs_a_seed_name_that_exists() {
-        let r = run(json!({ "koin": 9_999 }), &["buy"]);
+        let r = run(serde_json::json!({ "koin": 9_999 }), &["buy"]);
         assert!(text_of(&r).starts_with("Hayo, mau beli bibit apaan?"));
         assert!(text_of(&r).contains("`.garden buy carrot 5`"));
 
-        let r = run(json!({ "koin": 9_999 }), &["buy", "nasi"]);
+        let r = run(serde_json::json!({ "koin": 9_999 }), &["buy", "nasi"]);
         assert!(text_of(&r).starts_with("Bibit itu nggak dijual di toko tani kita"));
     }
 
@@ -431,20 +430,20 @@ mod tests {
     fn buying_costs_the_seed_price_per_unit_and_stacks_the_seeds() {
         // Wortel 10 per bibit, beli 4 = 40.
         let r = run(
-            json!({ "koin": 1_000, "inventory": { "carrotseed": 2 } }),
+            serde_json::json!({ "koin": 1_000, "inventory": { "carrotseed": 2 } }),
             &["buy", "carrot", "4"],
         );
         let t = text_of(&r);
         assert!(t.contains("Kamu beli *4x Bibit 🥕 Wortel*"), "{t}");
         assert!(t.contains("Total Bayar: *Rp 40*"), "{t}");
         let data = write_of(&r);
-        assert_eq!(data["koin"], json!(960));
-        assert_eq!(data["inventory"]["carrotseed"], json!(6));
+        assert_eq!(data["koin"], serde_json::json!(960));
+        assert_eq!(data["inventory"]["carrotseed"], serde_json::json!(6));
     }
 
     #[test]
     fn a_too_small_purse_blocks_the_purchase() {
-        let r = run(json!({ "koin": 39 }), &["buy", "carrot", "4"]);
+        let r = run(serde_json::json!({ "koin": 39 }), &["buy", "carrot", "4"]);
         let t = text_of(&r);
         assert!(t.starts_with("Eits, uang kamu kurang kak!"), "{t}");
         assert!(t.contains("Total belanjanya Rp 40"), "{t}");
@@ -454,17 +453,17 @@ mod tests {
 
     #[test]
     fn planting_needs_a_seed_and_a_free_plot() {
-        let r = run(json!({}), &["plant", "carrot"]);
+        let r = run(serde_json::json!({}), &["plant", "carrot"]);
         let t = text_of(&r);
         assert!(t.contains("Kamu nggak punya bibit *🥕 Wortel*"), "{t}");
         assert!(t.contains("`.garden buy carrot`"), "{t}");
         assert!(r.mutations().is_empty());
 
-        let r = run(json!({}), &["plant"]);
+        let r = run(serde_json::json!({}), &["plant"]);
         assert!(text_of(&r).starts_with("Tanah udah siap, tapi bibit apa"));
 
         let r = run(
-            json!({ "inventory": { "carrotseed": 1 } }),
+            serde_json::json!({ "inventory": { "carrotseed": 1 } }),
             &["plant", "nasi"],
         );
         assert!(text_of(&r).starts_with("Tanaman itu nggak ada di buku panduan tani"));
@@ -474,12 +473,12 @@ mod tests {
     fn a_full_garden_refuses_another_plot() {
         let now = crate::common::now_ms();
         let plots = vec![
-            json!({ "crop": "carrot", "plantedAt": now }),
-            json!({ "crop": "tomato", "plantedAt": now }),
-            json!({ "crop": "corn", "plantedAt": now }),
+            serde_json::json!({ "crop": "carrot", "plantedAt": now }),
+            serde_json::json!({ "crop": "tomato", "plantedAt": now }),
+            serde_json::json!({ "crop": "corn", "plantedAt": now }),
         ];
         let r = run(
-            json!({ "inventory": { "carrotseed": 1 },
+            serde_json::json!({ "inventory": { "carrotseed": 1 },
                     "rpg": { "garden": { "plots": plots, "maxPlots": 3 } } }),
             &["plant", "carrot"],
         );
@@ -490,24 +489,24 @@ mod tests {
     #[test]
     fn planting_consumes_one_seed_and_records_the_moment() {
         let r = run(
-            json!({ "inventory": { "carrotseed": 2 } }),
+            serde_json::json!({ "inventory": { "carrotseed": 2 } }),
             &["plant", "carrot"],
         );
         let t = text_of(&r);
         assert!(t.starts_with("Sipp! Bibit *🥕 Wortel* udah ditanam"), "{t}");
         assert!(t.contains("tunggu *5m 0s*"), "{t}");
         let data = write_of(&r);
-        assert_eq!(data["inventory"]["carrotseed"], json!(1));
+        assert_eq!(data["inventory"]["carrotseed"], serde_json::json!(1));
         let plots = data["rpg"]["garden"]["plots"].as_array().unwrap();
         assert_eq!(plots.len(), 1);
-        assert_eq!(plots[0]["crop"], json!("carrot"));
+        assert_eq!(plots[0]["crop"], serde_json::json!("carrot"));
         assert!(plots[0]["plantedAt"].as_i64().unwrap() > 0);
-        assert_eq!(data["rpg"]["garden"]["maxPlots"], json!(3));
+        assert_eq!(data["rpg"]["garden"]["maxPlots"], serde_json::json!(3));
     }
 
     #[test]
     fn the_last_seed_leaves_the_bag_entirely() {
-        let r = run(json!({ "inventory": { "carrotseed": 1 } }), &["plant", "carrot"]);
+        let r = run(serde_json::json!({ "inventory": { "carrotseed": 1 } }), &["plant", "carrot"]);
         let inv = write_of(&r)["inventory"].as_object().unwrap().clone();
         assert!(!inv.contains_key("carrotseed"), "1 - 1 = 0 -> dihapus");
     }
@@ -536,7 +535,7 @@ mod tests {
 
     #[test]
     fn an_empty_garden_says_it_is_bare() {
-        let r = run(json!({ "rpg": { "garden": { "plots": [], "maxPlots": 3 } } }), &["status"]);
+        let r = run(serde_json::json!({ "rpg": { "garden": { "plots": [], "maxPlots": 3 } } }), &["status"]);
         let t = text_of(&r);
         assert!(t.contains("*Kapasitas Tanah:* 0 dari 3 terisi."), "{t}");
         assert!(t.contains("kebun kamu masih gersang kak!"), "{t}");
@@ -558,7 +557,7 @@ mod tests {
         let mut harvested = false;
         for _ in 0..50 {
             let r = run(
-                json!({ "rpg": { "garden": {
+                serde_json::json!({ "rpg": { "garden": {
                     "plots": [{ "crop": "carrot", "plantedAt": now - 400_000 },
                               { "crop": "corn", "plantedAt": now }],
                     "maxPlots": 3 } } }),
@@ -574,11 +573,11 @@ mod tests {
             let qty = data["inventory"]["carrot"].as_i64().unwrap();
             assert!((2..=4).contains(&qty), "qty {qty}");
             // Wortel exp 50, satu kali per petak — bukan dikali qty.
-            assert_eq!(data["exp"], json!(50));
+            assert_eq!(data["exp"], serde_json::json!(50));
             assert!(t.contains("📈 Bonus EXP Tani: *+50*"), "{t}");
             let plots = data["rpg"]["garden"]["plots"].as_array().unwrap();
             assert_eq!(plots.len(), 1, "hanya petak matang yang dicabut");
-            assert_eq!(plots[0]["crop"], json!("corn"));
+            assert_eq!(plots[0]["crop"], serde_json::json!("corn"));
         }
         assert!(harvested, "dalam 50 percobaan harus ada petak matang");
     }
@@ -589,7 +588,7 @@ mod tests {
         let mut seen = false;
         for _ in 0..50 {
             let r = run(
-                json!({ "inventory": { "carrot": 10 },
+                serde_json::json!({ "inventory": { "carrot": 10 },
                         "rpg": { "garden": { "plots": [{ "crop": "carrot", "plantedAt": now - 400_000 }],
                                             "maxPlots": 3 } } }),
                 &["harvest"],

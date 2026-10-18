@@ -197,7 +197,6 @@ pub fn facebookdl(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug)]
@@ -227,7 +226,7 @@ mod tests {
             let text = self
                 .body
                 .clone()
-                .map_err(|()| HttpError { message: "offline".into() })?;
+                .map_err(|()| oktz_plugin_api::HttpError { message: "offline".into() })?;
             Ok(HttpResponse {
                 status: 200,
                 body: HttpBody::Bytes {
@@ -271,7 +270,7 @@ mod tests {
     }
 
     fn ok_body() -> Value {
-        json!({
+        serde_json::json!({
             "status": true,
             "result": {
                 "title": "Uji Coba",
@@ -378,7 +377,7 @@ mod tests {
 
     #[test]
     fn hd_is_preferred_over_sd_and_sd_over_the_first_item() {
-        let sd_only = normalize(&json!({
+        let sd_only = normalize(&serde_json::json!({
             "status": true,
             "result": { "video_sd": "https://cdn.example/sd.mp4" }
         }))
@@ -437,13 +436,13 @@ mod tests {
     #[test]
     fn an_empty_medias_list_gets_the_no_media_message() {
         for body in [
-            json!({ "status": true, "result": { "title": "x" } }),
-            json!({ "status": true, "result": { "video_hd": "", "video_sd": "" } }),
+            serde_json::json!({ "status": true, "result": { "title": "x" } }),
+            serde_json::json!({ "status": true, "result": { "video_hd": "", "video_sd": "" } }),
         ] {
             let data = normalize(&body).unwrap();
             assert!(data.medias.is_empty(), "{body}");
         }
-        let r = run(Stub::body(json!({ "status": true, "result": {} })), "https://fb.com/x");
+        let r = run(Stub::body(serde_json::json!({ "status": true, "result": {} })), "https://fb.com/x");
         assert_eq!(text_of(&r), NO_MEDIA);
         assert!(
             matches!(r.without_mutations(), Reply::Reaction { emoji, .. } if emoji == "❌"),
@@ -456,9 +455,9 @@ mod tests {
         // `fbdown.js:15` menelan respons gagal jadi `{ status: false }`, jadi
         // `catch` plugin tidak pernah menyala untuk request yang gagal.
         for body in [
-            json!({ "status": false, "message": "Gagal mengambil data dari API" }),
-            json!({}),
-            json!({ "status": true }),
+            serde_json::json!({ "status": false, "message": "Gagal mengambil data dari API" }),
+            serde_json::json!({}),
+            serde_json::json!({ "status": true }),
         ] {
             let r = run(Stub::body(body.clone()), "https://fb.com/x");
             assert_eq!(text_of(&r), NO_MEDIA, "body {body}");

@@ -18,7 +18,7 @@
 //! hilang; isi pesannya tidak berubah.
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::common::{jid_number, now_ms};
 
@@ -173,8 +173,8 @@ fn decide(
                 .get_mut(&id)
                 .expect("key baru dibaca dari map yang sama");
             if let Some(obj) = room.as_object_mut() {
-                obj.insert("playerO".into(), json!(sender));
-                obj.insert("state".into(), json!("PLAYING"));
+                obj.insert("playerO".into(), serde_json::json!(sender));
+                obj.insert("state".into(), serde_json::json!("PLAYING"));
             }
             Decision::Joined {
                 player_x: room
@@ -189,10 +189,10 @@ fn decide(
             let room_id = new_room_id(rooms, now);
             rooms.insert(
                 room_id.clone(),
-                json!({
+                serde_json::json!({
                     "id": room_id,
                     "chat": chat,
-                    "name": if room_name.is_empty() { Value::Null } else { json!(room_name) },
+                    "name": if room_name.is_empty() { Value::Null } else { serde_json::json!(room_name) },
                     "playerX": sender,
                     "playerO": Value::Null,
                     "state": "WAITING",
@@ -227,7 +227,7 @@ pub fn tictactoe(ctx: Ctx) -> Reply {
     let mut decided = None;
     ctx.session_update(GAMES_KEY, |slot| {
         if !slot.is_object() {
-            *slot = json!({});
+            *slot = serde_json::json!({});
         }
         let rooms = slot.as_object_mut().expect("baru diganti objek");
         decided = Some(decide(rooms, &room_name, &ctx.sender, &ctx.chat, now));
@@ -322,10 +322,10 @@ mod tests {
     fn waiting_room(id: &str, player_x: &str, name: Option<&str>, created: i64) -> (String, Value) {
         (
             id.into(),
-            json!({
+            serde_json::json!({
                 "id": id,
                 "chat": CHAT,
-                "name": name.map_or(Value::Null, |n| json!(n)),
+                "name": name.map_or(Value::Null, |n| serde_json::json!(n)),
                 "playerX": player_x,
                 "playerO": Value::Null,
                 "state": "WAITING",
@@ -383,12 +383,12 @@ mod tests {
         assert_eq!(list.len(), 1);
         let (id, room) = &list[0];
         assert!(id.starts_with(ROOM_PREFIX), "{id}");
-        assert_eq!(room["id"], json!(id.as_str()));
-        assert_eq!(room["chat"], json!(CHAT));
+        assert_eq!(room["id"], serde_json::json!(id.as_str()));
+        assert_eq!(room["chat"], serde_json::json!(CHAT));
         assert_eq!(room["name"], Value::Null, "room tanpa nama disimpan null");
-        assert_eq!(room["playerX"], json!(SENDER));
+        assert_eq!(room["playerX"], serde_json::json!(SENDER));
         assert_eq!(room["playerO"], Value::Null);
-        assert_eq!(room["state"], json!("WAITING"));
+        assert_eq!(room["state"], serde_json::json!("WAITING"));
         assert!(room["createdAt"].is_i64());
     }
 
@@ -401,7 +401,7 @@ mod tests {
             "{}",
             text_of(&r)
         );
-        assert_eq!(rooms(&s)[0].1["name"], json!("opardu ultimate"));
+        assert_eq!(rooms(&s)[0].1["name"], serde_json::json!("opardu ultimate"));
     }
 
     #[test]
@@ -430,9 +430,9 @@ mod tests {
 
         let list = rooms(&s);
         assert_eq!(list.len(), 1, "tidak boleh membuat room kedua");
-        assert_eq!(list[0].1["state"], json!("PLAYING"));
-        assert_eq!(list[0].1["playerX"], json!(SENDER));
-        assert_eq!(list[0].1["playerO"], json!(OTHER));
+        assert_eq!(list[0].1["state"], serde_json::json!("PLAYING"));
+        assert_eq!(list[0].1["playerX"], serde_json::json!(SENDER));
+        assert_eq!(list[0].1["playerO"], serde_json::json!(OTHER));
     }
 
     #[test]
@@ -481,16 +481,16 @@ mod tests {
         run(OTHER, "ruang 2", &s);
         let list = rooms(&s);
         assert_eq!(list.len(), 2, "nama room berbeda → dua room terpisah");
-        assert!(list.iter().all(|(_, r)| r["state"] == json!("WAITING")));
+        assert!(list.iter().all(|(_, r)| r["state"] == serde_json::json!("WAITING")));
         // Dua perintah berurutan bisa jatuh di milidetik yang sama; kalau key
         // room tidak dibedakan, room pertama tertimpa dan hanya tersisa satu.
         for (id, room) in &list {
             assert!(id.starts_with(ROOM_PREFIX), "{id}");
-            assert_eq!(room["id"], json!(id.as_str()));
+            assert_eq!(room["id"], serde_json::json!(id.as_str()));
         }
         let names: Vec<&Value> = list.iter().map(|(_, r)| &r["name"]).collect();
-        assert!(names.contains(&&json!("ruang 1")), "{names:?}");
-        assert!(names.contains(&&json!("ruang 2")), "{names:?}");
+        assert!(names.contains(&&serde_json::json!("ruang 1")), "{names:?}");
+        assert!(names.contains(&&serde_json::json!("ruang 2")), "{names:?}");
     }
 
     #[test]
@@ -563,7 +563,7 @@ mod tests {
             .and_then(|o| o.get_mut(&id))
             .and_then(Value::as_object_mut)
             .expect("room hasil join")
-            .insert("createdAt".into(), json!(0));
+            .insert("createdAt".into(), serde_json::json!(0));
         let r = run(SENDER, "", &s);
         assert_eq!(text_of(&r), BUSY, "PLAYING tidak boleh kadaluarsa");
         assert_eq!(rooms(&s).len(), 1);
@@ -578,7 +578,7 @@ mod tests {
         let s = new_session_store();
         s.lock().unwrap().insert(
             GAMES_KEY.into(),
-            json!({"lain": {"id": "lain", "chat": CHAT, "playerX": OTHER, "playerO": Value::Null, "state": "WAITING", "createdAt": now_ms()}}),
+            serde_json::json!({"lain": {"id": "lain", "chat": CHAT, "playerX": OTHER, "playerO": Value::Null, "state": "WAITING", "createdAt": now_ms()}}),
         );
         let r = run(SENDER, "", &s);
         assert!(
@@ -587,7 +587,7 @@ mod tests {
             text_of(&r)
         );
         assert_eq!(rooms(&s).len(), 1, "tidak boleh membuat room kedua");
-        assert_eq!(rooms(&s)[0].1["playerO"], json!(SENDER));
+        assert_eq!(rooms(&s)[0].1["playerO"], serde_json::json!(SENDER));
     }
 
     #[test]
@@ -595,7 +595,7 @@ mod tests {
         let s = new_session_store();
         s.lock().unwrap().insert(
             GAMES_KEY.into(),
-            json!({"lain": {"id": "lain", "chat": "lain@g.us", "playerX": SENDER, "playerO": Value::Null, "state": "WAITING", "createdAt": now_ms()}}),
+            serde_json::json!({"lain": {"id": "lain", "chat": "lain@g.us", "playerX": SENDER, "playerO": Value::Null, "state": "WAITING", "createdAt": now_ms()}}),
         );
         let r = run(SENDER, "", &s);
         assert!(
@@ -644,7 +644,7 @@ mod tests {
         let s = new_session_store();
         s.lock()
             .unwrap()
-            .insert(GAMES_KEY.into(), json!("bukan objek"));
+            .insert(GAMES_KEY.into(), serde_json::json!("bukan objek"));
         let r = run(SENDER, "", &s);
         assert!(text_of(&r).contains("Room dibuat!"), "{}", text_of(&r));
         assert_eq!(rooms(&s).len(), 1);
@@ -659,6 +659,6 @@ mod tests {
             text_of(&r).contains(&format!(".tictactoe {name}` untuk join")),
             "nama panjang harus utuh"
         );
-        assert_eq!(rooms(&s)[0].1["name"], json!(name));
+        assert_eq!(rooms(&s)[0].1["name"], serde_json::json!(name));
     }
 }

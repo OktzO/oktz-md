@@ -109,7 +109,7 @@ pub fn gempa(ctx: Ctx) -> Reply {
     };
 
     let text = caption(&g);
-    // `g.Shakemap ? \`…/${g.Shakemap}\` : null` (`gempa.js:30-32`) — nilai
+    // `g.Shakemap ? `…/${g.Shakemap}` : null` (`gempa.js:30-32`) — nilai
     // kosong itu falsy, jadi tidak jadi URL.
     let shakemap = g
         .get("Shakemap")
@@ -127,7 +127,6 @@ pub fn gempa(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpResponse, HttpGet};
-    use serde_json::json;
     use std::sync::Arc;
 
     #[derive(Debug)]
@@ -155,7 +154,7 @@ mod tests {
         fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
             self.seen.lock().unwrap().push(url.to_string());
             let Some(text) = &self.body else {
-                return Err(HttpError {
+                return Err(oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 });
             };
@@ -333,11 +332,11 @@ mod tests {
     fn js_str_mirrors_string_coercion_for_the_shapes_bmkg_can_send() {
         assert_eq!(js_str(None), "undefined");
         assert_eq!(js_str(Some(&Value::Null)), "undefined");
-        assert_eq!(js_str(Some(&json!("-7.42, 110.12"))), "-7.42, 110.12");
-        assert_eq!(js_str(Some(&json!(4))), "4");
-        assert_eq!(js_str(Some(&json!(true))), "true");
-        assert_eq!(js_str(Some(&json!([1, "a", null]))), "1,a,");
-        assert_eq!(js_str(Some(&json!({}))), "[object Object]");
+        assert_eq!(js_str(Some(&serde_json::json!("-7.42, 110.12"))), "-7.42, 110.12");
+        assert_eq!(js_str(Some(&serde_json::json!(4))), "4");
+        assert_eq!(js_str(Some(&serde_json::json!(true))), "true");
+        assert_eq!(js_str(Some(&serde_json::json!([1, "a", null]))), "1,a,");
+        assert_eq!(js_str(Some(&serde_json::json!({}))), "[object Object]");
     }
 
     #[test]

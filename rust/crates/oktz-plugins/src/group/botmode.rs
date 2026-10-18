@@ -146,7 +146,6 @@ pub fn botmodegrup(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -205,7 +204,7 @@ mod tests {
 
     #[test]
     fn no_argument_lists_every_mode_and_marks_the_current_one() {
-        let r = run(json!({}), "");
+        let r = run(serde_json::json!({}), "");
         assert!(
             text_of(&r).contains("> Mode saat ini: *ALL* (All Features)"),
             "{}",
@@ -224,7 +223,7 @@ mod tests {
 
     #[test]
     fn a_stored_mode_marks_the_right_row() {
-        let r = run(json!({"botMode": "otp"}), "");
+        let r = run(serde_json::json!({"botMode": "otp"}), "");
         assert!(
             text_of(&r).contains("> Mode saat ini: *OTP* (OTP Service)"),
             "{}",
@@ -236,7 +235,7 @@ mod tests {
 
     #[test]
     fn an_unknown_stored_mode_falls_back_to_the_unknown_label() {
-        let r = run(json!({"botMode": "kustom"}), "");
+        let r = run(serde_json::json!({"botMode": "kustom"}), "");
         assert!(
             text_of(&r).contains("> Mode saat ini: *KUSTOM* (Unknown)"),
             "{}",
@@ -247,8 +246,8 @@ mod tests {
 
     #[test]
     fn a_valid_mode_is_written_and_confirmed() {
-        let r = run(json!({}), "md");
-        assert_eq!(written(&r), &json!({ "botMode": "md" }));
+        let r = run(serde_json::json!({}), "md");
+        assert_eq!(written(&r), &serde_json::json!({ "botMode": "md" }));
         assert!(text_of(&r).contains("> Mode: *MD* (Multi-Device)"), "{}", text_of(&r));
         assert!(text_of(&r).contains("> Grup: *120363*"), "{}", text_of(&r));
         assert!(!text_of(&r).contains("Manual mode"), "bukan mode store");
@@ -256,10 +255,10 @@ mod tests {
 
     #[test]
     fn store_mode_also_seeds_an_empty_product_list() {
-        let r = run(json!({}), "store");
+        let r = run(serde_json::json!({}), "store");
         let data = written(&r);
-        assert_eq!(data["botMode"], json!("store"));
-        assert_eq!(data["storeConfig"]["products"], json!([]));
+        assert_eq!(data["botMode"], serde_json::json!("store"));
+        assert_eq!(data["storeConfig"]["products"], serde_json::json!([]));
         assert!(text_of(&r).contains("> Product: `0` item"), "{}", text_of(&r));
         assert!(
             text_of(&r).contains("`.addprod <kode> <harga> <nama>`"),
@@ -271,7 +270,7 @@ mod tests {
     #[test]
     fn an_existing_product_list_survives_switching_to_store() {
         let r = run(
-            json!({"storeConfig": {"products": [{"kode": "a"}, {"kode": "b"}]}}),
+            serde_json::json!({"storeConfig": {"products": [{"kode": "a"}, {"kode": "b"}]}}),
             "store",
         );
         let data = written(&r);
@@ -281,20 +280,20 @@ mod tests {
 
     #[test]
     fn an_invalid_mode_is_refused_and_nothing_is_written() {
-        let r = run(json!({}), "ngawur");
+        let r = run(serde_json::json!({}), "ngawur");
         assert_eq!(text_of(&r), BAD_MODE);
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn the_mode_is_lowercased_before_validating() {
-        assert_eq!(written(&run(json!({}), "STORE"))["botMode"], json!("store"));
-        assert_eq!(written(&run(json!({}), "  Md "))["botMode"], json!("md"));
+        assert_eq!(written(&run(serde_json::json!({}), "STORE"))["botMode"], serde_json::json!("store"));
+        assert_eq!(written(&run(serde_json::json!({}), "  Md "))["botMode"], serde_json::json!("md"));
     }
 
     #[test]
     fn a_successful_switch_always_reacts() {
-        match run(json!({}), "otp").without_mutations() {
+        match run(serde_json::json!({}), "otp").without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅"),
             other => panic!("harus Reaction, dapat {other:?}"),
         }

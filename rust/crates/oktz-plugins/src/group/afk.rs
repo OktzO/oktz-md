@@ -9,7 +9,6 @@
 //! `sweepAfkStorage` juga tidak ikut: penyapuan based-on-ukuran hanya
 //! memangkas cache in-memory, dan `Ctx` tidak punya cache AFK sendiri.
 
-use serde_json::json;
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
 
 pub(crate) const NO_REASON: &str = "Tidak ada alasan";
@@ -40,7 +39,7 @@ pub fn afk(ctx: Ctx) -> Reply {
     } else {
         ctx.text.clone()
     };
-    let record = json!({ "reason": reason, "since": crate::common::now_ms() });
+    let record = serde_json::json!({ "reason": reason, "since": crate::common::now_ms() });
 
     let reply = Reply::Text {
         text: format!(
@@ -57,7 +56,7 @@ pub fn afk(ctx: Ctx) -> Reply {
     if can_persist(&ctx.sender) {
         reply.with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "afk": record }),
+            data: serde_json::json!({ "afk": record }),
         })
     } else {
         reply
@@ -141,13 +140,13 @@ mod tests {
             "{}",
             text_of(&r)
         );
-        assert_eq!(written_afk(&r)["reason"], json!("Tidak ada alasan"));
+        assert_eq!(written_afk(&r)["reason"], serde_json::json!("Tidak ada alasan"));
     }
 
     #[test]
     fn the_reason_keeps_its_inner_spacing_and_case() {
         let r = run(SENDER, "  Makan  Nasi  ");
-        assert_eq!(written_afk(&r)["reason"], json!("  Makan  Nasi  "));
+        assert_eq!(written_afk(&r)["reason"], serde_json::json!("  Makan  Nasi  "));
     }
 
     #[test]
@@ -155,7 +154,7 @@ mod tests {
         let before = crate::common::now_ms();
         let r = run(SENDER, "jalan");
         let afk = written_afk(&r);
-        assert_eq!(afk["reason"], json!("jalan"));
+        assert_eq!(afk["reason"], serde_json::json!("jalan"));
         let since = afk["since"].as_i64().expect("since harus angka");
         assert!(
             (crate::common::now_ms() - since) < 5_000 && since >= before,

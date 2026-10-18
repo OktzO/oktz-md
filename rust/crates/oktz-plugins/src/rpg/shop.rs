@@ -1,7 +1,7 @@
 //! `plugins/rpg/shop.js` — beli dan jual item RPG.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::int_field;
 use crate::rpg::jualan::inventory_map;
@@ -135,9 +135,9 @@ pub fn shop(ctx: Ctx) -> Reply {
                 thousands_id((total - koin) as f64)
             ));
         }
-        let slot = inv.entry(key.clone()).or_insert(json!(0));
+        let slot = inv.entry(key.clone()).or_insert(serde_json::json!(0));
         let have = slot.as_i64().unwrap_or(0);
-        *slot = json!(have + amount);
+        *slot = serde_json::json!(have + amount);
         return Reply::text(format!(
             "MAKASIH BANYAK KAK! 🎉✨\n\n\
              Kamu berhasil borong:\n\
@@ -148,7 +148,7 @@ pub fn shop(ctx: Ctx) -> Reply {
         ))
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "koin": koin - total, "inventory": inv }),
+            data: serde_json::json!({ "koin": koin - total, "inventory": inv }),
         });
     }
 
@@ -161,7 +161,7 @@ pub fn shop(ctx: Ctx) -> Reply {
     }
     let total = price * amount;
     // Tidak ada `delete` di JS untuk jalur jual, jadi sisa 0 tetap ditulis.
-    inv.insert(key.clone(), json!(stock - amount));
+    inv.insert(key.clone(), serde_json::json!(stock - amount));
     Reply::text(format!(
         "CINGG! UANG MASUK! 💰✨\n\n\
          Kamu berhasil ngejual:\n\
@@ -172,7 +172,7 @@ pub fn shop(ctx: Ctx) -> Reply {
     ))
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": koin + total, "inventory": inv }),
+        data: serde_json::json!({ "koin": koin + total, "inventory": inv }),
     })
 }
 
@@ -240,7 +240,7 @@ mod tests {
     #[test]
     fn the_front_board_splits_the_two_lists_without_repeating_a_row() {
         for args in [vec![], vec!["jajan"]] {
-            let t = text(run(&args, json!({})));
+            let t = text(run(&args, serde_json::json!({})));
             assert!(t.starts_with("🏪 *Toko Kelontong RPG*"), "{args:?}: {t}");
             let (buy, sell) = t
                 .split_once("*💰 Barang yang Diterima (SELL):*\n")
@@ -269,16 +269,16 @@ mod tests {
     fn buying_stacks_onto_the_existing_stack_and_charges_the_purse() {
         let r = run(
             &["buy", "potion", "4"],
-            json!({"koin": 5000, "inventory": {"potion": 2}}),
+            serde_json::json!({"koin": 5000, "inventory": {"potion": 2}}),
         );
         let d = written(&r);
-        assert_eq!(d["koin"], json!(3000), "5000 - 4*500");
-        assert_eq!(d["inventory"]["potion"], json!(6));
+        assert_eq!(d["koin"], serde_json::json!(3000), "5000 - 4*500");
+        assert_eq!(d["inventory"]["potion"], serde_json::json!(6));
     }
 
     #[test]
     fn a_short_purse_names_the_exact_shortfall() {
-        let r = run(&["buy", "mythic", "2"], json!({"koin": 60_000}));
+        let r = run(&["buy", "mythic", "2"], serde_json::json!({"koin": 60_000}));
         let t = text_of(&r);
         assert!(t.contains("Koin kamu: *Rp 60.000*"), "{t}");
         assert!(t.contains("Kurang *Rp 40.000* lagi"), "{t}");
@@ -287,9 +287,9 @@ mod tests {
 
     #[test]
     fn a_sell_only_item_cannot_be_bought_and_buy_only_cannot_be_sold() {
-        let buy = text(run(&["buy", "rock"], json!({"koin": 999_999})));
+        let buy = text(run(&["buy", "rock"], serde_json::json!({"koin": 999_999})));
         assert!(buy.contains("*🪨 Batu* ini khusus buat dijual"), "{buy}");
-        let sell = text(run(&["sell", "potion"], json!({})));
+        let sell = text(run(&["sell", "potion"], serde_json::json!({})));
         assert!(sell.contains("*🥤 Health Potion* ini"), "{sell}");
         assert!(sell.contains("Nggak laku dijual lagi"), "{sell}");
     }
@@ -297,15 +297,15 @@ mod tests {
     #[test]
     fn selling_the_whole_stack_writes_zero_instead_of_deleting_the_key() {
         // Tidak seperti `merchant.js`, `shop.js` tidak pernah `delete`.
-        let r = run(&["sell", "trash", "3"], json!({"inventory": {"trash": 3}}));
+        let r = run(&["sell", "trash", "3"], serde_json::json!({"inventory": {"trash": 3}}));
         let d = written(&r);
-        assert_eq!(d["inventory"]["trash"], json!(0));
-        assert_eq!(d["koin"], json!(30), "3 * 10");
+        assert_eq!(d["inventory"]["trash"], serde_json::json!(0));
+        assert_eq!(d["koin"], serde_json::json!(30), "3 * 10");
     }
 
     #[test]
     fn selling_more_than_the_stock_is_refused_with_both_numbers() {
-        let r = run(&["sell", "gold", "2"], json!({"inventory": {"gold": 1}}));
+        let r = run(&["sell", "gold", "2"], serde_json::json!({"inventory": {"gold": 1}}));
         let t = text_of(&r);
         assert!(t.contains("Kamu cuma punya *1x 🥇 Emas*"), "{t}");
         assert!(t.contains("masa mau jual *2*?"), "{t}");
@@ -314,18 +314,18 @@ mod tests {
 
     #[test]
     fn an_unknown_or_missing_item_name_says_itu() {
-        let t = text(run(&["buy", "nasi"], json!({})));
+        let t = text(run(&["buy", "nasi"], serde_json::json!({})));
         assert!(t.starts_with("Aduh kak, barang *nasi* nggak ada di daftar!"), "{t}");
 
-        let t = text(run(&["buy"], json!({})));
+        let t = text(run(&["buy"], serde_json::json!({})));
         assert!(t.starts_with("Aduh kak, barang *itu* nggak ada di daftar!"), "{t}");
     }
 
     #[test]
     fn the_item_key_is_case_insensitive() {
-        let r = run(&["BUY", "Potion", "1"], json!({"koin": 1000}));
-        assert_eq!(written(&r)["inventory"]["potion"], json!(1));
-        assert_eq!(written(&r)["koin"], json!(500));
+        let r = run(&["BUY", "Potion", "1"], serde_json::json!({"koin": 1000}));
+        assert_eq!(written(&r)["inventory"]["potion"], serde_json::json!(1));
+        assert_eq!(written(&r)["koin"], serde_json::json!(500));
     }
 
     #[test]
@@ -336,9 +336,9 @@ mod tests {
             vec!["buy", "egg", "-3"],
             vec!["buy", "egg", "abc"],
         ] {
-            let r = run(&args, json!({"koin": 10_000}));
-            assert_eq!(written(&r)["inventory"]["egg"], json!(1), "{args:?}");
-            assert_eq!(written(&r)["koin"], json!(9900), "{args:?}");
+            let r = run(&args, serde_json::json!({"koin": 10_000}));
+            assert_eq!(written(&r)["inventory"]["egg"], serde_json::json!(1), "{args:?}");
+            assert_eq!(written(&r)["koin"], serde_json::json!(9900), "{args:?}");
         }
     }
 }

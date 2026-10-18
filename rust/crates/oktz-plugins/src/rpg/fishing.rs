@@ -10,7 +10,7 @@
 //! (rand > 50, ~50% peluang) memakai nilai fallback ini.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::rpg::heal::{
     apply_exp, coalesce, inventory_map, or_default, rpg_int, rpg_map, roll_percent,
@@ -65,11 +65,11 @@ pub fn fishing(ctx: Ctx) -> Reply {
              Istirahat dulu gih biar seger lagi! 🛌💤"
         ));
     }
-    rpg.insert("stamina".into(), json!(stamina - STAMINA_COST));
+    rpg.insert("stamina".into(), serde_json::json!(stamina - STAMINA_COST));
 
     let (item, name, exp_reward) = caught();
     let have = coalesce(inv.get(item).and_then(Value::as_i64), 0);
-    inv.insert(item.to_string(), json!(have + 1));
+    inv.insert(item.to_string(), serde_json::json!(have + 1));
 
     let old_exp = or_default(ctx.user_field("exp").and_then(Value::as_i64), 0);
     let new_exp = apply_exp(&mut rpg, old_exp, exp_reward);
@@ -94,7 +94,7 @@ pub fn fishing(ctx: Ctx) -> Reply {
     .with_reaction("✅")
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "inventory": inv, "exp": new_exp, "rpg": rpg }),
+        data: serde_json::json!({ "inventory": inv, "exp": new_exp, "rpg": rpg }),
     })
 }
 
@@ -102,7 +102,6 @@ pub fn fishing(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: Value) -> Reply {
         let ctx = Ctx {
@@ -155,7 +154,7 @@ mod tests {
     #[test]
     fn not_enough_stamina_costs_nothing() {
         for stamina in [1, 14] {
-            let r = run(json!({ "rpg": { "stamina": stamina } }));
+            let r = run(serde_json::json!({ "rpg": { "stamina": stamina } }));
             let t = text_of(&r);
             assert!(t.starts_with("Aduh kak, stamina kamu abis"), "stamina {stamina}: {t}");
             assert!(t.contains(&format!("sisa *{stamina}*")), "{t}");
@@ -175,19 +174,19 @@ mod tests {
     fn every_cast_lands_the_catch_in_the_bag_and_pays_its_exp() {
         let mut seen = std::collections::BTreeSet::new();
         for _ in 0..900 {
-            let r = run(json!({ "rpg": { "stamina": 100 }, "exp": 0 }));
+            let r = run(serde_json::json!({ "rpg": { "stamina": 100 }, "exp": 0 }));
             let t = text_of(&r);
             assert!(t.starts_with("HAPPP! Kailnya ditarik!"), "{t}");
             let data = write_of(&r);
             let inv = data["inventory"].as_object().unwrap().clone();
             assert_eq!(inv.len(), 1, "tepat satu item per lemparan: {data}");
             let (item, qty) = inv.iter().next().unwrap();
-            assert_eq!(*qty, json!(1));
+            assert_eq!(*qty, serde_json::json!(1));
             let exp = data["exp"].as_i64().unwrap();
             let row = DROPS.iter().find(|(i, ..)| i == item).expect("item di luar tabel");
             assert_eq!(exp, row.3);
             assert!(t.contains(&format!("*+{exp} EXP*")), "{t}");
-            assert_eq!(data["rpg"]["stamina"], json!(85));
+            assert_eq!(data["rpg"]["stamina"], serde_json::json!(85));
             seen.insert(item.to_string());
         }
         assert!(seen.len() >= 3, "hanya terlihat {seen:?}");
@@ -197,14 +196,14 @@ mod tests {
     fn trash_gets_its_own_sarcastic_line() {
         let mut trash = false;
         for _ in 0..900 {
-            let r = run(json!({ "rpg": { "stamina": 100 }, "exp": 0 }));
+            let r = run(serde_json::json!({ "rpg": { "stamina": 100 }, "exp": 0 }));
             if !text_of(&r).contains("🤢") {
                 continue;
             }
             trash = true;
             assert!(text_of(&r).contains("🗑️ Sampah"), "{}", text_of(&r));
             assert!(text_of(&r).contains("pengalaman buang sampah"), "{}", text_of(&r));
-            assert_eq!(write_of(&r)["exp"], json!(10));
+            assert_eq!(write_of(&r)["exp"], serde_json::json!(10));
         }
         assert!(trash, "dalam 900 percobaan harus ada sampah");
     }
@@ -213,7 +212,7 @@ mod tests {
     fn a_non_trash_catch_is_celebrated_instead() {
         let mut good = false;
         for _ in 0..900 {
-            let r = run(json!({ "rpg": { "stamina": 100 }, "exp": 0 }));
+            let r = run(serde_json::json!({ "rpg": { "stamina": 100 }, "exp": 0 }));
             let t = text_of(&r);
             if t.contains("🎉✨") {
                 good = true;
@@ -228,10 +227,10 @@ mod tests {
         // `user.rpg.stamina || 100` — bukan `??` seperti berburu/berladang.
         let mut ran = false;
         for _ in 0..50 {
-            let r = run(json!({ "rpg": { "stamina": 0 } }));
+            let r = run(serde_json::json!({ "rpg": { "stamina": 0 } }));
             if !text_of(&r).starts_with("Aduh kak, stamina kamu abis") {
                 ran = true;
-                assert_eq!(write_of(&r)["rpg"]["stamina"], json!(85), "0 -> 100 -> 85");
+                assert_eq!(write_of(&r)["rpg"]["stamina"], serde_json::json!(85), "0 -> 100 -> 85");
             }
         }
         assert!(ran, "stamina 0 harus jadi 100");
@@ -240,7 +239,7 @@ mod tests {
     #[test]
     fn an_existing_stack_grows_instead_of_being_replaced() {
         for _ in 0..900 {
-            let r = run(json!({ "rpg": { "stamina": 100 }, "inventory": { "fish": 4 } }));
+            let r = run(serde_json::json!({ "rpg": { "stamina": 100 }, "inventory": { "fish": 4 } }));
             let inv = write_of(&r)["inventory"].as_object().unwrap().clone();
             // `user.inventory[item] = (user.inventory[item] || 0) + 1` — tumpukan
             // `fish` bawaan 4 jadi 5 kalau yang tertangkap ikan, kalau tidak ia
@@ -252,7 +251,7 @@ mod tests {
                         .iter()
                         .find(|(k, _)| k.as_str() != "fish")
                         .expect("ikan lama + satu tangkapan baru");
-                    assert_eq!(*qty, json!(1), "0 + 1 untuk {item}");
+                    assert_eq!(*qty, serde_json::json!(1), "0 + 1 untuk {item}");
                 }
                 other => panic!("fish bukan 4 atau 5: {other:?} — {inv:?}"),
             }

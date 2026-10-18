@@ -161,7 +161,6 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use oktz_plugin_api::{HttpBody, HttpCall, HttpError, HttpGet, HttpResponse, find};
-    use serde_json::json;
 
     const SENDER: &str = "628111@s.whatsapp.net";
 
@@ -351,7 +350,7 @@ mod tests {
 
     #[test]
     fn hasil_dari_membaca_kunci_yang_hilang_sebagai_none() {
-        let hasil = hasil_dari(&json!({"status": true, "video": "https://cdn/v.mp4"}));
+        let hasil = hasil_dari(&serde_json::json!({"status": true, "video": "https://cdn/v.mp4"}));
         assert!(hasil.status);
         assert_eq!(hasil.video.as_deref(), Some("https://cdn/v.mp4"));
         assert_eq!(hasil.title, None);

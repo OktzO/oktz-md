@@ -6,6 +6,17 @@ pub use meta::PluginMeta;
 pub use ureq_http::UreqHttp;
 pub use oktz_plugin_macros::{answer_handler, plugin};
 
+// `sock` JS (cek nomor, foto profil, operasi grup). Kontraknya di sini,
+// implementasinya di crate `oktz-wa`.
+pub mod sock;
+pub use sock::{AksiPeserta, AdaWhatsapp, Sock, SockError, SockMati};
+
+// Padanan `fs` dan ffmpeg Node untuk plugin yang menulis berkas atau
+// memotong media.
+pub mod berkas;
+pub mod ffmpeg;
+pub mod gambar;
+
 // Plugin butuh menyusun `Runtime` sendiri di test (untuk menguji jalur
 // config terisi), jadi tipe yang dibaca `Ctx::config()` harus bisa diakses
 // tanpa menambah dependensi baru per crate plugin.

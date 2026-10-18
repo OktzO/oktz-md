@@ -137,7 +137,7 @@ pub fn cekpartner(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     const ME: &str = "628111@s.whatsapp.net";
 
@@ -191,7 +191,7 @@ mod tests {
 
     #[test]
     fn a_number_outside_the_list_takes_the_short_error_branch() {
-        for settings in [json!({}), json!({"partner": []}), json!({"partner": "x"})] {
+        for settings in [serde_json::json!({}), serde_json::json!({"partner": []}), serde_json::json!({"partner": "x"})] {
             let ctx = Ctx {
                 settings: settings.clone(),
                 ..base()
@@ -207,7 +207,7 @@ mod tests {
         let added = now_ms() - 10 * 86_400_000;
         let expired = now_ms() + 20 * 86_400_000;
         let ctx = Ctx {
-            settings: json!({
+            settings: serde_json::json!({
                 "partner": [{"id": "628111", "name": "Zann", "addedAt": added, "expired": expired}]
             }),
             ..base()
@@ -226,7 +226,7 @@ mod tests {
     #[test]
     fn an_expired_partner_reports_the_warning_instead_of_a_negative_count() {
         let ctx = Ctx {
-            settings: json!({
+            settings: serde_json::json!({
                 "partner": [{"id": "628111", "addedAt": 0, "expired": 1}]
             }),
             ..base()
@@ -238,7 +238,7 @@ mod tests {
     #[test]
     fn an_entry_without_a_name_or_start_date_uses_the_js_fallbacks() {
         let ctx = Ctx {
-            settings: json!({"partner": [{"id": "628111"}]}),
+            settings: serde_json::json!({"partner": [{"id": "628111"}]}),
             ..base()
         };
         let (text, _) = text_of(&run(ctx.clone()));
@@ -251,8 +251,8 @@ mod tests {
     #[test]
     fn a_stored_user_appends_energi_and_koin() {
         let ctx = Ctx {
-            settings: json!({"partner": [{"id": "628111", "addedAt": 0, "expired": 0}]}),
-            user_data: json!({"energi": -1, "koin": 2500}),
+            settings: serde_json::json!({"partner": [{"id": "628111", "addedAt": 0, "expired": 0}]}),
+            user_data: serde_json::json!({"energi": -1, "koin": 2500}),
             ..base()
         };
         let (text, _) = text_of(&run(ctx.clone()));
@@ -273,7 +273,7 @@ mod tests {
     #[test]
     fn the_plugin_only_reads() {
         let ctx = Ctx {
-            settings: json!({"partner": [{"id": "628111", "addedAt": 0, "expired": 0}]}),
+            settings: serde_json::json!({"partner": [{"id": "628111", "addedAt": 0, "expired": 0}]}),
             ..base()
         };
         assert!(run(ctx.clone()).mutations().is_empty());
@@ -283,7 +283,7 @@ mod tests {
     fn a_leading_zero_target_is_normalized_before_the_lookup() {
         let ctx = Ctx {
             sender: "0811@s.whatsapp.net".into(),
-            settings: json!({"partner": [{"id": "62811", "addedAt": 0, "expired": 0}]}),
+            settings: serde_json::json!({"partner": [{"id": "62811", "addedAt": 0, "expired": 0}]}),
             ..base()
         };
         let (text, mentions) = text_of(&run(ctx.clone()));
@@ -295,6 +295,6 @@ mod tests {
     fn format_date_passes_through_a_non_numeric_timestamp() {
         assert_eq!(format_date(Some(&Value::Null)), "Invalid Date");
         assert_eq!(format_date(None), "Invalid Date");
-        assert_eq!(format_date(Some(&json!("nope"))), "Invalid Date");
+        assert_eq!(format_date(Some(&serde_json::json!("nope"))), "Invalid Date");
     }
 }

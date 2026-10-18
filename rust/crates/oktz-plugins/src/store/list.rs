@@ -122,7 +122,6 @@ pub(crate) fn js_parse_int(s: &str) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(settings: serde_json::Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -166,18 +165,18 @@ mod tests {
     #[test]
     fn an_absent_setting_shows_the_empty_branch() {
         // `db.setting('storeLists') || []` — key tidak ada = array kosong.
-        assert_eq!(text_of(&run(json!({}), "")), EMPTY);
+        assert_eq!(text_of(&run(serde_json::json!({}), "")), EMPTY);
     }
 
     #[test]
     fn a_present_but_empty_list_shows_the_same_empty_branch() {
-        assert_eq!(text_of(&run(json!({"storeLists": []}), "")), EMPTY);
+        assert_eq!(text_of(&run(serde_json::json!({"storeLists": []}), "")), EMPTY);
     }
 
     #[test]
     fn the_listing_numbers_every_item_with_its_media_icon() {
         let r = run(
-            json!({"storeLists": [
+            serde_json::json!({"storeLists": [
                 {"name": "S&K", "content": "isi"},
                 {"name": "Order", "content": "isi", "image": "https://x/a.png"},
                 {"name": "Promo", "content": "isi", "video": "https://x/b.mp4"}
@@ -202,7 +201,7 @@ mod tests {
     #[test]
     fn picking_a_number_sends_that_item_content_as_plain_text() {
         let r = run(
-            json!({"storeLists": [{"name": "A", "content": "baris 1\nbaris 2"}, {"name": "B", "content": "b"}]}),
+            serde_json::json!({"storeLists": [{"name": "A", "content": "baris 1\nbaris 2"}, {"name": "B", "content": "b"}]}),
             "1",
         );
         assert_eq!(text_of(&r), "baris 1\nbaris 2");
@@ -212,7 +211,7 @@ mod tests {
     #[test]
     fn picking_an_item_with_an_image_replies_with_an_image_reply() {
         let r = run(
-            json!({"storeLists": [{"name": "A", "content": "caption", "image": "https://x/a.png"}]}),
+            serde_json::json!({"storeLists": [{"name": "A", "content": "caption", "image": "https://x/a.png"}]}),
             "1",
         );
         assert!(r.has_media(), "harus jadi Reply::Image");
@@ -227,7 +226,7 @@ mod tests {
     // Cabang `idx` di luar jangkauan jatuh ke daftar, bukan error.
     #[test]
     fn out_of_range_and_non_numeric_fall_back_to_the_listing() {
-        let settings = json!({"storeLists": [{"name": "A", "content": "x"}]});
+        let settings = serde_json::json!({"storeLists": [{"name": "A", "content": "x"}]});
         for bad in ["0", "2", "abc", "", "-1"] {
             let r = run(settings.clone(), bad);
             assert!(

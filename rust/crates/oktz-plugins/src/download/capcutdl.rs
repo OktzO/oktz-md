@@ -12,7 +12,6 @@
 use oktz_plugin_api::{Ctx, Reply, plugin};
 use serde_json::Value;
 
-use crate::fun::tod::error_template;
 
 /// `capcutdl.js:31` — `/capcut\.com/i`, tidak dikunci ke host.
 pub(crate) fn is_capcut_url(url: &str) -> bool {
@@ -83,7 +82,7 @@ pub fn capcutdl(ctx: Ctx) -> Reply {
     let data = match fetch_capcut(url) {
         Ok(data) => data,
         Err(()) => {
-            return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("🕕");
+            return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("🕕");
         }
     };
 
@@ -99,7 +98,6 @@ pub fn capcutdl(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(text: &str) -> Reply {
         let ctx = Ctx {
@@ -170,11 +168,11 @@ mod tests {
     #[test]
     fn a_response_without_the_video_field_is_the_no_video_message() {
         for data in [
-            json!({ "status": false, "originalVideoUrl": "https://cdn.example/v.mp4" }),
-            json!({ "status": true }),
-            json!({ "status": true, "originalVideoUrl": "" }),
-            json!({ "status": true, "originalVideoUrl": null }),
-            json!({}),
+            serde_json::json!({ "status": false, "originalVideoUrl": "https://cdn.example/v.mp4" }),
+            serde_json::json!({ "status": true }),
+            serde_json::json!({ "status": true, "originalVideoUrl": "" }),
+            serde_json::json!({ "status": true, "originalVideoUrl": null }),
+            serde_json::json!({}),
         ] {
             let video = original_video_url(&data);
             assert!(!status_ok(&data) || video.is_empty(), "{data} lolos");
@@ -186,7 +184,7 @@ mod tests {
         // `fetch_capcut` selalu gagal di port ini, jadi handler tidak pernah
         // mencapai cabang media — persis yang terjadi kalau scraper melempar.
         let r = run("https://www.capcut.com/t/xxx");
-        assert_eq!(text_of(&r), error_template(".", "ccdl"));
+        assert_eq!(text_of(&r), crate::common::error_template(".", "ccdl"));
         assert!(
             matches!(r.without_mutations(), Reply::Reaction { emoji, .. } if emoji == "🕕"),
             "reaksi jam harus tetap ada di cabang catch"

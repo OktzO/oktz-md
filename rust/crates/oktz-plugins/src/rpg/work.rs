@@ -9,7 +9,7 @@
 //! Hasil potongnya sudah dihitung di tabel JOB agar tidak salah baca emoji.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::int_field;
 use crate::rpg::jualan::{
@@ -55,7 +55,7 @@ pub fn work(ctx: Ctx) -> Reply {
              Istirahat dulu kek, jangan diforsir ntar tepar! 🛌💤"
         ));
     }
-    rpg.insert("stamina".into(), json!(stamina - STAMINA_COST));
+    rpg.insert("stamina".into(), serde_json::json!(stamina - STAMINA_COST));
 
     let (label, _bare, min, max) = JOBS[crate::common::random_index(JOBS.len())];
     let salary = roll_incl(min, max);
@@ -75,7 +75,7 @@ pub fn work(ctx: Ctx) -> Reply {
     ))
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": int_field(&ctx, "koin") + salary, "exp": new_exp, "rpg": rpg }),
+        data: serde_json::json!({ "koin": int_field(&ctx, "koin") + salary, "exp": new_exp, "rpg": rpg }),
     })
 }
 
@@ -136,19 +136,19 @@ mod tests {
 
     #[test]
     fn nine_stamina_is_refused_but_zero_is_not_because_of_the_or_guard() {
-        let r = run(json!({"rpg": {"stamina": 9}}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 9}}));
         assert!(text_of(&r).contains("sisa *9* doang"));
         assert!(r.mutations().is_empty());
 
-        let r = run(json!({"rpg": {"stamina": 0}, "koin": 0, "exp": 0}));
-        assert_eq!(written(&r)["rpg"]["stamina"], json!(90), "0 || 100 -> 100 - 10");
+        let r = run(serde_json::json!({"rpg": {"stamina": 0}, "koin": 0, "exp": 0}));
+        assert_eq!(written(&r)["rpg"]["stamina"], serde_json::json!(90), "0 || 100 -> 100 - 10");
     }
 
     #[test]
     fn each_profession_pays_inside_its_own_band() {
         let mut seen = [false; 6];
         for _ in 0..3000 {
-            let r = run(json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
+            let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 0, "exp": 0}));
             let t = text_of(&r);
             let (_, _, min, max) = JOBS
                 .iter()
@@ -162,8 +162,8 @@ mod tests {
                 .and_then(|s| s.replace('.', "").parse().ok())
                 .unwrap_or_else(|| panic!("gaji tak terbaca: {t}"));
             assert!((min..=max).contains(&salary), "{t}");
-            assert_eq!(written(&r)["koin"], json!(salary));
-            assert_eq!(written(&r)["exp"], json!(salary / 10));
+            assert_eq!(written(&r)["koin"], serde_json::json!(salary));
+            assert_eq!(written(&r)["exp"], serde_json::json!(salary / 10));
             for (i, (label, _, _, _)) in JOBS.iter().enumerate() {
                 seen[i] |= t.contains(&format!("💼 Profesi: *{label}*"));
             }
@@ -184,7 +184,7 @@ mod tests {
 
     #[test]
     fn the_existing_balance_is_added_to_the_paycheque() {
-        let r = run(json!({"rpg": {"stamina": 100}, "koin": 250_000, "exp": 0}));
+        let r = run(serde_json::json!({"rpg": {"stamina": 100}, "koin": 250_000, "exp": 0}));
         assert!(written(&r)["koin"].as_i64().unwrap() > 250_000);
     }
 }

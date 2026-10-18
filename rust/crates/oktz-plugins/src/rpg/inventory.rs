@@ -128,7 +128,6 @@ pub fn inventory(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: serde_json::Value) -> String {
         let ctx = Ctx {
@@ -170,7 +169,7 @@ mod tests {
 
     #[test]
     fn an_absent_user_row_shows_defaults_and_an_empty_bag() {
-        for user in [json!(null), json!({}), json!({"rpg": null, "inventory": null})] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({"rpg": null, "inventory": null})] {
             let out = run(user.clone());
             assert!(
                 out.starts_with("🎒 *Isi Tas Kamu Nih Kak!* ✨\n\n❤️ HP: *100*\n💸 Koin: *0*\n📈 EXP: *0*\n\n"),
@@ -183,7 +182,7 @@ mod tests {
 
     #[test]
     fn header_uses_stored_health_koin_and_exp() {
-        let out = run(json!({"rpg": {"health": 73}, "koin": 25000, "exp": 1250000}));
+        let out = run(serde_json::json!({"rpg": {"health": 73}, "koin": 25000, "exp": 1250000}));
         assert!(out.starts_with(
             "🎒 *Isi Tas Kamu Nih Kak!* ✨\n\n❤️ HP: *73*\n💸 Koin: *25.000*\n📈 EXP: *1.250.000*\n\n"
         ));
@@ -191,7 +190,7 @@ mod tests {
 
     #[test]
     fn zero_count_items_are_hidden_and_only_their_category_disappears() {
-        let out = run(json!({"inventory": {"rock": 0, "coal": 4, "fish": 2}}));
+        let out = run(serde_json::json!({"inventory": {"rock": 0, "coal": 4, "fish": 2}}));
         assert!(out.contains("⛏️ *Hasil Tambang*\n⚫ Batubara: *4x*\n"));
         assert!(
             !out.contains("🪨 Batu:"),
@@ -204,7 +203,7 @@ mod tests {
 
     #[test]
     fn categories_render_in_the_js_object_order() {
-        let out = run(json!({"inventory": {
+        let out = run(serde_json::json!({"inventory": {
             "kunai": 1, "potion": 2, "herb": 3, "fish": 4, "iron": 5, "common": 6
         }}));
         let pos = |needle: &str| out.find(needle).expect("kategori hilang");
@@ -218,7 +217,7 @@ mod tests {
     #[test]
     fn every_category_header_and_the_closed_boxes_line_up() {
         let out = run(
-            json!({"inventory": {"common": 1, "iron": 1, "fish": 1, "herb": 1, "potion": 1, "kunai": 1}}),
+            serde_json::json!({"inventory": {"common": 1, "iron": 1, "fish": 1, "herb": 1, "potion": 1, "kunai": 1}}),
         );
         for (name, _) in CATEGORIES {
             assert!(out.contains(&format!("{name}\n")), "kategori hilang: {name}");
@@ -232,7 +231,7 @@ mod tests {
 
     #[test]
     fn item_names_and_emotes_come_from_the_js_table() {
-        let out = run(json!({"inventory": {"fish": 7, "bowlramen": 1, "diamond": 2}}));
+        let out = run(serde_json::json!({"inventory": {"fish": 7, "bowlramen": 1, "diamond": 2}}));
         assert!(out.contains("🐟 Ikan: *7x*"));
         assert!(out.contains("💠 Berlian: *2x*"));
         assert!(out.contains("🍜 Ramen: *1x*"));
@@ -257,7 +256,7 @@ mod tests {
 
     #[test]
     fn a_non_integer_quantity_is_read_as_absent() {
-        let out = run(json!({"inventory": {"fish": "3"}}));
+        let out = run(serde_json::json!({"inventory": {"fish": "3"}}));
         assert!(!out.contains("Ikan"), "bukan angka -> `|| 0` -> disembunyikan");
         assert!(out.contains("Loh, tas kamu masih kosong"));
     }

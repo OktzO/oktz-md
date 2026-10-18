@@ -10,7 +10,7 @@
 //! di store jatuh ke cabang "nggak ketemu".
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::common::int_field;
 use crate::rpg::heal::other_user;
@@ -87,7 +87,7 @@ pub fn rob(ctx: Ctx) -> Reply {
 
     let mut rpg = rpg_map(&ctx);
     let health = or_default(rpg_int(&rpg, "health"), 100);
-    rpg.insert("health".into(), json!(health));
+    rpg.insert("health".into(), serde_json::json!(health));
     if health < MIN_ROBBER_HP {
         return Reply::text(format!(
             "Woy bos, badan lu tinggal tulang gitu masih nekat ngerampok?! 🤒\n\
@@ -115,17 +115,17 @@ pub fn rob(ctx: Ctx) -> Reply {
         )
         .with_mutation(Mutation::SetUser {
             jid: target.clone(),
-            data: json!({ "koin": victim_koin - stolen }),
+            data: serde_json::json!({ "koin": victim_koin - stolen }),
         })
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "koin": robber_koin + stolen, "exp": new_exp, "rpg": rpg }),
+            data: serde_json::json!({ "koin": robber_koin + stolen, "exp": new_exp, "rpg": rpg }),
         });
     }
 
     let fine = crate::common::roll(10_000) as i64 + 5_000;
     let actual_fine = fine.min(robber_koin);
-    rpg.insert("health".into(), json!((health - HEALTH_LOSS).max(0)));
+    rpg.insert("health".into(), serde_json::json!((health - HEALTH_LOSS).max(0)));
 
     Reply::text(format!(
         "GOBLOK! KETAHUAN WARGA!! 🚨🤬\n\n\
@@ -137,7 +137,7 @@ pub fn rob(ctx: Ctx) -> Reply {
     ))
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": (robber_koin - actual_fine).max(0), "rpg": rpg }),
+        data: serde_json::json!({ "koin": (robber_koin - actual_fine).max(0), "rpg": rpg }),
     })
 }
 
@@ -155,7 +155,7 @@ mod tests {
             is_admin: false,
             is_owner: false,
             data: match koin {
-                Some(k) => json!({ "koin": k }),
+                Some(k) => serde_json::json!({ "koin": k }),
                 None => Value::Null,
             },
         }
@@ -217,7 +217,7 @@ mod tests {
     #[test]
     fn without_a_target_it_asks_who_to_rob_and_writes_nothing() {
         for mentioned in [vec![], vec!["".to_string()]] {
-            let r = run(json!({ "koin": 0 }), mentioned, None);
+            let r = run(serde_json::json!({ "koin": 0 }), mentioned, None);
             let t = text_of(&r);
             assert!(t.starts_with("Hayo, mau malak siapa nih?"), "{t}");
             assert!(t.contains("`.rob @user`"), "{t}");
@@ -257,7 +257,7 @@ mod tests {
     #[test]
     fn robbing_yourself_is_refused() {
         let r = run(
-            json!({ "koin": 5_000 }),
+            serde_json::json!({ "koin": 5_000 }),
             vec![SENDER.into()],
             Some(victim(Some(5_000))),
         );
@@ -267,7 +267,7 @@ mod tests {
 
     #[test]
     fn a_target_without_a_stored_row_is_reported_as_missing() {
-        let r = run(json!({ "koin": 5_000 }), vec![TARGET.into()], Some(victim(None)));
+        let r = run(serde_json::json!({ "koin": 5_000 }), vec![TARGET.into()], Some(victim(None)));
         assert!(
             text_of(&r).starts_with("Target buronanmu nggak ketemu di database!"),
             "{}",
@@ -281,7 +281,7 @@ mod tests {
     fn a_target_below_one_thousand_coins_is_refused() {
         for koin in [0, 1, 999] {
             let r = run(
-                json!({ "koin": 50_000, "rpg": { "health": 100 } }),
+                serde_json::json!({ "koin": 50_000, "rpg": { "health": 100 } }),
                 vec![TARGET.into()],
                 Some(victim(Some(koin))),
             );
@@ -291,14 +291,14 @@ mod tests {
             );
             assert!(r.mutations().is_empty(), "koin {koin}");
         }
-        assert_eq!(victim(Some(1_000)).data["koin"], json!(1_000));
+        assert_eq!(victim(Some(1_000)).data["koin"], serde_json::json!(1_000));
     }
 
     /// `robber.rpg.health = robber.rpg.health || 100` — HP 0 jadi 100 lagi.
     #[test]
     fn zero_health_is_read_back_as_one_hundred_before_the_gate() {
         let r = run(
-            json!({ "koin": 50_000, "rpg": { "health": 0 } }),
+            serde_json::json!({ "koin": 50_000, "rpg": { "health": 0 } }),
             vec![TARGET.into()],
             Some(victim(Some(50_000))),
         );
@@ -315,7 +315,7 @@ mod tests {
     fn below_thirty_health_stops_the_rob_before_any_roll() {
         for hp in [1, 29] {
             let r = run(
-                json!({ "koin": 50_000, "rpg": { "health": hp } }),
+                serde_json::json!({ "koin": 50_000, "rpg": { "health": hp } }),
                 vec![TARGET.into()],
                 Some(victim(Some(50_000))),
             );
@@ -335,7 +335,7 @@ mod tests {
         let mut seen = 0;
         for _ in 0..4000 {
             let r = run(
-                json!({ "koin": 0, "exp": 0, "rpg": { "health": 100 } }),
+                serde_json::json!({ "koin": 0, "exp": 0, "rpg": { "health": 100 } }),
                 vec![TARGET.into()],
                 Some(victim(Some(koin))),
             );
@@ -348,15 +348,15 @@ mod tests {
                     "curian {gained} di luar 1000..={}",
                     max_steal + 999
                 );
-                assert_eq!(user_of(&r, TARGET)["koin"], json!(koin - gained));
-                assert_eq!(user_of(&r, SENDER)["exp"], json!(EXP_GAIN));
-                assert_eq!(user_of(&r, SENDER)["rpg"]["health"], json!(100));
+                assert_eq!(user_of(&r, TARGET)["koin"], serde_json::json!(koin - gained));
+                assert_eq!(user_of(&r, SENDER)["exp"], serde_json::json!(EXP_GAIN));
+                assert_eq!(user_of(&r, SENDER)["rpg"]["health"], serde_json::json!(100));
                 assert!(t.contains("Bonus EXP Begal: *+300*"), "{t}");
             } else {
                 assert!(t.starts_with("GOBLOK! KETAHUAN WARGA!!"), "{t}");
                 // Denda 5.000..14.999, dipotong koin zero → tetap zero.
                 assert_eq!(gained, 0, "koin 0 jadiRp 0");
-                assert_eq!(user_of(&r, SENDER)["rpg"]["health"], json!(75));
+                assert_eq!(user_of(&r, SENDER)["rpg"]["health"], serde_json::json!(75));
                 assert!(r.mutations().iter().all(|m| !matches!(
                     m, Mutation::SetUser { jid, .. } if jid == TARGET
                 )), "kegagalan tidak menyentuh koin target");
@@ -372,7 +372,7 @@ mod tests {
         let mut checked = false;
         for _ in 0..4000 {
             let r = run(
-                json!({ "koin": 0, "rpg": { "health": 100 } }),
+                serde_json::json!({ "koin": 0, "rpg": { "health": 100 } }),
                 vec![TARGET.into()],
                 Some(victim(Some(500_000))),
             );
@@ -398,7 +398,7 @@ mod tests {
             let mut fined = 0;
             for _ in 0..3000 {
                 let r = run(
-                    json!({ "koin": purse, "rpg": { "health": 100 } }),
+                    serde_json::json!({ "koin": purse, "rpg": { "health": 100 } }),
                     vec![TARGET.into()],
                     Some(victim(Some(500_000))),
                 );
@@ -413,7 +413,7 @@ mod tests {
                 } else {
                     assert!((5_000..=14_999).contains(&lost), "denda {lost} di luar 5.000..14.999");
                 }
-                assert_eq!(user_of(&r, SENDER)["rpg"]["health"], json!(75));
+                assert_eq!(user_of(&r, SENDER)["rpg"]["health"], serde_json::json!(75));
             }
             assert!(fined > 0, "dompet {purse} harus pernah ketahuan");
         }

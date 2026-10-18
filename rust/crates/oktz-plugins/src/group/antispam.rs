@@ -165,7 +165,7 @@ pub fn antispam(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(group: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -238,7 +238,7 @@ mod tests {
     #[test]
     fn missing_and_unknown_actions_show_the_help_without_writing() {
         for text in ["", "mungkin", "on2", "s", "-5", "5m", "5x"] {
-            let r = run(json!({}), text);
+            let r = run(serde_json::json!({}), text);
             assert_eq!(text_of(&r), help("."), "input {text:?}");
             assert!(r.mutations().is_empty(), "input {text:?} tidak boleh menulis");
         }
@@ -258,39 +258,39 @@ mod tests {
 
     #[test]
     fn a_bare_one_to_ten_is_read_as_seconds() {
-        assert_eq!(delay_ms_of(&run(json!({}), "2")), 2000);
-        assert_eq!(delay_ms_of(&run(json!({}), "10")), 10_000);
+        assert_eq!(delay_ms_of(&run(serde_json::json!({}), "2")), 2000);
+        assert_eq!(delay_ms_of(&run(serde_json::json!({}), "10")), 10_000);
         // Di atas 10 tidak dikali, lalu dijepit ke batas bawah 500.
-        assert_eq!(delay_ms_of(&run(json!({}), "11")), 500);
-        assert_eq!(delay_ms_of(&run(json!({}), "1500")), 1500);
+        assert_eq!(delay_ms_of(&run(serde_json::json!({}), "11")), 500);
+        assert_eq!(delay_ms_of(&run(serde_json::json!({}), "1500")), 1500);
     }
 
     #[test]
     fn the_s_suffix_always_means_seconds() {
-        assert_eq!(delay_ms_of(&run(json!({}), "20s")), 10_000);
+        assert_eq!(delay_ms_of(&run(serde_json::json!({}), "20s")), 10_000);
         // 1s -> 1000, di atas batas bawah; 0s -> 0, dijepit ke 500.
-        assert_eq!(delay_ms_of(&run(json!({}), "1s")), 1000);
-        assert_eq!(delay_ms_of(&run(json!({}), "0s")), 500);
+        assert_eq!(delay_ms_of(&run(serde_json::json!({}), "1s")), 1000);
+        assert_eq!(delay_ms_of(&run(serde_json::json!({}), "0s")), 500);
     }
 
     #[test]
     fn a_small_bare_number_is_multiplied_even_with_the_ms_suffix() {
         // `delayMatch[2] === "s" || (delayMs >= 1 && delayMs <= 10)` — syarat
         // angka tidak pernah melihat satuan, jadi "9ms" jadi 9000 juga.
-        assert_eq!(delay_ms_of(&run(json!({}), "9ms")), 9000);
-        assert_eq!(delay_ms_of(&run(json!({}), "10ms")), 10_000);
+        assert_eq!(delay_ms_of(&run(serde_json::json!({}), "9ms")), 9000);
+        assert_eq!(delay_ms_of(&run(serde_json::json!({}), "10ms")), 10_000);
         // Di luar 1..10 satuan `ms` baru benar-benar milidetik.
-        assert_eq!(delay_ms_of(&run(json!({}), "11ms")), 500);
-        assert_eq!(delay_ms_of(&run(json!({}), "750ms")), 750);
+        assert_eq!(delay_ms_of(&run(serde_json::json!({}), "11ms")), 500);
+        assert_eq!(delay_ms_of(&run(serde_json::json!({}), "750ms")), 750);
     }
 
     #[test]
     fn the_delay_is_clamped_into_500_to_10000() {
-        assert_eq!(delay_ms_of(&run(json!({}), "0")), 500);
-        assert_eq!(delay_ms_of(&run(json!({}), "499")), 500);
-        assert_eq!(delay_ms_of(&run(json!({}), "10001")), 10_000);
+        assert_eq!(delay_ms_of(&run(serde_json::json!({}), "0")), 500);
+        assert_eq!(delay_ms_of(&run(serde_json::json!({}), "499")), 500);
+        assert_eq!(delay_ms_of(&run(serde_json::json!({}), "10001")), 10_000);
         assert_eq!(
-            delay_ms_of(&run(json!({}), "99999999999999999999999999")),
+            delay_ms_of(&run(serde_json::json!({}), "99999999999999999999999999")),
             10_000,
             "digit raksasa harus di-clamp, bukan jadi NaN"
         );
@@ -310,7 +310,7 @@ mod tests {
 
     #[test]
     fn the_delay_reply_quotes_the_same_seconds_twice() {
-        let r = run(json!({}), "1500");
+        let r = run(serde_json::json!({}), "1500");
         assert!(text_of(&r).contains("> Jeda Maksimal: *1500 ms* (1.5 detik)"), "{}", text_of(&r));
         assert!(
             text_of(&r).contains("di bawah *1.5 detik* antar pesannya"),
@@ -321,8 +321,8 @@ mod tests {
 
     #[test]
     fn on_and_off_write_the_flag() {
-        let on = run(json!({}), "on");
-        assert_eq!(written(&on), &json!({ "antispam": true }));
+        let on = run(serde_json::json!({}), "on");
+        assert_eq!(written(&on), &serde_json::json!({ "antispam": true }));
         assert!(
             text_of(&on).contains("> Status: *AKTIF ✅*")
                 && text_of(&on).contains("kini akan mengawasi secara ketat"),
@@ -330,8 +330,8 @@ mod tests {
             text_of(&on)
         );
 
-        let off = run(json!({ "antispam": true }), "off");
-        assert_eq!(written(&off), &json!({ "antispam": false }));
+        let off = run(serde_json::json!({ "antispam": true }), "off");
+        assert_eq!(written(&off), &serde_json::json!({ "antispam": false }));
         assert!(
             text_of(&off).contains("> Status: *NONAKTIF ❌*")
                 && text_of(&off).contains("kini akan berhenti mengawasi"),
@@ -342,14 +342,14 @@ mod tests {
 
     #[test]
     fn repeating_the_current_state_writes_nothing() {
-        let already_on = run(json!({ "antispam": true }), "on");
+        let already_on = run(serde_json::json!({ "antispam": true }), "on");
         assert_eq!(
             text_of(&already_on),
             "✅ Fitur antispam sudah aktif di grup ini, tidak ada perubahan yang dibuat"
         );
         assert!(already_on.mutations().is_empty());
 
-        let already_off = run(json!({ "antispam": false }), "off");
+        let already_off = run(serde_json::json!({ "antispam": false }), "off");
         assert_eq!(
             text_of(&already_off),
             "✅ Fitur antispam sudah nonaktif di grup ini, tidak ada perubahan yang dibuat"
@@ -360,11 +360,11 @@ mod tests {
     #[test]
     fn a_non_boolean_stored_flag_is_not_equal_to_the_new_value() {
         // `1 === true` false di JS, jadi angka tidak boleh dianggap "sudah on".
-        let r = run(json!({ "antispam": 1 }), "on");
-        assert_eq!(written(&r), &json!({ "antispam": true }));
+        let r = run(serde_json::json!({ "antispam": 1 }), "on");
+        assert_eq!(written(&r), &serde_json::json!({ "antispam": true }));
 
-        let missing = run(json!({}), "off");
-        assert_eq!(written(&missing), &json!({ "antispam": false }));
+        let missing = run(serde_json::json!({}), "off");
+        assert_eq!(written(&missing), &serde_json::json!({ "antispam": false }));
     }
 
     #[test]
@@ -386,10 +386,10 @@ mod tests {
                 "Menghapus pesan spam yang mengganggu",
             ),
         ] {
-            let r = run(json!({}), input);
+            let r = run(serde_json::json!({}), input);
             // `antispam.js:20` mentohkan `args[0]` lebih dulu, jadi yang
             // ditulis ke store adalah bentuk huruf kecil.
-            assert_eq!(written(&r), &json!({ "antispamAction": input.to_lowercase() }));
+            assert_eq!(written(&r), &serde_json::json!({ "antispamAction": input.to_lowercase() }));
             // JS `antispam.js:88` membungkus deskripsi di dalam asterisk,
             // jadi yang dibandingkan termasuk tandanya.
             assert!(
@@ -408,10 +408,10 @@ mod tests {
     #[test]
     fn the_action_is_lowercased_before_matching() {
         assert_eq!(
-            written(&run(json!({}), "WARNING")),
-            &json!({ "antispamAction": "warning" })
+            written(&run(serde_json::json!({}), "WARNING")),
+            &serde_json::json!({ "antispamAction": "warning" })
         );
         // Tampilannya tetap huruf besar walau inputnya huruf kecil.
-        assert!(text_of(&run(json!({}), "KICK")).contains("*KICK*"));
+        assert!(text_of(&run(serde_json::json!({}), "KICK")).contains("*KICK*"));
     }
 }

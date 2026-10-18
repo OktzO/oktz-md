@@ -95,7 +95,7 @@ pub fn autoreactsw(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(settings: Value, text: &str) -> Reply {
         let ctx = Ctx {
@@ -154,29 +154,29 @@ mod tests {
     #[test]
     fn on_without_an_emoji_stores_the_default() {
         assert_eq!(
-            stored(&run(json!({}), "on")),
-            json!({"enabled": true, "emoji": "🔥"})
+            stored(&run(serde_json::json!({}), "on")),
+            serde_json::json!({"enabled": true, "emoji": "🔥"})
         );
-        assert!(text_of(&run(json!({}), "on")).contains("> Emoji: *🔥*"));
+        assert!(text_of(&run(serde_json::json!({}), "on")).contains("> Emoji: *🔥*"));
     }
 
     #[test]
     fn on_with_an_explicit_emoji_stores_that_emoji() {
         assert_eq!(
-            stored(&run(json!({}), "on 😍")),
-            json!({"enabled": true, "emoji": "😍"})
+            stored(&run(serde_json::json!({}), "on 😍")),
+            serde_json::json!({"enabled": true, "emoji": "😍"})
         );
-        assert!(text_of(&run(json!({}), "on 😍")).contains("> Emoji: *😍*"));
+        assert!(text_of(&run(serde_json::json!({}), "on 😍")).contains("> Emoji: *😍*"));
     }
 
     #[test]
     fn off_preserves_the_previously_stored_emoji() {
         // `db.setting('autoReactSW', { enabled: false, emoji: current.emoji })`
         // — emoji lama ikut ditulis, bukan dikosongkan.
-        let r = run(json!({"autoReactSW": {"enabled": true, "emoji": "😍"}}), "off");
+        let r = run(serde_json::json!({"autoReactSW": {"enabled": true, "emoji": "😍"}}), "off");
         assert_eq!(
             stored(&r),
-            json!({"enabled": false, "emoji": "😍"}),
+            serde_json::json!({"enabled": false, "emoji": "😍"}),
             "emoji tersimpan harus bertahan saat dimatikan"
         );
     }
@@ -186,9 +186,9 @@ mod tests {
         // `current` = default `{ enabled: false, emoji: '🔥' }`, jadi
         // `current.emoji` sebenarnya '🔥'. Menulis string kosong di sini akan
         // berbeda dari JS — test ini mengunci apa yang sebenarnya terjadi.
-        let r = run(json!({}), "off");
+        let r = run(serde_json::json!({}), "off");
         let v = stored(&r);
-        assert_eq!(v["enabled"], json!(false));
+        assert_eq!(v["enabled"], serde_json::json!(false));
         assert!(
             v["emoji"].is_string(),
             "emoji harus tetap berupa string: {v}"
@@ -197,7 +197,7 @@ mod tests {
 
     #[test]
     fn no_argument_reports_status_from_both_fields() {
-        let r = run(json!({"autoReactSW": {"enabled": true, "emoji": "🎉"}}), "");
+        let r = run(serde_json::json!({"autoReactSW": {"enabled": true, "emoji": "🎉"}}), "");
         let t = text_of(&r);
         assert!(t.starts_with("👁️ *ᴀᴜᴛᴏ ʀᴇᴀᴄᴛ sᴛᴏʀʏ*"));
         assert!(t.contains("> Status: *✅ ON*"));
@@ -207,7 +207,7 @@ mod tests {
 
     #[test]
     fn the_status_falls_back_to_the_js_default_object() {
-        let r = run(json!({}), "");
+        let r = run(serde_json::json!({}), "");
         let t = text_of(&r);
         assert!(t.contains("> Status: *❌ OFF*"), "`|| {{enabled:false}}`");
     }
@@ -215,7 +215,7 @@ mod tests {
     #[test]
     fn an_unknown_option_shows_status_and_writes_nothing() {
         for bad in ["", "maybe", "1", "ON!", "onx"] {
-            let r = run(json!({}), bad);
+            let r = run(serde_json::json!({}), bad);
             assert!(
                 text_of(&r).starts_with("👁️ *ᴀᴜᴛᴏ ʀᴇᴀᴄᴛ sᴛᴏʀʏ*"),
                 "input {bad:?}"
@@ -227,7 +227,7 @@ mod tests {
     #[test]
     fn both_switch_branches_react_with_a_check_mark() {
         for arg in ["on", "on 😍", "off"] {
-            match run(json!({}), arg).without_mutations() {
+            match run(serde_json::json!({}), arg).without_mutations() {
                 Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅", "arg {arg}"),
                 other => panic!("harus Reaction, dapat {other:?}"),
             }

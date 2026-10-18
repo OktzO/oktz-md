@@ -8,7 +8,7 @@
 //! persis dengan `slot.js:79-88`.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::{Value};
 
 use crate::rpg::heal::{math_random, or_default};
 use crate::tools::kalkulatormbg::thousands_id;
@@ -107,7 +107,11 @@ pub fn slot(ctx: Ctx) -> Reply {
     let result = [spin(), spin(), spin()];
     let (multiplier, win_text) = payout(&result);
     let winnings = winnings_of(bet, multiplier);
-    let new_koin = koin - bet + winnings;
+    // JS memakai Number (f64) sehingga `koin + winnings` tidak pernah
+    // meluap; i64 bisa. Saturasi dipakai supaya saldo raksasa tidak berbalik
+    // jadi negatif — `ponytail:` nilai di atas i64::MAX tidak bisa mewakili
+    // perilaku f64 JS, naik kelas kalau saldo sebesar itu benar-benar dipakai.
+    let new_koin = (koin - bet).saturating_add(winnings);
 
     let mut txt = format!(
         "🎰 *HASIL MESIN SLOT* 🎰\n\n[ {} | {} | {} ]\n\n",
@@ -129,7 +133,7 @@ pub fn slot(ctx: Ctx) -> Reply {
 
     Reply::text(txt).with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": new_koin }),
+        data: serde_json::json!({ "koin": new_koin }),
     })
 }
 
@@ -145,7 +149,7 @@ mod tests {
             chat: "628111@s.whatsapp.net".into(),
             text: arg.unwrap_or("").into(),
             args: arg.map(|a| vec![a.to_string()]).unwrap_or_default(),
-            user_data: json!({ "koin": koin }),
+            user_data: serde_json::json!({ "koin": koin }),
             ..Default::default()
         };
         (oktz_plugin_api::find("slot").unwrap().handler)(ctx)
@@ -251,6 +255,9 @@ mod tests {
             (["💎", "💎", "💎"], 5.0, "MANTAP! SUPER DIAMOND!! 💎✨ (5x Lipat)"),
             (["🍒", "🍒", "🍒"], 3.0, "ASIK! TRIPLE COMBO!! 🍒🎰 (3x Lipat)"),
             (["🍋", "🍋", "🍊"], 1.5, "LUMAYAN LAH! DOUBLE!! 👍 (1.5x Lipat)"),
+            // JS memakai `||` untuk pasangan, jadi cermin (`a == c`) juga
+            // dihitung DOUBLE — bukan ZONK seperti dugaan awal test ini.
+            (["7️⃣", "💎", "7️⃣"], 1.5, "LUMAYAN LAH! DOUBLE!! 👍 (1.5x Lipat)"),
         ] {
             let (got, label) = payout(&result);
             assert_eq!(got, multiplier, "{result:?}");
@@ -259,7 +266,6 @@ mod tests {
         for result in [
             ["🍒", "🍋", "🍊"],
             ["🍇", "💎", "7️⃣"],
-            ["7️⃣", "💎", "7️⃣"],
         ] {
             assert_eq!(payout(&result), (0.0, None), "{result:?} harus ZONK");
         }

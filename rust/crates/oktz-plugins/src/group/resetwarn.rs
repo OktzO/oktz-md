@@ -99,7 +99,6 @@ mod tests {
     use super::*;
 
     use oktz_plugin_api::QuotedMessage;
-    use serde_json::json;
 
     fn run(group: Value, mentioned: &[&str], quoted: Option<&str>) -> Reply {
         let ctx = Ctx {
@@ -170,7 +169,7 @@ mod tests {
 
     #[test]
     fn without_a_mention_or_a_quote_the_plugin_asks_for_one() {
-        let r = run(json!({}), &[], None);
+        let r = run(serde_json::json!({}), &[], None);
         assert_eq!(
             text_of(&r),
             "⚠️ *ᴄᴀʀᴀ ᴘᴀᴋᴀɪ*\n\n> Reply pesan user + `.resetwarn`\n> Atau: `.resetwarn @user`"
@@ -181,10 +180,10 @@ mod tests {
     #[test]
     fn a_target_without_warnings_says_so_and_writes_nothing() {
         for g in [
-            json!(null),
-            json!({}),
-            json!({"warnings": {}}),
-            json!({"warnings": {"628333@s.whatsapp.net": []}}),
+            serde_json::json!(null),
+            serde_json::json!({}),
+            serde_json::json!({"warnings": {}}),
+            serde_json::json!({"warnings": {"628333@s.whatsapp.net": []}}),
         ] {
             let r = run(g.clone(), &["628333@s.whatsapp.net"], None);
             assert_eq!(
@@ -200,7 +199,7 @@ mod tests {
     #[test]
     fn the_reset_writes_the_map_without_the_target_key() {
         let r = run(
-            json!({"warnings": {
+            serde_json::json!({"warnings": {
                 "628222@s.whatsapp.net": [{"reason": "a", "time": 0}],
                 "628333@s.whatsapp.net": [{"reason": "b", "time": 0}, {"reason": "c", "time": 0}]
             }}),
@@ -221,7 +220,7 @@ mod tests {
     #[test]
     fn a_custom_max_warnings_appears_in_both_counters() {
         let r = run(
-            json!({"maxWarnings": 7, "warnings": {"628333@s.whatsapp.net": [{"reason": "a"}]}}),
+            serde_json::json!({"maxWarnings": 7, "warnings": {"628333@s.whatsapp.net": [{"reason": "a"}]}}),
             &["628333@s.whatsapp.net"],
             None,
         );
@@ -232,7 +231,7 @@ mod tests {
     #[test]
     fn max_warnings_zero_falls_back_to_three() {
         let r = run(
-            json!({"maxWarnings": 0, "warnings": {"628333@s.whatsapp.net": [{"reason": "a"}]}}),
+            serde_json::json!({"maxWarnings": 0, "warnings": {"628333@s.whatsapp.net": [{"reason": "a"}]}}),
             &["628333@s.whatsapp.net"],
             None,
         );
@@ -242,7 +241,7 @@ mod tests {
     #[test]
     fn the_quote_wins_over_the_mention() {
         let r = run(
-            json!({"warnings": {
+            serde_json::json!({"warnings": {
                 "628222@s.whatsapp.net": [{"reason": "a"}],
                 "628333@s.whatsapp.net": [{"reason": "b"}]
             }}),
@@ -256,7 +255,7 @@ mod tests {
     #[test]
     fn a_device_suffix_in_the_jid_is_kept_in_the_mention_but_not_the_display() {
         let r = run(
-            json!({"warnings": {"628333:7@s.whatsapp.net": [{"reason": "a"}]}}),
+            serde_json::json!({"warnings": {"628333:7@s.whatsapp.net": [{"reason": "a"}]}}),
             &["628333:7@s.whatsapp.net"],
             None,
         );

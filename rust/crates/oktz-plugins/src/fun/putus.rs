@@ -86,7 +86,7 @@ pub fn putus(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::registry::{GroupRoster, Participant};
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     const ME: &str = "628111@s.whatsapp.net";
     const THEM: &str = "628222@s.whatsapp.net";
@@ -161,7 +161,7 @@ mod tests {
 
     #[test]
     fn the_normal_branch_announces_the_breakup_and_mentions_both() {
-        let r = run(json!({ "fun": { "pasangan": THEM } }), GroupRoster::default());
+        let r = run(serde_json::json!({ "fun": { "pasangan": THEM } }), GroupRoster::default());
         let (emoji, inner) = match r.without_mutations() {
             Reply::Reaction { emoji, reply } => (emoji.clone(), reply.as_ref()),
             other => panic!("harus Reaction, dapat {other:?}"),
@@ -183,8 +183,8 @@ mod tests {
 
     #[test]
     fn a_mutual_partner_in_the_roster_is_cleared_too() {
-        let roster = member(THEM, json!({ "fun": { "pasangan": ME } }));
-        let r = run(json!({ "fun": { "pasangan": THEM } }), roster);
+        let roster = member(THEM, serde_json::json!({ "fun": { "pasangan": ME } }));
+        let r = run(serde_json::json!({ "fun": { "pasangan": THEM } }), roster);
         assert_eq!(cleared_by(&r), [ME.to_string(), THEM.to_string()]);
     }
 
@@ -192,25 +192,25 @@ mod tests {
     fn a_one_sided_pair_only_clears_the_sender() {
         // Mantan yang balas-follow tapi tidak ada di grup: `db.getUser` tidak
         // terbaca, jadi `isMutual` false — persis cabang tanpa `if` di JS.
-        let roster = member(THEM, json!({ "fun": { "pasangan": "999@s.whatsapp.net" } }));
-        let r = run(json!({ "fun": { "pasangan": THEM } }), roster);
+        let roster = member(THEM, serde_json::json!({ "fun": { "pasangan": "999@s.whatsapp.net" } }));
+        let r = run(serde_json::json!({ "fun": { "pasangan": THEM } }), roster);
         assert_eq!(cleared_by(&r), [ME.to_string()]);
     }
 
     #[test]
     fn the_sender_is_written_exactly_once() {
-        let roster = member(THEM, json!({ "fun": { "pasangan": ME } }));
-        let r = run(json!({ "fun": { "pasangan": THEM } }), roster);
+        let roster = member(THEM, serde_json::json!({ "fun": { "pasangan": ME } }));
+        let r = run(serde_json::json!({ "fun": { "pasangan": THEM } }), roster);
         assert_eq!(r.mutations().len(), 2, "dua mutasi, tidak ada duplikat");
     }
 
     #[test]
     fn without_a_partner_it_reacts_with_a_cross_and_writes_nothing() {
         for data in [
-            json!({}),
-            json!({ "fun": {} }),
-            json!({ "fun": { "pasangan": null } }),
-            json!({ "fun": null }),
+            serde_json::json!({}),
+            serde_json::json!({ "fun": {} }),
+            serde_json::json!({ "fun": { "pasangan": null } }),
+            serde_json::json!({ "fun": null }),
         ] {
             let r = run(data.clone(), GroupRoster::default());
             assert!(

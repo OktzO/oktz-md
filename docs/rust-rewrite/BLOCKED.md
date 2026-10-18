@@ -351,3 +351,338 @@ membuat hasil terlihat hijau padahal tidak:
 
 Aturan tambahan untuk agent: kalau jumlah `#[test]` pada disk berbeda dengan
 hasil `cargo test -- --list`, itu gejala yang harus dilaporkan, bukan dibiarkan.
+
+## 12. Stub yang dibuang pada gelombang agent pertama
+
+Plugin berikut sempat dibuatkan berkas stub oleh agent porting (badannya cuma
+pesan "belum tersedia"), lalu dibuang dari registrasi karena bukan paritas JS.
+Port ulang setelah kapabilitasnya ada.
+
+### system (`rust/crates/oktz-plugins/src/main/system.rs`)
+
+`plugins/main/system.js` — info sistem (RAM, CPU, Disk, Latency).
+
+## BLOKIR — tidak di-port paksa.
+
+Alasan: butuh `os` (`totalmem`, `freemem`, `cpus`, `uptime`, `platform`,
+`arch`) dan `child_process` (`exec` untuk `df -h /` / `wmic`). Keduanya
+adalah I/O sistem yang tidak tersedia di `Ctx` Rust (handler bebas I/O,
+jaringan lewat `ctx.http` saja).
+
+`ponytail:` kalau `Ctx` menambah field sistem nanti, port ulang dari
+`plugins/main/system.js`.
+
+### ganti-asset (`rust/crates/oktz-plugins/src/owner/ganti-asset.rs`)
+
+`plugins/owner/ganti-asset.js` — ganti asset secara interaktif.
+
+NOTE: baris `pub mod ganti_asset;` perlu ditambah ke `owner/mod.rs`
+secara manual (mod.rs dilarang disentuh).
+
+BLOKIRAN: butuh `updateAssetUrl` dari `src/lib/uploader.js` (fs + HTTP
+upload ke storage), serta `m.download()` / `m.quoted.download()` dan
+`global.gantiAssetSessions` (state antar-pesan dengan `setTimeout`).
+Kapabilitas ini belum ada di Rust API (`Ctx` tidak punya `sock`, dan
+`MediaFetch` belum dipasang pipeline untuk owner). Jangan port paksa.
+
+### ganti-demote.jpg (`rust/crates/oktz-plugins/src/owner/ganti-demote.rs`)
+
+`plugins/owner/ganti-demote.js` — ganti gambar demote.jpg.
+BLOKIRAN: butuh kapasitas berkas (fs) + image processing (sharp) +
+upload ke penyimpanan aset melalui `updateAssetUrl` (`src/lib/uploader.js`),
+yang semua TIDAK tersedia di API Rust (`Ctx` tidak punya `sock`, tidak
+ada `download_media` ke berkas aset, dan tidak ada crate sharp).
+Tidak dapat dipaksa di-port. Buka lagi kalau fs + sharp + upload aset
+tersedia. Jika dibuka, daftarkan di `owner/mod.rs` dengan path karena
+nama berkas mengandung titik dan hubung:
+`#[path = "ganti-demote.rs"] pub mod ganti_demote;`.
+
+### ganti-foto3.jpg (`rust/crates/oktz-plugins/src/owner/ganti-foto3.rs`)
+
+`plugins/owner/ganti-foto3.js` — ganti gambar foto3.jpg.
+
+## BLOKIR — tidak di-port paksa.
+
+Alasan: `updateAssetUrl` di `src/lib/uploader.js` membutuhkan kapasitas
+yang belum ada di `Ctx` Rust:
+- `fs` (baca/tulis `config.js`, `mkdir`, `writeFileSync` file aset),
+- `sharp` (resize + konversi JPEG),
+- `updateAssetAndSave` dari `src/lib/asset-manager.js` (store I/O).
+Tidak ada `MediaFetch`/filesystem yang cukup di `Ctx`, dan mengubah
+`config.js` dari dalam plugin melanggar aturan file scope eksklusif.
+
+`ponytail:` kalau `MediaFetch` + write-asset tersedia di `Ctx` nanti,
+port ulang dari `plugins/owner/ganti-foto3.js` (download media, upload,
+balas URL baru).
+
+### ganti-goodbye.jpg (`rust/crates/oktz-plugins/src/owner/ganti-goodbye.rs`)
+
+`plugins/owner/ganti-goodbye.js` — ganti gambar goodbye.jpg.
+
+NOTE: baris `pub mod ganti_goodbye;` perlu ditambah ke `owner/mod.rs`
+secara manual (mod.rs dilarang disentuh).
+
+BLOKIRAN: butuh `updateAssetUrl` dari `src/lib/uploader.js` (fs + HTTP
+upload ke storage) serta `m.download()` / `m.quoted.download()`.
+Kapabilitas belum ada di Rust API. Jangan port paksa.
+
+### ganti-levelup.jpg (`rust/crates/oktz-plugins/src/owner/ganti-levelup.rs`)
+
+`plugins/owner/ganti-levelup.js` — ganti gambar levelup.jpg.
+BLOKIRAN: butuh kapasitas berkas (fs) + image processing (sharp) +
+upload ke penyimpanan aset melalui `updateAssetUrl` (`src/lib/uploader.js`),
+yang semua TIDAK tersedia di API Rust. Tidak dapat dipaksa di-port.
+Buka lagi kalau fs + sharp + upload aset tersedia. Jika dibuka, daftarkan
+di `owner/mod.rs` dengan path karena nama berkas mengandung titik dan hubung:
+`#[path = "ganti-levelup.rs"] pub mod ganti_levelup;`.
+
+### ganti-pp-kosong.jpg (`rust/crates/oktz-plugins/src/owner/ganti-pp-kosong.rs`)
+
+`plugins/owner/ganti-pp-kosong.js` — ganti gambar pp-kosong.jpg.
+
+## BLOKIR — tidak di-port paksa.
+
+Alasan: sama dengan `ganti-foto3.js` — `updateAssetUrl` butuh `fs`,
+`sharp`, dan modifikasi `config.js`, yang belum tersedia di `Ctx` Rust.
+
+`ponytail:` kalau kapasitas itu ditambahkan nanti, port ulang dari
+`plugins/owner/ganti-pp-kosong.js`.
+
+### ganti-rpg.jpg (`rust/crates/oktz-plugins/src/owner/ganti-rpg.rs`)
+
+`plugins/owner/ganti-rpg.js` — ganti gambar rpg.jpg.
+
+NOTE: baris `pub mod ganti_rpg;` perlu ditambah ke `owner/mod.rs`
+secara manual (mod.rs dilarang disentuh).
+
+BLOKIRAN: butuh `updateAssetUrl` dari `src/lib/uploader.js` (fs + HTTP
+upload ke storage) serta `m.download()` / `m.quoted.download()`.
+Kapabilitas belum ada di Rust API. Jangan port paksa.
+
+### ganti-rules.jpg (`rust/crates/oktz-plugins/src/owner/ganti-rules.rs`)
+
+`plugins/owner/ganti-rules.js` — ganti gambar rules.jpg (thumbnail rules).
+BLOKIRAN: butuh kapasitas berkas (fs) + image processing (sharp) +
+upload ke penyimpanan aset melalui `updateAssetUrl` (`src/lib/uploader.js`),
+yang semua TIDAK tersedia di API Rust. Tidak dapat dipaksa di-port.
+Buka lagi kalau fs + sharp + upload aset tersedia. Jika dibuka, daftarkan
+di `owner/mod.rs` dengan path karena nama berkas mengandung titik dan hubung:
+`#[path = "ganti-rules.rs"] pub mod ganti_rules;`.
+
+### ganti-welcome.jpg (`rust/crates/oktz-plugins/src/owner/ganti-welcome.rs`)
+
+`plugins/owner/ganti-welcome.js` — ganti gambar welcome.jpg.
+
+## BLOKIR — tidak di-port paksa.
+
+Alasan: sama dengan `ganti-foto3.js` — `updateAssetUrl` butuh `fs`,
+`sharp`, dan modifikasi `config.js`, yang belum tersedia di `Ctx` Rust.
+
+`ponytail:` kalau kapasitas itu ditambahkan nanti, port ulang dari
+`plugins/owner/ganti-welcome.js`.
+
+### sessionstats (`rust/crates/oktz-plugins/src/owner/sessionstats.rs`)
+
+`plugins/owner/sessionstats.js` — statistik session_keys per kategori.
+
+NOTE: baris `pub mod sessionstats;` perlu ditambah ke `owner/mod.rs`
+secara manual (mod.rs dilarang disentuh).
+
+BLOKIRAN: butuh `sessionKeyStats` dari `src/lib/turso-session.js` (Turso
+DB). Rust crate ini sengaja tidak punya dependensi store/Turso, dan `Ctx`
+tidak mengekspos DB. Jangan port paksa.
+
+### linode2gb (`rust/crates/oktz-plugins/src/panel/linode.rs`)
+
+`plugins/panel/linode.js` — manajemen VPS Linode.
+
+## BLOKIR — tidak di-port paksa.
+
+Alasan: bagian `linode2gb/4gb/8gb/16gb` (create) butuh
+`setTimeout(60000)` — tunggu 60 detik lalu ambil info instance. Handler
+Rust adalah `Fn(Ctx) -> Reply` yang sinkron (tidak async), jadi tidak ada
+mekanisme menunda/delay di dalam handler. Sisa command
+(`listlinode`, `onlinode`, `offlinode`, `rebootlinode`, `rebuildlinode`,
+`delinode`, `saldolinode`, `sisalinode`, `cekvpslinode`) bisa di-port
+lewat `ctx.http`, tapi aturan melarang port sebagian saja: kalau satu
+cabang butuh kapasitas yang belum ada, jangan port paksa.
+
+`ponytail:` kalau `sleep`/delay tersedia di handler nanti, port ulang
+dari `plugins/panel/linode.js` (Linode API v4, token dari
+`ctx.config().api_keys.linode`).
+
+### lookup (`rust/crates/oktz-plugins/src/tools/lookup.rs`)
+
+`plugins/tools/lookup.js` — DNS Lookup untuk domain.
+
+NOTE: baris `pub mod lookup;` perlu ditambah ke `tools/mod.rs` secara
+manual (mod.rs dilarang disentuh).
+
+BLOKIRAN: butuh `sendToolsPreview(sock, chat, text, ...)` dari
+`src/lib/context.js` — yang membutuhkan `sock` (WhatsApp client) untuk
+mengirim pesan preview. `Ctx` di Rust tidak punya `sock`. Jangan port paksa.
+
+### cekvps (`rust/crates/oktz-plugins/src/vps/cekvps.rs`)
+
+`plugins/vps/cekvps.js` — cek detail VPS DigitalOcean.
+BLOKIRAN: butuh `config.digitalocean` (token, sellers, ownerPanels), yang
+TIDAK ada di `oktz_core::config::Runtime` (hanya `api_keys` dan field
+standar config.js lain). Tidak ada jalan lain untuk membaca token
+DigitalOcean di `Ctx`, jadi plugin tidak dapat dipaksa di-port.
+Buka lagi kalau `config.digitalocean` ditambahkan ke `Runtime`.
+Jika dibuka, tambahkan baris `pub mod cekvps;` ke `vps/mod.rs`.
+
+### delvps (`rust/crates/oktz-plugins/src/vps/delvps.rs`)
+
+`plugins/vps/delvps.js` — hapus VPS DigitalOcean.
+
+## BLOKIR — tidak di-port.
+
+Alasan: membutuhkan `config.digitalocean.token` dan
+`config.digitalocean.sellers` / `config.digitalocean.ownerPanels`, yang
+tidak ada pada `oktz_core::config::Runtime` (hanya `api_keys`, `owner`,
+`assets`, dst. — lihat `rust/crates/oktz-core/src/config.rs`).
+Tidak ada jalur membaca kunci DigitalOcean dari `Ctx`, jadi tidak bisa
+meniru perilaku JS apa adanya.
+
+`ponytail:` kalau `config.digitalocean` ditambahkan ke `Runtime` nanti,
+port ulang dari `plugins/vps/delvps.js` (axios DELETE ke
+`https://api.digitalocean.com/v2/droplets/{id}`, header
+`Authorization: Bearer <token>`, pakai `ctx.http.delete` bila tersedia,
+atau `HttpCall::delete` lewat `ctx.http.call`).
+
+### sisavps (`rust/crates/oktz-plugins/src/vps/sisavps.rs`)
+
+`plugins/vps/sisavps.js` — cek sisa kuota VPS DigitalOcean.
+BLOKIRAN: butuh `config.digitalocean` (token, sellers, ownerPanels), yang
+TIDAK ada di `oktz_core::config::Runtime`. Tidak ada jalan lain untuk
+membaca token DigitalOcean di `Ctx`, jadi plugin tidak dapat dipaksa
+di-port. Buka lagi kalau `config.digitalocean` ditambahkan ke `Runtime`.
+Jika dibuka, tambahkan baris `pub mod sisavps;` ke `vps/mod.rs`.
+
+
+## 21. `AIRich` dan `sock.sendTable` (5 plugin, gelombang 4)
+
+Kapabilitas ini belum ada di Rust dan TIDAK bisa ditiru dengan teks biasa
+tanpa melanggar paritas tampilan.
+
+- `plugins/main/ping2.js:129` — `sock.sendTable(...)`
+- `plugins/main/totalfitur.js:62` — `sock.sendTable(...)`
+- `plugins/main/stats.js:88` — `sock.sendTableV2(...)`
+- `plugins/ai/ai.js:70` dan `:94` — `new AIRich(sock)` lalu `.addTable(...)`
+- `plugins/search/ytplay.js:891` — `new AIRich(sock)`
+
+Sisi JS: `sock.sendTable` dan `sock.sendTableV2` didefinisikan di
+`src/lib/socket.js:1300-1311`, keduanya memanggil `generateTableContent*`
+lalu `sock.relayMessage`. `AIRich` ada di `src/lib/builder.js:993`.
+
+Yang hilang di Rust:
+
+1. `Reply` (`rust/crates/oktz-plugin-api/src/registry.rs`) hanya punya
+   teks, kutipan, media, reaksi, dan mutasi — belum ada varian tabel atau
+   pesan interaktif.
+2. `oktz-wa` belum mengekspos pengiriman pesan proto mentah
+   (`relayMessage`) untuk tabel/interactive message; pipeline masih
+   menutup jalur itu.
+
+Jalan naik: tambah `Reply::Tabel { judul, header, baris }`, port
+`generateTableContent*` ke pembangun proto di `oktz-wa`, lalu kirim lewat
+jalur `relayMessage` yang setara. Untuk `AIRich`, port `src/lib/builder.js`
+bagian `AIRich` (kira-kira 900 baris) ke modul Rust dan pakai renderer yang
+sama. Setelah keduanya ada, kelima plugin di atas bisa di-port.
+
+## 22. `random/anime` (`plugins/random/anime.js`)
+
+Nama plugin di JS: `["loli", ...nexrayTypes]` (waifu, neko, shinobu, megumin,
+bully, cuddle, cry, hug, awoo, kiss, lick, pat, smug, bonk, yeet, blush,
+smile, wave, highfive, handhold, nom, bite, glomp, slap, kill, ...).
+
+Tidak bisa di-port: `prepareWAMessageMedia` / `generateWAMessageFromContent`
+dari `onigis`, `sock.relayMessage`, `viewOnceMessage` + `interactiveMessage`
+(native flow), dan deteksi GIF lewat header byte — semuanya belum ada di
+`Reply`/`Ctx`/`Sock`. `Reply::Sequence` bisa mengirim beberapa gambar biasa,
+tetapi bukan pesan `viewOnce` interaktif dengan quick reply.
+
+Berkas catatan lama (`rust/crates/oktz-plugins/src/random/anime.rs`) dihapus
+supaya tidak muncul sebagai plugin palsu di `bandingkan-nama-plugin.mjs`.
+Buka lagi kalau `Reply` punya varian native-flow.
+
+## 23. Port agen yang belum lolos kompilasi (dicabut dari registrasi)
+
+Berkas-berkas ini ditulis agen port tapi belum bisa dikompilasi. Registrasinya
+dicabut lewat `scripts/cabut-modul.mjs` supaya pohon tetap hijau; berkasnya
+TIDAK dihapus. Port ulang per berkas, lalu daftarkan lagi dengan
+`scripts/pasang-modul.mjs --terapkan`.
+
+| berkas | galat pertama |
+|---|---|
+| `ai/bananagen.rs` | 196:24 — use of moved value: `media`; 295:20 — the type `Arc` does not implement `Copy` |
+| `ai/musicmaker.rs` | 287:26 — `Teks` doesn't implement `Debug`; 312:43 — mismatched types |
+| `ai/to3d.rs` | 87:39 — `ai::to3d::tests::Stub` doesn't implement `Debug` |
+| `ai/tocartoon.rs` | 68:24 — cannot find function `async_download_media` in this scope; 68:9 — the size for values of type `[u8]` cannot be known at compilation time |
+| `ai/tochibi.rs` | 100:22 — the trait bound `Result<Vec<u8>, oktz_plugin_api::MediaError>: Default` is not satisfied |
+| `ai/tofigurine.rs` | 154:9 — the trait bound `Result<Vec<u8>, oktz_plugin_api::MediaError>: Default` is not satisfied; 190:27 — mismatched types |
+| `ai/tomanga.rs` | 101:22 — the trait bound `Result<Vec<u8>, oktz_plugin_api::MediaError>: Default` is not satisfied |
+| `anime/mywaifu.rs` | 64:30 — mismatched types; 65:30 — mismatched types |
+| `canvas/applemusic.rs` | 304:26 — `UpFail` doesn't implement `Debug`; 324:29 — `UpFail` doesn't implement `Debug` |
+| `canvas/fakecall.rs` | 86:25 — the trait bound `Arc<(dyn HttpGet + 'static)>: HttpGet` is not satisfied; 86:25 — the trait bound `std::sync::Arc<(dyn oktz_plugin_api::HttpGet + 'static)>: oktz_plugin_api::HttpGet` is not satisfied |
+| `canvas/tiktokchat.rs` | 246:26 — `canvas::tiktokchat::tests::api_gagal_mengembalikan_pesan_gagal_dan_reaksi_silang::UpOk` doesn't implement `Debug`; 266:29 — `canvas::tiktokchat::tests::api_gagal_mengembalikan_pesan_gagal_dan_reaksi_silang::UpOk` doesn't implement `Debug` |
+| `download/aio.rs` | 173:17 — the type `Arc` does not implement `Copy`; 90:9 — the trait bound `Result<std::string::String, ()>: Default` is not satisfied |
+| `download/alightmotion.rs` | 275:13 — the type `Arc` does not implement `Copy`; 91:10 — no method named `with_mimetype` found for enum `oktz_plugin_api::Reply` in the current scope |
+| `fun/cekkhodam.rs` | 13:37 — mismatched types; 219:33 — mismatched types |
+| `fun/waifupool.rs` | 151:18 — this function takes 0 arguments but 1 argument was supplied; 152:23 — no field `nav` on type `()` |
+| `group/add.rs` | 315:38 — cannot find struct, variant or union type `GroupRoster` in crate `oktz_plugin_api`; 365:20 — the type `Arc` does not implement `Copy` |
+| `info/gag2.rs` | 208:39 — `info::gag2::tests::Stub` doesn't implement `Debug`; 50:78 — mismatched types |
+| `info/infotourney.rs` | 110:17 — cannot find value `abs` in this scope; 148:32 — the `?` operator can only be used in a function that returns `Result` or `Option` (or another type that implements `FromResidual`) |
+| `main/donasi.rs` | 295:25 — mismatched types; 53:36 — no method named `as_deref` found for struct `std::string::String` in the current scope |
+| `owner/addprem.rs` | 287:63 — mismatched types; 38:16 — type mismatch resolving `<Option<&str> as IntoIterator>::Item == &&str` |
+| `owner/akses.rs` | 105:61 — type mismatch in function arguments; 109:49 — type mismatch in function arguments |
+| `owner/ganti_namadev.rs` | 127:11 — no method named `tulis_teks` found for struct `BerkasPalsu` in the current scope; 173:15 — no method named `baca_teks` found for struct `std::sync::Arc<BerkasPalsu>` in the current scope |
+| `owner/leave.rs` | 100:13 — mismatched types; 108:13 — mismatched types |
+| `owner/payment.rs` | 30:5 — mismatched types; 34:13 — mismatched types |
+| `owner/prefix.rs` | 129:34 — mismatched types; 214:30 — mismatched types |
+| `owner/sampah.rs` | 82:11 — no method named `buat_folder` found for struct `BerkasPalsu` in the current scope; 90:11 — no method named `buat_folder` found for struct `BerkasPalsu` in the current scope |
+| `owner/setgoodbyetype.rs` | 86:44 — can't compare `&str` with `str` |
+| `random/lahelu.rs` | 108:39 — `random::lahelu::tests::Stub` doesn't implement `Debug`; 54:9 — mismatched types |
+| `random/quotesimage.rs` | 39:9 — mismatched types; 40:9 — mismatched types |
+| `religi/audioquran.rs` | 169:83 — temporary value dropped while borrowed; 181:77 — temporary value dropped while borrowed |
+| `religi/jadwalsholat.rs` | 104:25 — mismatched types; 178:25 — mismatched types |
+| `rpg/dice.rs` | 107:14 — no method named `insert` found for enum `serde_json::Value` in the current scope; 107:14 — no method named `insert` found for enum `Value` in the current scope |
+| `search/playsoundcloud.rs` | 69:41 — the trait bound `Arc<(dyn HttpGet + 'static)>: HttpGet` is not satisfied; 69:41 — the trait bound `std::sync::Arc<(dyn oktz_plugin_api::HttpGet + 'static)>: oktz_plugin_api::HttpGet` is not satisfied |
+| `search/ptvsearch.rs` | 60:16 — cannot move out of index of `Vec<serde_json::Value>`; 60:16 — cannot move out of index of `Vec<Value>` |
+| `search/searchthatsong.rs` | 306:13 — mismatched types; 322:13 — mismatched types |
+| `search/soundcloud.rs` | 351:32 — the trait bound `std::sync::Arc<search::soundcloud::tests::StubHttp>: oktz_plugin_api::HttpGet` is not satisfied |
+| `search/tiktokfoto.rs` | 156:22 — expected `Chain<Once<char>, Once<char>>` to be an iterator that yields `u8`, but it yields `char`; 156:63 — type mismatch resolving `<Chain<Once<char>, Once<char>> as IntoIterator>::Item == u8` |
+| `search/wikipedia.rs` | 365:64 — type mismatch in function arguments; 368:26 — no method named `contains` found for enum `Option<T>` in the current scope |
+| `stalker/discordstalk.rs` | 372:13 — the type `Arc` does not implement `Copy` |
+| `stalker/ffstalk.rs` | 108:40 — mismatched types |
+| `stalker/robloxstalk.rs` | 157:56 — no method named `first` found for reference `&serde_json::Value` in the current scope; 157:56 — no method named `first` found for reference `&Value` in the current scope |
+| `tools/am_data.rs` | 99:40 — mismatched types |
+| `tools/cekxl.rs` | 191:40 — mismatched types; 192:14 — the trait bound `std::string::String: Copy` is not satisfied |
+| `tools/emojitoanimasi.rs` | 207:17 — the type `Arc` does not implement `Copy`; 257:21 — mismatched types |
+| `tools/emojitoimage.rs` | 96:49 — `if` and `else` have incompatible types |
+| `tools/hdvid.rs` | 31:13 — mismatched types; 36:7 — mismatched types |
+| `tools/imgtoprompt.rs` | 226:19 — the trait bound `std::sync::Arc<tools::imgtoprompt::tests::Stub>: oktz_plugin_api::HttpGet` is not satisfied; 78:23 — cannot find function `img2prompt` in this scope |
+| `tools/invoicemaker.rs` | 187:80 — mismatched types; 316:21 — mismatched types |
+| `tools/lookup.rs` | 94:27 — no method named `and_then` found for type `bool` in the current scope; 95:31 — no method named `and_then` found for type `bool` in the current scope |
+| `tools/sendngl.rs` | 54:17 — cannot find type `HttpError` in this scope |
+| `tools/spamngl.rs` | 111:39 — `tools::spamngl::tests::Stub` doesn't implement `Debug` |
+| `tools/ssweb.rs` | 185:17 — the type `Arc` does not implement `Copy`; 245:21 — mismatched types |
+| `tools/tempmail.rs` | 69:27 — no method named `insert` found for enum `serde_json::Value` in the current scope; 69:27 — no method named `insert` found for enum `Value` in the current scope |
+| `tools/wink.rs` | 118:22 — the trait bound `Result<Vec<u8>, oktz_plugin_api::MediaError>: Default` is not satisfied; 196:20 — the type `Arc` does not implement `Copy` |
+
+### 23.1 Status terkini gelombang 4
+
+Seluruh berkas baru gelombang 4 (`docs/rust-rewrite/gelombang4-belum-terpasang.txt`,
+204 berkas plugin, 92 modul sempat terdaftar) sudah DICABUT dari registrasi
+karena:
+- 54 berkas gagal dikompilasi (tabel di atas), dan
+- 29 test gagal setelah registrasi (bug perilaku: `ai/toblack` mengembalikan
+  galat unduh saat tidak ada gambar padahal JS mengirim kartu bantuan,
+  `sticker/emojimix` mengambil emoji dari string yang salah,
+  `owner/bcgc` parse delay, `rpg/duel` ambang health, `fun/top` alias
+  `leaderboard` yang bertabrakan dengan `main/leaderboard`, dan lain-lain).
+
+Berkas tidak dihapus. Cara memasang lagi per berkas: perbaiki, tambahkan test,
+lalu `node scripts/pasang-modul.mjs --terapkan`. Jangan pasang massal sebelum
+`cargo test --release` hijau untuk berkas itu.

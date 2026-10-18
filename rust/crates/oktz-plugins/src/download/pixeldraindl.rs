@@ -14,7 +14,6 @@ use oktz_plugin_api::{Ctx, Reply, plugin};
 use serde_json::Value;
 
 use crate::common::js_falsy;
-use crate::fun::tod::error_template;
 
 /// `config.APIkey?.neoxr || ''`.
 pub(crate) const NEOXR_APIKEY: &str = "";
@@ -280,7 +279,7 @@ pub fn pixeldraindl(ctx: Ctx) -> Reply {
         SizeField::Absent => String::new(),
         SizeField::Text(s) => s.to_string(),
         SizeField::BukanTeks => {
-            return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+            return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
         }
     };
 
@@ -302,7 +301,6 @@ pub fn pixeldraindl(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse, find};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const SENDER: &str = "628111@s.whatsapp.net";
@@ -333,7 +331,7 @@ mod tests {
         fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
             self.seen.lock().unwrap().push(url.to_string());
             let Some(v) = &self.body else {
-                return Err(HttpError {
+                return Err(oktz_plugin_api::HttpError {
                     message: "transport".into(),
                 });
             };
@@ -387,7 +385,7 @@ mod tests {
     }
 
     fn ok_file(size: Value) -> Value {
-        json!({
+        serde_json::json!({
             "status": true,
             "data": { "url": "https://cdn.example/f.zip", "filename": "f.zip", "size": size }
         })
@@ -429,7 +427,7 @@ mod tests {
             vec!["https://pixeldrain.com.evil.example/u/x"],
             vec!["pixeldrain.com/u/x"],
         ] {
-            let http = Stub::json(ok_file(json!("5 MB")));
+            let http = Stub::json(ok_file(serde_json::json!("5 MB")));
             let r = run(http.clone(), &args);
             assert_eq!(text_of(&r).as_deref(), Some(help(".").as_str()), "{args:?}");
             assert_eq!(reaksi(&r), None, "{args:?}");
@@ -482,7 +480,7 @@ mod tests {
         // sama menolak sebagai mentah tapi lolos setelah di-trim.
         assert!(!is_pixeldrain_url("  https://pixeldrain.com/u/x  "));
         let r = run(
-            Stub::json(ok_file(json!("5 MB"))),
+            Stub::json(ok_file(serde_json::json!("5 MB"))),
             &["  https://pixeldrain.com/u/x  "],
         );
         assert_eq!(reaksi(&r), Some("✅"));
@@ -531,26 +529,26 @@ assert_eq!(mb("5."), 0.0);
     fn a_size_field_that_is_not_text_is_a_type_error_in_js() {
         assert_eq!(size_in_mb(SizeField::Absent), 0.0);
         assert_eq!(size_in_mb(SizeField::BukanTeks), 0.0);
-        for nilai in [json!(5), json!(true), json!([]), json!({})] {
+        for nilai in [serde_json::json!(5), serde_json::json!(true), serde_json::json!([]), serde_json::json!({})] {
             let r = run(Stub::json(ok_file(nilai.clone())), &["https://pixeldrain.com/u/x"]);
             assert_eq!(
                 text_of(&r).as_deref(),
-                Some(error_template(".", "pixeldraindl").as_str()),
+                Some(crate::common::error_template(".", "pixeldraindl").as_str()),
                 "{nilai}"
             );
             assert_eq!(reaksi(&r), Some("☢"), "{nilai}");
         }
         // String dan null tidak melempar — keduanya jalan biasa.
-        for nilai in [json!("5 MB"), json!(null)] {
+        for nilai in [serde_json::json!("5 MB"), serde_json::json!(null)] {
             let r = run(Stub::json(ok_file(nilai.clone())), &["https://pixeldrain.com/u/x"]);
-            assert_ne!(text_of(&r).as_deref(), Some(error_template(".", "pixeldraindl").as_str()), "{nilai}");
+            assert_ne!(text_of(&r).as_deref(), Some(crate::common::error_template(".", "pixeldraindl").as_str()), "{nilai}");
         }
     }
 
     #[test]
     fn a_file_of_at_most_100_mb_is_sent() {
         for size in ["5 MB", "100 MB", "0.09 GB", "1024 KB", "12 mb"] {
-            let http = Stub::json(ok_file(json!(size)));
+            let http = Stub::json(ok_file(serde_json::json!(size)));
             let r = run(http.clone(), &["https://pixeldrain.com/u/x"]);
             assert_eq!(
                 text_of(&r).as_deref(),
@@ -565,7 +563,7 @@ assert_eq!(mb("5."), 0.0);
     #[test]
     fn a_file_over_100_mb_answers_with_the_raw_size_string() {
         for size in ["100.4 MB", "101 MB", "2 GB", "200000 KB"] {
-            let http = Stub::json(ok_file(json!(size)));
+            let http = Stub::json(ok_file(serde_json::json!(size)));
             let r = run(http, &["https://pixeldrain.com/u/x"]);
             assert_eq!(
                 text_of(&r).as_deref(),
@@ -585,7 +583,7 @@ assert_eq!(mb("5."), 0.0);
         // `sizeInMB == 0` tidak masuk cabang mana pun; `m.react("✅")` tetap
         // dipanggil dan `Reply` tidak boleh mengarang teks.
         for size in ["12345 bytes", "MB", "0 MB", ""] {
-            let http = Stub::json(ok_file(json!(size)));
+            let http = Stub::json(ok_file(serde_json::json!(size)));
             let r = run(http, &["https://pixeldrain.com/u/x"]);
             assert_eq!(text_of(&r), None, "size {size:?}");
             assert_eq!(reaksi(&r), Some("✅"), "size {size:?}");
@@ -599,11 +597,11 @@ assert_eq!(mb("5."), 0.0);
         for body in [
             Stub::null(),
             Stub::json(Value::Null),
-            Stub::json(json!({})),
-            Stub::json(json!({ "status": false, "data": { "url": "u" } })),
-            Stub::json(json!({ "status": true })),
-            Stub::json(json!({ "status": 0, "data": { "url": "u" } })),
-            Stub::json(json!({ "status": "" })),
+            Stub::json(serde_json::json!({})),
+            Stub::json(serde_json::json!({ "status": false, "data": { "url": "u" } })),
+            Stub::json(serde_json::json!({ "status": true })),
+            Stub::json(serde_json::json!({ "status": 0, "data": { "url": "u" } })),
+            Stub::json(serde_json::json!({ "status": "" })),
         ] {
             let r = run(body, &["https://pixeldrain.com/u/x"]);
             assert_eq!(text_of(&r).as_deref(), Some(TIDAK_ADA));
@@ -614,8 +612,8 @@ assert_eq!(mb("5."), 0.0);
     #[test]
     fn a_truthy_non_boolean_status_is_accepted_like_in_js() {
         // `!data?.status` memakai falsiness JS, bukan `status === true`.
-        for status in [json!(1), json!("true"), json!([]), json!({})] {
-            let body = json!({ "status": status, "data": { "url": "https://cdn/f", "size": "1 MB" } });
+        for status in [serde_json::json!(1), serde_json::json!("true"), serde_json::json!([]), serde_json::json!({})] {
+            let body = serde_json::json!({ "status": status, "data": { "url": "https://cdn/f", "size": "1 MB" } });
             let r = run(Stub::json(body.clone()), &["https://pixeldrain.com/u/x"]);
             assert_eq!(text_of(&r).as_deref(), Some("https://cdn/f"), "{status}");
             assert_eq!(reaksi(&r), Some("✅"), "{status}");
@@ -624,7 +622,7 @@ assert_eq!(mb("5."), 0.0);
 
     #[test]
     fn the_plugin_only_reads_and_never_mutates() {
-        let r = run(Stub::json(ok_file(json!("5 MB"))), &["https://pixeldrain.com/u/x"]);
+        let r = run(Stub::json(ok_file(serde_json::json!("5 MB"))), &["https://pixeldrain.com/u/x"]);
         assert!(r.mutations().is_empty());
     }
 }

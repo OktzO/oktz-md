@@ -6,7 +6,6 @@
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
 use serde_json::Value;
-use serde_json::json;
 
 use crate::rpg::heal::{
     apply_exp, coalesce, math_random, or_default, rpg_int, rpg_map, roll_incl,
@@ -38,7 +37,7 @@ pub fn freelance(ctx: Ctx) -> Reply {
              Freelance butuh *{STAMINA_COST} Stamina*, sisa stamina kamu *{stamina}*. Refreshing dulu woi! 🌿"
         ));
     }
-    rpg.insert("stamina".into(), json!(stamina - STAMINA_COST));
+    rpg.insert("stamina".into(), serde_json::json!(stamina - STAMINA_COST));
 
     let koin = crate::common::int_field(&ctx, "koin");
     let gacha = math_random();
@@ -55,7 +54,7 @@ pub fn freelance(ctx: Ctx) -> Reply {
         .with_reaction("📉")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "rpg": rpg }),
+            data: serde_json::json!({ "rpg": rpg }),
         });
     }
 
@@ -78,7 +77,7 @@ pub fn freelance(ctx: Ctx) -> Reply {
         .with_reaction("💸")
         .with_mutation(Mutation::SetUser {
             jid: ctx.sender.clone(),
-            data: json!({ "koin": koin + total, "exp": new_exp, "rpg": rpg }),
+            data: serde_json::json!({ "koin": koin + total, "exp": new_exp, "rpg": rpg }),
         });
     }
 
@@ -97,14 +96,13 @@ pub fn freelance(ctx: Ctx) -> Reply {
     .with_reaction("✅")
     .with_mutation(Mutation::SetUser {
         jid: ctx.sender.clone(),
-        data: json!({ "koin": koin + earning, "exp": new_exp, "rpg": rpg }),
+        data: serde_json::json!({ "koin": koin + earning, "exp": new_exp, "rpg": rpg }),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(user: Value) -> Reply {
         let ctx = Ctx {
@@ -157,7 +155,7 @@ mod tests {
     #[test]
     fn a_burned_out_brain_blocks_the_project() {
         for stamina in [0, 24] {
-            let r = run(json!({ "rpg": { "stamina": stamina } }));
+            let r = run(serde_json::json!({ "rpg": { "stamina": stamina } }));
             let t = text_of(&r);
             assert!(t.starts_with("Otak ngebul mikirin error!"), "stamina {stamina}: {t}");
             assert!(t.contains(&format!("sisa stamina kamu *{stamina}*")), "{t}");
@@ -169,10 +167,10 @@ mod tests {
     fn all_three_outcomes_appear_and_each_costs_the_stamina() {
         let (mut ghosted, mut dollar, mut local) = (0, 0, 0);
         for _ in 0..1200 {
-            let r = run(json!({ "rpg": { "stamina": 100 }, "koin": 0, "exp": 0 }));
+            let r = run(serde_json::json!({ "rpg": { "stamina": 100 }, "koin": 0, "exp": 0 }));
             let t = text_of(&r);
             let data = write_of(&r);
-            assert_eq!(data["rpg"]["stamina"], json!(75), "{t}");
+            assert_eq!(data["rpg"]["stamina"], serde_json::json!(75), "{t}");
             if t.starts_with("KLIEN KABUR") {
                 ghosted += 1;
                 assert!(data.get("koin").is_none(), "klien tak bayar: {data}");
@@ -183,13 +181,13 @@ mod tests {
                 assert_eq!(paid % DOLLAR_RATE, 0, "bayar {paid} bukan kelipatan 16.000");
                 let dollars = paid / DOLLAR_RATE;
                 assert!((5..=14).contains(&dollars), "dolar {dollars}");
-                assert_eq!(data["exp"], json!(paid / 30));
+                assert_eq!(data["exp"], serde_json::json!(paid / 30));
                 assert!(t.contains(&format!("ngasih ${dollars}")), "{t}");
             } else {
                 local += 1;
                 let paid = data["koin"].as_i64().unwrap();
                 assert!((15_000..=54_999).contains(&paid), "bayar {paid}");
-                assert_eq!(data["exp"], json!(paid / 20));
+                assert_eq!(data["exp"], serde_json::json!(paid / 20));
                 assert!(t.contains(&format!("+Rp {}", thousands_id(paid as f64))), "{t}");
             }
         }
@@ -200,21 +198,21 @@ mod tests {
     /// TETAP nol dan langsung memblokir (beda dari fishing/hunt yang pakai `||`).
     #[test]
     fn a_zero_stamina_stays_zero_because_nullish_coalescing_keeps_it() {
-        let r = run(json!({ "rpg": { "stamina": 0 } }));
+        let r = run(serde_json::json!({ "rpg": { "stamina": 0 } }));
         let t = text_of(&r);
         assert!(t.starts_with("Otak ngebul mikirin error!"), "{t}");
         assert!(t.contains("sisa stamina kamu *0*"), "{t}");
         assert!(r.mutations().is_empty(), "nol tak jadi 100");
 
         // `null` dan field yang hilang justru jatuh ke 100, lalu lolos gerbang.
-        for user in [json!({ "rpg": { "stamina": null } }), json!({ "rpg": {} })] {
+        for user in [serde_json::json!({ "rpg": { "stamina": null } }), serde_json::json!({ "rpg": {} })] {
             assert!(!text_of(&run(user.clone())).starts_with("Otak ngebul"), "{user}");
         }
     }
 
     #[test]
     fn a_missing_user_row_never_panics() {
-        for user in [json!(null), json!({}), json!({ "rpg": null })] {
+        for user in [serde_json::json!(null), serde_json::json!({}), serde_json::json!({ "rpg": null })] {
             let r = run(user.clone());
             assert!(!text_of(&r).is_empty(), "input {user}");
         }

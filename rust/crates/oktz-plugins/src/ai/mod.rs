@@ -31,3 +31,5 @@ pub mod txt2img2;
 #[path = "waguri-ai.rs"]
 pub mod waguri_ai;
 pub mod wormgpt;
+
+// Ditambahkan scripts/pasang-modul.mjs.

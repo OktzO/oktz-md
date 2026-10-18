@@ -138,7 +138,7 @@ pub fn onlyadmin(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(command: &str, args: &str, is_group: bool, group: Value, settings: Value) -> Reply {
         let args_vec: Vec<String> = args.split_whitespace().map(str::to_string).collect();
@@ -211,26 +211,26 @@ mod tests {
     #[test]
     fn no_argument_reports_status_without_writing() {
         for (settings, expected) in [
-            (json!({}), "❌ Nonaktif"),
-            (json!({"onlyAdmin": true}), "✅ Aktif"),
+            (serde_json::json!({}), "❌ Nonaktif"),
+            (serde_json::json!({"onlyAdmin": true}), "✅ Aktif"),
         ] {
             let r = private("onlyadmin", "", settings.clone());
             assert!(text_of(&r).contains(expected), "settings {settings}");
             assert!(r.mutations().is_empty());
         }
-        assert!(text_of(&private("onlyadmin", "status", json!({}))).contains("❌ Nonaktif"));
+        assert!(text_of(&private("onlyadmin", "status", serde_json::json!({}))).contains("❌ Nonaktif"));
     }
 
     #[test]
     fn on_writes_all_three_flags_so_the_router_cannot_keep_the_old_mode() {
-        let r = private("onlyadmin", "on", json!({"onlyAdmin": false, "selfAdmin": true}));
+        let r = private("onlyadmin", "on", serde_json::json!({"onlyAdmin": false, "selfAdmin": true}));
         let w = written(&r, false);
         assert_eq!(
             w,
             vec![
-                ("onlyAdmin".to_string(), json!(true)),
-                ("selfAdmin".to_string(), json!(false)),
-                ("publicAdmin".to_string(), json!(false)),
+                ("onlyAdmin".to_string(), serde_json::json!(true)),
+                ("selfAdmin".to_string(), serde_json::json!(false)),
+                ("publicAdmin".to_string(), serde_json::json!(false)),
             ]
         );
         assert!(text_of(&r).contains("✅ *ᴏɴʟʏᴀᴅᴍɪɴ ᴀᴋᴛɪꜰ*"));
@@ -238,18 +238,18 @@ mod tests {
 
     #[test]
     fn on_when_already_on_only_warns() {
-        let r = private("onlyadmin", "on", json!({"onlyAdmin": true}));
+        let r = private("onlyadmin", "on", serde_json::json!({"onlyAdmin": true}));
         assert_eq!(text_of(&r), WARN_ON);
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn off_writes_only_onlyadmin_and_warns_when_it_was_already_off() {
-        let r = private("onlyadmin", "off", json!({"onlyAdmin": true}));
-        assert_eq!(written(&r, false), vec![("onlyAdmin".to_string(), json!(false))]);
+        let r = private("onlyadmin", "off", serde_json::json!({"onlyAdmin": true}));
+        assert_eq!(written(&r, false), vec![("onlyAdmin".to_string(), serde_json::json!(false))]);
         assert_eq!(text_of(&r), OFF_TEXT);
 
-        let r = private("onlyadmin", "off", json!({}));
+        let r = private("onlyadmin", "off", serde_json::json!({}));
         assert_eq!(text_of(&r), WARN_OFF);
         assert!(r.mutations().is_empty());
     }
@@ -260,28 +260,28 @@ mod tests {
             "onlyadmin",
             "on",
             true,
-            json!({"onlyAdmin": false}),
-            json!({"onlyAdmin": true}),
+            serde_json::json!({"onlyAdmin": false}),
+            serde_json::json!({"onlyAdmin": true}),
         );
         // key ada di grup → nilai grup (false) yang dibaca, bukan global.
         assert!(text_of(&r).contains("✅ *ᴏɴʟʏᴀᴅᴍɪɴ ᴀᴋᴛɪꜰ*"));
         let w = written(&r, true);
         assert_eq!(w.len(), 1);
         assert_eq!(w[0].0, "120363@g.us");
-        assert_eq!(w[0].1, json!({"onlyAdmin": true, "selfAdmin": false, "publicAdmin": false}));
+        assert_eq!(w[0].1, serde_json::json!({"onlyAdmin": true, "selfAdmin": false, "publicAdmin": false}));
     }
 
     #[test]
     fn a_group_without_the_key_falls_back_to_the_global_setting() {
-        let r = run("onlyadmin", "", true, json!({"mute": true}), json!({"onlyAdmin": true}));
+        let r = run("onlyadmin", "", true, serde_json::json!({"mute": true}), serde_json::json!({"onlyAdmin": true}));
         assert!(text_of(&r).contains("✅ Aktif"), "harus baca setting global");
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn selfadmin_and_publicadmin_differ_only_in_the_private_chat_line() {
-        let self_admin = private("selfadmin", "", json!({}));
-        let public_admin = private("publicadmin", "", json!({}));
+        let self_admin = private("selfadmin", "", serde_json::json!({}));
+        let public_admin = private("publicadmin", "", serde_json::json!({}));
         assert!(
             !text_of(&self_admin).contains("Private chat (semua)"),
             "selfadmin menutup private chat: {}",
@@ -293,15 +293,15 @@ mod tests {
 
     #[test]
     fn selfadmin_turns_the_flag_off_again() {
-        let r = private("selfadmin", "", json!({"onlyAdmin": true}));
+        let r = private("selfadmin", "", serde_json::json!({"onlyAdmin": true}));
         assert_eq!(text_of(&r), OFF_TEXT);
-        assert_eq!(written(&r, false), vec![("onlyAdmin".to_string(), json!(false))]);
+        assert_eq!(written(&r, false), vec![("onlyAdmin".to_string(), serde_json::json!(false))]);
     }
 
     #[test]
     fn an_unknown_argument_is_rejected() {
         for bad in ["ON!", "enable", "1", "yes"] {
-            let r = private("onlyadmin", bad, json!({}));
+            let r = private("onlyadmin", bad, serde_json::json!({}));
             assert_eq!(text_of(&r), INVALID, "arg {bad}");
             assert!(r.mutations().is_empty(), "arg {bad}");
         }

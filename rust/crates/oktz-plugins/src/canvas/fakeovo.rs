@@ -10,7 +10,6 @@
 
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 
-use crate::canvas::fakedana::error_template;
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// Cabang `if (!text)` (`fakeovo.js:21`).
@@ -51,7 +50,7 @@ pub fn fakeovo(ctx: Ctx) -> Reply {
     // `await m.react("🕕")` lalu `await m.react("✅")` / `"❌"` — `Reply` hanya
     // menyimpan satu reaksi, jadi yang dipegang adalah reaksi terakhir.
     let Ok(res) = ctx.http.get(&api_url(&ctx.text)) else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("❌");
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("❌");
     };
 
     Reply::image(MediaSource::bytes(res.body.bytes().to_vec()), CAPTION).with_reaction("✅")
@@ -234,7 +233,7 @@ mod tests {
         };
         let r = (oktz_plugin_api::find("fakeovo").unwrap().handler)(ctx);
         assert!(!r.has_media());
-        assert_eq!(text_of(&r), error_template(".", "fake-ovo"));
+        assert_eq!(text_of(&r), crate::common::error_template(".", "fake-ovo"));
         assert_eq!(reaction_of(&r), Some("❌"));
     }
 }

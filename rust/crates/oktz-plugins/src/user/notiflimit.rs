@@ -56,7 +56,7 @@ pub fn notiflimit(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(settings: Value) -> Reply {
         let ctx = Ctx {
@@ -109,27 +109,27 @@ mod tests {
 
     #[test]
     fn a_missing_setting_turns_the_flag_on() {
-        let r = run(json!({}));
-        assert_eq!(stored(&r), json!(true));
+        let r = run(serde_json::json!({}));
+        assert_eq!(stored(&r), serde_json::json!(true));
         assert!(r.text_body().unwrap().contains("Status saat ini: *AKTIF ✅*"));
     }
 
     #[test]
     fn each_call_flips_the_stored_value() {
-        let r = run(json!({"notiflimit": true}));
-        assert_eq!(stored(&r), json!(false));
+        let r = run(serde_json::json!({"notiflimit": true}));
+        assert_eq!(stored(&r), serde_json::json!(false));
         assert!(r.text_body().unwrap().contains("Status saat ini: *MATI ❌*"));
     }
 
     #[test]
     fn an_explicit_null_is_treated_like_a_missing_key() {
         // `?? false` hanya usherkan null/undefined, jadi null -> false -> !false.
-        assert_eq!(stored(&run(json!({"notiflimit": null}))), json!(true));
+        assert_eq!(stored(&run(serde_json::json!({"notiflimit": null}))), serde_json::json!(true));
     }
 
     #[test]
     fn falsy_non_null_values_are_negated_by_truthiness_not_replaced() {
-        assert_eq!(stored(&run(json!({"notiflimit": 0}))), json!(true));
-        assert_eq!(stored(&run(json!({"notiflimit": ""}))), json!(true));
+        assert_eq!(stored(&run(serde_json::json!({"notiflimit": 0}))), serde_json::json!(true));
+        assert_eq!(stored(&run(serde_json::json!({"notiflimit": ""}))), serde_json::json!(true));
     }
 }

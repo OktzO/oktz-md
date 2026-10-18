@@ -61,7 +61,6 @@ pub fn sifatusahabisnis(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse, NoHttp};
-    use serde_json::json;
     use std::sync::Arc;
 
     #[derive(Debug)]
@@ -152,7 +151,7 @@ mod tests {
     #[test]
     fn a_good_payload_renders_the_birth_day_analysis_and_note() {
         let r = run_with(
-            Arc::new(Stub(json!({
+            Arc::new(Stub(serde_json::json!({
                 "status": true,
                 "data": {
                     "hari_lahir": "Sabtu",
@@ -176,7 +175,7 @@ mod tests {
     #[test]
     fn a_payload_missing_every_field_still_renders_the_frame() {
         let r = run_with(
-            Arc::new(Stub(json!({ "status": true, "data": { "placeholder": 1 } }))),
+            Arc::new(Stub(serde_json::json!({ "status": true, "data": { "placeholder": 1 } }))),
             &["1", "1", "2000"],
         );
         let t = reply_text(&r);
@@ -187,7 +186,7 @@ mod tests {
 
     #[test]
     fn a_falsy_status_or_data_gives_the_failure_message() {
-        for body in [json!({ "data": {} }), json!({ "status": true }), json!({})] {
+        for body in [serde_json::json!({ "data": {} }), serde_json::json!({ "status": true }), serde_json::json!({})] {
             let r = run_with(Arc::new(Stub(body)), &["1", "1", "2000"]);
             assert_eq!(reply_text(&r), "❌ *ɢᴀɢᴀʟ*\n\n> Gagal menganalisa");
         }

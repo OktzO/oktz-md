@@ -119,7 +119,6 @@ mod tests {
 
     use oktz_plugin_api::Participant;
     use oktz_plugin_api::registry::GroupRoster;
-    use serde_json::json;
 
     fn run(group: Value, settings: Value, arg: Option<&str>, admin: bool) -> Reply {
         let ctx = Ctx {
@@ -182,14 +181,14 @@ mod tests {
 
     #[test]
     fn a_member_who_is_neither_admin_nor_owner_is_rejected() {
-        let r = run(json!({}), json!({}), Some("on"), false);
+        let r = run(serde_json::json!({}), serde_json::json!({}), Some("on"), false);
         assert_eq!(text_of(&r), ADMIN_ONLY);
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn without_an_argument_the_plugin_shows_both_statuses() {
-        let r = run(json!({}), json!({}), None, true);
+        let r = run(serde_json::json!({}), serde_json::json!({}), None, true);
         let t = text_of(&r);
         assert!(t.starts_with("🕌 *PENGINGAT WAKTU SHOLAT*"), "{t}");
         assert!(t.contains("Status Pengingat (grup ini): *❌ NONAKTIF*"), "{t}");
@@ -201,8 +200,8 @@ mod tests {
     #[test]
     fn the_group_auto_setting_is_used_before_the_global_one() {
         let r = run(
-            json!({"autoSholat": true}),
-            json!({"autoSholat": false, "autoSholatKota": {"nama": "BANDUNG"}}),
+            serde_json::json!({"autoSholat": true}),
+            serde_json::json!({"autoSholat": false, "autoSholatKota": {"nama": "BANDUNG"}}),
             None,
             true,
         );
@@ -214,7 +213,7 @@ mod tests {
     #[test]
     fn an_explicit_false_in_the_group_is_not_overwritten_by_the_global_value() {
         // `??` di JS: `false` bukan nullish, jadi tetap nonaktif walau global aktif.
-        let r = run(json!({"autoSholat": false}), json!({"autoSholat": true}), None, true);
+        let r = run(serde_json::json!({"autoSholat": false}), serde_json::json!({"autoSholat": true}), None, true);
         let t = text_of(&r);
         assert!(t.contains("Status Pengingat (grup ini): *❌ NONAKTIF*"), "{t}");
     }
@@ -222,12 +221,12 @@ mod tests {
     #[test]
     fn notif_sholat_is_only_nonaktif_when_explicitly_false() {
         for (stored, expected) in [
-            (json!({}), "✅ AKTIF"),
-            (json!({"notifSholat": null}), "✅ AKTIF"),
-            (json!({"notifSholat": true}), "✅ AKTIF"),
-            (json!({"notifSholat": false}), "❌ NONAKTIF"),
+            (serde_json::json!({}), "✅ AKTIF"),
+            (serde_json::json!({"notifSholat": null}), "✅ AKTIF"),
+            (serde_json::json!({"notifSholat": true}), "✅ AKTIF"),
+            (serde_json::json!({"notifSholat": false}), "❌ NONAKTIF"),
         ] {
-            let r = run(stored.clone(), json!({}), None, true);
+            let r = run(stored.clone(), serde_json::json!({}), None, true);
             let t = text_of(&r);
             assert!(t.contains(&format!("Status Grup: *{expected}*")), "input {stored}: {t}");
         }
@@ -236,8 +235,8 @@ mod tests {
     #[test]
     fn on_writes_true_and_names_the_location() {
         let r = run(
-            json!({}),
-            json!({"autoSholatKota": {"nama": "SURABAYA"}}),
+            serde_json::json!({}),
+            serde_json::json!({"autoSholatKota": {"nama": "SURABAYA"}}),
             Some("on"),
             true,
         );
@@ -247,26 +246,26 @@ mod tests {
              > Grup ini akan menerima pengingat waktu sholat\n\
              > Lokasi: SURABAYA"
         );
-        assert_eq!(group_write(&r), &json!({"notifSholat": true}));
+        assert_eq!(group_write(&r), &serde_json::json!({"notifSholat": true}));
     }
 
     #[test]
     fn off_writes_false_and_says_nothing_about_the_location() {
-        let r = run(json!({}), json!({}), Some("off"), true);
+        let r = run(serde_json::json!({}), serde_json::json!({}), Some("off"), true);
         assert_eq!(text_of(&r), "❌ *ɴᴏᴛɪꜰ sʜᴏʟᴀᴛ ᴅɪɴᴏɴᴀᴋᴛɪꜰᴋᴀɴ*");
-        assert_eq!(group_write(&r), &json!({"notifSholat": false}));
+        assert_eq!(group_write(&r), &serde_json::json!({"notifSholat": false}));
     }
 
     #[test]
     fn an_unknown_keyword_shows_the_overview_instead_of_writing() {
-        let r = run(json!({}), json!({}), Some("nyanyi"), true);
+        let r = run(serde_json::json!({}), serde_json::json!({}), Some("nyanyi"), true);
         assert!(text_of(&r).starts_with("🕌 *PENGINGAT WAKTU SHOLAT*"), "{}", text_of(&r));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn the_overview_help_uses_the_live_prefix() {
-        let r = run(json!({}), json!({}), None, true);
+        let r = run(serde_json::json!({}), serde_json::json!({}), None, true);
         let t = text_of(&r);
         assert!(t.contains("• *.notifsholat on* — Aktifkan notif di grup ini"), "{t}");
         assert!(t.contains("• *.notifsholat off* — Nonaktifkan notif di grup ini"), "{t}");

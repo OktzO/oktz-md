@@ -92,7 +92,6 @@ mod tests {
 
     use oktz_plugin_api::Participant;
     use oktz_plugin_api::registry::GroupRoster;
-    use serde_json::json;
 
     const SENDER: &str = "628111@s.whatsapp.net";
 
@@ -182,10 +181,10 @@ mod tests {
     #[test]
     fn no_argument_reports_the_status_without_writing() {
         for (stored, expected) in [
-            (json!({}), "❌ Nonaktif"),
-            (json!({"notifCloseGroup": true}), "✅ Aktif"),
-            (json!({"notifCloseGroup": false}), "❌ Nonaktif"),
-            (json!({"notifCloseGroup": 1}), "❌ Nonaktif"),
+            (serde_json::json!({}), "❌ Nonaktif"),
+            (serde_json::json!({"notifCloseGroup": true}), "✅ Aktif"),
+            (serde_json::json!({"notifCloseGroup": false}), "❌ Nonaktif"),
+            (serde_json::json!({"notifCloseGroup": 1}), "❌ Nonaktif"),
         ] {
             let r = run(stored.clone(), None);
             assert!(
@@ -199,39 +198,39 @@ mod tests {
 
     #[test]
     fn an_unknown_keyword_falls_through_to_the_status_branch() {
-        let r = run(json!({}), Some("ngapain"));
+        let r = run(serde_json::json!({}), Some("ngapain"));
         assert!(text_of(&r).contains("> Status: ❌ Nonaktif"), "{}", text_of(&r));
         assert!(r.mutations().is_empty());
     }
 
     #[test]
     fn the_keyword_is_lowercased_before_matching() {
-        let r = run(json!({}), Some("ON"));
+        let r = run(serde_json::json!({}), Some("ON"));
         assert_eq!(text_of(&r), "✅ *ɴᴏᴛɪꜰ ᴄʟᴏsᴇ ɢʀᴏᴜᴘ ᴅɪᴀᴋᴛɪꜰᴋᴀɴ*");
-        assert_eq!(group_write(&r), &json!({"notifCloseGroup": true}));
+        assert_eq!(group_write(&r), &serde_json::json!({"notifCloseGroup": true}));
     }
 
     #[test]
     fn on_writes_only_the_own_field() {
-        let r = run(json!({"notifCloseGroup": false, "mute": true}), Some("on"));
+        let r = run(serde_json::json!({"notifCloseGroup": false, "mute": true}), Some("on"));
         assert_eq!(
             group_write(&r).as_object().unwrap().len(),
             1,
             "field lain tinggal di store, jadi tidak ikut dikirim"
         );
-        assert_eq!(group_write(&r)["notifCloseGroup"], json!(true));
+        assert_eq!(group_write(&r)["notifCloseGroup"], serde_json::json!(true));
     }
 
     #[test]
     fn off_writes_false_and_says_disabled() {
-        let r = run(json!({"notifCloseGroup": true}), Some("off"));
+        let r = run(serde_json::json!({"notifCloseGroup": true}), Some("off"));
         assert_eq!(text_of(&r), "❌ *ɴᴏᴛɪꜰ ᴄʟᴏsᴇ ɢʀᴏᴜᴘ ᴅɪɴᴏɴᴀᴋᴛɪꜰᴋᴀɴ*");
-        assert_eq!(group_write(&r), &json!({"notifCloseGroup": false}));
+        assert_eq!(group_write(&r), &serde_json::json!({"notifCloseGroup": false}));
     }
 
     #[test]
     fn the_status_help_uses_the_live_prefix_and_command() {
-        let r = run(json!({}), None);
+        let r = run(serde_json::json!({}), None);
         assert!(
             text_of(&r).ends_with(
                 "*Penggunaan:*\n`.notifclosegroup on` - Aktifkan\n`.notifclosegroup off` - Nonaktifkan"

@@ -19,7 +19,6 @@
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::error_template;
 
 use super::gempa::js_str;
 
@@ -31,7 +30,7 @@ const CDN: &str = "https://images.dotgg.gg/bluearchive/characters/";
 /// langsung ditangkap `catch` (`bluearchive-char.js:160-163`) yang hanya
 /// memanggil `te(...)`, tanpa menyertakan `error.message`.
 fn gagal(ctx: &Ctx) -> Reply {
-    Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢")
+    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢")
 }
 
 /// `if (!name)` (`bluearchive-char.js:80`) — teks literal, bukan `te`.
@@ -231,7 +230,6 @@ pub fn bluearchive_char(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpResponse, HttpGet};
-    use serde_json::json;
     use std::sync::Arc;
 
     /// Stub dengan dua halaman: daftar character lalu detail satu character.
@@ -268,7 +266,7 @@ mod tests {
                 self.detail.clone()
             };
             let Some(text) = body else {
-                return Err(HttpError {
+                return Err(oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 });
             };
@@ -506,7 +504,7 @@ mod tests {
     #[test]
     fn a_long_bio_is_cut_at_200_characters_with_an_ellipsis() {
         let bio = "a".repeat(250);
-        let detail = json!({"name":"Aru", "bio": bio}).to_string();
+        let detail = serde_json::json!({"name":"Aru", "bio": bio}).to_string();
         let t = teks(&run(Stub::new(DAFTAR, &detail), "aru"));
         // `substring(0, 200)` + `...`, lalu baris ditutup `\n\n`.
         assert!(
@@ -518,7 +516,7 @@ mod tests {
     #[test]
     fn a_bio_of_exactly_200_characters_gets_no_ellipsis() {
         let bio = "a".repeat(200);
-        let detail = json!({"name":"Aru", "bio": bio}).to_string();
+        let detail = serde_json::json!({"name":"Aru", "bio": bio}).to_string();
         let t = teks(&run(Stub::new(DAFTAR, &detail), "aru"));
         assert!(
             t.contains(&format!("> {}\n\n", "a".repeat(200))),
@@ -529,20 +527,20 @@ mod tests {
 
     #[test]
     fn an_empty_bio_is_skipped_entirely() {
-        let detail = json!({"name":"Aru", "bio": ""}).to_string();
+        let detail = serde_json::json!({"name":"Aru", "bio": ""}).to_string();
         let t = teks(&run(Stub::new(DAFTAR, &detail), "aru"));
         assert!(t.starts_with("🎮 *ARU*\n\n╭┈┈⬡"), "{t}");
     }
 
     #[test]
     fn a_character_without_a_name_renders_the_js_undefined_text() {
-        let detail = json!({"type":"Front"}).to_string();
+        let detail = serde_json::json!({"type":"Front"}).to_string();
         assert!(teks(&run(Stub::new(DAFTAR, &detail), "aru")).starts_with("🎮 *undefined*\n\n"));
     }
 
     #[test]
     fn falsy_profile_fields_drop_their_row() {
-        let detail = json!({
+        let detail = serde_json::json!({
             "name":"Aru",
             "profile":{"familyName":"", "age":0, "height":"154cm"}
         })
@@ -555,7 +553,7 @@ mod tests {
 
     #[test]
     fn four_skills_is_the_cap_and_zero_skill_draws_no_box() {
-        let detail = json!({"name":"Aru","skills":[]}).to_string();
+        let detail = serde_json::json!({"name":"Aru","skills":[]}).to_string();
         let t = teks(&run(Stub::new(DAFTAR, &detail), "aru"));
         assert!(!t.contains("sᴋɪʟʟs"), "array kosong -> tanpa kotak");
         assert!(t.ends_with("╰┈┈┈┈┈┈┈┈⬡\n\n"), "kotak skills tidak ditambah");

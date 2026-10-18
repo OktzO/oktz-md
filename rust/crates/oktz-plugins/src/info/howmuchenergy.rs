@@ -44,10 +44,10 @@ pub fn howmuchenergy(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::Ctx;
-    use serde_json::{Value, json};
+    use serde_json::{Value};
 
     fn run(args: &[&str]) -> String {
-        run_with(args, json!({}))
+        run_with(args, serde_json::json!({}))
     }
 
     fn run_with(args: &[&str], settings: Value) -> String {
@@ -174,10 +174,10 @@ mod tests {
     fn an_absent_or_empty_capenergi_setting_falls_back_to_the_plugin_meta() {
         let baseline = run(&["readmore", "dare"]);
         for settings in [
-            json!({}),
-            json!({"capenergi": {}}),
-            json!({"capenergi": null}),
-            json!({"capenergi": "bukan-peta"}),
+            serde_json::json!({}),
+            serde_json::json!({"capenergi": {}}),
+            serde_json::json!({"capenergi": null}),
+            serde_json::json!({"capenergi": "bukan-peta"}),
         ] {
             assert_eq!(
                 run_with(&["readmore", "dare"], settings.clone()),
@@ -191,7 +191,7 @@ mod tests {
     fn capenergi_overrides_the_price_of_that_plugin_only() {
         let out = run_with(
             &["readmore", "dare"],
-            json!({"capenergi": {"readmore": 7, "dare": 3}}),
+            serde_json::json!({"capenergi": {"readmore": 7, "dare": 3}}),
         );
         assert_eq!(
             out,
@@ -207,7 +207,7 @@ mod tests {
     #[test]
     fn a_capenergi_key_can_also_make_a_free_command_cost_energy() {
         assert_eq!(
-            run_with(&["dare"], json!({"capenergi": {"dare": 12}})),
+            run_with(&["dare"], serde_json::json!({"capenergi": {"dare": 12}})),
             "🔋 *DETAIL ENERGI FITUR*\n\n✅ *dare* : 12 Energi"
         );
     }
@@ -215,25 +215,25 @@ mod tests {
     #[test]
     fn capenergi_is_keyed_by_canonical_name_not_by_alias() {
         // `kkmbg` resolve ke `kalkulatormbg`, jadi override harus pakai nama itu.
-        let by_alias = run_with(&["kkmbg"], json!({"capenergi": {"kkmbg": 9}}));
+        let by_alias = run_with(&["kkmbg"], serde_json::json!({"capenergi": {"kkmbg": 9}}));
         assert!(
             by_alias.ends_with("✅ *kalkulatormbg* : 1 Energi"),
             "override by alias diabaikan: {by_alias}"
         );
-        let by_name = run_with(&["kkmbg"], json!({"capenergi": {"kalkulatormbg": 9}}));
+        let by_name = run_with(&["kkmbg"], serde_json::json!({"capenergi": {"kalkulatormbg": 9}}));
         assert!(by_name.ends_with("✅ *kalkulatormbg* : 9 Energi"));
     }
 
     #[test]
     fn only_the_probe_branch_carries_a_reaction() {
         // JS bereaksi "🕕" lalu "✅", tapi hanya setelah guard args.length === 0.
-        let help_reply = handler(&[], json!({}));
+        let help_reply = handler(&[], serde_json::json!({}));
         assert!(matches!(
             help_reply.without_mutations(),
             Reply::Text { .. }
         ));
 
-        let probed = handler(&["readmore"], json!({}));
+        let probed = handler(&["readmore"], serde_json::json!({}));
         let mut cur = probed.without_mutations();
         let mut seen = 0;
         while let Reply::Reaction { emoji, reply } = cur {

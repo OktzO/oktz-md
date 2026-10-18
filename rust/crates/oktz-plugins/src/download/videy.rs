@@ -16,7 +16,7 @@
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
-use crate::common::{error_template, host_dari};
+use crate::common::{host_dari};
 
 /// `videy.js:48-51` — kartu pakai. Baris contoh dibungkus satu pasang backtick,
 /// sama seperti di JS.
@@ -99,7 +99,7 @@ pub fn videy(ctx: Ctx) -> Reply {
         // `videy.js:82-105` — tanpa `error.tried`, `missingEnvNameOf` dan
         // `adaNormalisasiGagal` sama-sama `false`, jadi template error yang
         // menyala. `m.pushName` tidak ada di `Ctx`, jadi `User` yang dipakai.
-        Err(()) => Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
+        Err(()) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
     }
 }
 
@@ -223,7 +223,7 @@ mod tests {
     #[test]
     fn the_resolve_failure_lands_on_the_generic_catch_branch() {
         let r = run("https://videy.co/v?id=7ZH1ZRIF");
-        assert_eq!(text_of(&r), error_template(".", "videy"));
+        assert_eq!(text_of(&r), crate::common::error_template(".", "videy"));
         assert_eq!(reaksi(&r), Some("☢"));
     }
 
