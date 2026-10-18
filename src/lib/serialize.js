@@ -37,7 +37,7 @@ import fsc from "fs";
 import { getDatabase } from "./database.js";
 import { saluranCtx } from "./context.js";
 import { LRUCache } from "lru-cache";
-import { getAssetBuffer, safeThumbnail } from "./asset-manager.js";
+import { getGroupMetadata } from "./group-meta.js";
 let _prefixCache = null;
 let _prefixCacheTime = 0;
 const PREFIX_CACHE_TTL = 30000;
@@ -722,7 +722,7 @@ async function serialize(sock, msg, store = {}) {
         try {
           const cachedMeta = global.groupMetadataCache?.get(m.chat);
           const metadata =
-            cachedMeta?.data || cachedMeta || (await sock.groupMetadata(m.chat));
+            cachedMeta?.data || cachedMeta || (await getGroupMetadata(sock, m.chat));
           if (metadata?.participants) {
             cacheParticipantLids(metadata.participants);
           }
@@ -833,14 +833,7 @@ async function serialize(sock, msg, store = {}) {
         }
       }
       if (!groupMetadata) {
-        groupMetadata = await sock.groupMetadata(m.chat);
-        if (groupMetadata && global.groupMetadataCache) {
-          sweepGroupMetadataCache(global.groupMetadataCache);
-          global.groupMetadataCache.set(m.chat, {
-            data: groupMetadata,
-            timestamp: Date.now(),
-          });
-        }
+        groupMetadata = await getGroupMetadata(sock, m.chat);
       }
       m.groupMetadata = groupMetadata;
       m.groupName = m.groupMetadata?.subject || "";

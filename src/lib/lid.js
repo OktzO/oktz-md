@@ -551,6 +551,63 @@ function forgetCachedJid(lid) {
   return removed;
 }
 
+const LID_RESOLVE_TIMEOUT_MS = 1200;
+const LID_MISS_TTL_MS = 5 * 60 * 1000;
+const lidMissCache = new Map();
+const lidInflight = new Map();
+
+function isFreshLidMiss(jid) {
+  const ts = lidMissCache.get(jid);
+  if (!ts) return false;
+  if (Date.now() - ts >= LID_MISS_TTL_MS) {
+    lidMissCache.delete(jid);
+    return false;
+  }
+  return true;
+}
+
+function markLidMiss(jid) {
+  lidMissCache.set(jid, Date.now());
+  if (lidMissCache.size > 5000) {
+    const first = lidMissCache.keys().next().value;
+    if (first) lidMissCache.delete(first);
+  }
+}
+
+async function doResolveLid(jid, sock) {
+  if (isLid(jid)) {
+    const swJid = jid.replace("@lid", "@s.whatsapp.net");
+    const cachedSw = getCachedJid(swJid);
+    if (cachedSw && !isLid(cachedSw) && !isLidConverted(cachedSw)) {
+      cacheLidJid(jid, cachedSw);
+      return cachedSw;
+    }
+  }
+  const repo = sock.signalRepository || sock.repository;
+  if (repo?.lidMapping?.getPNForLID) {
+    let probe = jid;
+    if (isLidConverted(jid)) probe = jid.replace("@s.whatsapp.net", "@lid");
+    const pn = await repo.lidMapping.getPNForLID(probe);
+    const pnClean = pn ? decodeAndNormalize(pn) : null;
+    if (pnClean && !isLid(pnClean) && !isLidConverted(pnClean)) {
+      cacheLidJid(jid, pnClean);
+      return pnClean;
+    }
+  }
+
+  if (sock.store && sock.store.contacts) {
+    for (const [pnJid, contact] of Object.entries(sock.store.contacts)) {
+      if (contact.lid === jid || contact.id === jid) {
+        if (pnJid && !isLid(pnJid) && !isLidConverted(pnJid) && pnJid !== "status@broadcast") {
+          cacheLidJid(jid, pnJid);
+          return pnJid;
+        }
+      }
+    }
+  }
+  return null;
+}
+
 async function resolveFromSock(jid, sock) {
   if (!jid || !sock) return jid;
   try {
@@ -558,38 +615,42 @@ async function resolveFromSock(jid, sock) {
     if (cached && !isLid(cached) && !isLidConverted(cached)) {
       return cached;
     }
-    if (isLid(jid)) {
-      const swJid = jid.replace("@lid", "@s.whatsapp.net");
-      const cachedSw = getCachedJid(swJid);
-      if (cachedSw && !isLid(cachedSw) && !isLidConverted(cachedSw)) {
-        cacheLidJid(jid, cachedSw);
-        return cachedSw;
-      }
-    }
-    const repo = sock.signalRepository || sock.repository;
-    if (repo?.lidMapping?.getPNForLID) {
-      let probe = jid;
-      if (isLidConverted(jid)) probe = jid.replace("@s.whatsapp.net", "@lid");
-      const pn = await repo.lidMapping.getPNForLID(probe);
-      const pnClean = pn ? decodeAndNormalize(pn) : null;
-      if (pnClean && !isLid(pnClean) && !isLidConverted(pnClean)) {
-        cacheLidJid(jid, pnClean);
-        return pnClean;
-      }
+    if (isLid(jid) && isFreshLidMiss(jid)) {
+      return jid;
     }
 
-    if (sock.store && sock.store.contacts) {
-      for (const [pnJid, contact] of Object.entries(sock.store.contacts)) {
-        if (contact.lid === jid || contact.id === jid) {
-          if (pnJid && !isLid(pnJid) && !isLidConverted(pnJid) && pnJid !== "status@broadcast") {
-            cacheLidJid(jid, pnJid);
-            return pnJid;
-          }
+    let promise = lidInflight.get(jid);
+    if (!promise) {
+      promise = (async () => {
+        const result = await doResolveLid(jid, sock);
+        if (result) {
+          return result;
         }
-      }
+        markLidMiss(jid);
+        return jid;
+      })();
+      // ensure inflight removed on completion
+      const tracked = promise.finally(() => {
+        if (lidInflight.get(jid) === tracked) lidInflight.delete(jid);
+      });
+      lidInflight.set(jid, tracked);
+      promise = tracked;
     }
-  } catch {}
-  return jid;
+
+    // Bounded wait: on timeout, proceed with LID now; resolution continues
+    // in background and will be cached for the next message.
+    const result = await Promise.race([
+      promise,
+      new Promise((resolve) => {
+        const t = setTimeout(() => resolve(jid), LID_RESOLVE_TIMEOUT_MS);
+        if (t && typeof t.unref === "function") t.unref();
+        promise.then(() => clearTimeout(t), () => clearTimeout(t));
+      }),
+    ]);
+    return result || jid;
+  } catch {
+    return jid;
+  }
 }
 
 function getLidCacheSize() {
@@ -648,6 +709,7 @@ export {
   cacheLidJid,
   forgetCachedJid,
   resolveFromSock,
+  LID_RESOLVE_TIMEOUT_MS,
   getLidCacheSize,
   savePersistentCache,
   sweepGroupMetadataCache,

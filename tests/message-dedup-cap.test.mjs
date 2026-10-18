@@ -109,7 +109,7 @@ describe("messages.upsert — processedMessages.set() tidak lagi telanjang", () 
     // wrapper harus dipakai tepat di tempat dedup lama dipakai
     assert.match(
       src,
-      /messageDedup\.has\(msgId\)[\s\S]{0,80}messageDedup\.set\(msgId/,
+      /messageDedup\.has\(dedupKey\)[\s\S]{0,80}messageDedup\.set\(dedupKey/,
       "loop pesan harus memakai messageDedup.has/set",
     );
   });
