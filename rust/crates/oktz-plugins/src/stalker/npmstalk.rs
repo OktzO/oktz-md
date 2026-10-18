@@ -16,8 +16,8 @@ use crate::common::error_template;
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `NEXRAY_BASES[0]` — hanya basis pertama yang dipakai `fetchNpmProfile`.
-const NEXRAY: &str = "https://api.nexray.eu.cc";
-const FIREFLY: &str = "https://firefly.maiku.my.id";
+pub(crate) const NEXRAY: &str = "https://api.nexray.eu.cc";
+pub(crate) const FIREFLY: &str = "https://firefly.maiku.my.id";
 
 /// `npmstalk.js:26-29` — kartu pakai saat `m.args[0]` kosong.
 pub(crate) fn help(prefix: &str) -> String {
@@ -80,7 +80,7 @@ fn parse_int_js(v: &Value) -> f64 {
 }
 
 /// `d.name || '-'` dan sejenisnya — nilai falsy jadi tanda hubung.
-fn or_dash(v: &Value) -> String {
+pub(crate) fn or_dash(v: &Value) -> String {
     let s = js_str(v);
     if s.is_empty() || s == "null" {
         "-".to_string()
@@ -90,7 +90,7 @@ fn or_dash(v: &Value) -> String {
 }
 
 /// `String(v)` untuk nilai JSON di template literal.
-fn js_str(v: &Value) -> String {
+pub(crate) fn js_str(v: &Value) -> String {
     match v {
         Value::String(s) => s.clone(),
         Value::Null => "null".to_string(),
@@ -108,7 +108,7 @@ pub(crate) struct Profil {
     pub email: String,
     pub description: String,
     pub profile: String,
-    pub avatar: String,
+    pub avatar: Value,
     pub packages: Vec<Value>,
 }
 
@@ -121,7 +121,7 @@ pub(crate) fn dari_firefly(d: &Value) -> Profil {
         email: js_str(&d["email"]),
         description: js_str(&d["name"]),
         profile: js_str(&d["profile"]),
-        avatar: js_str(&d["avatar"]),
+        avatar: d["avatar"].clone(),
         packages: d
             .get("packages")
             .filter(|v| crate::common::js_truthy_value(v))
@@ -145,7 +145,7 @@ pub(crate) fn dari_nexray(r: &Value) -> Profil {
         } else {
             format!("https://www.npmjs.com/~{nama}")
         },
-        avatar: String::new(),
+        avatar: Value::Null,
         packages: Vec::new(),
     }
 }
@@ -254,10 +254,11 @@ pub fn npmstalk(ctx: Ctx) -> Reply {
     };
 
     let teks = caption(&profil);
-    if profil.avatar.is_empty() {
+    // `if (d.avatar)`: `undefined` falsy, jadi yang dicek truthiness-nya.
+    if !crate::common::js_truthy_value(&profil.avatar) {
         Reply::text(teks).with_reaction("✅")
     } else {
-        Reply::image(MediaSource::url(profil.avatar), teks).with_reaction("✅")
+        Reply::image(MediaSource::url(js_str(&profil.avatar)), teks).with_reaction("✅")
     }
 }
 
@@ -464,7 +465,7 @@ mod tests {
             email: String::new(),
             description: String::new(),
             profile: "https://npmjs.com/~u".into(),
-            avatar: String::new(),
+            avatar: Value::Null,
             packages: paket,
         };
         let txt = caption(&p);
@@ -485,7 +486,7 @@ mod tests {
         assert_eq!(p.email, "z@x.io");
         assert_eq!(p.description, "bio");
         assert_eq!(p.profile, "https://www.npmjs.com/~zann", "homepage kosong");
-        assert!(p.avatar.is_empty(), "avatar nexray selalu kosong");
+        assert!(p.avatar.is_null(), "avatar nexray selalu kosong");
         assert!(p.packages.is_empty());
     }
 
