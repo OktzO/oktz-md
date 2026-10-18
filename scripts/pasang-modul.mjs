@@ -25,7 +25,7 @@ const KATA_KUNCI = new Set([
   "priv", "typeof", "unsized", "virtual",
 ]);
 
-const SRC = process.argv.find((a) => a.startsWith("--src="))?.slice(6) ?? "rust/crates/oktz-plugins/src";
+const SRC = process.argv.find((a) => a.startsWith("--src="))?.slice(6) ?? "rust/plugin/src";
 const TERAPKAN = process.argv.includes("--terapkan");
 
 const semuaKategori = readdirSync(SRC, { withFileTypes: true })

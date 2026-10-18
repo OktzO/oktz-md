@@ -17,7 +17,7 @@ import path from "node:path";
 
 const REPO = path.resolve(new URL("..", import.meta.url).pathname);
 const AKAR = process.argv.slice(2);
-const DAFKAJ = AKAR.length ? AKAR : ["rust/crates"];
+const DAFKAJ = AKAR.length ? AKAR : ["rust"];
 
 // Hanya jejak kuat. `}` sendirian dan `=> {` dipakai juga oleh JSON/HTML,
 // jadi tidak boleh jadi bukti.

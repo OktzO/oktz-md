@@ -57,7 +57,7 @@ mod tests {
     #[test]
     fn roundtrips_real_lowdb_file() {
         // File produksi lowdb; hanya jalan kalau ada (test skip kalau tidak).
-        let Ok(raw) = std::fs::read_to_string("../../../database/main/settings.json") else {
+        let Ok(raw) = std::fs::read_to_string("../../test/fixtures/settings.json") else {
             eprintln!("skip: settings.json tidak ada di mesin ini");
             return;
         };

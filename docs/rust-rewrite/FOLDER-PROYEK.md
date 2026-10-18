@@ -1,8 +1,10 @@
 # Rencana: sistem Rust jadi folder mandiri (seperti `ourin-md`)
 
-Status: **direncanakan**, belum dieksekusi. Tuple ini hanya sah kalau core
-sudah memenuhi gate di bawah._workers_referensi: repo JS tetap ada sebagai
-**acuan baca-saja** untuk cek paritas — bukan dua sistem yang jalan bersamaan.
+Status: **sebagian dieksekusi** — `rust/` kini mandiri dengan `src/`, `lib/`,
+`plugin/`, `assets/`, `data/`, `test/`, `native/`, dan `tests/`. Nama folder
+target di bawah (`ourin-rs/`, `crates/`) tidak dipakai. Gate §3 tetap berlaku
+untuk pemisahan repo final. Referensi: repo JS tetap ada sebagai **acuan
+baca-saja** untuk cek paritas — bukan dua sistem yang jalan bersamaan.
 
 ## 1. Bentuk target
 

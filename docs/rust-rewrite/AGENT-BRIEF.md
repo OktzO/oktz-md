@@ -17,11 +17,11 @@ menambah pesan sendiri.
 Hanya file `.rs` BARU di direktori kategori yang sesuai:
 
 ```
-rust/crates/oktz-plugins/src/<kategori>/<nama>.rs
+rust/plugin/src/<kategori>/<nama>.rs
 ```
 
 Kategori mengikuti folder JS asalnya (`plugins/ai/ai.js` →
-`rust/crates/oktz-plugins/src/ai/ai.rs`). Kalau folder kategori belum ada,
+`rust/plugin/src/ai/ai.rs`). Kalau folder kategori belum ada,
 buat foldernya.
 
 ## File yang TIDAK boleh kamu sentuh

@@ -283,7 +283,7 @@ mod tests {
         // `countrystalk.js:7` menulis "stalker  ". Dibulatkan jadi satu
         // spasi akaningen tidak cocok dengan produksi.
         let teks = std::fs::read_to_string(
-            concat!(env!("CARGO_MANIFEST_DIR"), "/../../../plugins/stalker/countrystalk.js"),
+            concat!(env!("CARGO_MANIFEST_DIR"), "/../test/fixtures/countrystalk.js"),
         )
         .expect("baca JS");
         let baris = teks

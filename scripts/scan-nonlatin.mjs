@@ -11,7 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO = path.resolve(fileURLToPath(import.meta.url), '../..');
-const ROOT = path.resolve(REPO, process.argv[2] || 'rust/crates');
+const ROOT = path.resolve(REPO, process.argv[2] || 'rust');
 const ext = process.argv[3] || '.rs';
 
 const IZIN = new Set([
@@ -51,7 +51,7 @@ const DUI = new Map();
 function jalan(dir) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
-    if (e.isDirectory()) { jalan(p); continue; }
+    if (e.isDirectory()) { if (e.name === 'target' || e.name === 'node_modules') continue; jalan(p); continue; }
     if (!e.name.endsWith(ext)) continue;
     const lines = fs.readFileSync(p, 'utf8').split('\n');
     lines.forEach((line, i) => {

@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-const SRC = "rust/crates/oktz-plugins/src";
+const SRC = "rust/plugin/src";
 const COMMON = join(SRC, "common.rs");
 
 function namaOwner(file) {

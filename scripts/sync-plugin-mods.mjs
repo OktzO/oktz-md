@@ -9,7 +9,7 @@ import path from "node:path";
 
 const ROOT =
   process.argv[2] ||
-  path.resolve(import.meta.dirname, "../rust/crates/oktz-plugins/src");
+  path.resolve(import.meta.dirname, "../rust/plugin/src");
 
 // Nama file plugin bisa mengandung `-` (`jtukowi-ai.rs`) atau keyword Rust
 // (`use.rs`), sedangkan nama modul harus identifier. Nama modulnya di-slash ke

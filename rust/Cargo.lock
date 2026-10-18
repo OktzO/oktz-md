@@ -1157,7 +1157,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oktz-bin"
+name = "oktz"
 version = "0.1.0"
 dependencies = [
  "oktz-core",

@@ -54,7 +54,7 @@ for (const f of walk(join(ROOT, "plugins"), ".js")) {
 }
 
 const rs = new Map();
-for (const f of walk(join(ROOT, "rust/crates/oktz-plugins/src"), ".rs")) {
+for (const f of walk(join(ROOT, "rust/plugin/src"), ".rs")) {
   const t = readFileSync(f, "utf8");
   // Dua cara mendaftarkan plugin: atribut `#[plugin(name = "..")]` langsung,
   // dan macro `cek_plugin!`/`data_plugin!`/`tanya_plugin!` yang memancarkan
@@ -83,7 +83,7 @@ for (const n of hanyaJs) console.log("  -", n, "|", js.get(n));
 // VALID_SERVERS saat modul dimuat, jadi tidak ada literal untuk dibaca. Satu
 //-satunya plugin dengan nama non-literal, dan `addownerv1` yang terdaftar di Rust
 // adalah anggota generator itu — bukan nama yang tidak dikenal produksi.
-const DINAMIS = new Map([["addownerv1", "rust/crates/oktz-plugins/src/panel/rolemanager.rs"]]);
+const DINAMIS = new Map([["addownerv1", "rust/plugin/src/panel/rolemanager.rs"]]);
 const hanyaRsRiil = hanyaRs.filter((n) => !DINAMIS.has(n));
 
 console.log("hanya di Rust (tidak dikenal di produksi):", hanyaRsRiil.length);

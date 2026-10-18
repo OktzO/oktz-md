@@ -21,8 +21,8 @@ pesan ini. Setiap plugin hanya boleh kamu sentuh file Rust-nya sendiri.
 4. **Dilarang `git commit`, `git add`, atau mengubah branch.**
 5. Komentar, doc comment, dan nama identifier bahasa Indonesia. Huruf CJK
    dilarang kecuali glyph yang memang ada di teks tampilan JS.
-6. Satu plugin = satu file Rust di `rust/crates/oktz-plugins/src/<kategori>/`.
-   Daftarkan modulnya di `rust/crates/oktz-plugins/src/<kategori>/mod.rs`
+6. Satu plugin = satu file Rust di `rust/plugin/src/<kategori>/`.
+   Daftarkan modulnya di `rust/plugin/src/<kategori>/mod.rs`
    HANYA kalau mod.rs itu milikmu dan belum memuat pluginmu — kalau mod.rs
    sudah punya plugin lain yang bukan milikmu, jangan sentuh; tulis catatan
    di kepala file bahwa baris `pub mod` perlu ditambah manual.
@@ -31,8 +31,8 @@ pesan ini. Setiap plugin hanya boleh kamu sentuh file Rust-nya sendiri.
 
 ## Kontrak API
 
-Baca dulu `rust/crates/oktz-plugin-api/src/registry.rs` dan
-`rust/crates/oktz-plugins/src/common.rs` sebelum menulis apa pun.
+Baca dulu `rust/lib/oktz-plugin-api/src/registry.rs` dan
+`rust/plugin/src/common.rs` sebelum menulis apa pun.
 
 - `#[plugin(name = "...", alias = [...], category = "...", description = "...",
   usage = "...", example = "...", cooldown = N, energi = N, is_group = bool,
@@ -90,7 +90,7 @@ sini BUKAN alasan untuk melewatkan plugin.
   akan dipakai kalau penyimpangan ditutup.
 - Test di `#[cfg(test)] mod tests` pada file yang sama. Stub `HttpGet` lokal
   yang mencatat `HttpCall` dan membalas body tetap — contoh ada di
-  `rust/crates/oktz-plugins/src/stalker/ytstalk.rs`.
+  `rust/plugin/src/stalker/ytstalk.rs`.
 - Test harus mengunci perilaku JS yang mudah salah: operator `||` vs `??`,
   `parseInt` vs `Number`, urutan operasi, batas digit `toFixed`, dan apa yang
   terjadi pada body bukan JSON.

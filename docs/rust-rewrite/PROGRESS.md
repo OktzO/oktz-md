@@ -404,7 +404,7 @@ nix-shell -p stdenv.cc pkg-config -I nixpkgs=/tmp/opencode/nixpkgs-25.05 --run '
 
 ## Migrasi plugin massal (2026-10-14)
 
-Alur sekarang: file JS di `plugins/` dipor ke `rust/crates/oktz-plugins/src/<kategori>/<nama>.rs` oleh subagent, satu batch 15 file per agent, dengan brief di `AGENT-BRIEF.md`. Orkestrator yang menjalankan cargo, menyinkronkan `*/mod.rs` dan `lib.rs`, serta memperbaiki error integrasi.
+Alur sekarang: file JS di `plugins/` dipor ke `rust/plugin/src/<kategori>/<nama>.rs` oleh subagent, satu batch 15 file per agent, dengan brief di `AGENT-BRIEF.md`. Orkestrator yang menjalankan cargo, menyinkronkan `*/mod.rs` dan `lib.rs`, serta memperbaiki error integrasi.
 
 Skrip orkestrator (wajib, agent tidak boleh menyentuh):
 - `scripts/sync-plugin-mods.mjs` — daftar modul per kategori; blok `//!` harus tetap di paling atas.

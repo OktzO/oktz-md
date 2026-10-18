@@ -39,7 +39,7 @@ ${daftar.map((f) => `- \`${f}\``).join("\n")}
 
 Folder Rust hasil: mengikuti struktur folder JS. Untuk setiap plugin JS di
 \`plugins/<kategori>/<file>.js\`, buat
-\`rust/crates/oktz-plugins/src/<kategori>/<file>.rs\`.
+\`rust/plugin/src/<kategori>/<file>.rs\`.
 
 Kalau dua file JS di daftarmu berakhiran nama sama setelah normalisasi
 (hanya berbeda ekstensi), pakai nama Rust yang berbeda dan tulis catatan

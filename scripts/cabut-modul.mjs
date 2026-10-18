@@ -4,13 +4,13 @@
 //   node scripts/cabut-modul.mjs daftar.txt
 //
 // `daftar.txt` berisi satu jalur relatif terhadap
-// `rust/crates/oktz-plugins/src/` per baris (mis. `tools/ipwho.rs`).
+// `rust/plugin/src/` per baris (mis. `tools/ipwho.rs`).
 // Skrip menghapus `pub mod ...;` yang menunjuk berkas itu, termasuk bentuk
 // `#[path = "..."]`. Tidak pernah menyentuh berkas lain.
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, basename, join } from "node:path";
 
-const SRC = new URL("../rust/crates/oktz-plugins/src/", import.meta.url).pathname;
+const SRC = new URL("../rust/plugin/src/", import.meta.url).pathname;
 const daftar = readFileSync(process.argv[2], "utf8")
   .split("\n")
   .map((s) => s.trim())

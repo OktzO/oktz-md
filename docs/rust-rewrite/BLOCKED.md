@@ -345,7 +345,7 @@ membuat hasil terlihat hijau padahal tidak:
    check`/`build` tetap mem-build ulang, tapi `cargo test` memakai binari lama
    sehingga test yang baru ditulis tidak muncul. Gejalanya "test saya tidak
    jalan". Hindari dengan menyentuh file sumber sebelum build:
-   `touch rust/crates/*/src/*.rs rust/crates/*/src/*/*.rs`. Kalau hasilnya
+   `touch rust/src/*.rs rust/lib/*/src/*.rs rust/lib/*/src/*/*.rs rust/plugin/src/*/*.rs`. Kalau hasilnya
    tetap janggal, buktikan dulu dengan `compile_error!` di dalam badan fungsi —
    kalau tidak muncul, itu bukan soal staleness, tapi jebakan no-1 di atas.
 
@@ -358,7 +358,7 @@ Plugin berikut sempat dibuatkan berkas stub oleh agent porting (badannya cuma
 pesan "belum tersedia"), lalu dibuang dari registrasi karena bukan paritas JS.
 Port ulang setelah kapabilitasnya ada.
 
-### system (`rust/crates/oktz-plugins/src/main/system.rs`)
+### system (`rust/plugin/src/main/system.rs`)
 
 `plugins/main/system.js` — info sistem (RAM, CPU, Disk, Latency).
 
@@ -372,7 +372,7 @@ jaringan lewat `ctx.http` saja).
 `ponytail:` kalau `Ctx` menambah field sistem nanti, port ulang dari
 `plugins/main/system.js`.
 
-### ganti-asset (`rust/crates/oktz-plugins/src/owner/ganti-asset.rs`)
+### ganti-asset (`rust/plugin/src/owner/ganti-asset.rs`)
 
 `plugins/owner/ganti-asset.js` — ganti asset secara interaktif.
 
@@ -385,7 +385,7 @@ upload ke storage), serta `m.download()` / `m.quoted.download()` dan
 Kapabilitas ini belum ada di Rust API (`Ctx` tidak punya `sock`, dan
 `MediaFetch` belum dipasang pipeline untuk owner). Jangan port paksa.
 
-### ganti-demote.jpg (`rust/crates/oktz-plugins/src/owner/ganti-demote.rs`)
+### ganti-demote.jpg (`rust/plugin/src/owner/ganti-demote.rs`)
 
 `plugins/owner/ganti-demote.js` — ganti gambar demote.jpg.
 BLOKIRAN: butuh kapasitas berkas (fs) + image processing (sharp) +
@@ -397,7 +397,7 @@ tersedia. Jika dibuka, daftarkan di `owner/mod.rs` dengan path karena
 nama berkas mengandung titik dan hubung:
 `#[path = "ganti-demote.rs"] pub mod ganti_demote;`.
 
-### ganti-foto3.jpg (`rust/crates/oktz-plugins/src/owner/ganti-foto3.rs`)
+### ganti-foto3.jpg (`rust/plugin/src/owner/ganti-foto3.rs`)
 
 `plugins/owner/ganti-foto3.js` — ganti gambar foto3.jpg.
 
@@ -415,7 +415,7 @@ Tidak ada `MediaFetch`/filesystem yang cukup di `Ctx`, dan mengubah
 port ulang dari `plugins/owner/ganti-foto3.js` (download media, upload,
 balas URL baru).
 
-### ganti-goodbye.jpg (`rust/crates/oktz-plugins/src/owner/ganti-goodbye.rs`)
+### ganti-goodbye.jpg (`rust/plugin/src/owner/ganti-goodbye.rs`)
 
 `plugins/owner/ganti-goodbye.js` — ganti gambar goodbye.jpg.
 
@@ -426,7 +426,7 @@ BLOKIRAN: butuh `updateAssetUrl` dari `src/lib/uploader.js` (fs + HTTP
 upload ke storage) serta `m.download()` / `m.quoted.download()`.
 Kapabilitas belum ada di Rust API. Jangan port paksa.
 
-### ganti-levelup.jpg (`rust/crates/oktz-plugins/src/owner/ganti-levelup.rs`)
+### ganti-levelup.jpg (`rust/plugin/src/owner/ganti-levelup.rs`)
 
 `plugins/owner/ganti-levelup.js` — ganti gambar levelup.jpg.
 BLOKIRAN: butuh kapasitas berkas (fs) + image processing (sharp) +
@@ -436,7 +436,7 @@ Buka lagi kalau fs + sharp + upload aset tersedia. Jika dibuka, daftarkan
 di `owner/mod.rs` dengan path karena nama berkas mengandung titik dan hubung:
 `#[path = "ganti-levelup.rs"] pub mod ganti_levelup;`.
 
-### ganti-pp-kosong.jpg (`rust/crates/oktz-plugins/src/owner/ganti-pp-kosong.rs`)
+### ganti-pp-kosong.jpg (`rust/plugin/src/owner/ganti-pp-kosong.rs`)
 
 `plugins/owner/ganti-pp-kosong.js` — ganti gambar pp-kosong.jpg.
 
@@ -448,7 +448,7 @@ Alasan: sama dengan `ganti-foto3.js` — `updateAssetUrl` butuh `fs`,
 `ponytail:` kalau kapasitas itu ditambahkan nanti, port ulang dari
 `plugins/owner/ganti-pp-kosong.js`.
 
-### ganti-rpg.jpg (`rust/crates/oktz-plugins/src/owner/ganti-rpg.rs`)
+### ganti-rpg.jpg (`rust/plugin/src/owner/ganti-rpg.rs`)
 
 `plugins/owner/ganti-rpg.js` — ganti gambar rpg.jpg.
 
@@ -459,7 +459,7 @@ BLOKIRAN: butuh `updateAssetUrl` dari `src/lib/uploader.js` (fs + HTTP
 upload ke storage) serta `m.download()` / `m.quoted.download()`.
 Kapabilitas belum ada di Rust API. Jangan port paksa.
 
-### ganti-rules.jpg (`rust/crates/oktz-plugins/src/owner/ganti-rules.rs`)
+### ganti-rules.jpg (`rust/plugin/src/owner/ganti-rules.rs`)
 
 `plugins/owner/ganti-rules.js` — ganti gambar rules.jpg (thumbnail rules).
 BLOKIRAN: butuh kapasitas berkas (fs) + image processing (sharp) +
@@ -469,7 +469,7 @@ Buka lagi kalau fs + sharp + upload aset tersedia. Jika dibuka, daftarkan
 di `owner/mod.rs` dengan path karena nama berkas mengandung titik dan hubung:
 `#[path = "ganti-rules.rs"] pub mod ganti_rules;`.
 
-### ganti-welcome.jpg (`rust/crates/oktz-plugins/src/owner/ganti-welcome.rs`)
+### ganti-welcome.jpg (`rust/plugin/src/owner/ganti-welcome.rs`)
 
 `plugins/owner/ganti-welcome.js` — ganti gambar welcome.jpg.
 
@@ -481,7 +481,7 @@ Alasan: sama dengan `ganti-foto3.js` — `updateAssetUrl` butuh `fs`,
 `ponytail:` kalau kapasitas itu ditambahkan nanti, port ulang dari
 `plugins/owner/ganti-welcome.js`.
 
-### sessionstats (`rust/crates/oktz-plugins/src/owner/sessionstats.rs`)
+### sessionstats (`rust/plugin/src/owner/sessionstats.rs`)
 
 `plugins/owner/sessionstats.js` — statistik session_keys per kategori.
 
@@ -492,7 +492,7 @@ BLOKIRAN: butuh `sessionKeyStats` dari `src/lib/turso-session.js` (Turso
 DB). Rust crate ini sengaja tidak punya dependensi store/Turso, dan `Ctx`
 tidak mengekspos DB. Jangan port paksa.
 
-### linode2gb (`rust/crates/oktz-plugins/src/panel/linode.rs`)
+### linode2gb (`rust/plugin/src/panel/linode.rs`)
 
 `plugins/panel/linode.js` — manajemen VPS Linode.
 
@@ -511,7 +511,7 @@ cabang butuh kapasitas yang belum ada, jangan port paksa.
 dari `plugins/panel/linode.js` (Linode API v4, token dari
 `ctx.config().api_keys.linode`).
 
-### lookup (`rust/crates/oktz-plugins/src/tools/lookup.rs`)
+### lookup (`rust/plugin/src/tools/lookup.rs`)
 
 `plugins/tools/lookup.js` — DNS Lookup untuk domain.
 
@@ -522,7 +522,7 @@ BLOKIRAN: butuh `sendToolsPreview(sock, chat, text, ...)` dari
 `src/lib/context.js` — yang membutuhkan `sock` (WhatsApp client) untuk
 mengirim pesan preview. `Ctx` di Rust tidak punya `sock`. Jangan port paksa.
 
-### cekvps (`rust/crates/oktz-plugins/src/vps/cekvps.rs`)
+### cekvps (`rust/plugin/src/vps/cekvps.rs`)
 
 `plugins/vps/cekvps.js` — cek detail VPS DigitalOcean.
 BLOKIRAN: butuh `config.digitalocean` (token, sellers, ownerPanels), yang
@@ -532,7 +532,7 @@ DigitalOcean di `Ctx`, jadi plugin tidak dapat dipaksa di-port.
 Buka lagi kalau `config.digitalocean` ditambahkan ke `Runtime`.
 Jika dibuka, tambahkan baris `pub mod cekvps;` ke `vps/mod.rs`.
 
-### delvps (`rust/crates/oktz-plugins/src/vps/delvps.rs`)
+### delvps (`rust/plugin/src/vps/delvps.rs`)
 
 `plugins/vps/delvps.js` — hapus VPS DigitalOcean.
 
@@ -541,7 +541,7 @@ Jika dibuka, tambahkan baris `pub mod cekvps;` ke `vps/mod.rs`.
 Alasan: membutuhkan `config.digitalocean.token` dan
 `config.digitalocean.sellers` / `config.digitalocean.ownerPanels`, yang
 tidak ada pada `oktz_core::config::Runtime` (hanya `api_keys`, `owner`,
-`assets`, dst. — lihat `rust/crates/oktz-core/src/config.rs`).
+`assets`, dst. — lihat `rust/lib/oktz-core/src/config.rs`).
 Tidak ada jalur membaca kunci DigitalOcean dari `Ctx`, jadi tidak bisa
 meniru perilaku JS apa adanya.
 
@@ -551,7 +551,7 @@ port ulang dari `plugins/vps/delvps.js` (axios DELETE ke
 `Authorization: Bearer <token>`, pakai `ctx.http.delete` bila tersedia,
 atau `HttpCall::delete` lewat `ctx.http.call`).
 
-### sisavps (`rust/crates/oktz-plugins/src/vps/sisavps.rs`)
+### sisavps (`rust/plugin/src/vps/sisavps.rs`)
 
 `plugins/vps/sisavps.js` — cek sisa kuota VPS DigitalOcean.
 BLOKIRAN: butuh `config.digitalocean` (token, sellers, ownerPanels), yang
@@ -578,7 +578,7 @@ lalu `sock.relayMessage`. `AIRich` ada di `src/lib/builder.js:993`.
 
 Yang hilang di Rust:
 
-1. `Reply` (`rust/crates/oktz-plugin-api/src/registry.rs`) hanya punya
+1. `Reply` (`rust/lib/oktz-plugin-api/src/registry.rs`) hanya punya
    teks, kutipan, media, reaksi, dan mutasi — belum ada varian tabel atau
    pesan interaktif.
 2. `oktz-wa` belum mengekspos pengiriman pesan proto mentah
@@ -603,7 +603,7 @@ dari `onigis`, `sock.relayMessage`, `viewOnceMessage` + `interactiveMessage`
 `Reply`/`Ctx`/`Sock`. `Reply::Sequence` bisa mengirim beberapa gambar biasa,
 tetapi bukan pesan `viewOnce` interaktif dengan quick reply.
 
-Berkas catatan lama (`rust/crates/oktz-plugins/src/random/anime.rs`) dihapus
+Berkas catatan lama (`rust/plugin/src/random/anime.rs`) dihapus
 supaya tidak muncul sebagai plugin palsu di `bandingkan-nama-plugin.mjs`.
 Buka lagi kalau `Reply` punya varian native-flow.
 

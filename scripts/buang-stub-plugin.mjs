@@ -18,7 +18,7 @@
 import { readFileSync, writeFileSync, readdirSync, rmSync, existsSync } from "node:fs";
 import { join, basename } from "node:path";
 
-const SRC = "rust/crates/oktz-plugins/src";
+const SRC = "rust/plugin/src";
 const BLOCKED = "docs/rust-rewrite/BLOCKED.md";
 const TERAPKAN = process.argv.includes("--terapkan");
 

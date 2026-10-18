@@ -79,7 +79,7 @@ ${daftar.map((f) => `- \`${f}\``).join("\n")}
 
 ## Keluaran
 
-\`rust/crates/oktz-plugins/src/<kategori>/<nama>.rs\` untuk setiap
+\`rust/plugin/src/<kategori>/<nama>.rs\` untuk setiap
 \`plugins/<kategori>/<nama>.js\`, plus daftar singkat: berkas yang dibuat,
 jumlah test per berkas, dan berkas yang tidak jadi di-port beserta alasannya.
 JANGAN menyentuh \`mod.rs\` mana pun.

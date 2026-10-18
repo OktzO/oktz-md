@@ -25,7 +25,7 @@ pub(crate) const SESSION_TIMEOUT_MS: i64 = 120_000;
 /// memakainya tidak membuat sesi kedua untuk chat yang sama.
 pub(crate) const SESSIONS_KEY: &str = "gameSessions";
 
-const BANK: &str = include_str!("../../../../../src/data/family100.json");
+const BANK: &str = include_str!("../../../data/family100.json");
 
 /// Satu baris `src/data/family100.json`.
 #[derive(Debug, PartialEq, Eq)]

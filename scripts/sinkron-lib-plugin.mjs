@@ -7,7 +7,7 @@
 //
 // Pemakaian:
 //   node scripts/sinkron-lib-plugin.mjs                      # oktz-plugins
-//   node scripts/sinkron-lib-plugin.mjs rust/crates/oktz-scraper/src
+//   node scripts/sinkron-lib-plugin.mjs rust/lib/oktz-scraper/src
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 const REPO = path.resolve(fileURLToPath(import.meta.url), '../..');
 const ROOT = process.argv[2]
   ? path.resolve(REPO, process.argv[2])
-  : path.join(REPO, 'rust/crates/oktz-plugins/src');
+  : path.join(REPO, 'rust/plugin/src');
 
 const libPath = path.join(ROOT, 'lib.rs');
 const lama = fs.existsSync(libPath) ? fs.readFileSync(libPath, 'utf8') : '';

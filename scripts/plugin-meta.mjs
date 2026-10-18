@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 export const REPO = path.resolve(fileURLToPath(import.meta.url), '../..');
 export const JS_ROOT = path.join(REPO, 'plugins');
-export const RS_ROOT = path.join(REPO, 'rust/crates/oktz-plugins/src');
+export const RS_ROOT = path.join(REPO, 'rust/plugin/src');
 
 export function parseJsConfig(src) {
   const i = src.indexOf('pluginConfig');

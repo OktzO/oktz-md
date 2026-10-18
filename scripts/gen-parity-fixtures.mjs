@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import config from "../config.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const OUT = path.join(ROOT, "rust/crates/oktz-core/tests/fixtures/parity");
+const OUT = path.join(ROOT, "rust/lib/oktz-core/tests/fixtures/parity");
 fs.mkdirSync(OUT, { recursive: true });
 
 const out = {

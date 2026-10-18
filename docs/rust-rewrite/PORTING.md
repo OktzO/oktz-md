@@ -1,6 +1,6 @@
 # Cara port plugin JS → Rust
 
-Satu plugin satu file: `plugins/<dir>/<nama>.js` → `rust/crates/oktz-plugins/src/<dir>/<nama>.rs`.
+Satu plugin satu file: `plugins/<dir>/<nama>.js` → `rust/plugin/src/<dir>/<nama>.rs`.
 
 ## Aturan keras
 
