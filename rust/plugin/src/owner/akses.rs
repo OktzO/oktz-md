@@ -11,9 +11,7 @@
 //! manual (mod.rs sudah milik plugin lain, dilarang disentuh).
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{json, Value};
-
-use crate::common::parse_int;
+use serde_json::Value;
 
 const PERMANENT_KEYS: [&str; 2] = ["permanent", "perm"];
 
@@ -42,36 +40,6 @@ fn parse_duration(s: &str) -> Option<i64> {
     Some(num * mult)
 }
 
-/// `ms(timeLeft, { long: true })` — representasi manusia, terbesar dulu.
-fn format_duration_long(millis: i64) -> String {
-    let mut ms = millis.max(0);
-    let seconds = ms / 1000;
-    let minutes = seconds / 60;
-    let hours = minutes / 60;
-    let days = hours / 24;
-    let years = days / 365;
-    let mut parts: Vec<String> = Vec::new();
-    if years > 0 {
-        parts.push(format!("{} tahun", years));
-    }
-    let sisa_hari = days % 365;
-    if sisa_hari > 0 {
-        parts.push(format!("{} hari", sisa_hari));
-    }
-    let sisa_jam = hours % 24;
-    if sisa_jam > 0 {
-        parts.push(format!("{} jam", sisa_jam));
-    }
-    let sisa_menit = minutes % 60;
-    if sisa_menit > 0 {
-        parts.push(format!("{} menit", sisa_menit));
-    }
-    let sisa_detik = seconds % 60;
-    if parts.is_empty() || sisa_detik > 0 {
-        parts.push(format!("{} detik", sisa_detik));
-    }
-    parts.join(" ")
-}
 
 /// `acc.expired ? ms(acc.expired - now) : "Permanent"` (bentuk pendek).
 fn format_expired(expired: Option<i64>, now: i64) -> String {
@@ -81,7 +49,7 @@ fn format_expired(expired: Option<i64>, now: i64) -> String {
             if left <= 0 {
                 "Expired".to_string()
             } else {
-                let mut ms = left;
+                let ms = left;
                 let seconds = ms / 1000;
                 let minutes = seconds / 60;
                 let hours = minutes / 60;
@@ -102,13 +70,14 @@ fn format_expired(expired: Option<i64>, now: i64) -> String {
 }
 
 fn jid_dari_nomor(arg: &str) -> Option<String> {
-    if arg.len() >= 5 && arg.len() <= 15 && arg.chars().all(char::is_ascii_digit) {
+    if arg.len() >= 5 && arg.len() <= 15 && arg.chars().all(|c| c.is_ascii_digit()) {
         return Some(format!("{}@s.whatsapp.net", arg));
     }
-    if let Some(rest) = arg.strip_prefix('@') {
-        if !rest.is_empty() && rest.chars().all(char::is_ascii_digit) {
-            return Some(format!("{}@s.whatsapp.net", rest));
-        }
+    if let Some(rest) = arg.strip_prefix('@')
+        && !rest.is_empty()
+        && rest.chars().all(|c| c.is_ascii_digit())
+    {
+        return Some(format!("{}@s.whatsapp.net", rest));
     }
     None
 }
@@ -131,7 +100,7 @@ fn resolve_target(ctx: &Ctx) -> Option<String> {
 /// `m.args.filter(a => !a.includes("@") && !/^\d{10,}$/.test(a))`
 fn clean_args(args: &[String]) -> Vec<String> {
     args.iter()
-        .filter(|a| !a.contains('@') && !(a.len() >= 10 && a.chars().all(char::is_ascii_digit)))
+        .filter(|a| !a.contains('@') && !(a.len() >= 10 && a.chars().all(|c| c.is_ascii_digit())))
         .cloned()
         .collect()
 }
@@ -155,7 +124,7 @@ fn active_access(access: &[Value], now: i64) -> Vec<Value> {
         .filter(|a| {
             a.get("expired")
                 .and_then(Value::as_i64)
-                .map_or(true, |e| e > now)
+                .is_none_or(|e| e > now)
         })
         .cloned()
         .collect()
@@ -192,11 +161,11 @@ pub fn akses(ctx: Ctx) -> Reply {
         // `db.getUser(target)` — di port ini user_data adalah objek pengirim;
         // untuk target lain tidak ada jalan baca store selain user_data sendiri.
         // Pakai user_data sebagai akses target (batasan Ctx).
-        let mut access = access_list(&user_data);
+        let access = access_list(&user_data);
         let active = active_access(&access, now);
         if active.len() != access.len() {
             let mut next = user_data.clone();
-            next.insert("access".to_string(), Value::Array(active.clone()));
+            next.as_object_mut().unwrap().insert("access".to_string(), Value::Array(active.clone()));
             return Reply::text(list_text(target_jid, &active, now))
                 .with_mutation(Mutation::SetUser {
                     jid: target_jid.to_string(),
@@ -214,21 +183,21 @@ pub fn akses(ctx: Ctx) -> Reply {
         };
         let clean = clean_args(&ctx.args);
         if clean.len() < 2 {
-            return Reply::text(format!(
+            return Reply::text(
                 "⚠️ *Format Salah*\n\n\
                  Format: `.addakses <command> <durasi> <target>`\n\n\
                  *Contoh:*\n\
                  > `.addakses addowner 30d @user` (30 Hari)\n\
                  > `.addakses unban permanent @user` (Selamanya)\n\n\
-                 *Durasi Support:* 1h, 1d, 30d, 1y"
-            ));
+                 *Durasi Support:* 1h, 1d, 30d, 1y",
+            );
         }
         let command_target = clean[0].to_lowercase();
         let duration_target = clean[1].to_lowercase();
 
         let mut user = ctx.user_data.clone();
         if user.get("access").is_none() {
-            user.insert("access".to_string(), Value::Array(Vec::new()));
+            user.as_object_mut().unwrap().insert("access".to_string(), Value::Array(Vec::new()));
         }
         let mut access = access_list(&user);
 
@@ -246,7 +215,7 @@ pub fn akses(ctx: Ctx) -> Reply {
         if let Some(idx) = access.iter().position(|a| a.get("cmd").and_then(Value::as_str) == Some(command_target.as_str())) {
             access[idx] = serde_json::json!({ "cmd": command_target, "expired": expired_time.map(Value::from) });
             let mut next = user.clone();
-            next.insert("access".to_string(), Value::Array(access));
+            next.as_object_mut().unwrap().insert("access".to_string(), Value::Array(access));
             return Reply::text(format!(
                 "✅ *ᴀᴋsᴇs ᴅɪᴘᴇʀʙᴀʀᴜɪ*\n\n\
                  Command: `{}`\n\
@@ -262,7 +231,7 @@ pub fn akses(ctx: Ctx) -> Reply {
 
         access.push(serde_json::json!({ "cmd": command_target, "expired": expired_time.map(Value::from) }));
         let mut next = user.clone();
-        next.insert("access".to_string(), Value::Array(access));
+        next.as_object_mut().unwrap().insert("access".to_string(), Value::Array(access));
         Reply::text(format!(
             "✅ *ᴀᴋsᴇs ᴅɪʙᴇʀɪᴋᴀɴ*\n\n\
              ┃ 🔑 ᴄᴍᴅ: `{}`\n\
@@ -278,21 +247,21 @@ pub fn akses(ctx: Ctx) -> Reply {
         let Some(target_jid) = target.as_deref() else {
             return Reply::text("❌ Tag user yang mau dihapus aksesnya!");
         };
-        let mut user = ctx.user_data.clone();
+        let user = ctx.user_data.clone();
         let mut access = access_list(&user);
         let active = active_access(&access, now);
 
         let specific_cmd = ctx
             .args
             .iter()
-            .find(|a| !a.contains('@') && !a.chars().all(char::is_ascii_digit))
+            .find(|a| !a.contains('@') && !a.chars().all(|c| c.is_ascii_digit()))
             .map(|a| a.to_lowercase());
 
         if let Some(cmd_name) = specific_cmd {
             if let Some(idx) = access.iter().position(|a| a.get("cmd").and_then(Value::as_str) == Some(cmd_name.as_str())) {
                 access.remove(idx);
                 let mut next = user.clone();
-                next.insert("access".to_string(), Value::Array(access));
+                next.as_object_mut().unwrap().insert("access".to_string(), Value::Array(access));
                 return Reply::text(format!(
                     "✅ Akses `{}` berhasil dicabut dari @{}",
                     cmd_name,
@@ -357,10 +326,9 @@ fn list_text(target: &str, active: &[Value], now: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(args: &[&str], command: &str, user_data: Value, mentioned: Option<&str>, quoted: bool) -> Reply {
-        let mut args_vec: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
+        let args_vec: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
         let ctx = Ctx {
             command: command.to_string(),
             args: args_vec.clone(),
@@ -396,7 +364,7 @@ mod tests {
         assert_eq!(r.mutations().len(), 1);
         match &r.mutations()[0] {
             Mutation::SetUser { jid, data } => {
-                assert_eq!(jid, "628111@s.whatsapp.net");
+                assert_eq!(jid, "6281234567890@s.whatsapp.net");
                 data.clone()
             }
             other => panic!("harus SetUser, dapat {other:?}"),
@@ -492,6 +460,6 @@ mod tests {
         let r = run(&["6281234567890", "cmdx", "permanent"], "addakses", serde_json::json!({}), None, false);
         let data = stored(&r);
         let access = data.get("access").and_then(Value::as_array).unwrap();
-        assert_eq!(access[0].get("expired"), None);
+        assert_eq!(access[0].get("expired"), Some(&Value::Null));
     }
 }

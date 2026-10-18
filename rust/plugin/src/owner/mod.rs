@@ -60,3 +60,6 @@ pub mod unblock;
 pub mod welcomeall;
 
 // Ditambahkan scripts/pasang-modul.mjs.
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod akses;

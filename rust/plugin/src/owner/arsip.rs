@@ -5,7 +5,6 @@
 //! `rust/crates/oktz-plugins/src/owner/mod.rs`.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::json;
 
 /// Membuang karakter non-digit dari nomor telepon, seperti
 /// `num.replace(/[^0-9]/g, "")` di JS.
@@ -76,8 +75,7 @@ pub fn arsip(ctx: Ctx) -> Reply {
                 data: serde_json::json!({}),
             });
         }
-        if let Some(q) = &ctx.quoted {
-            if let Some(jid) = target_jid_dari_quoted(q) {
+        if let Some(jid) = ctx.quoted.as_ref().and_then(target_jid_dari_quoted) {
                 let target = jid.split('@').next().unwrap_or(&jid);
                 return Reply::text(format!(
                     "📂 *ᴀʀsɪᴘ ᴅɪʙᴜᴋᴀ*\n\n> Target: {target}"
@@ -86,7 +84,6 @@ pub fn arsip(ctx: Ctx) -> Reply {
                     jid,
                     data: serde_json::json!({}),
                 });
-            }
         }
         if !ctx.is_group {
             let target = ctx.chat.split('@').next().unwrap_or(&ctx.chat);
@@ -171,7 +168,9 @@ mod tests {
 
     #[test]
     fn tanpa_target_mengembalikan_bantuan() {
-        let r = arsip(ctx());
+        let mut c = ctx();
+        c.is_group = true; // JS: private chat tanpa argumen mengarsipkan chat itu sendiri
+        let r = arsip(c);
         assert!(text_of(&r).contains("📁 *ᴀʀsɪᴘ ᴄʜᴀᴛ*"));
         assert!(text_of(&r).contains(".arsip 628xxx"));
         assert!(r.mutations().is_empty());
@@ -192,6 +191,7 @@ mod tests {
     #[test]
     fn buka_tanpa_target_mengembalikan_bantuan() {
         let mut c = ctx();
+        c.is_group = true;
         c.args = vec!["buka".into()];
         let r = arsip(c);
         assert!(text_of(&r).contains("📁 *ᴀʀsɪᴘ ᴄʜᴀᴛ*"));

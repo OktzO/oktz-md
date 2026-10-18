@@ -27,6 +27,14 @@ const KATA_KUNCI = new Set([
 
 const SRC = process.argv.find((a) => a.startsWith("--src="))?.slice(6) ?? "rust/plugin/src";
 const TERAPKAN = process.argv.includes("--terapkan");
+// `--hanya=owner/addowner.rs,owner/akses.rs` membatasi ke berkas itu saja —
+// supaya pemasangan bisa dicoba per batch kecil, bukan seluruhnya sekaligus.
+const HANYA = process.argv
+  .find((a) => a.startsWith("--hanya="))
+  ?.slice(8)
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 const semuaKategori = readdirSync(SRC, { withFileTypes: true })
   .filter((e) => e.isDirectory())
@@ -60,16 +68,17 @@ for (const kat of semuaKategori) {
 }
 
 console.log(`kategori: ${semuaKategori.length} | perlu didaftarkan: ${kurang.length} | stub terlewat: ${stub.length}`);
+const dipilih = HANYA ? kurang.filter((k) => HANYA.includes(`${k.kat}/${k.berkas}`)) : kurang;
 for (const s of stub) console.log(`  stub (tidak didaftarkan): ${s}`);
-for (const k of kurang) console.log(`  + ${k.kat}/${k.berkas} -> ${k.namaModul}`);
+for (const k of dipilih) console.log(`  + ${k.kat}/${k.berkas} -> ${k.namaModul}`);
 
-if (!TERAPKAN || kurang.length === 0) {
+if (!TERAPKAN || dipilih.length === 0) {
   if (!TERAPKAN) console.log("(kering; jalankan dengan --terapkan)");
   process.exit(0);
 }
 
 const perKategori = new Map();
-for (const k of kurang) {
+for (const k of dipilih) {
   if (!perKategori.has(k.kat)) perKategori.set(k.kat, []);
   perKategori.get(k.kat).push(k);
 }
@@ -93,4 +102,4 @@ for (const [kat, daftar] of perKategori) {
     .join("\n");
   writeFileSync(modPath, `${lama.trimEnd()}\n\n// Ditambahkan scripts/pasang-modul.mjs.\n${tambah}\n`);
 }
-console.log(`selesai: ${kurang.length} modul didaftarkan di ${perKategori.size} kategori`);
+console.log(`selesai: ${dipilih.length} modul didaftarkan di ${perKategori.size} kategori`);

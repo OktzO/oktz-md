@@ -686,3 +686,17 @@ karena:
 Berkas tidak dihapus. Cara memasang lagi per berkas: perbaiki, tambahkan test,
 lalu `node scripts/pasang-modul.mjs --terapkan`. Jangan pasang massal sebelum
 `cargo test --release` hijau untuk berkas itu.
+
+## 24. Owner gelombang 4 — hanya `akses` yang layak didaftarkan
+
+- `owner/akses.rs` — **didaftarkan**. Satu-satunya dari batch ini yang semua
+  cabangnya bekerja lewat API yang ada (`Ctx.user_data` + `Mutation::SetUser`).
+- `owner/addprem.rs` — **tidak didaftarkan**: seluruh operasi tulis (add/del/
+  list, jadibot maupun reguler) berakhir `error_template` + reaksi ☢ karena
+  `Ctx` belum punya store premium (`db.data.premium`). Badan handler jadi
+  "belum tersedia" untuk aksi intinya → kena aturan stub.
+- `owner/arsip.rs` — **tidak didaftarkan**: `sock.chatModify({archive})` tidak
+  ada padanannya; port mengirim `Mutation::SetUser` kosong yang bukan aksi
+  arsip (menulis data palsu ke user). Tunggu kapabilitas `Sock` §2.
+- `scripts/pasang-modul.mjs` kini punya `--hanya=<jalur,...>` supaya batch
+  pendaftaran bisa dibatasi; tanpa itu skrip mendaftarkan seluruh berkas.

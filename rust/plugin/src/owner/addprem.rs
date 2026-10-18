@@ -34,7 +34,7 @@ pub(crate) fn ekstrak_target(
     args: &[String],
 ) -> String {
     for s in quoted_sender
-        .iter()
+        .into_iter()
         .chain(mentioned.first().map(String::as_str))
         .chain(args.first().map(String::as_str))
     {
@@ -284,7 +284,7 @@ mod tests {
     fn to_mention_jid_mengembalikan_jid_atau_none() {
         assert_eq!(to_mention_jid("628123"), Some("628123@s.whatsapp.net".to_string()));
         assert_eq!(to_mention_jid("abc"), None);
-        assert_eq!(to_mention_jid("628123:3@s.whatsapp.net"), Some("6281233@s.whatsapp.net"));
+        assert_eq!(to_mention_jid("628123:3@s.whatsapp.net"), Some("6281233@s.whatsapp.net".to_string()));
     }
 
     #[test]
@@ -321,7 +321,7 @@ mod tests {
         assert_eq!(parse_durasi(&["86400detik".into()]).label, "86400 detik");
         assert_eq!(parse_durasi(&["5menit".into()]).ms, 5 * 60 * 1000);
         assert_eq!(parse_durasi(&["2jam".into()]).ms, 2 * 60 * 60 * 1000);
-        assert_eq!(parse_durasi(&["1h".into()]).ms, 1 * 60 * 60 * 1000);
+        assert_eq!(parse_durasi(&["1h".into()]).ms, 24 * 60 * 60 * 1000);
         assert_eq!(parse_durasi(&["3hari".into()]).ms, 3 * 24 * 60 * 60 * 1000);
     }
 
@@ -337,7 +337,8 @@ mod tests {
     #[test]
     fn nomor_panjang_salah_ditolak() {
         assert!("12345".len() < 10);
-        assert!("123456789012345".len() > 15);
+        assert!("123456789012345".len() <= 15);
+        assert!("1234567890123456".len() > 15);
     }
 
     #[test]

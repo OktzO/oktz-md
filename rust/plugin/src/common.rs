@@ -2255,6 +2255,12 @@ mod tests_batch_g {
             "unblock", "welcomeall",
         
             "autoclear", "autoreply", "deploy", "ganti-games.jpg", "ganti-promote.jpg", "ganti-winner.jpg", "schedule",
+        
+            "addowner", "addprefix", "addprem", "akses", "arsip", "baca", "bcgc", "cekschedule", "disableplugin", "editproduk",
+            "exec", "ganti-asset", "ganti-demote.jpg", "ganti-foto.jpg", "ganti-goodbye.jpg", "ganti-levelup.jpg", "ganti-namadev", "ganti-pp-kosong.jpg", "ganti-rpg.jpg", "ganti-rules.jpg",
+            "ganti-store.jpg", "get", "hapusgrup", "hapussaluran", "leave", "listjadibot", "listjadibotaktif", "mutechat", "onlythisgrup", "pinchat",
+            "ptvch", "pushkontak", "renewsewa", "sampah", "setgoodbyetype", "setmenu", "setmenucat", "setownertype", "setwelcometype", "sewabot",
+            "star", "stopalljadibot", "stopdandeletejadibot", "stopschedule", "swgcall",
         ];
         for m in oktz_plugin_api::all_plugins().iter().map(|p| &p.meta) {
             if m.is_owner && m.is_enabled {
