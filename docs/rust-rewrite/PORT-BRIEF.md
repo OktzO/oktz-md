@@ -31,7 +31,7 @@ pesan ini. Setiap plugin hanya boleh kamu sentuh file Rust-nya sendiri.
 
 ## Kontrak API
 
-Baca dulu `rust/oktz-plugin-api/src/registry.rs` dan
+Baca dulu `rust/lib/oktz-plugin-api/registry.rs` dan
 `rust/plugin/src/common.rs` sebelum menulis apa pun.
 
 - `#[plugin(name = "...", alias = [...], category = "...", description = "...",

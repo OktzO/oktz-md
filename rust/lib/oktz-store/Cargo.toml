@@ -1,3 +1,6 @@
+[lib]
+path = "lib.rs"
+
 [package]
 name = "oktz-store"
 version.workspace = true

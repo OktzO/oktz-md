@@ -345,7 +345,7 @@ membuat hasil terlihat hijau padahal tidak:
    check`/`build` tetap mem-build ulang, tapi `cargo test` memakai binari lama
    sehingga test yang baru ditulis tidak muncul. Gejalanya "test saya tidak
    jalan". Hindari dengan menyentuh file sumber sebelum build:
-   `touch rust/src/*.rs rust/oktz-*/src/*.rs rust/oktz-*/src/*/*.rs rust/plugin/src/*/*.rs`. Kalau hasilnya
+   `touch rust/src/*.rs rust/lib/oktz-*/*.rs rust/lib/oktz-*/*/*.rs rust/plugin/src/*/*.rs`. Kalau hasilnya
    tetap janggal, buktikan dulu dengan `compile_error!` di dalam badan fungsi —
    kalau tidak muncul, itu bukan soal staleness, tapi jebakan no-1 di atas.
 
@@ -541,7 +541,7 @@ Jika dibuka, tambahkan baris `pub mod cekvps;` ke `vps/mod.rs`.
 Alasan: membutuhkan `config.digitalocean.token` dan
 `config.digitalocean.sellers` / `config.digitalocean.ownerPanels`, yang
 tidak ada pada `oktz_core::config::Runtime` (hanya `api_keys`, `owner`,
-`assets`, dst. — lihat `rust/oktz-core/src/config.rs`).
+`assets`, dst. — lihat `rust/lib/oktz-core/config.rs`).
 Tidak ada jalur membaca kunci DigitalOcean dari `Ctx`, jadi tidak bisa
 meniru perilaku JS apa adanya.
 
@@ -578,7 +578,7 @@ lalu `sock.relayMessage`. `AIRich` ada di `src/lib/builder.js:993`.
 
 Yang hilang di Rust:
 
-1. `Reply` (`rust/oktz-plugin-api/src/registry.rs`) hanya punya
+1. `Reply` (`rust/lib/oktz-plugin-api/registry.rs`) hanya punya
    teks, kutipan, media, reaksi, dan mutasi — belum ada varian tabel atau
    pesan interaktif.
 2. `oktz-wa` belum mengekspos pengiriman pesan proto mentah
@@ -731,8 +731,9 @@ Catatan: berkas-berkas itu tetap ada di disk (dicabut, bukan dihapus), jadi
 perbaikannya cukup memanggil ulang `pasang-modul.mjs --terapkan --hanya=<berkas>`
 setelah galatnya dibereskan.
 
-Struktur: folder `rust/lib/` dihapus — crate pendukung kini langsung di
-`rust/oktz-*` (members workspace `["oktz-*", "plugin"]`).
+Struktur: crate pendukung tetap di `rust/lib/oktz-*`, tapi isi `src/`
+dinaikkan satu level (`rust/lib/oktz-core/config.rs`, `lib.rs` di akar crate
+dengan `[lib] path = "lib.rs"`) — folder `src/` dihapus.
 
 ## 26. Tiga berkas owner yang tadi gagal test
 
