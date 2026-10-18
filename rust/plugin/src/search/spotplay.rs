@@ -1,6 +1,6 @@
 //! `plugins/search/spotplay.js` — putar musik dari Spotify.
 
-use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
+use oktz_plugin_api::{Ctx, Reply, plugin};
 
 #[plugin(
     name = "spotplay",

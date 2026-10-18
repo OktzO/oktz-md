@@ -5,8 +5,6 @@
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
-use crate::common::error_template;
-
 const BASE: &str = "https://pastebin.com/raw/";
 
 pub(crate) const USAGE_TMPL: &str =

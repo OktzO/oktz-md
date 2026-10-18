@@ -48,9 +48,6 @@ pub(crate) fn respons_valid(data: &serde_json::Value) -> bool {
     crate::common::js_truthy(data.get("status")) && data.get("data").is_some()
 }
 
-/// `!stickerUrls.length` (`linesticker.js:65`).
-pub(crate) const TIDAK_ADA_STICKER: &str = "❌ Tidak ada sticker ditemukan!";
-
 /// `❌ Gagal mengambil sticker dari URL tersebut!` (`linesticker.js:53`).
 pub(crate) const GAGAL_AMBIL: &str = "❌ Gagal mengambil sticker dari URL tersebut!";
 
@@ -58,6 +55,7 @@ pub(crate) const GAGAL_AMBIL: &str = "❌ Gagal mengambil sticker dari URL terse
 pub(crate) const KUNCI_TIDAK_ADA: &str = "❌ API Key Neoxr tidak ditemukan di config!";
 
 /// Info pack (`linesticker.js:70-79`).
+#[cfg(test)]
 pub(crate) fn render_info(title: &str, author: &str, animated: bool, total: usize) -> String {
     format!(
         "🎨 *ʟɪɴᴇ sᴛɪᴄᴋᴇʀ ᴘᴀᴄᴋ*\n\n\
@@ -73,6 +71,7 @@ pub(crate) fn render_info(title: &str, author: &str, animated: bool, total: usiz
 }
 
 /// Sukses kirim (`linesticker.js:108-109`).
+#[cfg(test)]
 pub(crate) fn berhasil_kirim(terkirim: usize, total: usize) -> String {
     format!("✅ Berhasil kirim {terkirim}/{total} sticker")
 }

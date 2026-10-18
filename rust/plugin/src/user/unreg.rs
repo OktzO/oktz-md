@@ -8,15 +8,6 @@
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
-use crate::common::error_template;
-
-/// Kartu "belum terdaftar" (store selalu kosong tanpa API database).
-pub(crate) fn belum_terdaftar(prefix: &str) -> String {
-    format!(
-        "❌ Kamu belum terdaftar!\n\n> Daftar dengan `{prefix}daftar`"
-    )
-}
-
 #[plugin(
     name = "unreg",
     alias = ["unregister", "hapusdaftar"],

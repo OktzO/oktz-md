@@ -9,7 +9,7 @@
 //! kembali lewat `Mutation::SetUser`. Preview dan jeda 2,5 detik diabaikan.
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 fn format_idr(n: i64) -> String {
     let s = n.abs().to_string();
@@ -184,10 +184,10 @@ pub fn maling(ctx: Ctx) -> Reply {
         let exp = user.get("exp").and_then(Value::as_i64).unwrap_or(0);
         let new_exp = (exp / 2).max(0);
         user["exp"] = serde_json::json!(new_exp);
-        txt.push_str(&format!(
+        txt.push_str(
             "\n\n💀 *INNALILLAHI... KAMU MATI GEGARA DIGEBUKIN MASSA!*\n\
-             Exp-mu hangus 50%! 😭"
-        ));
+             Exp-mu hangus 50%! 😭",
+        );
     }
 
     Reply::text(txt).with_mutation(Mutation::SetUser {

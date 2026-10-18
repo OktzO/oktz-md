@@ -7,7 +7,7 @@
 //
 // Pemakaian:
 //   node scripts/sinkron-lib-plugin.mjs                      # oktz-plugins
-//   node scripts/sinkron-lib-plugin.mjs rust/lib/oktz-scraper/src
+//   node scripts/sinkron-lib-plugin.mjs rust/oktz-scraper/src
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

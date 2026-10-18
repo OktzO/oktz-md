@@ -16,6 +16,7 @@
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
 /// `get.js:23-45` — deteksi ekstensi dari `content-type`.
+#[cfg(test)]
 pub(crate) fn detect_extension(content_type: &str) -> &str {
     let ct = content_type.to_ascii_lowercase();
     if ct.contains("json") {
@@ -64,6 +65,7 @@ pub(crate) fn detect_extension(content_type: &str) -> &str {
 }
 
 /// `get.js:70-75` — format ukuran byte.
+#[cfg(test)]
 pub(crate) fn format_size(bytes: u64) -> String {
     if bytes == 0 {
         return "0 B".into();
@@ -80,6 +82,7 @@ pub(crate) fn format_size(bytes: u64) -> String {
 }
 
 /// `get.js:47-54` — kategori MIME.
+#[cfg(test)]
 pub(crate) fn get_mime_category(mime_type: &str) -> &str {
     let mt = mime_type.to_ascii_lowercase();
     if mt == "image/gif" {
@@ -98,6 +101,7 @@ pub(crate) fn get_mime_category(mime_type: &str) -> &str {
 }
 
 /// `get.js:56-68` — URL blokir (localhost/internal/metadata).
+#[cfg(test)]
 pub(crate) fn is_blocked_url(url: &str) -> bool {
     let blocked = [
         "localhost",

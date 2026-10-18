@@ -9,3 +9,6 @@ pub mod wwsee;
 pub mod wwsorcerer;
 
 // Ditambahkan scripts/pasang-modul.mjs.
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod minecraft;

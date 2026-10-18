@@ -2,12 +2,6 @@
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
-const PROMPT: &str = "Transform this image into Studio Ghibli anime style. \
-Make the characters look like they belong in a Ghibli movie with soft colors, \
-detailed backgrounds, expressive eyes, and that signature warm, magical atmosphere. \
-Keep the original composition but apply the distinct Ghibli artistic style with \
-watercolor-like textures and dreamy lighting.";
-
 pub(crate) fn help(prefix: &str) -> String {
     format!(
         "🎨 *ᴛᴏ ᴀɴɪᴍᴇ*\n\n> Kirim/reply gambar untuk diubah ke gaya anime\n\n`{prefix}toanime`",

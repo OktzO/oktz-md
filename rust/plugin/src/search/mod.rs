@@ -36,3 +36,7 @@ pub mod play2;
 pub mod playcall;
 
 // Ditambahkan scripts/pasang-modul.mjs.
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod resep;
+pub mod spotplay;

@@ -157,9 +157,13 @@ mod tests {
 
     #[test]
     fn aliases_resolve() {
-        for a in ["liststore", "daftar", "info"] {
+        for a in ["liststore", "info"] {
             assert_eq!(oktz_plugin_api::find(a).unwrap().meta.name, "list");
         }
+        // `daftar` bentrok di JS: alias di sini, tapi `user/daftar.js` memakai
+        // kunci yang sama sebagai command. `getPlugin` JS mengutamakan
+        // `commands` atas `aliases`, jadi `daftar` memang milik plugin itu.
+        assert_eq!(oktz_plugin_api::find("daftar").unwrap().meta.name, "daftar");
     }
 
     #[test]

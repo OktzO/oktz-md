@@ -11,3 +11,6 @@ pub mod listproduk;
 pub mod liststok;
 
 // Ditambahkan scripts/pasang-modul.mjs.
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod editproduk;

@@ -10,8 +10,6 @@
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
-use crate::common::error_template;
-
 /// Kartu pakai saat input kosong.
 pub(crate) fn help(prefix: &str, command: &str) -> String {
     format!(

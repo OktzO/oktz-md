@@ -2,6 +2,7 @@
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
+#[cfg(test)]
 const VARIANTS: &[(&str, u32, &str, &str, &str)] = &[
     ("v1", 1, "BASIC", "", "🖼️"),
     ("v2", 2, "PREMIUM", "", "✅"),

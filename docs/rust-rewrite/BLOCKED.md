@@ -345,7 +345,7 @@ membuat hasil terlihat hijau padahal tidak:
    check`/`build` tetap mem-build ulang, tapi `cargo test` memakai binari lama
    sehingga test yang baru ditulis tidak muncul. Gejalanya "test saya tidak
    jalan". Hindari dengan menyentuh file sumber sebelum build:
-   `touch rust/src/*.rs rust/lib/*/src/*.rs rust/lib/*/src/*/*.rs rust/plugin/src/*/*.rs`. Kalau hasilnya
+   `touch rust/src/*.rs rust/oktz-*/src/*.rs rust/oktz-*/src/*/*.rs rust/plugin/src/*/*.rs`. Kalau hasilnya
    tetap janggal, buktikan dulu dengan `compile_error!` di dalam badan fungsi —
    kalau tidak muncul, itu bukan soal staleness, tapi jebakan no-1 di atas.
 
@@ -541,7 +541,7 @@ Jika dibuka, tambahkan baris `pub mod cekvps;` ke `vps/mod.rs`.
 Alasan: membutuhkan `config.digitalocean.token` dan
 `config.digitalocean.sellers` / `config.digitalocean.ownerPanels`, yang
 tidak ada pada `oktz_core::config::Runtime` (hanya `api_keys`, `owner`,
-`assets`, dst. — lihat `rust/lib/oktz-core/src/config.rs`).
+`assets`, dst. — lihat `rust/oktz-core/src/config.rs`).
 Tidak ada jalur membaca kunci DigitalOcean dari `Ctx`, jadi tidak bisa
 meniru perilaku JS apa adanya.
 
@@ -578,7 +578,7 @@ lalu `sock.relayMessage`. `AIRich` ada di `src/lib/builder.js:993`.
 
 Yang hilang di Rust:
 
-1. `Reply` (`rust/lib/oktz-plugin-api/src/registry.rs`) hanya punya
+1. `Reply` (`rust/oktz-plugin-api/src/registry.rs`) hanya punya
    teks, kutipan, media, reaksi, dan mutasi — belum ada varian tabel atau
    pesan interaktif.
 2. `oktz-wa` belum mengekspos pengiriman pesan proto mentah
@@ -700,3 +700,36 @@ lalu `node scripts/pasang-modul.mjs --terapkan`. Jangan pasang massal sebelum
   arsip (menulis data palsu ke user). Tunggu kapabilitas `Sock` §2.
 - `scripts/pasang-modul.mjs` kini punya `--hanya=<jalur,...>` supaya batch
   pendaftaran bisa dibatasi; tanpa itu skrip mendaftarkan seluruh berkas.
+
+## 25. Gelombang 4 massal — 60 modul lolos, 73 tidak
+
+Pendaftaran massal 133 berkas (`pasang-modul.mjs` tanpa `--hanya=`), lalu
+penyaringan otomatis: 52 dicabut karena gagal kompilasi, 19 dicabut karena
+testnya gagal, 2 (`owner/addprem`, `owner/arsip`) dicabut karena stub (§24).
+Sisanya 60 modul terdaftar.
+
+Gagal kompilasi (API/tipe belum ada) — 52 berkas:
+`ai/bananagen ai/musicmaker ai/to3d ai/tocartoon ai/tochibi ai/tofigurine
+ai/tomanga anime/mywaifu canvas/applemusic canvas/fakecall canvas/tiktokchat
+download/aio download/alightmotion fun/cekkhodam fun/waifupool group/add
+info/gag2 info/infotourney main/donasi owner/ganti_namadev owner/leave
+owner/payment owner/prefix owner/sampah owner/setgoodbyetype random/lahelu
+random/quotesimage religi/audioquran religi/jadwalsholat rpg/dice
+search/playsoundcloud search/ptvsearch search/searchthatsong search/soundcloud
+search/tiktokfoto search/wikipedia stalker/discordstalk stalker/ffstalk
+stalker/robloxstalk tools/am_data tools/cekxl tools/emojitoanimasi
+tools/emojitoimage tools/hdvid tools/imgtoprompt tools/invoicemaker tools/lookup
+tools/sendngl tools/spamngl tools/ssweb tools/tempmail tools/wink`
+
+Gagal test (perilaku belum sama dengan JS) — 19 berkas:
+`ai/toblack ai/toisland ai/txt2img canvas/musiccard group/pinchat owner/bcgc
+owner/hapusgrup owner/mutechat owner/renewsewa random/meme rpg/duel rpg/nulis
+search/playtiktok stalker/igstalk stalker/stalkml sticker/emojimix tools/ipwho
+tools/tovideo utility/inspect`
+
+Catatan: berkas-berkas itu tetap ada di disk (dicabut, bukan dihapus), jadi
+perbaikannya cukup memanggil ulang `pasang-modul.mjs --terapkan --hanya=<berkas>`
+setelah galatnya dibereskan.
+
+Struktur: folder `rust/lib/` dihapus — crate pendukung kini langsung di
+`rust/oktz-*` (members workspace `["oktz-*", "plugin"]`).

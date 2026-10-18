@@ -13,7 +13,7 @@
 use oktz_plugin_api::{Ctx, IncomingKind, Reply, plugin};
 
 /// Kartu pakai / penolakan bukan gambar (`ganti-store.js:22-24`).
-pub(crate) fn pakai(file: &str, prefix: &str) -> String {
+pub(crate) fn pakai(file: &str, _prefix: &str) -> String {
     format!(
         "🖼️ *ɢᴀɴᴛɪ sᴛᴏʀᴇ.ᴊᴘɢ*\n\n> Kirim/reply gambar untuk mengganti\n> File: assets/image/{file}"
     )

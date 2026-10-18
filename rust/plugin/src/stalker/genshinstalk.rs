@@ -105,7 +105,7 @@ pub fn genshinstalk(ctx: Ctx) -> Reply {
     if let Some(s) = stygian {
         caption.push_str(&format!("  - Stygian Onslaught: {}\n", s));
     }
-    caption.push_str("\n");
+    caption.push('\n');
     caption.push_str("Gimana, statnya bagus nggak? Pamerin ke teman-temanmu yuk! 🚀");
 
     if !image_url.is_empty() {
@@ -119,7 +119,6 @@ pub fn genshinstalk(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug, Default)]

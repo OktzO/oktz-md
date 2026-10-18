@@ -4,9 +4,7 @@
 //! orchestrator harus menambah baris `pub mod nikparser;` ke `tools/mod.rs`.
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
-use serde_json::{Value, json};
-
-use crate::common::error_template;
+use serde_json::Value;
 
 const OBSCURA_BASE: &str = "https://api.obscuraworks.org/api/v2/tools/nik";
 const NEXRAY_BASE: &str = "https://api.nexray.eu.cc/tools/nikparse";

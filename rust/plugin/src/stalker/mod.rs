@@ -6,3 +6,7 @@ pub mod tiktokstalk;
 pub mod ytstalk;
 
 // Ditambahkan scripts/pasang-modul.mjs.
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod genshinstalk;
+pub mod robloxplayer;

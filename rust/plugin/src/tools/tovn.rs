@@ -9,7 +9,6 @@
 //! Unduh media lewat `ctx.download_media()` / `ctx.download_quoted_media()`.
 //! Kirim voice note lewat `Reply::voice_note`.
 use oktz_plugin_api::{Ctx, Reply, plugin};
-use std::path::Path;
 
 #[plugin(
     name = "tovn",
@@ -37,22 +36,22 @@ pub fn tovn(ctx: Ctx) -> Reply {
         if q_is_video || q_is_audio {
             (q_is_video, ctx.download_quoted_media())
         } else {
-            return Reply::text(format!(
+            return Reply::text(
                 "❌ *ɢᴀɢᴀʟ*\n\n\
                  > Tidak ada audio/video yang terdeteksi!\n\n\
                  *Cara penggunaan:*\n\
                  > 1. Kirim audio/video + caption `.tovn`\n\
                  > 2. Reply audio/video dengan `.tovn`"
-            ));
+            );
         }
     } else {
-        return Reply::text(format!(
+        return Reply::text(
             "❌ *ɢᴀɢᴀʟ*\n\n\
              > Tidak ada audio/video yang terdeteksi!\n\n\
              *Cara penggunaan:*\n\
              > 1. Kirim audio/video + caption `.tovn`\n\
              > 2. Reply audio/video dengan `.tovn`"
-        ));
+        );
     };
 
     let buffer = match download_fn_result {
@@ -145,8 +144,6 @@ pub fn tovn(ctx: Ctx) -> Reply {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn path_nama_berkas_benar() {
         let ts = 1234567890i64;

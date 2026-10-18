@@ -9,7 +9,6 @@
 use oktz_plugin_api::{Ctx, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::error_template;
 use crate::tools::phisingataubukan::encode_uri_component;
 
 pub(crate) const ENDPOINT: &str = "https://api.cuki.biz.id/api/aicode/caribug";
@@ -153,11 +152,8 @@ pub fn caribug(ctx: Ctx) -> Reply {
         return Reply::text(SCAN_FAILED).with_reaction("❌");
     };
 
-    Reply::text(rendered(&data)).with_reaction("✅")
+    Reply::text(rendered(data)).with_reaction("✅")
 }
-
-#[cfg(test)]
-use serde_json::json;
 
 #[cfg(test)]
 fn contoh() -> Value {

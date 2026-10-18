@@ -10,8 +10,6 @@
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::error_template;
-
 /// Kartu pakai saat tidak ada teks.
 pub(crate) fn help(prefix: &str) -> String {
     format!(
@@ -55,7 +53,7 @@ pub fn attp(ctx: Ctx) -> Reply {
     }
 
     let api_key = ctx.config().api_keys.neoxr.clone();
-    let url = api_url(&text, &api_key);
+    let url = api_url(text, &api_key);
 
     let Ok(res) = ctx.http.get(&url) else {
         return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
@@ -76,7 +74,6 @@ pub fn attp(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";

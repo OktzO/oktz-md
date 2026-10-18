@@ -1,13 +1,13 @@
 # Briefing agent porting scraper
 
-Baca ini dulu, lalu buka `rust/lib/oktz-scraper/src/dailymotion.rs` — itu
+Baca ini dulu, lalu buka `rust/oktz-scraper/src/dailymotion.rs` — itu
 **contoh acuan** yang sudah lulus test dan clippy. Port-mu harus berbentuk
 seperti itu.
 
 ## Tugas
 
 Port daftar file `src/scraper/*.js` yang kamu terima ke
-`rust/lib/oktz-scraper/src/*.rs`.
+`rust/oktz-scraper/src/*.rs`.
 
 **Acuan tunggal adalah file JS-nya.** Kalau JS melakukan hal yang aneh atau
 keliru, Rust melakukan hal yang sama. Format angka, urutan kunci, teks pesan
@@ -36,8 +36,8 @@ error, dan bentuk objek hasil harus sama persis.
 
 ## File yang TIDAK boleh kamu sentuh
 
-- `rust/lib/oktz-scraper/src/lib.rs` — daftar modul milik orkestrator.
-- `rust/lib/oktz-scraper/src/common.rs` — milik orkestrator (lihat di
+- `rust/oktz-scraper/src/lib.rs` — daftar modul milik orkestrator.
+- `rust/oktz-scraper/src/common.rs` — milik orkestrator (lihat di
   bawah, sudah ada helper; kalau kurang, tulis privat di filemu lalu
   laporkan).
 - File milik agent lain, file JS asli, apa pun di `oktz-plugins/`.

@@ -11,12 +11,15 @@
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
 /// Jumlah frame animasi (`attp2.js:18`).
+#[cfg(test)]
 pub(crate) const FRAMES: usize = 8;
 
 /// Ukuran canvas (`attp2.js:20`).
+#[cfg(test)]
 pub(crate) const CANVAS_SIZE: u32 = 512;
 
 /// Warna tiap frame (`attp2.js:19`).
+#[cfg(test)]
 pub(crate) const WARNA: [&str; 6] = [
     "#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#00FFFF", "#FF00FF",
 ];

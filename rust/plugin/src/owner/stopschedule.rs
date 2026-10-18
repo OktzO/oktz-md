@@ -11,6 +11,7 @@
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
 /// Daftar scheduler yang dikenal (`stopschedule.js:32-37`).
+#[cfg(test)]
 pub(crate) const JADWAL: [(&str, &str); 6] = [
     ("limitreset", "Daily Limit Reset"),
     ("groupschedule", "Group Schedule"),
@@ -21,7 +22,8 @@ pub(crate) const JADWAL: [(&str, &str); 6] = [
 ];
 
 /// Teks bantuan (`stopschedule.js:26-44`).
-pub(crate) fn bantuan(prefix: &str) -> String {
+#[cfg(test)]
+pub(crate) fn bantuan(_prefix: &str) -> String {
     let mut out = String::from(
         "🛑 *sᴛᴏᴘ sᴄʜᴇᴅᴜʟᴇʀ*\n\n\
          *Usage:*\n\
@@ -41,27 +43,24 @@ pub(crate) fn bantuan(prefix: &str) -> String {
 }
 
 /// Apakah target adalah 'sholat' (`stopschedule.js:47`).
+#[cfg(test)]
 pub(crate) fn is_sholat(target: &str) -> bool {
     target == "sholat"
 }
 
 /// Apakah target adalah 'all' (`stopschedule.js:68`).
+#[cfg(test)]
 pub(crate) fn is_all(target: &str) -> bool {
     target == "all"
 }
 
-/// Teks scheduler sudah nonaktif (`stopschedule.js:52-54`).
-pub(crate) const SUDAH_NONAKTIF: &str = "ℹ️ Sholat Scheduler sudah dalam keadaan nonaktif";
-
 /// Teks scheduler dihentikan (`stopschedule.js:59-64` / `77-82`).
+#[cfg(test)]
 pub(crate) fn dihentikan(nama: &str) -> String {
     format!(
         "🛑 *sᴄʜᴇᴅᴜʟᴇʀ ᴅɪʜᴇɴᴛɪᴋᴀɴ*\n\n> Scheduler: *{nama}*\n> Status: ❌ Dihentikan\n\n_Gunakan `.startschedule {nama}` untuk mengaktifkan kembali_",
     )
 }
-
-/// Teks tidak ditemukan (`stopschedule.js:84-87`).
-pub(crate) const TIDAK_DITEMUKAN: &str = "❌ Scheduler tidak ditemukan atau sudah nonaktif\n\nGunakan `.stopschedule` untuk melihat daftar scheduler";
 
 #[plugin(
     name = "stopschedule",

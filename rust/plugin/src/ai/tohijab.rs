@@ -1,6 +1,6 @@
 //! `plugins/ai/tohijab.js` — tambahkan hijab ke gambar.
 
-use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
+use oktz_plugin_api::{Ctx, Reply, plugin};
 
 #[plugin(
     name = "tohijab",

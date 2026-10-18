@@ -10,10 +10,13 @@
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
+#[cfg(test)]
 const CANVAS_WIDTH: u32 = 1254;
+#[cfg(test)]
 const CANVAS_HEIGHT: u32 = 1254;
 
 /// `BACKGROUNDS` (`buatquotes.js:34-91`).
+#[cfg(test)]
 pub(crate) struct Background {
     pub name: &'static str,
     pub url: &'static str,
@@ -22,6 +25,7 @@ pub(crate) struct Background {
     pub username_font_size: u32,
 }
 
+#[cfg(test)]
 pub(crate) const BACKGROUNDS: [Background; 8] = [
     Background {
         name: "l",
@@ -82,11 +86,13 @@ pub(crate) const BACKGROUNDS: [Background; 8] = [
 ];
 
 /// `TEXT_STYLE` (`buatquotes.js:93-100`).
+#[cfg(test)]
 pub(crate) struct TextStyle {
     pub initial_size: u32,
     pub min_font_size: u32,
 }
 
+#[cfg(test)]
 pub(crate) const TEXT_STYLE: TextStyle = TextStyle {
     initial_size: 75,
     min_font_size: 24,
@@ -160,6 +166,7 @@ mod tests {
         assert_eq!(BACKGROUNDS.len(), 8);
         assert_eq!(BACKGROUNDS[0].name, "l");
         assert_eq!(BACKGROUNDS[0].text_zone, (775, 56, 456, 1102));
+        assert_eq!(BACKGROUNDS[0].username_zone, (890, 1167, 228, 50));
         assert_eq!(BACKGROUNDS[1].name, "gojo");
         assert_eq!(BACKGROUNDS[7].name, "higuruma");
         for bg in BACKGROUNDS {

@@ -10,7 +10,7 @@
 //! (tidak ada I/O sock / penundaan di konteks plugin).
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::common::parse_int;
 
@@ -104,7 +104,7 @@ pub fn coinflip(ctx: Ctx) -> Reply {
     let is_win = user_choice == result;
 
     let mut new_user = user.clone();
-    let mut rpg = new_user
+    let rpg = new_user
         .get("rpg")
         .cloned()
         .unwrap_or(serde_json::json!({}));
@@ -168,10 +168,6 @@ mod tests {
 
     fn text_of(r: &Reply) -> &str {
         r.without_mutations().text_body().expect("harus ada teks")
-    }
-
-    fn mutations_of(r: &Reply) -> &[Mutation] {
-        r.mutations()
     }
 
     #[test]

@@ -11,7 +11,7 @@
 //! peserta bot tidak diperlukan. `sock.user.id` (nomor bot sendiri) juga tidak
 //! ada di `Sock`, jadi tidak digunakan.
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 #[plugin(
     name = "onlythisgrup",
@@ -92,10 +92,10 @@ pub fn onlythisgrup(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{json, Value};
+    use serde_json::Value;
 
     fn run(settings: Value, is_bot_admin: bool, chat: &str) -> Reply {
-        let mut ctx = Ctx {
+        let ctx = Ctx {
             text: String::new(),
             args: Vec::new(),
             sender: "628111@s.whatsapp.net".into(),

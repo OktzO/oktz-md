@@ -4120,10 +4120,16 @@ mod tests_roster_state {
     /// `fakegopay.js`, `fakeovo.js`, `nsfw/paptt.js` menaruh nama sendiri di
     /// dalam daftar alias-nya. `search/movieku.js` memasang `film` sebagai
     /// alias, padahal itu nama `search/film.js`.
-    pub(crate) const JS_COLLISIONS: [&str; 25] = [
-        "asmaulhusna", "beli", "berburu", "block", "bucin", "cantik", "cc", "cekjodoh",
-        "cupu", "exp", "fakedana", "fakegopay", "fakeovo", "film", "ganteng", "heapsnap",
-        "kaya", "mimpi", "ngemis", "noob", "paptt", "pintar", "pro", "unblock", "wibu",
+    // Dihitung dari `plugins/**/*.js`: setiap kunci yang muncul lebih dari
+    // sekali di seluruh daftar `name` + `alias` (termasuk sekali di dalam
+    // berkas yang sama, mis. `sticker/attp2.js` yang memakai nama sekaligus
+    // alias `attp2`, atau `main/leaderboard.js` yang mengulang
+    // `leaderboard`). Tabrakan baru di luar daftar ini berarti port kita.
+    pub(crate) const JS_COLLISIONS: [&str; 32] = [
+        "asmaulhusna", "attp2", "beli", "berburu", "block", "bratanime", "bucin", "cantik",
+        "cc", "cekjodoh", "cupu", "daftar", "exp", "fakedana", "fakegopay", "fakeovo",
+        "film", "ganteng", "heapsnap", "izen", "kaya", "leaderboard", "mimpi", "ngemis",
+        "noob", "paptt", "pintar", "pro", "sroast", "top", "unblock", "wibu",
     ];
 
     #[test]

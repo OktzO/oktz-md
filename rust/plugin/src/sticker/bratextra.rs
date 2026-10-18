@@ -13,9 +13,6 @@ pub(crate) fn help(prefix: &str, cmd: &str) -> String {
     )
 }
 
-const BRAT_FONT_URL: &str =
-    "https://raw.githubusercontent.com/Ditzzx-vibecoder/Assets/main/Brat/Poppins.ttf";
-
 #[plugin(
     name = "bratanime",
     alias = ["bratanime", "bratbahlil", "brathd", "bratpatrick", "bratsquidward", "bratwhite",

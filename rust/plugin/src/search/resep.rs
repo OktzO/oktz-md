@@ -9,17 +9,21 @@
 //! lain — dilarang menyentuh per brief).
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
+#[cfg(test)]
 use serde_json::Value;
 
+#[cfg(test)]
 const API: &str = "https://api.neoxr.eu/api";
 
 /// Hasil satu pencarian resep (`resep.js:51-54`).
+#[cfg(test)]
 pub(crate) struct ResepHasil {
     pub name: String,
     pub url: String,
 }
 
 /// `searchUrl` (`resep.js:33`).
+#[cfg(test)]
 pub(crate) fn search_url(query: &str, apikey: &str) -> String {
     format!(
         "{API}/resep-search?q={}&apikey={}",
@@ -29,6 +33,7 @@ pub(crate) fn search_url(query: &str, apikey: &str) -> String {
 }
 
 /// `detailUrl` (`resep.js:115`).
+#[cfg(test)]
 pub(crate) fn detail_url(resep_url: &str, apikey: &str) -> String {
     format!(
         "{API}/resep?url={}&apikey={}",
@@ -38,6 +43,7 @@ pub(crate) fn detail_url(resep_url: &str, apikey: &str) -> String {
 }
 
 /// Apakah respons pencarian valid (`resep.js:38`).
+#[cfg(test)]
 pub(crate) fn pencarian_valid(data: &Value) -> bool {
     crate::common::js_truthy(data.get("status"))
         && data
@@ -46,6 +52,7 @@ pub(crate) fn pencarian_valid(data: &Value) -> bool {
 }
 
 /// `listTxt` daftar hasil (`resep.js:44-58`).
+#[cfg(test)]
 pub(crate) fn render_daftar(text: &str, hasil: &[ResepHasil]) -> String {
     let mut out = format!(
         "🍳 *HASIL PENCARIAN RESEP: {}*\n\nDitemukan beberapa resep nih, pilih salah satu ya:\n\n",
@@ -61,11 +68,13 @@ pub(crate) fn render_daftar(text: &str, hasil: &[ResepHasil]) -> String {
 }
 
 /// Teks tidak ditemukan (`resep.js:40`).
+#[cfg(test)]
 pub(crate) fn tidak_ditemukan(text: &str) -> String {
     format!("Maaf, resep untuk \"{text}\" tidak ditemukan. Coba kata kunci lain.")
 }
 
 /// `renderDetail` resep (`resep.js:125-142`).
+#[cfg(test)]
 pub(crate) fn render_detail(recipe: &Value) -> String {
     let mut out = format!(
         "👨‍🍳 *{}* 👩‍🍳\n\n⏱️ *Waktu:* {}\n🍽️ *Porsi:* {}\n\n",
@@ -77,25 +86,25 @@ pub(crate) fn render_detail(recipe: &Value) -> String {
         recipe.get("timeout").and_then(Value::as_str).unwrap_or("-"),
         recipe.get("portion").and_then(Value::as_str).unwrap_or("-")
     );
-    if let Some(bahan) = recipe.get("ingredients").and_then(Value::as_array) {
-        if !bahan.is_empty() {
-            out.push_str("*🥬 BAHAN-BAHAN:*\n");
-            for b in bahan {
-                out.push_str(&format!("- {}\n", b.as_str().unwrap_or(&b.to_string())));
-            }
-            out.push('\n');
+    if let Some(bahan) = recipe.get("ingredients").and_then(Value::as_array)
+        && !bahan.is_empty()
+    {
+        out.push_str("*🥬 BAHAN-BAHAN:*\n");
+        for b in bahan {
+            out.push_str(&format!("- {}\n", b.as_str().unwrap_or(&b.to_string())));
         }
+        out.push('\n');
     }
-    if let Some(steps) = recipe.get("steps").and_then(Value::as_array) {
-        if !steps.is_empty() {
-            out.push_str("*🍳 CARA MEMBUAT:*\n");
-            for (i, s) in steps.iter().enumerate() {
-                out.push_str(&format!(
-                    "*{}.* {}\n\n",
-                    i + 1,
-                    s.as_str().unwrap_or(&s.to_string())
-                ));
-            }
+    if let Some(steps) = recipe.get("steps").and_then(Value::as_array)
+        && !steps.is_empty()
+    {
+        out.push_str("*🍳 CARA MEMBUAT:*\n");
+        for (i, s) in steps.iter().enumerate() {
+            out.push_str(&format!(
+                "*{}.* {}\n\n",
+                i + 1,
+                s.as_str().unwrap_or(&s.to_string())
+            ));
         }
     }
     out
@@ -139,7 +148,6 @@ pub fn resep(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn meta_dan_alias() {
@@ -186,6 +194,7 @@ mod tests {
             },
         ];
         let out = render_daftar("ayam", &hasil);
+        assert_eq!(hasil[0].url, "https://x/1");
         assert!(out.starts_with("🍳 *HASIL PENCARIAN RESEP: AYAM*\n\n"));
         assert!(out.contains("*1.* Ayam Geprek"));
         assert!(out.contains("*2.* Nasi Goreng"));

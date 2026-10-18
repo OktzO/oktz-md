@@ -16,6 +16,7 @@
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
 /// `listjadibotaktif.js:18-25` — format uptime milidetik ke teks.
+#[cfg(test)]
 pub(crate) fn format_uptime(ms: i64) -> String {
     let seconds = (ms / 1000).max(0);
     let minutes = seconds / 60;

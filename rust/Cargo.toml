@@ -11,10 +11,10 @@ path = "src/main.rs"
 
 [workspace]
 resolver = "3"
-members = ["lib/*", "plugin"]
+members = ["oktz-*", "plugin"]
 # Tanpa ini `cargo test` di root package hanya menguji binary, bukan crate
-# lib/plugin — test ribuan plugin jadi tidak jalan diam-diam.
-default-members = [".", "lib/*", "plugin"]
+# oktz-* dan plugin — test ribuan plugin jadi tidak jalan diam-diam.
+default-members = [".", "oktz-*", "plugin"]
 
 [workspace.package]
 version = "0.1.0"
@@ -31,11 +31,11 @@ anyhow = "1"
 thiserror = "2"
 
 [dependencies]
-oktz-core = { path = "lib/oktz-core" }
-oktz-store = { path = "lib/oktz-store" }
-oktz-wa = { path = "lib/oktz-wa" }
-oktz-plugin-api = { path = "lib/oktz-plugin-api" }
-oktz-router = { path = "lib/oktz-router" }
+oktz-core = { path = "oktz-core" }
+oktz-store = { path = "oktz-store" }
+oktz-wa = { path = "oktz-wa" }
+oktz-plugin-api = { path = "oktz-plugin-api" }
+oktz-router = { path = "oktz-router" }
 # Crate plugin harus ikut ter-link ke binary; tanpa ini `linkme` mendaftarkan
 # nol plugin dan `all_plugins()` melaporkan angka yang menipu.
 oktz-plugins = { path = "plugin" }

@@ -133,7 +133,12 @@ mod tests {
         for a in ["top5", "toplist"] {
             assert_eq!(oktz_plugin_api::find(a).unwrap().meta.name, "top");
         }
-        for key in ["top", "top5", "toplist"] {
+        // `top` bentrok di JS sendiri: `main/leaderboard.js` memakai `top`
+        // sebagai alias padahal `fun/top.js` sudah memakai nama itu. Karena
+        // `top` di sini sebuah command (bukan alias), aturan `getPlugin` JS
+        // (command menang) membuat `find("top")` tetap milik kita.
+        assert_eq!(oktz_plugin_api::find("top").unwrap().meta.name, "top");
+        for key in ["top5", "toplist"] {
             let owners: Vec<&str> = all_plugins()
                 .iter()
                 .filter(|e| e.meta.matches(key))

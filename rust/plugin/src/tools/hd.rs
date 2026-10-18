@@ -1,6 +1,6 @@
 //! `plugins/tools/hd.js` — enhance gambar jadi HD (via ihancer.com API).
 
-use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
+use oktz_plugin_api::{Ctx, Reply, plugin};
 
 pub(crate) fn help(prefix: &str) -> String {
     format!(

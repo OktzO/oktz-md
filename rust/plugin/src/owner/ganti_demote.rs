@@ -7,16 +7,10 @@
 
 use oktz_plugin_api::{Ctx, IncomingKind, QuotedKind, Reply, plugin};
 
-use crate::common::error_template;
-
-const FILE_NAME: &str = "demote.jpeg";
-const ASSET_KEY: &str = "demote";
-
 /// Kartu pakai saat bukan gambar.
 pub(crate) fn help() -> String {
-    format!(
-        "🖼️ *ɢᴀɴᴛɪ ᴅᴇᴍᴏᴛᴇ.ᴊᴘɢ*\n\n> Kirim/reply gambar untuk mengganti\n> File: assets/image/demote.jpeg"
-    )
+    "🖼️ *ɢᴀɴᴛɪ ᴅᴇᴍᴏᴛᴇ.ᴊᴘɢ*\n\n> Kirim/reply gambar untuk mengganti\n> File: assets/image/demote.jpeg"
+        .to_string()
 }
 
 /// Cek apakah pemicu atau quoted adalah image, sama urutan dengan JS.

@@ -10,7 +10,6 @@
 //! adanya (cabang `catch` di JS). Format yang dihasilkan hanya pendekatan.
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
-use serde_json::Value;
 
 /// `NEWS_SOURCES` — kunci command, URL RSS, nama, emoji.
 #[derive(Clone)]
@@ -329,9 +328,7 @@ pub fn berita(ctx: Ctx) -> Reply {
     let mut txt = format!("{} *{}*\n", source.emoji, source.name.to_uppercase());
     txt.push_str("━━━━━━━━━━━━━━━\n\n");
 
-    let limit = articles.len().min(7);
-    for i in 0..limit {
-        let a = &articles[i];
+    for (i, a) in articles.iter().take(7).enumerate() {
         txt.push_str(&format!("*{}. {}*\n", i + 1, a.title));
         if !a.description.is_empty() {
             txt.push_str(&format!("{}...\n", a.description));
@@ -353,6 +350,7 @@ pub fn berita(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
+    use serde_json::Value;
     use std::sync::{Arc, Mutex};
 
     const SENDER: &str = "628111@s.whatsapp.net";

@@ -1,3 +1,9 @@
 pub mod swm;
 
 // Ditambahkan scripts/pasang-modul.mjs.
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod attp;
+pub mod attp2;
+pub mod bratextra;
+pub mod linesticker;

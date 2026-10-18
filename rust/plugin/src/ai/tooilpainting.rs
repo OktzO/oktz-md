@@ -16,6 +16,7 @@
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
 /// `tooilpainting.js:19-22` — prompt hardcode.
+#[cfg(test)]
 pub(crate) const PROMPT: &str = "Transform this image into a classical oil painting style. \
 Apply thick brushstrokes, rich colors, and the texture of traditional oil paint on canvas. \
 Keep the original composition but make it look like a masterpiece painting \

@@ -12,3 +12,6 @@ pub mod livescore;
 pub mod whatrolethis;
 
 // Ditambahkan scripts/pasang-modul.mjs.
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod berita;

@@ -9,15 +9,16 @@
 //! plugin lain — dilarang menyentuh per brief).
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
-use serde_json::json;
 
 /// `VARIANTS` (`setownertype.js:18-21`).
+#[cfg(test)]
 pub(crate) const VARIANTS: [(&str, &str, &str); 2] = [
     ("1", "Current Design", "Tampilan default saat ini"),
     ("2", "Multiple Contact", "Kirim contact card semua owner"),
 ];
 
 /// `current = db.setting('ownerType') || 1` — baca dari settings.
+#[cfg(test)]
 pub(crate) fn owner_type_saat_ini(ctx: &Ctx) -> i64 {
     ctx.setting("ownerType")
         .and_then(serde_json::Value::as_i64)
@@ -25,6 +26,7 @@ pub(crate) fn owner_type_saat_ini(ctx: &Ctx) -> i64 {
 }
 
 /// `/^v?[1-3]$/` → id (`setownertype.js:28-29`).
+#[cfg(test)]
 pub(crate) fn parse_varian(variant: &str) -> Option<i64> {
     let bersih = variant.trim_start_matches('v');
     if bersih.len() == 1 && bersih.chars().next().is_some_and(|c| matches!(c, '1' | '2' | '3')) {
@@ -35,7 +37,8 @@ pub(crate) fn parse_varian(variant: &str) -> Option<i64> {
 }
 
 /// Teks saat pilihan variant (`setownertype.js:53-54`).
-pub(crate) fn teks_pilihan(current: i64, nama_bot: &str) -> String {
+#[cfg(test)]
+pub(crate) fn teks_pilihan(current: i64, _nama_bot: &str) -> String {
     let varian = VARIANTS.iter().find(|(id, _, _)| id == &current.to_string());
     let (nama, _) = varian.map(|(_, n, d)| (*n, *d)).unwrap_or(("Current Design", "Tampilan default saat ini"));
     format!(
@@ -45,6 +48,7 @@ pub(crate) fn teks_pilihan(current: i64, nama_bot: &str) -> String {
 }
 
 /// Daftar tombol variant (`setownertype.js:42-51`), tanpa markup tombol WA.
+#[cfg(test)]
 pub(crate) fn daftar_varian(current: i64) -> Vec<String> {
     let mut out = Vec::new();
     for (id, nama, _) in VARIANTS {
@@ -55,6 +59,7 @@ pub(crate) fn daftar_varian(current: i64) -> Vec<String> {
 }
 
 /// Sukses ganti variant (`setownertype.js:33-38`).
+#[cfg(test)]
 pub(crate) fn berhasil_ganti(id: i64) -> String {
     let varian = VARIANTS.iter().find(|(i, _, _)| *i == id.to_string());
     let (nama, desc) = varian.map(|(_, n, d)| (*n, *d)).unwrap_or(("", ""));

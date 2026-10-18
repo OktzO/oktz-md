@@ -6,8 +6,6 @@
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
-use crate::common::error_template;
-
 #[plugin(
     name = "stopjadibot",
     alias = ["berhentijadibot", "stopbot", "unjadibot"],

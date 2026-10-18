@@ -11,3 +11,9 @@ pub mod pakustad;
 pub mod watercolortext;
 
 // Ditambahkan scripts/pasang-modul.mjs.
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod buatquotes;
+pub mod facepalm;
+pub mod sroast;
+pub mod starboy;

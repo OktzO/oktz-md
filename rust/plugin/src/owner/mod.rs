@@ -63,3 +63,29 @@ pub mod welcomeall;
 
 // Ditambahkan scripts/pasang-modul.mjs.
 pub mod akses;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod exec;
+#[path = "ganti-asset.rs"]
+pub mod ganti_asset;
+#[path = "ganti-rpg.rs"]
+pub mod ganti_rpg;
+pub mod ganti_demote;
+pub mod ganti_foto;
+pub mod ganti_goodbye;
+pub mod ganti_levelup;
+pub mod ganti_pp_kosong;
+pub mod ganti_rules;
+pub mod ganti_store;
+pub mod get;
+pub mod hapussaluran;
+pub mod listjadibotaktif;
+pub mod onlythisgrup;
+pub mod pinchat;
+pub mod ptvch;
+pub mod setmenu;
+pub mod setmenucat;
+pub mod setownertype;
+pub mod star;
+pub mod stopdandeletejadibot;
+pub mod stopschedule;

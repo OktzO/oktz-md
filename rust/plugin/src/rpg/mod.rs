@@ -40,7 +40,6 @@ pub mod nambalban;
 pub mod ngamen;
 pub mod ngemis;
 pub mod ngojek;
-pub mod nulis;
 pub mod nyapu;
 pub mod parkir;
 pub mod pet;
@@ -65,3 +64,7 @@ pub mod slot;
 pub mod stamina;
 
 // Ditambahkan scripts/pasang-modul.mjs.
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod coinflip;
+pub mod maling;

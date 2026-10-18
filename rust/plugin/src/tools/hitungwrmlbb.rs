@@ -6,8 +6,6 @@
 use oktz_plugin_api::{Ctx, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::error_template;
-
 const API_BASE: &str = "https://api.nexray.eu.cc/tools/winrate-mlbb";
 
 /// `hitungwrmlbb.js:16-22` — kartu pakai saat argumen kurang dari 3.
@@ -131,7 +129,6 @@ pub fn hitungwrmlbb(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";

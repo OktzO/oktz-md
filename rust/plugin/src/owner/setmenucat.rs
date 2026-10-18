@@ -12,8 +12,6 @@ use oktz_plugin_api::{Ctx, Reply, plugin};
 struct Variant {
     id: i64,
     name: &'static str,
-    desc: &'static str,
-    emoji: &'static str,
     key: &'static str,
 }
 
@@ -21,29 +19,21 @@ const VARIANTS: &[Variant] = &[
     Variant {
         id: 1,
         name: "Plain Text",
-        desc: "Tampilan teks biasa tanpa media, cocok untuk koneksi lambat atau device yang tidak support interactive message",
-        emoji: "📝",
         key: "v1",
     },
     Variant {
         id: 2,
         name: "Interactive + Image Header",
-        desc: "Tampilan premium dengan gambar header, limited time offer, dan tombol navigasi interaktif",
-        emoji: "🖼️",
         key: "v2",
     },
     Variant {
         id: 5,
         name: "MENUCAT NATIVEFLOW",
-        desc: "Tampilan native flow premium dengan video & cuaca",
-        emoji: "✨",
         key: "v5",
     },
     Variant {
         id: 6,
         name: "MENUCAT LOCATION",
-        desc: "Tampilan location message tanpa tombol interaktif",
-        emoji: "📍",
         key: "v6",
     },
 ];
@@ -105,9 +95,9 @@ pub fn setmenucat(ctx: Ctx) -> Reply {
     };
 
     let selected = VARIANTS.iter().find(|v| v.key == key);
-    let Some(selected) = selected else {
+    if selected.is_none() {
         return Reply::text("❌ *VARIANT TIDAK VALID*\n\nGunakan: *v1*, *v2*, *v5*, atau *v6*");
-    };
+    }
 
     // `ponytail:` `db.setting("menucatVariant", selected.id)` + `db.save()`
     // (penulisan database) tidak tersedia di registry Rust, jadi perubahan
@@ -144,7 +134,6 @@ mod tests {
 
     #[test]
     fn variant_aktif_dari_setting() {
-        use serde_json::json;
         let ctx = Ctx {
             sender: ME.into(),
             chat: ME.into(),

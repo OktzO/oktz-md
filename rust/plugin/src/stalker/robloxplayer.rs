@@ -133,9 +133,6 @@ pub fn robloxplayer(ctx: Ctx) -> Reply {
 }
 
 #[cfg(test)]
-use serde_json::json;
-
-#[cfg(test)]
 fn contoh_data() -> Value {
     serde_json::json!({
         "status": true,
@@ -162,7 +159,6 @@ fn contoh_data() -> Value {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";

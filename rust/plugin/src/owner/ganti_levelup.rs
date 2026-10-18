@@ -38,8 +38,6 @@ pub fn ganti_levelup(_ctx: Ctx) -> Reply {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn registers_with_the_js_plugin_config() {
         let p = oktz_plugin_api::find("ganti-levelup.jpg").unwrap();

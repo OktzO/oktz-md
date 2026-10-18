@@ -4,20 +4,12 @@
 //! config realtime) tidak diekspos ke plugin di registry Rust. Unduhan media
 //! tersedia, tetapi unggahan hasilnya tidak dapat dieksekusi.
 
-use std::sync::Arc;
-
 use oktz_plugin_api::{Ctx, IncomingKind, QuotedKind, Reply, plugin};
-
-use crate::common::error_template;
-
-const FILE_NAME: &str = "rules.jpeg";
-const ASSET_KEY: &str = "rules";
 
 /// Kartu pakai saat bukan gambar.
 pub(crate) fn help() -> String {
-    format!(
-        "🖼️ *ɢᴀɴᴛɪ ʀᴜʟᴇs.ᴊᴘɢ*\n\n> Kirim/reply gambar untuk mengganti\n> File: assets/image/rules.jpeg"
-    )
+    "🖼️ *ɢᴀɴᴛɪ ʀᴜʟᴇs.ᴊᴘɢ*\n\n> Kirim/reply gambar untuk mengganti\n> File: assets/image/rules.jpeg"
+        .to_string()
 }
 
 /// Cek apakah pemicu atau quoted adalah image, sama urutan dengan JS.
@@ -74,6 +66,7 @@ pub fn ganti_rules(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     const ME: &str = "628111@s.whatsapp.net";
 

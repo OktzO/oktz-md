@@ -64,7 +64,6 @@ pub mod notifpromote;
 pub mod notifsholat;
 pub mod open;
 pub mod openvo;
-pub mod pinchat;
 pub mod poll;
 pub mod promote;
 pub mod publicthisgc;
@@ -93,5 +92,7 @@ pub mod unmutegc;
 pub mod unmutemember;
 pub mod warn;
 pub mod welcome;
+
+// Ditambahkan scripts/pasang-modul.mjs.
 
 // Ditambahkan scripts/pasang-modul.mjs.

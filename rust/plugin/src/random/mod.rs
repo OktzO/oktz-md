@@ -7,3 +7,6 @@ pub mod cecanthai;
 pub mod cecanvietnam;
 
 // Ditambahkan scripts/pasang-modul.mjs.
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod couple;

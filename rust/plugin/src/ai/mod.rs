@@ -33,3 +33,10 @@ pub mod waguri_ai;
 pub mod wormgpt;
 
 // Ditambahkan scripts/pasang-modul.mjs.
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod toanime;
+pub mod tofigure;
+pub mod tohijab;
+pub mod tojapanese;
+pub mod tooilpainting;

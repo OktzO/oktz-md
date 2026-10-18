@@ -54,14 +54,14 @@ pub(crate) fn encode_uri_component(raw: &str) -> String {
 pub fn izen(ctx: Ctx) -> Reply {
     let link = ctx.args.first().cloned().unwrap_or_default();
     if link.is_empty() {
-        return Reply::text(format!(
+        return Reply::text(
             "🔗 *SKIPLINK BYPASS* 🔗\n\n\
              Halo kak! Punya link yang ribet ngelewatin iklan? Sini aku bantu lewatin biar langsung ke tujuan akhir!\n\n\
              *Cara Pakai:*\n\
              👉 `.izen <link>`\n\n\
              *Contoh:*\n\
-             👉 `.izen https://sfl.gl/xxxxx`"
-        ));
+             👉 `.izen https://sfl.gl/xxxxx`",
+        );
     }
 
     let api_url = format!(
@@ -103,7 +103,6 @@ pub fn izen(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug, Default)]
