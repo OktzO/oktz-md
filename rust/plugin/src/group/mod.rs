@@ -96,3 +96,6 @@ pub mod welcome;
 // Ditambahkan scripts/pasang-modul.mjs.
 
 // Ditambahkan scripts/pasang-modul.mjs.
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod pinchat;

@@ -9,13 +9,6 @@
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::error_template;
-
-/// Kartu pakai (meme tidak butuh argumen, tapi disediakan untuk konsistensi).
-pub(crate) fn help(prefix: &str) -> String {
-    format!("🍌 *ʀᴀɴᴅᴏᴍ ᴍᴇᴍᴇ ɪɴᴅᴏɴᴇꜱɪᴀ*\n\n`Contoh: {prefix}meme`")
-}
-
 #[plugin(
     name = "meme",
     alias = ["randommeme", "memeindonesia"],
@@ -58,7 +51,6 @@ pub fn meme(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -175,7 +167,12 @@ mod tests {
              _Jika masalah berlanjut, silahkan hubungi owner bot_"
         );
         assert_eq!(reaction_of(&r), Some("☢"));
-        assert!(http.seen.lock().unwrap().is_empty());
+        // JS tetap memanggil `f(url)` di dalam `try` (`meme.js:24-25`);
+        // kegagalan jaringan terdeteksi justru dari panggilan itu, jadi satu
+        // request harus tercatat oleh stub.
+        let seen = http.seen.lock().unwrap();
+        assert_eq!(seen.len(), 1);
+        assert!(seen[0].starts_with("https://api.neoxr.eu/api/meme?apikey="));
     }
 
     #[test]

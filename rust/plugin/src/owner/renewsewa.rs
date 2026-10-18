@@ -9,8 +9,6 @@
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
-use crate::common::error_template;
-
 const LIFETIME_KATA: &[&str] = &["lifetime", "permanent", "forever", "unlimited"];
 
 /// `parseDurationMs(str)` (`renewsewa.js:21-40`).
@@ -22,9 +20,7 @@ pub(crate) fn parse_duration_ms(s: &str) -> Option<i64> {
         .as_bytes()
         .iter()
         .position(|b| !b.is_ascii_digit());
-    let Some(idx) = caps else {
-        return None;
-    };
+    let idx = caps?;
     let angka: &str = &s[..idx];
     let unit: &str = &s[idx..];
     if unit.len() != 1 {
@@ -43,6 +39,7 @@ pub(crate) fn parse_duration_ms(s: &str) -> Option<i64> {
 }
 
 /// `formatDuration(str)` (`renewsewa.js:42-53`).
+#[cfg(test)]
 pub(crate) fn format_duration(s: &str) -> String {
     if LIFETIME_KATA.iter().any(|k| s.to_lowercase() == *k) {
         return "Permanent".to_string();
@@ -54,6 +51,10 @@ pub(crate) fn format_duration(s: &str) -> String {
     let Some(idx) = caps else {
         return s.to_string();
     };
+    if idx == 0 {
+        // `^(\d+)…` di JS butuh minimal satu digit.
+        return s.to_string();
+    }
     let angka: &str = &s[..idx];
     let unit: &str = &s[idx..];
     let units = [
@@ -63,11 +64,12 @@ pub(crate) fn format_duration(s: &str) -> String {
         ("m", "bulan"),
         ("y", "tahun"),
     ];
-    let nama = units
-        .iter()
-        .find(|(u, _)| unit.to_ascii_lowercase() == *u)
-        .map(|(_, n)| *n)
-        .unwrap_or(unit);
+    let unit_lc = unit.to_ascii_lowercase();
+    // Regex JS `^(\d+)([iIdDmMyYhH])$` — unit asing berarti tidak cocok, dan
+    // JS `return str` apa adanya (`renewsewa.js:50`), bukan `<angka> <unit>`.
+    let Some(nama) = units.iter().find(|(u, _)| unit_lc == *u).map(|(_, n)| *n) else {
+        return s.to_string();
+    };
     format!("{angka} {nama}")
 }
 
@@ -100,11 +102,10 @@ pub fn renewsewa(ctx: Ctx) -> Reply {
     }
 
     let duration_str = &ctx.args[1];
-    let duration_ms = parse_duration_ms(duration_str);
 
-    let Some(duration_ms) = duration_ms else {
+    if parse_duration_ms(duration_str).is_none() {
         return Reply::text("❌ Format durasi tidak valid\nContoh: 7d, 1m, 1y, lifetime");
-    };
+    }
 
     // `ponytail:` `resolveGroupId` (butuh `sock.groupGetInviteInfo`) dan
     // operasi `db.db.data.sewa` / `db.db.write()` tidak tersedia di registry,
@@ -132,8 +133,8 @@ mod tests {
         assert_eq!(parse_duration_ms("30i"), Some(30 * 60_000));
         assert_eq!(parse_duration_ms("12h"), Some(12 * 3_600_000));
         assert_eq!(parse_duration_ms("7d"), Some(7 * 86_400_000));
-        assert_eq!(parse_duration_ms("1m"), Some(1 * 2_592_000_000));
-        assert_eq!(parse_duration_ms("1y"), Some(1 * 31_536_000_000));
+        assert_eq!(parse_duration_ms("1m"), Some(2_592_000_000));
+        assert_eq!(parse_duration_ms("1y"), Some(31_536_000_000));
         assert_eq!(parse_duration_ms("2d"), Some(2 * 86_400_000));
     }
 

@@ -10,3 +10,7 @@ pub mod ytstalk;
 // Ditambahkan scripts/pasang-modul.mjs.
 pub mod genshinstalk;
 pub mod robloxplayer;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod igstalk;
+pub mod stalkml;

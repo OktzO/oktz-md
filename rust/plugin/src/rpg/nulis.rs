@@ -145,9 +145,12 @@ mod tests {
         assert_eq!(p.meta.energi, 0);
         assert!(!p.meta.is_group && !p.meta.is_private);
         assert!(!p.meta.is_owner && !p.meta.is_admin);
-        assert!(
-            oktz_plugin_api::find("nulis").is_none(),
-            "`nulis` bukan nama command di JS"
+        // `nulis` adalah plugin tools (`plugins/tools/nulis.js:7`), bukan
+        // plugin ini; plugin ini bernama `cerpen` (`plugins/rpg/nulis.js:5`).
+        assert_ne!(
+            oktz_plugin_api::find("nulis").map(|e| e.meta.name.as_str()),
+            Some("cerpen"),
+            "`nulis` bukan command plugin rpg ini"
         );
     }
 

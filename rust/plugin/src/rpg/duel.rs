@@ -6,13 +6,24 @@
 //!
 //! `getDatabase()`, `addExpWithLevelCheck()`, `sendRpgPreview()`, dan
 //! `setTimeout` tidak punya padanan di `Ctx`. State player1 dibaca dari
-//! `ctx.user_data`; player2 menggunakan default (tidak ada cara membaca
-//! user data anggota lain di `Ctx`). Preview dan jeda 2 detik diabaikan.
+//! `ctx.user_data`, state player2 dari roster grup (`db.getUser(target)`
+//! digantikan [`crate::rpg::heal::other_user`]). Preview dan jeda 2 detik
+//! diabaikan.
 
-use oktz_plugin_api::{Ctx, Mutation, QuotedKind, Reply, plugin};
+use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
 use serde_json::{Value, json};
 
 use crate::common::parse_int;
+use crate::rpg::heal::other_user;
+
+/// `db.getUser(target) || db.setUser(target)` (`duel.js:46`) — data lawan dari
+/// store; row yang belum ada dibuat dengan default `setUser` (`koin` 0,
+/// `rpg` {}).
+fn opponent(ctx: &Ctx, target: &str) -> Value {
+    other_user(ctx, target)
+        .cloned()
+        .unwrap_or_else(|| json!({ "koin": 0, "rpg": {} }))
+}
 
 fn format_idr(n: i64) -> String {
     let s = n.abs().to_string();
@@ -63,21 +74,12 @@ fn rpg_koin(user: &Value) -> i64 {
     is_bot_admin = false
 )]
 pub fn duel(ctx: Ctx) -> Reply {
+    // `m.mentionedJid?.[0] || m.quoted?.sender` (`duel.js:25`).
     let target = ctx
         .mentioned
         .first()
         .cloned()
-        .or_else(|| {
-            ctx.quoted()
-                .filter(|q| q.kind != QuotedKind::Text)
-                .and_then(|q| {
-                    if q.kind.is_media() || q.kind == QuotedKind::Text {
-                        Some(q.sender.clone())
-                    } else {
-                        Some(q.sender.clone())
-                    }
-                })
-        });
+        .or_else(|| ctx.quoted().map(|q| q.sender.clone()));
 
     let target = match target {
         Some(t) if !t.is_empty() => t,
@@ -98,15 +100,21 @@ pub fn duel(ctx: Ctx) -> Reply {
         );
     }
 
-    let bet = parse_int(ctx.args.get(1).map(|s| s.as_str()).unwrap_or("1000"));
-    let bet = bet.unwrap_or(1000);
+    // `args[1] ? parseInt(args[1]) : 1000` (`duel.js:26`) — `parseInt` yang
+    // gagal berarti `NaN`, dan `isNaN(bet)` menolaknya (`duel.js:41`); di sini
+    // `NaN` jatuh ke 0 supaya gerbang `< 1000` yang sama menolak.
+    let bet = ctx
+        .args
+        .get(1)
+        .map(|s| parse_int(s).unwrap_or(0))
+        .unwrap_or(1000);
 
     if bet < 1000 {
         return Reply::text("Taruhan tidak valid! Minimal *Rp 1.000*. Gunakan angka.");
     }
 
     let player1 = ctx.user_data.clone();
-    let mut player2 = serde_json::json!({ "koin": 0, "rpg": { "level": 1, "health": 100 } });
+    let player2 = opponent(&ctx, &target);
 
     if rpg_koin(&player1) < bet {
         return Reply::text(format!(
@@ -197,6 +205,7 @@ pub fn duel(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oktz_plugin_api::Participant;
 
     fn ctx() -> Ctx {
         Ctx {
@@ -275,6 +284,15 @@ mod tests {
         let mut c = ctx();
         c.user_data = serde_json::json!({ "koin": 5000, "rpg": { "level": 5, "health": 20 } });
         c.args = vec!["@628999".into(), "1000".into()];
+        // `db.getUser(target) || db.setUser(target)` (`duel.js:46`): row lawan
+        // yang belum ada dibuat default `koin` 0, jadi gerbang saldo lawan
+        // (`duel.js:52`) menangkap lebih dulu. Data user lain hanya terbaca
+        // dari roster, jadi lawan harus punya row di situ.
+        c.roster.participants.push(Participant {
+            jid: "628999@s.whatsapp.net".into(),
+            data: serde_json::json!({ "koin": 5000, "rpg": { "level": 5, "health": 100 } }),
+            ..Default::default()
+        });
         let r = duel(c);
         assert!(text_of(&r).contains("sekarat banget"));
         assert!(r.mutations().is_empty());

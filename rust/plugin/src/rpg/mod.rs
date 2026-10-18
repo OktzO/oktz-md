@@ -68,3 +68,7 @@ pub mod stamina;
 // Ditambahkan scripts/pasang-modul.mjs.
 pub mod coinflip;
 pub mod maling;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod duel;
+pub mod nulis;

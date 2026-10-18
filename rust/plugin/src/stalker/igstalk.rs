@@ -9,7 +9,6 @@
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::error_template;
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `plugins/stalker/igstalk.js` — kartu pakai saat `m.args[0]` kosong.
@@ -64,7 +63,11 @@ fn caption(d: &Value, username: &str) -> String {
         .get("username")
         .and_then(Value::as_str)
         .unwrap_or(username);
-    let full_name = d.get("full_name").and_then(Value::as_str).unwrap_or("-");
+    let full_name = d
+        .get("full_name")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty()) // `d.full_name || '-'` (`igstalk.js:65`)
+        .unwrap_or("-");
     let verified = if d
         .get("is_verified")
         .is_some_and(crate::common::js_truthy_value)
@@ -85,7 +88,11 @@ fn caption(d: &Value, username: &str) -> String {
     let followers = short_num(stats.and_then(|s| s.get("followers")));
     let following = short_num(stats.and_then(|s| s.get("following")));
     let posts = short_num(stats.and_then(|s| s.get("posts")));
-    let bio = d.get("bio").and_then(Value::as_str).unwrap_or("-");
+    let bio = d
+        .get("bio")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty()) // `d.bio || '-'` (`igstalk.js:71`)
+        .unwrap_or("-");
 
     format!(
         "📸 *ɪɴsᴛᴀɢʀᴀᴍ sᴛᴀʟᴋ*\n\n\
@@ -97,7 +104,7 @@ fn caption(d: &Value, username: &str) -> String {
          👤 *Mengikuti:* {following}\n\
          📷 *Postingan:* {posts}\n\n\
          📝 *Bio:*\n{bio}\n\n\
-         🔗 https://instagram.com/{username}"
+         🔗 https://instagram.com/{username_d}"
     )
 }
 
@@ -121,7 +128,9 @@ pub fn igstalk(ctx: Ctx) -> Reply {
     let username = ctx
         .args
         .first()
-        .map(|s| s.trim_start_matches('@'))
+        // `m.args[0]?.replace('@', '')` (`igstalk.js:32`) — buang '@' PERTAMA,
+        // bukan semua '@' di depan.
+        .map(|s| s.replacen('@', "", 1))
         .unwrap_or_default();
 
     if username.is_empty() {
@@ -142,7 +151,7 @@ pub fn igstalk(ctx: Ctx) -> Reply {
             .with_reaction("❌");
     };
     if !body.get("status").is_some_and(crate::common::js_truthy_value)
-        || d.get("username").and_then(Value::as_str).map_or(true, |s| s.is_empty())
+        || d.get("username").and_then(Value::as_str).is_none_or(|s| s.is_empty())
     {
         return Reply::text(format!("❌ Akun *@{username}* tidak ditemukan"))
             .with_reaction("❌");
@@ -162,7 +171,6 @@ pub fn igstalk(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -304,7 +312,9 @@ mod tests {
         assert_eq!(short_num(Some(&serde_json::json!(999))), "999");
         assert_eq!(short_num(Some(&serde_json::json!(1000))), "1 rb");
         assert_eq!(short_num(Some(&serde_json::json!(1500))), "1.5 rb");
-        assert_eq!(short_num(Some(&serde_json::json!(999999))), "1 jt");
+        // `(999_999 / 1000).toFixed(1)` = "1000.0" → buang ".0" = "1000"
+        // (`igstalk.js:27`), bukan naik ke ambang juta.
+        assert_eq!(short_num(Some(&serde_json::json!(999999))), "1000 rb");
         assert_eq!(short_num(Some(&serde_json::json!(1500000))), "1.5 jt");
         assert_eq!(short_num(Some(&serde_json::json!(1000000000))), "1 miliar");
         assert_eq!(short_num(Some(&serde_json::json!("2500"))), "2.5 rb");
@@ -341,7 +351,9 @@ mod tests {
                     })
                 );
                 assert!(caption.contains("👤 *Username:* cristiano"));
-                assert!(caption.contains("👥 *Pengikut:* 600 miliar"));
+                // 600_000_000 < 1_000_000_000, jadi ambang "jt" yang dipakai
+                // (`igstalk.js:26`), bukan "miliar".
+                assert!(caption.contains("👥 *Pengikut:* 600 jt"));
                 assert!(caption.contains("📷 *Postingan:* 3.5 rb"));
             }
             lain => panic!("harus image, dapat {lain:?}"),

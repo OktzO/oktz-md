@@ -9,31 +9,18 @@
 //! `src/canvas/mod.rs` secara manual (mod.rs milik plugin lain — dilarang
 //! menyentuh per brief).
 
-use oktz_plugin_api::{Ctx, IncomingKind, Reply, plugin};
+use oktz_plugin_api::{Ctx, Reply, plugin};
 
 /// `m.pushName` tidak tersedia di `Ctx`; fallback nama artis seperti JS
 /// (`parts[1].trim() || m.pushName` → `"Unknown Artist"`).
+#[cfg(test)]
 const NAMA_ARTIS_DEFAULT: &str = "Unknown Artist";
-
-/// Keterangan tidak ada gambar (`musiccard.js:28-29` / `42-43`).
-pub(crate) const BUKAN_GAMBAR: &str = "❌ *Waduh, itu bukan gambar!*\n\nKamu harus me-reply (membalas) pesan berupa *gambar* dengan format `.musiccard <judul>|<nama>`.\n\nContoh: \nBalas gambar temanmu, lalu ketik: `.musiccard Perfect|Ed Sheeran`";
 
 /// Keterangan judul belum diisi (`musiccard.js:60-62`).
 pub(crate) const JUDUL_BELUM_DIISI: &str = "❌ *Judul lagu dan artis belum diisi!*\n\nFormat penulisan yang benar adalah: `.musiccard <judul>|<nama>`\nPisahkan judul dan nama artis dengan simbol pita ( | ).";
 
 /// Keterangan gambar tidak terdeteksi (`musiccard.js:56-58`).
 pub(crate) const GAMBAR_TIDAK_TERDETEKSI: &str = "❌ *Gambar tidak terdeteksi!* Pastikan kamu mengirim gambar dengan benar.";
-
-/// Kartu pakai gagal buat kartu (`musiccard.js:106-109`).
-pub(crate) const GAGAL_BUAT_KARTU: &str = "😔 *Terjadi masalah di sistem kami.* \n\nSistem gagal menghubungi server pembuat kartu. Silakan coba beberapa saat lagi ya.";
-
-/// `isImage` (`musiccard.js:27` / `41`).
-pub(crate) fn is_image(ctx: &Ctx) -> bool {
-    ctx.is_media_kind(IncomingKind::Image)
-        || ctx
-            .quoted()
-            .is_some_and(|q| q.kind.is_image())
-}
 
 /// Unduh gambar: quoted dulu, baru trigger (`musiccard.js:32-36` / `46-50`).
 pub(crate) fn unduh_media(ctx: &Ctx) -> Option<Vec<u8>> {
@@ -46,20 +33,20 @@ pub(crate) fn unduh_media(ctx: &Ctx) -> Option<Vec<u8>> {
     }
 }
 
-/// Pisahkan `judul|nama` (`musiccard.js:67-71`). Tanpa `|`: nama =
+/// Pisahkan `judul|nama` (`musiccard.js:67-71`: `text.split("|")`, ambil
+/// `parts[0]` dan `parts[1]` — pipa ketiga dst. dibuang). Tanpa `|`: nama =
 /// `NAMA_ARTIS_DEFAULT` (karena `m.pushName` tidak ada di `Ctx`).
+#[cfg(test)]
 pub(crate) fn pisah_judul_nama(text: &str) -> (String, String) {
-    if let Some((judul, nama)) = text.split_once('|') {
-        let judul = judul.trim().to_string();
-        let nama = if nama.trim().is_empty() {
-            NAMA_ARTIS_DEFAULT.to_string()
-        } else {
-            nama.trim().to_string()
-        };
-        (judul, nama)
+    let mut bagian = text.split('|');
+    let judul = bagian.next().unwrap_or_default().trim().to_string();
+    let nama = bagian.next().unwrap_or_default().trim();
+    let nama = if nama.is_empty() {
+        NAMA_ARTIS_DEFAULT.to_string()
     } else {
-        (text.trim().to_string(), NAMA_ARTIS_DEFAULT.to_string())
-    }
+        nama.to_string()
+    };
+    (judul, nama)
 }
 
 #[plugin(
@@ -96,7 +83,7 @@ pub fn musiccard(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::{IncomingMedia, QuotedKind, QuotedMessage};
+    use oktz_plugin_api::{IncomingKind, IncomingMedia, QuotedKind, QuotedMessage};
     use std::sync::Arc;
 
     #[derive(Debug, Default)]
@@ -201,7 +188,7 @@ mod tests {
         assert_eq!(
             pisah_judul_nama("A|B|C"),
             ("A".to_string(), "B".to_string()),
-            "split_once ambil pipa pertama"
+            "musiccard.js:68 — split(\"|\") lalu ambil parts[0] dan parts[1]"
         );
     }
 

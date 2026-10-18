@@ -9,15 +9,8 @@
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
-/// `grupPattern` (`inspect.js:31`).
-const GRUP_PATTERN: &str = r"chat\.whatsapp\.com\/([\w\d]*)";
-
-/// `saluranPattern` (`inspect.js:32`).
-const SALURAN_PATTERN: &str = r"whatsapp\.com\/channel\/([\w\d]*)";
-
 /// `m.react('🔍')` tidak tersedia sebagai reaksi tunggal terpisah dari balasan;
 // dicatat di `ponytail:` di atas.
-
 /// Kartu pakai (`inspect.js:22-28`).
 pub(crate) fn pakai(prefix: &str) -> String {
     format!(
@@ -30,13 +23,12 @@ pub(crate) fn pakai(prefix: &str) -> String {
 }
 
 /// `text.match(grupPattern)[1]` — kode undangan grup, `None` kalau tidak cocok.
+#[cfg(test)]
 pub(crate) fn kode_undangan_grup(text: &str) -> Option<String> {
     // Regex sederhana tanpa dependency: cari `chat.whatsapp.com/` lalu ambil
     // token [\w\d]* setelahnya, sama seperti `([\w\d]*)`.
     let marker = "chat.whatsapp.com/";
-    let Some(pos) = text.find(marker) else {
-        return None;
-    };
+    let pos = text.find(marker)?;
     let setelah = &text[pos + marker.len()..];
     let mut kode = String::new();
     for c in setelah.chars() {
@@ -54,11 +46,10 @@ pub(crate) fn kode_undangan_grup(text: &str) -> Option<String> {
 }
 
 /// `text.match(saluranPattern)[1]` — ID saluran, `None` kalau tidak cocok.
+#[cfg(test)]
 pub(crate) fn id_saluran(text: &str) -> Option<String> {
     let marker = "whatsapp.com/channel/";
-    let Some(pos) = text.find(marker) else {
-        return None;
-    };
+    let pos = text.find(marker)?;
     let setelah = &text[pos + marker.len()..];
     let mut id = String::new();
     for c in setelah.chars() {
@@ -77,6 +68,7 @@ pub(crate) fn id_saluran(text: &str) -> Option<String> {
 
 /// `!isNaN(text)` (`inspect.js:88`) — `Number(text)` bukan `NaN`. String kosong
 /// dan spasi jadi 0 di JS, jadi ikut `true`.
+#[cfg(test)]
 pub(crate) fn adalah_angka_js(text: &str) -> bool {
     let bersih = text.trim();
     if bersih.is_empty() {
@@ -86,6 +78,7 @@ pub(crate) fn adalah_angka_js(text: &str) -> bool {
 }
 
 /// Saluran valid: cocok pola, atau berakhir `@newsletter`, atau angka (`inspect.js:88`).
+#[cfg(test)]
 pub(crate) fn saluran_valid(text: &str) -> bool {
     id_saluran(text).is_some()
         || text.ends_with("@newsletter")
@@ -124,7 +117,16 @@ mod tests {
 
     #[test]
     fn meta_dan_alias() {
-        let p = oktz_plugin_api::find("inspect").unwrap();
+        // JS `getPlugin` mengecek map `commands` (nama) SEBELUM `aliases`
+        // (`src/lib/plugins.js:334-341`), jadi `.inspect` menunjuk plugin
+        // ini walau `q` juga memakai `inspect` sebagai alias
+        // (`plugins/owner/q.js:4`). `find()` Rust mencocokkan nama+alias urut
+        // registrasi, jadi lookup di sini harus lewat nama.
+        let p = oktz_plugin_api::all_plugins()
+            .iter()
+            .copied()
+            .find(|p| p.meta.name == "inspect")
+            .unwrap();
         assert_eq!(p.meta.name, "inspect");
         assert_eq!(p.meta.alias, ["cekgrup", "ceksaluran", "channelinfo"]);
         assert_eq!(p.meta.category, "utility");
@@ -180,7 +182,7 @@ mod tests {
     }
 
     #[test]
-    fn adalah_angka_js_serupa_global_isNaN() {
+    fn adalah_angka_js_serupa_global_is_nan() {
         assert!(adalah_angka_js("123"));
         assert!(adalah_angka_js(""));
         assert!(adalah_angka_js(" "));

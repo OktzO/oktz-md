@@ -10,3 +10,6 @@ pub mod cecanvietnam;
 
 // Ditambahkan scripts/pasang-modul.mjs.
 pub mod couple;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod meme;

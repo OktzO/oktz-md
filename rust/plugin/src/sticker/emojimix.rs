@@ -9,8 +9,6 @@
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::error_template;
-
 /// Kartu pakai saat teks kosong.
 pub(crate) fn help(prefix: &str) -> String {
     format!(
@@ -27,14 +25,16 @@ pub(crate) fn api_url(emoji1: &str, emoji2: &str, api_key: &str) -> String {
     )
 }
 
-/// Deteksi karakter emoji mirip `/\p{Extended_Pictographic}/gu` di JS.
+/// Deteksi dua emoji pertama mirip `/\p{Extended_Pictographic}/gu` di JS.
+/// Hasil `text.match(regex)` hanya dipakai di indeks `0` dan `1`
+/// (`emojimix.js:33-34,40-41`), jadi kelebihannya dibuang.
 ///
 /// Tanpa crate `regex`, pendekatan ini menganggap setiap karakter non-ASCII
 /// (`> '\u{7F}'`) sebagai emoji. Ini menangkap kebanyakan emoji tetapi juga
 /// karakter non-ASCII lain — catatan disengaja, karena tidak ada jalan lain
 /// tanpa menambah dependensi yang dilarang.
 fn emojis(teks: &str) -> Vec<char> {
-    teks.chars().filter(|c| *c > '\u{7F}').collect()
+    teks.chars().filter(|c| *c > '\u{7F}').take(2).collect()
 }
 
 /// `encode_uri_component` dari `crate::tools::phisingataubukan`.
@@ -98,7 +98,6 @@ pub fn emojimix(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";

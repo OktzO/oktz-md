@@ -127,9 +127,12 @@ mod tests {
                 "alias {a}"
             );
         }
-        assert!(
-            find("pinchat").is_none(),
-            "tidak ada command `pinchat`, hanya `gcpinchat`"
+        // `pinchat` milik plugin owner (`plugins/owner/pinchat.js:2`), bukan
+        // plugin grup ini — grup menamai dirinya `gcpinchat` (`pinchat.js:2`).
+        assert_ne!(
+            find("pinchat").map(|e| e.meta.name.as_str()),
+            Some("gcpinchat"),
+            "`pinchat` tidak boleh resolve ke plugin grup ini"
         );
     }
 

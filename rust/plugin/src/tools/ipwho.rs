@@ -56,11 +56,11 @@ pub fn ipwho(ctx: Ctx) -> Reply {
     }
 
     let url = format!("https://ipwho.is/{ip}");
-    let data = match ctx.http.get(&url) {
-        Ok(r) => r.json().unwrap_or(Value::Null),
-        Err(_) => return Reply::text(
-            "☢ Kayaknya command `.ipwho` lagi ada kendala\nSilahkan coba lagi nanti, User\n\n_Jika masalah berlanjut, silahkan hubungi owner bot_"
-        ).with_reaction("☢"),
+    let Some(data) = ctx.http.get(&url).ok().and_then(|r| r.json()) else {
+        // `fetch` gagal ATAU `res.json()` gagal (badan kosong/bukan JSON)
+        // sama-sama masuk `catch` JS (`ipwho.js:40-41`, `ipwho.js:87-90`).
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+            .with_reaction("☢");
     };
 
     if !data.get("success").is_some_and(|v| v.as_bool().unwrap_or(false)) {
@@ -83,9 +83,9 @@ pub fn ipwho(ctx: Ctx) -> Reply {
         conn.get("isp").and_then(Value::as_str).unwrap_or("-"),
         conn.get("org").and_then(Value::as_str).unwrap_or("-"),
         conn.get("asn").and_then(Value::as_str).unwrap_or("-"),
-        yes(&sec.get("vpn").unwrap_or(&serde_json::Value::Null)),
-        yes(&sec.get("proxy").unwrap_or(&serde_json::Value::Null)),
-        yes(&sec.get("tor").unwrap_or(&serde_json::Value::Null)),
+        yes(sec.get("vpn").unwrap_or(&serde_json::Value::Null)),
+        yes(sec.get("proxy").unwrap_or(&serde_json::Value::Null)),
+        yes(sec.get("tor").unwrap_or(&serde_json::Value::Null)),
     );
     Reply::text(caption).with_reaction("✅")
 }
@@ -94,7 +94,6 @@ pub fn ipwho(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug, Default)]

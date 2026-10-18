@@ -40,3 +40,8 @@ pub mod tofigure;
 pub mod tohijab;
 pub mod tojapanese;
 pub mod tooilpainting;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod toblack;
+pub mod toisland;
+pub mod txt2img;

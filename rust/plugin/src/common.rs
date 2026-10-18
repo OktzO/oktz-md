@@ -4125,11 +4125,11 @@ mod tests_roster_state {
     // berkas yang sama, mis. `sticker/attp2.js` yang memakai nama sekaligus
     // alias `attp2`, atau `main/leaderboard.js` yang mengulang
     // `leaderboard`). Tabrakan baru di luar daftar ini berarti port kita.
-    pub(crate) const JS_COLLISIONS: [&str; 32] = [
+    pub(crate) const JS_COLLISIONS: [&str; 33] = [
         "asmaulhusna", "attp2", "beli", "berburu", "block", "bratanime", "bucin", "cantik",
         "cc", "cekjodoh", "cupu", "daftar", "exp", "fakedana", "fakegopay", "fakeovo",
-        "film", "ganteng", "heapsnap", "izen", "kaya", "leaderboard", "mimpi", "ngemis",
-        "noob", "paptt", "pintar", "pro", "sroast", "top", "unblock", "wibu",
+        "film", "ganteng", "heapsnap", "inspect", "izen", "kaya", "leaderboard", "mimpi",
+        "ngemis", "noob", "paptt", "pintar", "pro", "sroast", "top", "unblock", "wibu",
     ];
 
     #[test]

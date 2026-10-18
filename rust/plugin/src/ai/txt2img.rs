@@ -9,9 +9,7 @@
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::error_template;
 use crate::tools::phisingataubukan::encode_uri_component;
-use oktz_plugin_api::HttpError;
 
 const API: &str = "https://api.neoxr.eu/api/stablediff";
 
@@ -100,8 +98,7 @@ pub fn txt2img(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::{HttpBody, HttpResponse};
-    use serde_json::json;
+    use oktz_plugin_api::{HttpBody, HttpError, HttpResponse};
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -181,6 +178,7 @@ mod tests {
         txt2img(ctx)
     }
 
+    /// Tanpa `APIKEY_NEOXR`: config eksplisit kosong, bukan env mesin test.
     fn run_tanpa_kunci(http: Arc<Stub>, text: &str) -> Reply {
         let mut args = text.split_whitespace();
         let ctx = Ctx {
@@ -191,6 +189,13 @@ mod tests {
             prefix: ".".into(),
             command: "txt2img".into(),
             http,
+            config: Arc::new(oktz_plugin_api::config::Runtime {
+                api_keys: oktz_plugin_api::config::ApiKeys {
+                    neoxr: String::new(),
+                    ..oktz_plugin_api::config::ApiKeys::default()
+                },
+                ..oktz_plugin_api::config::Runtime::default()
+            }),
             ..Ctx::default()
         };
         txt2img(ctx)
@@ -218,8 +223,9 @@ mod tests {
 
     #[test]
     fn kunci_kosong_menghasilkan_missing_key_dan_reaksi_silang() {
+        // txt2img.js:41-44 — cek `config.APIkey.neoxr` sebelum request apa pun.
         let http = Stub::offline();
-        let r = run(http.clone(), "sunset");
+        let r = run_tanpa_kunci(http.clone(), "sunset");
         assert_eq!(text_of(&r), missing_key("."));
         assert_eq!(reaction_of(&r), Some("❌"));
         assert!(http.seen.lock().unwrap().is_empty());
@@ -228,7 +234,7 @@ mod tests {
     #[test]
     fn prompt_diambil_di_belakang_pipe_dan_terencode() {
         let http = Stub::body(serde_json::json!({ "data": { "url": "https://x/hasil.png" } }));
-        let r = run(http.clone(), "indah sekali | anime");
+        let _r = run(http.clone(), "indah sekali | anime");
         let seen = http.seen.lock().unwrap();
         assert!(seen[0].contains("prompt=indah%20sekali"), "{:?}", seen[0]);
         assert!(!seen[0].contains("anime"), "style tidak ikut ke prompt: {:?}", seen[0]);

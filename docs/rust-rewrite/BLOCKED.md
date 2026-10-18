@@ -721,7 +721,8 @@ stalker/robloxstalk tools/am_data tools/cekxl tools/emojitoanimasi
 tools/emojitoimage tools/hdvid tools/imgtoprompt tools/invoicemaker tools/lookup
 tools/sendngl tools/spamngl tools/ssweb tools/tempmail tools/wink`
 
-Gagal test (perilaku belum sama dengan JS) — 19 berkas:
+Gagal test (perilaku belum sama dengan JS) — 19 berkas, semuanya sudah
+dibereskan dan didaftarkan kecuali `owner/bcgc` (stub, §26):
 `ai/toblack ai/toisland ai/txt2img canvas/musiccard group/pinchat owner/bcgc
 owner/hapusgrup owner/mutechat owner/renewsewa random/meme rpg/duel rpg/nulis
 search/playtiktok stalker/igstalk stalker/stalkml sticker/emojimix tools/ipwho

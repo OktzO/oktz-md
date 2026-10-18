@@ -124,7 +124,7 @@ pub fn tovideo(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::{berkas::BerkasPalsu, QuotedKind, QuotedMessage};
+    use oktz_plugin_api::{berkas::BerkasPalsu, QuotedMessage};
     use std::sync::Arc;
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -147,26 +147,6 @@ mod tests {
         r.text_body().unwrap_or_default().to_string()
     }
 
-    fn image_media(r: &Reply) -> Option<Vec<u8>> {
-        match r.without_mutations() {
-            Reply::Image { media, .. } => media.as_ref().and_then(|m| match m {
-                MediaSource::Bytes { data, .. } => Some(data.to_vec()),
-                _ => None,
-            }),
-            _ => None,
-        }
-    }
-
-    fn video_media(r: &Reply) -> Option<Vec<u8>> {
-        match r.without_mutations() {
-            Reply::Video { media, .. } => media.as_ref().and_then(|m| match m {
-                MediaSource::Bytes { data, .. } => Some(data.to_vec()),
-                _ => None,
-            }),
-            _ => None,
-        }
-    }
-
     #[test]
     fn tanpa_sticker_mengembalikan_pesan_tanpa_request() {
         let r = run(BerkasPalsu::baru(), None, None);
@@ -175,10 +155,6 @@ mod tests {
 
     #[test]
     fn sticker_statis_dikonversi_ke_png() {
-        // PNG kosong valid (header PNG 8 byte).
-        let png = vec![
-            137, 80, 78, 71, 13, 10, 26, 10,
-        ];
         let berkas = BerkasPalsu::baru();
         let r = run(
             berkas,
@@ -196,8 +172,18 @@ mod tests {
 
     #[test]
     fn is_animated_webp_mendeteksi_penanda() {
-        assert!(is_animated_webp(&[0, 0, 0, 0, b'A', b'N', b'I', b'M', 0, 0]));
-        assert!(is_animated_webp(&[0, 0, 0, 0, b'A', b'N', b'M', b'F', 0, 0]));
+        // `tovideo.js:26` menolak buffer < 50 byte walau penandanya ada.
+        assert!(!is_animated_webp(&[0, 0, 0, 0, b'A', b'N', b'I', b'M', 0, 0]));
+
+        // `Buffer.includes` JS memindai seluruh buffer (`tovideo.js:27`),
+        // bukan hanya offset 0.
+        let mut anim = vec![0u8; 60];
+        anim[25..29].copy_from_slice(b"ANIM");
+        assert!(is_animated_webp(&anim));
+        let mut anmf = vec![0u8; 60];
+        anmf[44..48].copy_from_slice(b"ANMF");
+        assert!(is_animated_webp(&anmf));
+
         assert!(!is_animated_webp(b"bukan webp"));
         assert!(!is_animated_webp(&[]));
     }
@@ -228,7 +214,20 @@ mod tests {
 
     #[test]
     fn unduh_gagal_dilaporkan() {
-        let r = run(BerkasPalsu::baru(), None, None);
+        // `tovideo.js:129-132`: sticker ada tapi unduhan gagal/kosong →
+        // "Tidak dapat mengunduh sticker". Sticker disertakan supaya tidak
+        // jatuh ke cabang "Tidak ada sticker" (`tovideo.js:114-122`);
+        // `NoMediaFetch` default bikin `download_media()` gagal.
+        let r = run(
+            BerkasPalsu::baru(),
+            Some(oktz_plugin_api::IncomingMedia {
+                kind: oktz_plugin_api::IncomingKind::Sticker,
+                mimetype: None,
+                file_name: None,
+                caption: String::new(),
+            }),
+            None,
+        );
         assert!(body_of(&r).contains("Tidak dapat mengunduh sticker"));
     }
 }

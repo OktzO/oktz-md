@@ -7,3 +7,6 @@ pub mod attp;
 pub mod attp2;
 pub mod bratextra;
 pub mod linesticker;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod emojimix;

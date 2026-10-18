@@ -93,3 +93,6 @@ pub mod stopschedule;
 // Ditambahkan scripts/pasang-modul.mjs.
 pub mod hapusgrup;
 pub mod mutechat;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod renewsewa;

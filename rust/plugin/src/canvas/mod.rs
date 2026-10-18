@@ -17,3 +17,6 @@ pub mod buatquotes;
 pub mod facepalm;
 pub mod sroast;
 pub mod starboy;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod musiccard;

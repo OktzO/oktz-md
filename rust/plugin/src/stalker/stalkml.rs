@@ -14,11 +14,16 @@ const REGION: &[(&str, &str)] = &[
     ("21", "Europe"), ("22", "South America"),
 ];
 
+/// `getRegion(sid)` (`stalkml.js:28-31`):
+/// `REGION_MAP[s.slice(0,2)] ?? REGION_MAP[s.slice(0,1)] ?? "Unknown"`.
+/// Dua digit DULU — `starts_with("1")` akan salah untuk "15139" (Myanmar).
 fn get_region(sid: &str) -> &'static str {
-    let s = sid;
+    let dua = sid.get(..2).unwrap_or(sid);
+    let satu = sid.get(..1).unwrap_or(sid);
     REGION
         .iter()
-        .find(|(k, _)| s.starts_with(k))
+        .find(|(k, _)| *k == dua)
+        .or_else(|| REGION.iter().find(|(k, _)| *k == satu))
         .map(|(_, v)| *v)
         .unwrap_or("Unknown")
 }
@@ -31,55 +36,87 @@ pub(crate) fn help(prefix: &str) -> String {
 }
 
 fn parse_input(text: &str) -> (String, String) {
-    let mut userId = String::new();
-    let mut serverId = String::new();
+    let user_id;
+    let mut server_id = String::new();
     if text.contains('|') {
         let bagian: Vec<&str> = text.split('|').map(|v| v.trim()).collect();
-        userId = bagian.first().copied().unwrap_or("").to_string();
-        serverId = bagian.get(1).copied().unwrap_or("").to_string();
+        user_id = bagian.first().copied().unwrap_or("").to_string();
+        server_id = bagian.get(1).copied().unwrap_or("").to_string();
     } else if text.contains('(') && text.contains(')') {
         if let Some(cap) = regex_capture(text) {
-            userId = cap.0;
-            serverId = cap.1;
+            user_id = cap.0;
+            server_id = cap.1;
         } else {
             let angka: String = text.chars().filter(|c| c.is_ascii_digit()).collect();
             if angka.len() > 4 {
-                serverId = angka[angka.len() - 4..].to_string();
-                userId = angka[..angka.len() - 4].to_string();
+                server_id = angka[angka.len() - 4..].to_string();
+                user_id = angka[..angka.len() - 4].to_string();
             } else {
-                userId = angka;
+                user_id = angka;
             }
         }
     } else {
         let bagian: Vec<&str> = text.split_whitespace().filter(|v| !v.is_empty()).collect();
         if bagian.len() >= 2 {
-            userId = bagian[0].to_string();
-            serverId = bagian[1].to_string();
+            user_id = bagian[0].to_string();
+            server_id = bagian[1].to_string();
         } else {
             let angka: String = text.chars().filter(|c| c.is_ascii_digit()).collect();
             if angka.len() > 4 {
-                serverId = angka[angka.len() - 4..].to_string();
-                userId = angka[..angka.len() - 4].to_string();
+                server_id = angka[angka.len() - 4..].to_string();
+                user_id = angka[..angka.len() - 4].to_string();
             } else {
-                userId = angka;
+                user_id = angka;
             }
         }
     }
-    (userId, serverId)
+    (user_id, server_id)
 }
 
-/// Padanan `(\d+)\s*\(\s*(\d+)\s*()` tanpa dependensi `regex`.
+/// Padanan `text.match(/(\d+)\s*\(\s*(\d+)\s*\)/)` (`stalkml.js:56`) tanpa
+/// dependensi `regex`: `(` paling kiri yang didahului digit (boleh dipisah
+/// spasi) dan diikuti digit lalu `)` menang — sama dengan pencarian regex JS
+/// dari kiri, karena digit selalu runtut dan tak bisa menyeberangi `(`.
 fn regex_capture(text: &str) -> Option<(String, String)> {
-    let li = text.find('(')?;
-    let ri = text[li..].find(')')?;
-    let dalam = text[li + 1..li + ri].trim();
-    let mut parts = dalam.split_whitespace();
-    let a = parts.next()?;
-    let b = parts.next()?;
-    if parts.next().is_some() || !a.chars().all(|c| c.is_ascii_digit()) || !b.chars().all(|c| c.is_ascii_digit()) {
-        return None;
+    let b = text.as_bytes();
+    let spasi = |c: u8| c.is_ascii_whitespace();
+    for buka in text.match_indices('(').map(|(i, _)| i) {
+        // `(\d+)\s*` — digit yang berakhir tepat sebelum `(`.
+        let mut user_awal = buka;
+        while user_awal > 0 && spasi(b[user_awal - 1]) {
+            user_awal -= 1;
+        }
+        let user_akhir = user_awal;
+        while user_awal > 0 && b[user_awal - 1].is_ascii_digit() {
+            user_awal -= 1;
+        }
+        if user_awal == user_akhir {
+            continue;
+        }
+        // `\s*(\d+)\s*\)`
+        let mut i = buka + 1;
+        while i < b.len() && spasi(b[i]) {
+            i += 1;
+        }
+        let server_awal = i;
+        while i < b.len() && b[i].is_ascii_digit() {
+            i += 1;
+        }
+        if i == server_awal {
+            continue;
+        }
+        let server_akhir = i;
+        while i < b.len() && spasi(b[i]) {
+            i += 1;
+        }
+        if i < b.len() && b[i] == b')' {
+            return Some((
+                text[user_awal..user_akhir].to_string(),
+                text[server_awal..server_akhir].to_string(),
+            ));
+        }
     }
-    Some((a.to_string(), b.to_string()))
+    None
 }
 
 #[plugin(
@@ -105,9 +142,11 @@ pub fn stalkml(ctx: Ctx) -> Reply {
     }
     let (user_id, server_id) = parse_input(text);
     if user_id.is_empty() || server_id.is_empty() {
-        return Reply::text(
-            "❌ *FORMAT SALAH*\n\nPastikan kamu memasukkan ID dan Server yang lengkap.\nContoh: `.stalkml 1264042367 | 15139`"
-        ).with_reaction("❌");
+        // `${m.prefix}stalkml ...` (`stalkml.js:85`) — jangan hardcode `.`.
+        return Reply::text(format!(
+            "❌ *FORMAT SALAH*\n\nPastikan kamu memasukkan ID dan Server yang lengkap.\nContoh: `{}stalkml 1264042367 | 15139`",
+            ctx.prefix
+        )).with_reaction("❌");
     }
 
     let url = format!("https://api.isan.eu.org/nickname/ml?id={user_id}&server={server_id}");
@@ -120,7 +159,8 @@ pub fn stalkml(ctx: Ctx) -> Reply {
         }
     };
 
-    if json.get("success").is_some_and(|v| v.as_bool().unwrap_or(false)) {
+    // `if (json.success)` (`stalkml.js:95`) — truthy, bukan cuma `true`.
+    if json.get("success").is_some_and(crate::common::js_truthy_value) {
         let region = get_region(&server_id);
         let nama = json.get("name").and_then(Value::as_str).unwrap_or("-");
         let caption = format!(
@@ -139,7 +179,6 @@ pub fn stalkml(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug, Default)]
@@ -160,7 +199,12 @@ mod tests {
     impl HttpGet for Stub {
         fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
             self.seen.lock().unwrap().push(url.to_string());
-            let teks = self.body.lock().unwrap().clone().unwrap_or_default();
+            // `offline()` = body `None`: fetch gagal melempar → catch →
+            // "GAGAL MELACAK AKUN" (`stalkml.js:111-114`). Harus `Err`, bukan
+            // 200 berbadan kosong.
+            let Some(teks) = self.body.lock().unwrap().clone() else {
+                return Err(HttpError { message: "offline".into() });
+            };
             Ok(HttpResponse { status: 200, body: HttpBody::Bytes { data: Arc::from(teks.into_bytes()), mimetype: None }, headers: Vec::new() })
         }
         fn post_json(&self, _: &str, _: &Value) -> Result<HttpResponse, HttpError> { unimplemented!() }
@@ -206,7 +250,9 @@ mod tests {
     fn format_salah_dengan_angka_gabung() {
         let http = Stub::json(serde_json::json!({ "success": false }));
         let r = run(http.clone(), "126404236715139");
-        assert_eq!(text_of(&r), "❌ *AKUN TIDAK DITEMUKAN*\n\nMaaf, sistem tidak dapat menemukan akun dengan ID *1264042367* dan Server *15139*. Pastikan ID dan Server sudah diketik dengan benar.");
+        // `pureNumbers.slice(-4)` → server, sisanya → user (`stalkml.js:74-76`):
+        // "126404236715139" jadi user "12640423671" + server "5139".
+        assert_eq!(text_of(&r), "❌ *AKUN TIDAK DITEMUKAN*\n\nMaaf, sistem tidak dapat menemukan akun dengan ID *12640423671* dan Server *5139*. Pastikan ID dan Server sudah diketik dengan benar.");
         assert_eq!(reaction_of(&r), Some("❌".to_string()));
     }
 

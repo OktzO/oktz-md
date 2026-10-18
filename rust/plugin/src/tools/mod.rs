@@ -25,3 +25,7 @@ pub mod nulis;
 pub mod tovn;
 pub mod txt2qr;
 pub mod videotranscribe;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod ipwho;
+pub mod tovideo;

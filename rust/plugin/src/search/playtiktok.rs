@@ -67,7 +67,9 @@ pub fn playtiktok(ctx: Ctx) -> Reply {
         }
     };
 
-    let items = match hasil.get("result").and_then(Value::as_array) {
+    // `tiktokSearchVideo` mengembalikan array item yang SUDAH dinormalisasi
+    // (`tiktoksearch.js:64`), bukan objek ber-`result` — `videos[0]` di JS.
+    let items = match hasil.as_array() {
         Some(arr) if !arr.is_empty() => arr,
         _ => {
             return Reply::text(format!("❌ Tidak ditemukan video untuk: {query}"))
@@ -79,18 +81,24 @@ pub fn playtiktok(ctx: Ctx) -> Reply {
     let title = video
         .get("title")
         .and_then(Value::as_str)
+        .filter(|s| !s.is_empty()) // `video.title || "-"` (`playtiktok.js:47`)
         .unwrap_or("-");
     let author = video
         .get("author")
         .and_then(|a| a.get("nickname"))
         .and_then(Value::as_str)
+        .filter(|s| !s.is_empty()) // `video.author?.nickname || "-"` (`:48`)
         .unwrap_or("-");
     let stats = video.get("stats").and_then(Value::as_object);
     let plays = angka_stats(stats.and_then(|s| s.get("plays")));
     let likes = angka_stats(stats.and_then(|s| s.get("likes")));
     let comments = angka_stats(stats.and_then(|s| s.get("comments")));
     let shares = angka_stats(stats.and_then(|s| s.get("shares")));
-    let music = video.get("music").and_then(Value::as_str).unwrap_or("-");
+    let music = video
+        .get("music")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty()) // `video.music || "-"` (`playtiktok.js:53`)
+        .unwrap_or("-");
     let link = video.get("link").and_then(Value::as_str).unwrap_or("");
 
     let caption = format!(
@@ -116,7 +124,6 @@ pub fn playtiktok(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -190,27 +197,32 @@ mod tests {
     }
 
     fn contoh() -> Value {
+        // Bentuk MENTAH dari API (`tiktoksearch.js:26-50`): link di `data`,
+        // statistik di `views`/`comment`/`share`, musik di `music_info.url`.
+        // Scraper yang menormalkannya sebelum plugin membacanya.
         serde_json::json!({
             "status": true,
             "result": [
                 {
                     "title": "Video Lucu",
+                    "data": "https://www.tiktok.com/@budi/video/1",
                     "author": { "nickname": "Budi", "fullname": "Budi Santoso" },
                     "stats": {
-                        "plays": 1_200_000,
+                        "views": 1_200_000,
                         "likes": 34_000,
                         "comment": 1_200,
                         "share": 450
                     },
-                    "music": "Lagu Pop",
-                    "link": "https://www.tiktok.com/@budi/video/1"
+                    "music_info": { "url": "Lagu Pop" }
                 }
             ]
         })
     }
 
     fn video_url(r: &Reply) -> Option<String> {
-        match r.without_mutations() {
+        // `with_reaction` membungkus balasan di `Mutate`+`Reaction`
+        // (`registry.rs:412-421`), jadi keduanya harus dilepas dulu.
+        match r.without_mutations().tanpa_reaksi() {
             Reply::Video { media, .. } => media.as_ref().and_then(|m| match m {
                 MediaSource::Url { url, .. } => Some(url.clone()),
                 _ => None,
@@ -248,7 +260,7 @@ mod tests {
         assert!(caption_of(&r).contains("*Judul:* Video Lucu"));
         assert!(caption_of(&r).contains("*Author:* Budi"));
         assert!(caption_of(&r).contains("👀 *Views:* 1.2M"));
-        assert!(caption_of(&r).contains("❤️ *Likes:* 34K"));
+        assert!(caption_of(&r).contains("❤️ *Likes:* 34.0K"));
         assert!(caption_of(&r).contains("💬 *Comments:* 1.2K"));
         assert!(caption_of(&r).contains("🔁 *Shares:* 450"));
         assert!(caption_of(&r).contains("🎧 *Music:* Lagu Pop"));
@@ -287,7 +299,9 @@ mod tests {
     #[test]
     fn format_number_mengikuti_js() {
         assert_eq!(format_number(1_200_000.0), "1.2M");
-        assert_eq!(format_number(34_000.0), "34K");
+        // `(34_000 / 1000).toFixed(1)` = "34.0" (`playtiktok.js:23`) — ".0"
+        // TIDAK dibuang, jadi bukan "34K".
+        assert_eq!(format_number(34_000.0), "34.0K");
         assert_eq!(format_number(450.0), "450");
         assert_eq!(format_number(0.0), "0");
         assert_eq!(format_number(999.0), "999");

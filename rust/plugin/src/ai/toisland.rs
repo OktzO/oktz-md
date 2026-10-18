@@ -4,8 +4,6 @@
 
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 
-use crate::common::error_template;
-
 const PROMPT: &str = "Transform this image into a tropical island scene. \
 Place the subject in a beautiful island environment with clear blue ocean, palm trees, and warm sunlight. \
 Add realistic lighting, shadows, and vibrant tropical colors. \
@@ -21,10 +19,8 @@ pub(crate) fn help(prefix: &str) -> String {
 /// Ambil byte media dari pesan pemicu atau pesan yang di-reply, sama urutan
 // pengecekannya dengan JS.
 fn ambil_buffer(ctx: &Ctx) -> Option<Vec<u8>> {
-    if let Some(q) = ctx.quoted() {
-        if q.is_media() {
-            return ctx.download_quoted_media().ok();
-        }
+    if ctx.quoted().is_some_and(|q| q.is_media()) {
+        return ctx.download_quoted_media().ok();
     }
     if ctx.is_media() {
         return ctx.download_media().ok();
@@ -59,7 +55,8 @@ pub fn toisland(ctx: Ctx) -> Reply {
     }
 
     let Some(buffer) = ambil_buffer(&ctx) else {
-        return Reply::text("❌ Gagal mendownload gambar");
+        // toisland.js:46-49 — `m.react('❌')` lalu `m.reply` pesan gagal unduh.
+        return Reply::text("❌ Gagal mendownload gambar").with_reaction("❌");
     };
 
     match oktz_scraper::seaart::live3d(ctx.http.as_ref(), &buffer, PROMPT) {
@@ -71,80 +68,123 @@ pub fn toisland(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse, IncomingKind};
+    use oktz_plugin_api::{
+        HttpBody, HttpCall, HttpError, HttpGet, HttpResponse, IncomingKind, IncomingMedia,
+        MediaError, MediaFetch, MediaOrigin, QuotedKind, QuotedMessage,
+    };
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
 
+    /// Balasan berurutan per `call` (pola sama dengan test `bananagen.rs`);
+    /// lima balasan cukup untuk seluruh rangkaian `seaart::live3d`.
     #[derive(Debug, Default)]
     struct Stub {
-        balasan: Option<Vec<u8>>,
+        balasan: Mutex<Vec<String>>,
         seen: Mutex<Vec<String>>,
+        hitung: Mutex<usize>,
     }
 
     impl Stub {
-        fn bytes(b: impl Into<Vec<u8>>) -> Arc<Stub> {
+        fn urutan(daftar: Vec<&str>) -> Arc<Stub> {
             Arc::new(Stub {
-                balasan: Some(b.into()),
+                balasan: Mutex::new(daftar.into_iter().map(str::to_string).collect()),
                 seen: Mutex::new(Vec::new()),
+                hitung: Mutex::new(0),
             })
         }
         fn offline() -> Arc<Stub> {
-            Arc::new(Stub {
-                balasan: None,
-                seen: Mutex::new(Vec::new()),
-            })
+            Stub::urutan(Vec::new())
         }
     }
 
     impl HttpGet for Stub {
-        fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
-            self.seen.lock().unwrap().push(url.to_string());
-            match &self.balasan {
+        fn call(&self, req: &HttpCall) -> Result<HttpResponse, HttpError> {
+            self.seen.lock().unwrap().push(req.url.clone());
+            let i = {
+                let mut hitung = self.hitung.lock().unwrap();
+                let i = *hitung;
+                *hitung += 1;
+                i
+            };
+            let balasan = self.balasan.lock().unwrap().get(i).cloned();
+            match balasan {
                 Some(b) => Ok(HttpResponse {
                     status: 200,
                     body: HttpBody::Bytes {
-                        data: Arc::from(b.clone()),
+                        data: Arc::from(b.into_bytes()),
                         mimetype: None,
                     },
                     headers: Vec::new(),
                 }),
-                None => Err(oktz_plugin_api::HttpError {
+                None => Err(HttpError {
                     message: "offline".into(),
                 }),
             }
         }
+        fn get(&self, _: &str) -> Result<HttpResponse, HttpError> {
+            unimplemented!("pakai call")
+        }
         fn post_json(&self, _: &str, _: &serde_json::Value) -> Result<HttpResponse, HttpError> {
-            unimplemented!("cuma GET")
+            unimplemented!("pakai call")
         }
         fn post_form(&self, _: &str, _: &str) -> Result<HttpResponse, HttpError> {
-            unimplemented!("cuma GET")
+            unimplemented!("pakai call")
         }
         fn post_multipart(
             &self,
             _: &str,
-            _: &[(&str, oktz_plugin_api::HttpBody)],
+            _: &[(&str, HttpBody)],
         ) -> Result<HttpResponse, HttpError> {
-            unimplemented!("cuma GET")
+            unimplemented!("pakai call")
         }
     }
 
-    fn run_media(buffer: Vec<u8>) -> Reply {
-        toisland(Ctx {
+    /// `m.download()` palsu, tanpa jaringan.
+    #[derive(Debug)]
+    struct MediaStub(Result<Vec<u8>, MediaError>);
+
+    impl MediaFetch for MediaStub {
+        fn download(&self, _: MediaOrigin) -> Result<Vec<u8>, MediaError> {
+            self.0.clone()
+        }
+    }
+
+    fn ctx_media(
+        http: Arc<Stub>,
+        media: Option<IncomingKind>,
+        quoted_image: bool,
+        unduh: Result<Vec<u8>, MediaError>,
+    ) -> Ctx {
+        Ctx {
             sender: ME.into(),
             chat: ME.into(),
             prefix: ".".into(),
             command: "toisland".into(),
-            media: Some(oktz_plugin_api::IncomingMedia {
-                kind: IncomingKind::Image,
+            media: media.map(|kind| IncomingMedia {
+                kind,
                 mimetype: Some("image/jpeg".into()),
                 file_name: None,
                 caption: String::new(),
             }),
-            media_fetch: Arc::new(oktz_plugin_api::NoMediaFetch),
-            http: Stub::bytes(buffer),
+            quoted: if quoted_image {
+                Some(QuotedMessage {
+                    id: "Q1".into(),
+                    sender: ME.into(),
+                    chat: ME.into(),
+                    text: String::new(),
+                    kind: QuotedKind::Image,
+                    mimetype: None,
+                    file_name: None,
+                    from_me: false,
+                })
+            } else {
+                None
+            },
+            media_fetch: Arc::new(MediaStub(unduh)),
+            http,
             ..Ctx::default()
-        })
+        }
     }
 
     fn text_of(r: &Reply) -> String {
@@ -160,56 +200,45 @@ mod tests {
 
     #[test]
     fn bukan_gambar_menghasilkan_kartu_pakai_tanpa_reaksi() {
-        let r = run_media(vec![]);
+        // toisland.js:26-34 — media video bukan `imageMessage` → kartu pakai.
+        let r = toisland(ctx_media(
+            Stub::offline(),
+            Some(IncomingKind::Video),
+            false,
+            Ok(Vec::new()),
+        ));
         assert_eq!(text_of(&r), help("."));
         assert_eq!(reaction_of(&r), None);
     }
 
     #[test]
-    fn download_gagal_mengembalikan_pesan_tanpa_reaksi() {
-        let r = toisland(Ctx {
-            sender: ME.into(),
-            chat: ME.into(),
-            prefix: ".".into(),
-            command: "toisland".into(),
-            media: Some(oktz_plugin_api::IncomingMedia {
-                kind: IncomingKind::Image,
-                mimetype: None,
-                file_name: None,
-                caption: String::new(),
+    fn download_gagal_mengembalikan_pesan_dan_reaksi_silang() {
+        // toisland.js:46-49 — `m.react('❌')` lalu `m.reply` pesan gagal unduh.
+        let r = toisland(ctx_media(
+            Stub::offline(),
+            Some(IncomingKind::Image),
+            false,
+            Err(MediaError {
+                message: "cdn mati".into(),
             }),
-            media_fetch: Arc::new(oktz_plugin_api::NoMediaFetch),
-            http: Stub::bytes(vec![1, 2, 3]),
-            ..Ctx::default()
-        });
+        ));
         assert_eq!(text_of(&r), "❌ Gagal mendownload gambar");
-        assert_eq!(reaction_of(&r), None);
+        assert_eq!(reaction_of(&r), Some("❌"));
     }
 
     #[test]
     fn quoted_image_dilayani_sama_dengan_trigger_image() {
-        // quoted berisi media → download_quoted_media dipakai.
-        // Karena NoMediaFetch selalu gagal, hasilnya pesan gagal download.
-        let r = toisland(Ctx {
-            sender: ME.into(),
-            chat: ME.into(),
-            prefix: ".".into(),
-            command: "toisland".into(),
-            quoted: Some(oktz_plugin_api::QuotedMessage {
-                id: "1".into(),
-                sender: ME.into(),
-                chat: ME.into(),
-                text: String::new(),
-                kind: oktz_plugin_api::QuotedKind::Image,
-                mimetype: None,
-                file_name: None,
-                from_me: false,
+        // toisland.js:40-49 — `m.quoted` dicek duluan; unduh gagal → pesan
+        // gagal unduh yang sama seperti jalur trigger.
+        let r = toisland(ctx_media(
+            Stub::offline(),
+            None,
+            true,
+            Err(MediaError {
+                message: "cdn mati".into(),
             }),
-            media_fetch: Arc::new(oktz_plugin_api::NoMediaFetch),
-            http: Stub::bytes(vec![1, 2, 3]),
-            ..Ctx::default()
-        });
+        ));
         assert_eq!(text_of(&r), "❌ Gagal mendownload gambar");
-        assert_eq!(reaction_of(&r), None);
+        assert_eq!(reaction_of(&r), Some("❌"));
     }
 }
