@@ -9,12 +9,15 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
-const BIN = process.env.OKTZ_BIN || path.join("target", "release", "oktz");
+const KANDIDAT = [path.join("bin", "oktz"), path.join("target", "release", "oktz")];
+const BIN = process.env.OKTZ_BIN || KANDIDAT.find((p) => existsSync(p)) || KANDIDAT[1];
 const ARGS = process.argv.slice(2);
 const CHILD_ARGS = ARGS.length > 0 ? ARGS : ["run"];
 
 if (!existsSync(BIN)) {
-  console.error(`binary ${BIN} tidak ada. Build dulu: cargo build --release`);
+  console.error(
+    `binary ${BIN} tidak ada. Taruh binary di bin/oktz atau build: cargo build --release`
+  );
   process.exit(127);
 }
 

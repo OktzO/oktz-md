@@ -436,3 +436,15 @@ Pemicu utama test agent yang gagal: assertion memakai delimiter markdown yang be
   dipasang lewat `Pipeline::with_sock`; roster produksi dipasang dari
   `ClientSender`; `KickAndReply` mengeksekusi kick.
 - Batas yang belum dikerjakan ada di `docs/rust-rewrite/BLOCKED.md` §29.
+
+## Event peserta grup (2026-10-19)
+
+- Langganan `EventKind::GroupUpdate` di `Pipeline::attach`, antrean sendiri,
+  dan `Pipeline::tangani_update_grup` sebagai padanan `handler.groupHandler`.
+- Welcome/goodbye tipe teks: `lib/oktz-wa/pesan_grup.rs` (teks, placeholder,
+  undian) + `lib/oktz-wa/grup_event.rs` (parse event, LID→JID, default grup,
+  gerbang tipe).
+- Jalur bot ditambahkan: anticulik (keluar), sewa (tolak grup tak terdaftar),
+  salam bot bergabung — semuanya dari `src/connection.js:1199-1328`.
+- Batas (kartu tipe 2..8, banner promote/demote, badge newsletter, TZ host)
+  dicatat di `docs/rust-rewrite/BLOCKED.md` §30.

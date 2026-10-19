@@ -49,6 +49,8 @@ use oktz_router::{
 };
 use oktz_store::json_store::JsonStore;
 use serde_json::Value;
+use crate::grup_event::{self, AksiGrup, UpdateGrup};
+use crate::pesan_grup::{self, KonteksPesan};
 use crate::reply_variant;
 use whatsapp_rust::RevokeType;
 use whatsapp_rust::http::{HttpClient, HttpRequest, UreqHttpClient};
@@ -3153,12 +3155,378 @@ impl Pipeline {
     /// dua loop hidup dan satu pesan dibalas dua kali.
     pub fn attach(self: &Arc<Self>, client: &Arc<Client>) {
         let (tx, rx) = whatsapp_rust::async_channel::bounded(Self::INGEST_CAPACITY);
-        let handler = Arc::new(PipelineHandler { tx });
-        let sub = client.subscribe(EventInterest::of(&[EventKind::Messages]), handler);
+        let (grup_tx, grup_rx) = whatsapp_rust::async_channel::bounded(Self::INGEST_CAPACITY);
+        let handler = Arc::new(PipelineHandler {
+            tx,
+            grup: grup_tx,
+        });
+        let sub = client.subscribe(
+            EventInterest::of(&[EventKind::Messages, EventKind::GroupUpdate]),
+            handler,
+        );
         let mut slot = self.subscription.lock().unwrap_or_else(|e| e.into_inner());
         *slot = Some(sub);
         drop(slot);
         tokio::spawn(self.clone().run(rx));
+        tokio::spawn(self.clone().run_grup(grup_rx));
+    }
+
+    /// Drain antrean update peserta grup → [`Pipeline::tangani_update_grup`].
+    ///
+    /// Pisah dari [`Pipeline::run`] karena bentuk datanya beda; dua-duanya
+    /// berbagi satu `Subscription` supaya reconnect tidak meninggalkan
+    /// langganan yatim.
+    pub async fn run_grup(self: Arc<Self>, rx: GrupRx) {
+        while let Ok(u) = rx.recv().await {
+            if let Err(e) = self.tangani_update_grup(&u).await {
+                tracing::warn!(
+                    error = %e,
+                    grup = %u.id,
+                    aksi = ?u.aksi,
+                    "update peserta grup gagal ditangani"
+                );
+            }
+        }
+        tracing::debug!("antrean update grup ditutup");
+    }
+
+    /// Kirim teks ke sebuah chat; `mention` mengisi `mentions` (peserta yang
+    /// baru masuk/keluar), `None` = tanpa mention.
+    async fn kirim_teks(
+        &self,
+        chat: &str,
+        teks: &str,
+        mention: Option<&str>,
+    ) -> Result<(), PipelineError> {
+        let target = ReplyTarget {
+            quote: None,
+            sender: mention.unwrap_or("").to_string(),
+        };
+        let rendered = render_reply(&Reply::text(teks), &target)?;
+        if let Some(r) = rendered {
+            self.sender
+                .send(chat, r.message, r.extra_nodes)
+                .await
+                .map_err(|e| PipelineError::Other(format!("gagal kirim: {e}")))?;
+        }
+        Ok(())
+    }
+
+    async fn tidur(&self, ms: u64) {
+        tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+    }
+
+    /// Bot sendiri ada di daftar peserta yang baru masuk?
+    ///
+    /// `isBotAdded` (`src/connection.js:1218-1235`) memakai `phoneNumber || id`
+    /// lalu membandingkan digit maupun `includes`, jadi dua bentuk itu ikut
+    /// diperiksa di sini.
+    fn bot_baru_ditambahkan(&self, u: &UpdateGrup) -> bool {
+        u.aksi == AksiGrup::Add
+            && u.peserta.iter().any(|p| {
+                let kandidat = p.nomor.as_deref().unwrap_or(&p.jid);
+                let nomor = grup_event::nomor_jid(kandidat);
+                nomor == self.bot_id
+                    || self.bot_id.contains(&nomor)
+                    || kandidat.contains(&self.bot_id)
+            })
+    }
+
+    /// `handleAntiCulik` (`plugins/group/anticulik.js:71-127`).
+    ///
+    /// `true` = bot ditambahkan orang asing dan sudah dijadwalkan keluar.
+    /// Badge newsletter (`saluranCtx()`) tidak ikut — jalur context itu belum
+    /// ada, sama seperti catatan di `docs/rust-rewrite/BLOCKED.md` §15.
+    async fn anticulik_menolak(&self, u: &UpdateGrup) -> Result<bool, PipelineError> {
+        let grup = self.ctx.group_entry(&u.id);
+        let setting = self.ctx.settings_entry();
+        let status = grup
+            .get("anticulik")
+            .and_then(Value::as_str)
+            .or_else(|| setting.get("anticulik").and_then(Value::as_str))
+            .unwrap_or("off");
+        if status != "on" {
+            return Ok(false);
+        }
+
+        let pelaku = u.pelaku.clone().unwrap_or_default();
+        // JS punya catatan khusus `event.author` yang bisa berupa LID; owner
+        // yang mengundang tidak boleh dianggap orang asing
+        // (`plugins/group/anticulik.js:100-109`).
+        if !pelaku.is_empty()
+            && (self.identity.is_owner(&pelaku)
+                || grup_event::nomor_jid(&pelaku) == self.bot_id)
+        {
+            return Ok(false);
+        }
+
+        let sebut = if pelaku.is_empty() {
+            "seseorang".to_string()
+        } else {
+            format!("@{}", grup_event::nomor_jid(&pelaku))
+        };
+        let teks = format!(
+            "🛡️ *Anti Culik*\n\nMinimal izin dulu ya bang, jangan asal culik 🗿\n\n\
+             > Bot ditambah oleh {sebut} tanpa izin\n\
+             > Bot akan keluar dari grup ini\n\n\
+             _Hubungi owner untuk menambahkan bot dengan cara yang benar_"
+        );
+        self.kirim_teks(&u.id, &teks, (!pelaku.is_empty()).then_some(pelaku.as_str()))
+            .await?;
+        // JS menunggu 2 detik supaya pesannya sempat terkirim sebelum keluar.
+        self.tidur(2000).await;
+        self.plugin_src.sock.keluar_grup(&u.id).map_err(|e| {
+            PipelineError::Other(format!("keluar grup {} (anticulik): {e}", u.id))
+        })?;
+        tracing::warn!(grup = %u.id, pelaku = %pelaku, "anticulik: bot keluar dari grup");
+        Ok(true)
+    }
+
+    /// `src/connection.js:1244-1272` — grup di luar daftar sewa ditinggalkan.
+    ///
+    /// `Some(teks)` = kirim teks itu lalu keluar; `None` = boleh tinggal.
+    fn sewa_penolakan(&self, u: &UpdateGrup) -> Option<String> {
+        let setting = self.ctx.settings_entry();
+        let sewa = setting.get("sewa")?;
+        if sewa.get("enabled").and_then(Value::as_bool) != Some(true) {
+            return None;
+        }
+        let grup = sewa.get("groups").and_then(|g| g.get(&u.id));
+        let terdaftar = grup
+            .map(|g| {
+                g.get("isLifetime").and_then(Value::as_bool) == Some(true)
+                    || g.get("expiredAt")
+                        .and_then(Value::as_i64)
+                        .map(|t| t > now_ms())
+                        .unwrap_or(false)
+            })
+            .unwrap_or(false);
+        if terdaftar {
+            return None;
+        }
+        // `config.bot.support` belum punya jalur file di Rust; JS jatuh ke
+        // `config.bot.developer` lalu "owner" kalau dua-duanya kosong.
+        let kontak = {
+            let dev = self.plugin_src.config.bot.developer.trim();
+            if dev.is_empty() {
+                "owner".to_string()
+            } else {
+                dev.to_string()
+            }
+        };
+        Some(format!(
+            "⛔ *sᴇᴡᴀʙᴏᴛ*\n\n\
+             > Grup ini tidak terdaftar dalam sistem sewa.\n\
+             > Bot akan meninggalkan grup ini.\n\n\
+             _Hubungi {kontak} untuk sewa bot._"
+        ))
+    }
+
+    /// Salam saat bot baru dimasukkan ke grup (`src/connection.js:1274-1317`).
+    async fn salam_bot_bergabung(&self, u: &UpdateGrup) -> Result<(), PipelineError> {
+        let pelaku = u.pelaku.clone().unwrap_or_default();
+        let sebut = if pelaku.is_empty() {
+            "seseorang".to_string()
+        } else {
+            format!("@{}", grup_event::nomor_jid(&pelaku))
+        };
+        let meta = self.plugin_src.sock.metadata_grup(&u.id);
+        let nama_grup = meta
+            .ok()
+            .and_then(|m| m.get("subject").and_then(Value::as_str).map(str::to_string))
+            .unwrap_or_else(|| "grup ini".to_string());
+        let prefix = self
+            .parse_opts
+            .prefixes
+            .first()
+            .cloned()
+            .unwrap_or_else(|| ".".to_string());
+        let dev = {
+            let d = self.plugin_src.config.bot.developer.trim();
+            if d.is_empty() {
+                "Lucky Archz".to_string()
+            } else {
+                d.to_string()
+            }
+        };
+        let nama_bot = {
+            let n = self.plugin_src.config.bot.name.trim();
+            if n.is_empty() {
+                "Bot".to_string()
+            } else {
+                n.to_string()
+            }
+        };
+        let teks = format!(
+            "👋 *ʜᴀɪ, sᴀʟᴀᴍ ᴋᴇɴᴀʟ!*\n\n\
+             Aku *{nama_bot}* 🤖\n\n\
+             Terima kasih sudah mengundang aku ke *{nama_grup}*!\n\
+             Aku diundang oleh {sebut} ✨\n\n\
+             ╭┈┈⬡「 📋 *ɪɴꜰᴏ* 」\n\
+             ┃ 🔧 Developer: *{dev}*\n\
+             ┃ 📢 Prefix: `{prefix}`\n\
+             ┃ 📩 Support: -\n\
+             ╰┈┈⬡\n\n\
+             > Ketik `{prefix}menu` untuk melihat daftar fitur\n\
+             > Ketik `{prefix}help` untuk bantuan"
+        );
+        self.kirim_teks(&u.id, &teks, (!pelaku.is_empty()).then_some(pelaku.as_str()))
+            .await?;
+        tracing::info!(grup = %u.id, nama = %nama_grup, "bot bergabung ke grup");
+        Ok(())
+    }
+
+    /// `groupHandler(update, sock)` (`src/handler.js:1981`) — versi Rust.
+    ///
+    /// Yang dipindah: grup tanpa catatan diberi default dulu
+    /// (`src/handler.js:1996-2003`), gerbang `welcome`/`goodbye` per grup,
+    /// terjemahan LID → JID lewat metadata, lalu kirim pesan teks (tipe 1)
+    /// dengan mention peserta.
+    ///
+    /// Yang DIKETAHUI belum: `welcomeType`/`goodbyeType` 2..8 (kartu/album,
+    /// butuh media + relay) dan banner `promote`/`demote`
+    /// (`src/handler.js:2090-2130`, butuh `config.assets`) — dilewati dengan
+    /// `warn`, bukan diganti bentuk lain.
+    async fn tangani_update_grup(&self, u: &UpdateGrup) -> Result<(), PipelineError> {
+        match u.aksi {
+            AksiGrup::Promote | AksiGrup::Demote => {
+                tracing::warn!(grup = %u.id, aksi = ?u.aksi, "banner promote/demote belum ada jalur medianya; dilewati");
+                return Ok(());
+            }
+            AksiGrup::Add | AksiGrup::Remove => {}
+            AksiGrup::Modify | AksiGrup::Lain => return Ok(()),
+        }
+
+        // Satu event diproses DUA listener di JS: `src/connection.js:1199`
+        // (bot baru ditambahkan → anticulik, sewa, salam) dan
+        // `src/handler.js:1981` (welcome/goodbye). Dua-duanya jalan, jadi di
+        // sini pun tidak ada early-return setelah jalur bot.
+        if self.bot_baru_ditambahkan(u) {
+            self.anticulik_menolak(u).await?;
+            if let Some(teks) = self.sewa_penolakan(u) {
+                self.kirim_teks(&u.id, &teks, None).await?;
+                self.tidur(2000).await;
+                self.plugin_src.sock.keluar_grup(&u.id).map_err(|e| {
+                    PipelineError::Other(format!("keluar grup {} (sewa): {e}", u.id))
+                })?;
+                tracing::warn!(grup = %u.id, "sewa: bot keluar dari grup tak terdaftar");
+            } else {
+                self.salam_bot_bergabung(u).await?;
+            }
+        }
+
+        if self.ctx.group_entry(&u.id).is_null() {
+            self.ctx
+                .apply(
+                    &[Mutation::SetGroup {
+                        jid: u.id.clone(),
+                        data: grup_event::default_grup(),
+                    }],
+                    now_ms(),
+                )
+                .map_err(|e| PipelineError::Other(format!("tulis default grup: {e}")))?;
+        }
+        let grup = self.ctx.group_entry(&u.id);
+        let masuk = u.aksi == AksiGrup::Add;
+        let boleh = if masuk {
+            grup_event::boleh_welcome(&grup)
+        } else {
+            grup_event::boleh_goodbye(&grup)
+        };
+        if !boleh {
+            return Ok(());
+        }
+        let setting = self.ctx.settings_entry();
+        let tipe = if masuk {
+            grup_event::tipe_welcome(&setting)
+        } else {
+            grup_event::tipe_goodbye(&setting)
+        };
+        if tipe != 1 {
+            tracing::warn!(
+                grup = %u.id,
+                tipe,
+                "welcome/goodbye tipe ini butuh kartu/album yang belum ada; dilewati"
+            );
+            return Ok(());
+        }
+
+        let meta = self
+            .plugin_src
+            .sock
+            .metadata_grup(&u.id)
+            .map_err(|e| PipelineError::Other(format!("metadata grup {}: {e}", u.id)))?;
+        let peserta_meta = meta.get("participants").cloned().unwrap_or(Value::Null);
+        let jumlah = peserta_meta.as_array().map(Vec::len).unwrap_or(0);
+        let nama_grup = meta
+            .get("subject")
+            .and_then(Value::as_str)
+            .unwrap_or("Grup")
+            .to_string();
+        // JS menyerahkan `groupMeta.descOwner` sebagai "groupDesc"
+        // (`plugins/group/welcome.js:137`, `goodbye.js:165`) — kuirk yang
+        // ditiru apa adanya, bukan diperbaiki.
+        let deskripsi = meta
+            .get("descOwner")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let owner = meta
+            .get("owner")
+            .and_then(Value::as_str)
+            .map(grup_event::nomor_jid)
+            .unwrap_or_default();
+        let waktu = grup_event::waktu_lokal();
+        let prefix = self
+            .parse_opts
+            .prefixes
+            .first()
+            .cloned()
+            .unwrap_or_else(|| ".".to_string());
+        let bot_nama = self.plugin_src.config.bot.name.clone();
+        let custom = if masuk {
+            grup.get("welcomeMsg")
+        } else {
+            grup.get("goodbyeMsg")
+        }
+        .and_then(Value::as_str)
+        .map(str::to_string);
+        // JS `Math.random()`; di sini jam dinding supaya pilihan tips berganti
+        // tiap pesan tanpa crate rng.
+        let acak = now_ms() as u64;
+
+        for p in &u.peserta {
+            let jid = grup_event::jid_peserta(p, &peserta_meta);
+            let nomor = grup_event::nomor_jid(&jid);
+            let k = KonteksPesan {
+                nomor: &nomor,
+                nama_grup: &nama_grup,
+                deskripsi: deskripsi.as_deref(),
+                jumlah_member: jumlah,
+                owner_grup: &owner,
+                prefix: &prefix,
+                bot_nama: &bot_nama,
+                tanggal: &waktu.tanggal,
+                jam: &waktu.jam,
+                hari: &waktu.hari,
+            };
+            let teks = if masuk {
+                pesan_grup::welcome(custom.as_deref(), &k, acak)
+            } else {
+                pesan_grup::goodbye(custom.as_deref(), &k, acak)
+            };
+            let target = ReplyTarget {
+                quote: None,
+                sender: jid.clone(),
+            };
+            let rendered = render_reply(&Reply::text(teks), &target)?;
+            if let Some(r) = rendered {
+                self.sender
+                    .send(&u.id, r.message, r.extra_nodes)
+                    .await
+                    .map_err(|e| PipelineError::Other(format!("gagal kirim sapaan: {e}")))?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -3166,6 +3534,10 @@ impl Pipeline {
 /// tidak menulis ulang path crate.
 pub type IngestRx = whatsapp_rust::async_channel::Receiver<InboundMessage>;
 type IngestTx = whatsapp_rust::async_channel::Sender<InboundMessage>;
+
+/// Sisi terima antrean update peserta grup.
+pub type GrupRx = whatsapp_rust::async_channel::Receiver<UpdateGrup>;
+type GrupTx = whatsapp_rust::async_channel::Sender<UpdateGrup>;
 
 fn now_ms() -> i64 {
     std::time::SystemTime::now()
@@ -3181,10 +3553,23 @@ fn now_ms() -> i64 {
 /// tidak boleh async, dan tidak boleh panik.
 struct PipelineHandler {
     tx: IngestTx,
+    grup: GrupTx,
 }
 
 impl EventHandler for PipelineHandler {
     fn handle_event(&self, event: Arc<Event>) {
+        // Satu langganan dua bentuk: update grup dicoba dulu (murah, cuma
+        // cocokkan varian), sisanya jalur pesan seperti sebelumnya.
+        if let Some(u) = grup_event::UpdateGrup::dari_event(&event) {
+            if let Err(e) = self.grup.try_send(u) {
+                tracing::warn!(
+                    error = %e,
+                    queue = Pipeline::INGEST_CAPACITY,
+                    "antrean update grup penuh; event dibuang"
+                );
+            }
+            return;
+        }
         let Event::Messages(batch) = &*event else {
             return;
         };
@@ -3205,12 +3590,13 @@ impl EventHandler for PipelineHandler {
     }
 
     fn interest(&self) -> EventInterest {
-        EventInterest::of(&[EventKind::Messages])
+        EventInterest::of(&[EventKind::Messages, EventKind::GroupUpdate])
     }
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::grup_event::PesertaGrup;
     use serde_json::json;
     use whatsapp_rust::{GroupParticipant, ParticipantType};
     use whatsapp_rust::types::message::MessageSource;
@@ -3227,6 +3613,12 @@ mod tests {
         let p = std::env::temp_dir().join(format!("oktz-pipeline-{name}-{n}.json"));
         std::fs::write(&p, body).unwrap();
         Arc::new(JsonStore::open(&p).unwrap())
+    }
+
+    /// `PipelineHandler` untuk pesan; antrean grup dibuat tapi tidak dipakai.
+    fn handler_pesan(tx: IngestTx) -> PipelineHandler {
+        let (grup, _grx) = whatsapp_rust::async_channel::unbounded();
+        PipelineHandler { tx, grup }
     }
 
     #[derive(Clone, Default)]
@@ -4497,7 +4889,7 @@ fn group_number_and_long_number_are_rejected() {
     #[test]
     fn handler_enqueues_every_message_in_a_batch() {
         let (tx, rx) = whatsapp_rust::async_channel::unbounded();
-        let h = PipelineHandler { tx };
+        let h = handler_pesan(tx);
         h.handle_event(messages_event(&["B1", "B2", "B3"]));
         let ids: Vec<String> = std::iter::from_fn(|| rx.try_recv().ok())
             .map(|m| m.info.id.clone())
@@ -4508,7 +4900,7 @@ fn group_number_and_long_number_are_rejected() {
     #[test]
     fn handler_ignores_non_message_events() {
         let (tx, rx) = whatsapp_rust::async_channel::unbounded();
-        let h = PipelineHandler { tx };
+        let h = handler_pesan(tx);
         h.handle_event(Arc::new(Event::Connected(
             whatsapp_rust::types::events::Connected::builder().build(),
         )));
@@ -4516,16 +4908,19 @@ fn group_number_and_long_number_are_rejected() {
     }
 
     #[test]
-    fn handler_interest_is_messages_only() {
+    fn handler_interest_is_messages_and_group_updates() {
         let (tx, _rx) = whatsapp_rust::async_channel::unbounded();
-        let h = PipelineHandler { tx };
-        assert_eq!(h.interest(), EventInterest::of(&[EventKind::Messages]));
+        let h = handler_pesan(tx);
+        assert_eq!(
+            h.interest(),
+            EventInterest::of(&[EventKind::Messages, EventKind::GroupUpdate])
+        );
     }
 
     #[test]
     fn full_queue_is_reported_and_never_blocks() {
         let (tx, rx) = whatsapp_rust::async_channel::bounded(2);
-        let h = PipelineHandler { tx };
+        let h = handler_pesan(tx);
         // Kapasitas 2, Offering 4: `try_send` HARUS balik tanpa menunggu dan
         // 2 sisanya tercatat sebagai overflow, bukan hilang tanpa jejak.
         for e in [
@@ -4559,7 +4954,7 @@ fn group_number_and_long_number_are_rejected() {
         ));
 
         let (tx, rx) = whatsapp_rust::async_channel::unbounded();
-        let handle = PipelineHandler { tx };
+        let handle = handler_pesan(tx);
         tokio::spawn(p.clone().run(rx));
 
         handle.handle_event(messages_event(&["E1", "E2"]));
@@ -4602,7 +4997,7 @@ fn group_number_and_long_number_are_rejected() {
         ));
 
         let (tx, rx) = whatsapp_rust::async_channel::unbounded();
-        let handler = PipelineHandler { tx };
+        let handler = handler_pesan(tx);
         handler.handle_event(messages_event(&["F1", "F2", "F3"]));
         let runner = tokio::spawn(p.run(rx));
 
@@ -5117,6 +5512,8 @@ impl TestPlugin {
 
     const GROUP: &str = "120363@g.us";
     const MEMBER: &str = "628111@s.whatsapp.net";
+    /// JID bot uji — angka di dalamnya harus sama dengan [`BOT`].
+    const BOT_JID: &str = "628999@s.whatsapp.net";
     /// `bot_id` harus mengandung angka karena `is_bot_admin_check` membandingkan
     /// digit (`digits("628999@s.whatsapp.net")` = "628999"), dan roster
     /// [`AdminRoster`] menaruh bot di `628999@lid`.
@@ -6203,6 +6600,11 @@ fn a_null_access_field_keeps_the_existing_grant() {
     #[derive(Debug, Default)]
     struct SockUji {
         aksi: Mutex<Vec<(String, Vec<String>, oktz_plugin_api::AksiPeserta)>>,
+        /// Metadata grup yang dikembalikan [`Sock::metadata_grup`]; `None` =
+        /// panggilan itu error, bukan metadata kosong.
+        meta: Option<Value>,
+        /// Grup yang diminta keluar lewat [`Sock::keluar_grup`].
+        keluar: Mutex<Vec<String>>,
     }
 
     macro_rules! sock_tolak {
@@ -6230,13 +6632,25 @@ fn a_null_access_field_keeps_the_existing_grant() {
             Ok(())
         }
 
+        fn metadata_grup(&self, jid: &str) -> Result<Value, oktz_plugin_api::SockError> {
+            match &self.meta {
+                Some(m) => Ok(m.clone()),
+                None => Err(oktz_plugin_api::SockError::baru(format!(
+                    "sock uji tanpa metadata ({jid})"
+                ))),
+            }
+        }
+
+        fn keluar_grup(&self, jid: &str) -> Result<(), oktz_plugin_api::SockError> {
+            self.keluar.lock().unwrap().push(jid.to_string());
+            Ok(())
+        }
+
         sock_tolak! {
             ada_whatsapp(nomor: &[String]) -> Vec<oktz_plugin_api::AdaWhatsapp>;
             foto_profil(jid: &str, tipe: &str) -> Option<String>;
-            metadata_grup(jid: &str) -> Value;
             semua_grup() -> Value;
             set_foto_profil(jid: &str, isi: &[u8]) -> ();
-            keluar_grup(jid: &str) -> ();
             kode_undangan(jid: &str) -> String;
             info_undangan(kode: &str) -> Value;
             buat_grup(subjek: &str, peserta: &[String]) -> Value;
@@ -6249,9 +6663,248 @@ fn a_null_access_field_keeps_the_existing_grant() {
         }
     }
 
+    /// Metadata grup bentuk Baileys untuk [`SockUji`].
+    fn meta_grup(peserta: Value) -> Value {
+        json!({
+            "subject": "Grup Uji",
+            "descOwner": "628999@s.whatsapp.net",
+            "owner": "628999@s.whatsapp.net",
+            "participants": peserta,
+        })
+    }
+
+    fn update_grup(aksi: AksiGrup, jid: &str) -> UpdateGrup {
+        UpdateGrup {
+            id: GROUP.to_string(),
+            aksi,
+            peserta: vec![PesertaGrup {
+                jid: jid.to_string(),
+                nomor: None,
+                lid: None,
+            }],
+            pelaku: None,
+            mode_lid: false,
+        }
+    }
+
+    fn pipa_grup(
+        nama: &str,
+        isi_store: &str,
+        meta: Value,
+    ) -> (Arc<Pipeline>, Arc<RecordingSender>, Arc<SockUji>) {
+        let ctx = StoreContext::new(store_with(nama, isi_store));
+        let sender = Arc::new(RecordingSender::default());
+        let sock = Arc::new(SockUji {
+            meta: Some(meta),
+            ..Default::default()
+        });
+        let p = Arc::new(
+            Pipeline::new(ctx, sender.clone(), BOT, ParseOptions::default())
+                .with_sock(sock.clone()),
+        );
+        (p, sender, sock)
+    }
+
+    #[tokio::test]
+    async fn update_grup_add_mengirim_welcome_dengan_mention_peserta() {
+        let (p, sender, _sock) = pipa_grup(
+            "grup-welcome",
+            r#"{"groups": {"120363@g.us": {"welcome": true}}, "settings": {}}"#,
+            meta_grup(json!([{"id": MEMBER, "admin": null}])),
+        );
+        p.tangani_update_grup(&update_grup(AksiGrup::Add, MEMBER))
+            .await
+            .unwrap();
+
+        let sent = sender.texts();
+        assert_eq!(sent.len(), 1, "satu sapaan per peserta: {sent:?}");
+        assert!(sent[0].contains("WELCOME"), "{}", sent[0]);
+        assert!(sent[0].contains("628111"), "{}", sent[0]);
+        let mentah = sender.sent.lock().unwrap()[0].1.clone();
+        assert_eq!(
+            ctx_of(&mentah).map(|c| c.mentioned_jid.clone()).unwrap_or_default(),
+            vec![MEMBER.to_string()],
+            "peserta baru harus di-mention, bukan cuma ditulis"
+        );
+    }
+
+    #[tokio::test]
+    async fn update_grup_remove_mengirim_goodbye() {
+        let (p, sender, _sock) = pipa_grup(
+            "grup-goodbye",
+            r#"{"groups": {"120363@g.us": {"goodbye": true}}, "settings": {}}"#,
+            meta_grup(json!([{"id": MEMBER, "admin": null}])),
+        );
+        p.tangani_update_grup(&update_grup(AksiGrup::Remove, MEMBER))
+            .await
+            .unwrap();
+
+        let sent = sender.texts();
+        assert_eq!(sent.len(), 1, "satu ucapan per peserta: {sent:?}");
+        assert!(sent[0].contains("SAYONARA"), "{}", sent[0]);
+    }
+
+    #[tokio::test]
+    async fn update_grup_tanpa_catatan_menulis_default_tanpa_menyapa() {
+        let (p, sender, _sock) = pipa_grup(
+            "grup-default",
+            r#"{"groups": {}, "settings": {}}"#,
+            meta_grup(json!([{"id": MEMBER, "admin": null}])),
+        );
+        p.tangani_update_grup(&update_grup(AksiGrup::Add, MEMBER))
+            .await
+            .unwrap();
+
+        // `config.js:186-187` memasang `defaultEnabled: false`, jadi grup baru
+        // dicatat mati — bukan langsung menyapa.
+        let grup = p.ctx.group_entry(GROUP);
+        assert_eq!(grup.get("welcome"), Some(&Value::Bool(false)));
+        assert_eq!(grup.get("goodbye"), Some(&Value::Bool(false)));
+        assert_eq!(grup.get("leave"), Some(&Value::Bool(false)));
+        assert!(sender.texts().is_empty(), "default false = tidak menyapa");
+    }
+
+    #[tokio::test]
+    async fn update_grup_mati_atau_tipe_lain_tidak_mengirim() {
+        for (nama, isi) in [
+            ("grup-off", r#"{"groups": {"120363@g.us": {"welcome": false}}}"#),
+            (
+                "grup-tipe",
+                r#"{"groups": {"120363@g.us": {"welcome": true}}, "settings": {"welcomeType": 2}}"#,
+            ),
+        ] {
+            let (p, sender, _sock) = pipa_grup(
+                nama,
+                isi,
+                meta_grup(json!([{"id": MEMBER, "admin": null}])),
+            );
+            p.tangani_update_grup(&update_grup(AksiGrup::Add, MEMBER))
+                .await
+                .unwrap();
+            assert!(
+                sender.texts().is_empty(),
+                "{nama}: tidak boleh ada pesan terkirim"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn anticulik_mengeluarkan_bot_yang_diculik_orang_asing() {
+        let (p, sender, sock) = pipa_grup(
+            "grup-anticulik",
+            r#"{"groups": {"120363@g.us": {"anticulik": "on"}}}"#,
+            meta_grup(json!([{"id": BOT_JID, "admin": null}])),
+        );
+        let mut u = update_grup(AksiGrup::Add, BOT_JID);
+        u.pelaku = Some("628777@s.whatsapp.net".to_string());
+        p.tangani_update_grup(&u).await.unwrap();
+
+        assert!(
+            sender.texts().iter().any(|t| t.contains("Anti Culik")),
+            "{:?}",
+            sender.texts()
+        );
+        assert_eq!(
+            sock.keluar.lock().unwrap().clone(),
+            vec![GROUP.to_string()],
+            "harus keluar setelah memberi tahu grup"
+        );
+    }
+
+    #[tokio::test]
+    async fn anticulik_tidak_keluar_kalau_owner_yang_mengundang() {
+        let ctx = StoreContext::new(store_with(
+            "grup-anticulik-owner",
+            r#"{"groups": {"120363@g.us": {"anticulik": "on"}}}"#,
+        ));
+        let sender = Arc::new(RecordingSender::default());
+        let sock = Arc::new(SockUji {
+            meta: Some(meta_grup(json!([{"id": BOT_JID, "admin": null}]))),
+            ..Default::default()
+        });
+        let p = Arc::new(
+            Pipeline::new(ctx, sender.clone(), BOT, ParseOptions::default())
+                .with_identity(Identity {
+                    owners: ["628777".to_string()].into_iter().collect(),
+                    ..Default::default()
+                })
+                .with_sock(sock.clone()),
+        );
+        let mut u = update_grup(AksiGrup::Add, BOT_JID);
+        u.pelaku = Some("628777@s.whatsapp.net".to_string());
+        p.tangani_update_grup(&u).await.unwrap();
+
+        assert!(
+            sock.keluar.lock().unwrap().is_empty(),
+            "owner mengundang bot: jangan keluar"
+        );
+        assert!(
+            sender.texts().iter().all(|t| !t.contains("Anti Culik")),
+            "undangan owner bukan culikan: {:?}",
+            sender.texts()
+        );
+    }
+
+    #[tokio::test]
+    async fn sewa_menolak_grup_tak_terdaftar() {
+        let (p, sender, sock) = pipa_grup(
+            "grup-sewa",
+            r#"{"settings": {"sewa": {"enabled": true, "groups": {}}}}"#,
+            meta_grup(json!([{"id": BOT_JID, "admin": null}])),
+        );
+        p.tangani_update_grup(&update_grup(AksiGrup::Add, BOT_JID))
+            .await
+            .unwrap();
+
+        assert!(
+            sender.texts().iter().any(|t| t.contains("sᴇᴡᴀʙᴏᴛ")),
+            "{:?}",
+            sender.texts()
+        );
+        assert_eq!(sock.keluar.lock().unwrap().clone(), vec![GROUP.to_string()]);
+    }
+
+    #[tokio::test]
+    async fn sewa_terdaftar_mendapat_salam_bukan_dikeluarkan() {
+        let (p, sender, sock) = pipa_grup(
+            "grup-sewa-ok",
+            r#"{"settings": {"sewa": {"enabled": true, "groups": {"120363@g.us": {"isLifetime": true}}}}}"#,
+            meta_grup(json!([{"id": BOT_JID, "admin": null}])),
+        );
+        let mut u = update_grup(AksiGrup::Add, BOT_JID);
+        u.pelaku = Some("628777@s.whatsapp.net".to_string());
+        p.tangani_update_grup(&u).await.unwrap();
+
+        assert!(
+            sender.texts().iter().any(|t| t.contains("sᴀʟᴀᴍ ᴋᴇɴᴀʟ")),
+            "{:?}",
+            sender.texts()
+        );
+        assert!(sock.keluar.lock().unwrap().is_empty(), "grup sewa: tetap di dalam");
+    }
+
+    #[tokio::test]
+    async fn update_grup_menghormati_lid_lewat_metadata() {        // Wire memberi LID; metadata grup yang tahu nomor teleponnya. Yang
+        // di-mention harus nomor, sama seperti `resolveAnyLidToJid`.
+        let (p, sender, _sock) = pipa_grup(
+            "grup-lid",
+            r#"{"groups": {"120363@g.us": {"welcome": true}}}"#,
+            meta_grup(json!([{"id": "628111@s.whatsapp.net", "lid": "12345@lid", "admin": null}])),
+        );
+        let mut u = update_grup(AksiGrup::Add, "12345@lid");
+        u.mode_lid = true;
+        p.tangani_update_grup(&u).await.unwrap();
+
+        let mentah = sender.sent.lock().unwrap()[0].1.clone();
+        assert_eq!(
+            ctx_of(&mentah).map(|c| c.mentioned_jid.clone()).unwrap_or_default(),
+            vec![MEMBER.to_string()],
+            "mention harus nomor telepon, bukan LID"
+        );
+    }
+
     #[test]
-    fn ctx_sock_mengikuti_sumber_yang_dipasang() {
-        let mut src = plugin_src_with("{}");
+    fn ctx_sock_mengikuti_sumber_yang_dipasang() {        let mut src = plugin_src_with("{}");
         src.sock = Arc::new(SockUji::default());
         let mut c = Ctx::default();
         src.fill(&mut c);

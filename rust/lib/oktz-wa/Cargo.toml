@@ -20,6 +20,7 @@ anyhow.workspace = true
 base64 = "0.22"
 bytes = "1"
 tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "time", "fs", "signal"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 whatsapp-rust = { version = "0.7", default-features = false, features = [
     "sqlite-storage", "tokio-transport", "tokio-native", "ureq-client",
     "signal", "legacy-session-interop", "tracing",

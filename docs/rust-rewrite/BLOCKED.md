@@ -916,3 +916,45 @@ dan itu disengaja (`bot.rs:302-331`: rollback kunci senyap).
 
 Belum: `ctx.berkas` nyata, `Reply::Interactive`, daemon shutdown, handler event
 lanjutan.
+
+## 30. Event peserta grup (welcome/goodbye, anticulik, sewa)
+
+`EventKind::GroupUpdate` sekarang dilanggan (`Pipeline::attach`) dan mengalir
+lewat antrean sendiri ke `Pipeline::tangani_update_grup`. Satu event = satu aksi
++ satu daftar peserta (`wacore-0.7.0/src/types/events.rs:1780`), bukan array
+besar seperti Baileys.
+
+Yang sudah jalan:
+- Default grup baru ditulis persis `db.setGroup(groupJid, {...})`
+  (`src/handler.js:1999-2003`). Nilainya `false` karena `config.js:186-187`
+  memang memasang `defaultEnabled: false` untuk welcome/goodbye.
+- Welcome (`add`) dan goodbye (`remove`) tipe teks (1): teks di
+  `lib/oktz-wa/pesan_grup.rs` (placeholder, sapaan, tips acak, potong 120
+  karakter) dan gerbang di `lib/oktz-wa/grup_event.rs`. Quirk JS ditiru: yang
+  diserahkan sebagai "deskripsi grup" adalah `groupMeta.descOwner`
+  (`plugins/group/welcome.js:137`, `goodbye.js:165`), bukan `desc`.
+- LID → JID lewat `groupMeta.participants` (`resolveAnyLidToJid`); mention
+  memakai nomor hasil terjemahan.
+- Bot ditambahkan ke grup (`src/connection.js:1199-1328`): anticulik (keluar
+  setelah 2 detik kalau `anticulik: "on"` dan pengundang bukan owner), sewa
+  (grup tidak terdaftar/tidak aktif → beri tahu lalu keluar), dan salam
+  "hai, salam kenal" saat grup terdaftar.
+
+Batas yang diketahui (jangan diklaim jalan):
+- `welcomeType`/`goodbyeType` 2..8 (kartu carousel, upload foto profil, video
+  gif, tombol, teks type 8) — dilewati dengan `warn`. Juga banner
+  `promote`/`demote` (`src/handler.js:2090-2130`, butuh `config.assets`).
+- Badge newsletter `saluranCtx()` dan `forwardedNewsletterMessageInfo`
+  (`src/connection.js:1288-1313`) tidak ikut; jalur context itu belum ada.
+- `config.bot.support` belum punya field di `Runtime`; baris "Support: -" dan
+  fallback kontak sewa memakai `developer` lalu `"owner"`.
+- Penjaga 15 detik setelah connect (`src/connection.js:1200`), cache metadata
+  300 detik, dan `options.onParticipantsUpdate` (tidak dipakai di JS) tidak
+  diport.
+- Penerjemahan LID untuk `pelaku` (pengundang) hanya lewat pencocokan nomor;
+  tabel LID global JS (`src/lib/lid.js`) tidak ada di modul murni.
+- `waktu_lokal()` memakai `Local::now()`; host harus TZ `Asia/Jakarta` supaya
+  tanggal/jam/hari sama dengan bot JS.
+
+Tes: `pipeline::tests::update_grup_*`, `anticulik_*`, `sewa_*` (memakai `SockUji`
+yang mengembalikan metadata + mencatat `keluar_grup`).
