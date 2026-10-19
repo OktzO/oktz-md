@@ -272,7 +272,7 @@ fn file_src_upload_ee(html: &str) -> Option<String> {
                 cari = vk;
                 continue;
             };
-            if let Some(akhir) = isi.find(|c: char| c == '"' || c == '\'').filter(|n| *n > 0) {
+            if let Some(akhir) = isi.find(['"', '\'']).filter(|n| *n > 0) {
                 return Some(isi[..akhir].to_string());
             }
             cari = vk;
@@ -341,7 +341,7 @@ fn upload_ee(http: &dyn HttpGet, buffer: &[u8]) -> Result<String, String> {
     .map_err(|e| e.message)?;
     let id_body = http
         .call(
-            &HttpCall::get(&format!(
+            &HttpCall::get(format!(
                 "https://www.upload.ee/ubr_link_upload.php?rnd_id={}",
                 crate::common::now_ms()
             ))
@@ -379,7 +379,7 @@ fn upload_ee(http: &dyn HttpGet, buffer: &[u8]) -> Result<String, String> {
 
     let html = http
         .call(
-            &HttpCall::get(&format!(
+            &HttpCall::get(format!(
                 "https://www.upload.ee/?page=finished&upload_id={upload_id}"
             ))
             .header("User-Agent", UA_UPLOAD)
@@ -406,9 +406,11 @@ fn upload_ee(http: &dyn HttpGet, buffer: &[u8]) -> Result<String, String> {
 
 /// `uploadImage(buffer, 'image.jpg')` (`uploader.js:14-40`) — provider
 /// dicoba berurutan sampai ada yang mengembalikan URL.
+type Unggah = fn(&dyn HttpGet, &[u8]) -> Result<String, String>;
+
 fn upload_image(http: &dyn HttpGet, buffer: &[u8]) -> Result<String, String> {
     // Urutan `PROVIDERS` (`upload-providers.js:183-190`).
-    let providers: [(&str, fn(&dyn HttpGet, &[u8]) -> Result<String, String>); 6] = [
+    let providers: [(&str, Unggah); 6] = [
         ("Litterbox", litterbox),
         ("Kappa", kappa),
         ("Uguu", uguu),

@@ -25,3 +25,7 @@ pub mod musiccard;
 pub mod applemusic;
 pub mod fakecall;
 pub mod tiktokchat;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod fakeml;
+pub mod profileig;

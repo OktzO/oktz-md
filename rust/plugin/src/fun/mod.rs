@@ -37,3 +37,6 @@ pub mod terima;
 // Ditambahkan scripts/pasang-modul.mjs.
 pub mod cekkhodam;
 pub mod waifupool;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod gachawaifu;

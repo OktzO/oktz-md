@@ -2250,14 +2250,14 @@ mod tests_batch_g {
             "liststok", "notiflimit", "onlyadmin", "onlygc", "onlypc",
             "public", "publicthisgc", "q", "resetlimitdefault", "resetrules",
             "self", "selfthisgc", "setaudioallmenu", "setbio", "setlimitdefault",
-            "setname", "setpp", "setrules", "similarity", "sistemenergi",
+            "setname", "setpp", "setreply", "setrules", "similarity", "sistemenergi",
             "stop", "stopbcpc", "templateplugin", "uinstalltema", "unban",
             "unblock", "welcomeall",
         
             "autoclear", "autoreply", "deploy", "ganti-games.jpg", "ganti-promote.jpg", "ganti-winner.jpg", "schedule",
         
             "addowner", "addprefix", "addprem", "akses", "arsip", "baca", "bcgc", "cekschedule", "disableplugin", "editproduk",
-            "exec", "ganti-asset", "ganti-demote.jpg", "ganti-foto.jpg", "ganti-goodbye.jpg", "ganti-levelup.jpg", "ganti-namadev", "ganti-pp-kosong.jpg", "ganti-rpg.jpg", "ganti-rules.jpg",
+            "exec", "ganti-asset", "ganti-demote.jpg", "ganti-foto.jpg", "ganti-goodbye.jpg", "ganti-levelup.jpg", "ganti-namadev", "ganti-namaowner", "ganti-pp-kosong.jpg", "ganti-rpg.jpg", "ganti-rules.jpg",
             "ganti-store.jpg", "get", "hapusgrup", "hapussaluran", "leave", "listjadibot", "listjadibotaktif", "listsewa", "mutechat", "onlythisgrup", "pinchat",
             "ptvch", "pushkontak", "renewsewa", "sampah", "setgoodbyetype", "setmenu", "setmenucat", "setownertype", "setwelcometype", "sewabot",
             "star", "stopalljadibot", "stopdandeletejadibot", "stopschedule", "swgcall",
@@ -4125,12 +4125,12 @@ mod tests_roster_state {
     // berkas yang sama, mis. `sticker/attp2.js` yang memakai nama sekaligus
     // alias `attp2`, atau `main/leaderboard.js` yang mengulang
     // `leaderboard`). Tabrakan baru di luar daftar ini berarti port kita.
-    pub(crate) const JS_COLLISIONS: [&str; 36] = [
+    pub(crate) const JS_COLLISIONS: [&str; 37] = [
         "applemusic", "asmaulhusna", "attp2", "beli", "berburu", "block", "bratanime", "bucin",
         "cantik", "cc", "cekjodoh", "cupu", "daftar", "exp", "fakedana", "fakegopay",
         "fakeovo", "film", "ganteng", "heapsnap", "inspect", "izen", "kaya", "leaderboard",
-        "leave", "mimpi", "ngemis", "noob", "paptt", "pintar", "pro", "sroast", "tofigure3",
-        "top", "unblock", "wibu",
+        "leave", "mimpi", "ngemis", "noob", "paptt", "pintar", "pro", "profileig", "sroast",
+        "tofigure3", "top", "unblock", "wibu",
     ];
 
     #[test]

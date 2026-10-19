@@ -107,3 +107,10 @@ pub mod setgoodbyetype;
 
 // Ditambahkan scripts/pasang-modul.mjs.
 pub mod listsewa;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+#[path = "ganti-namaowner.rs"]
+pub mod ganti_namaowner;
+pub mod setreply;
+pub mod setwelcometype;
+pub mod sewabot;

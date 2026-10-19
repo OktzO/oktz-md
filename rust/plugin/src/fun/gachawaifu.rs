@@ -43,7 +43,7 @@ const TIER_WEIGHTS: [(&str, f64); 5] = [
 ];
 
 /// Satu baris `DOWRY` (`src/lib/romance.js:12-18`).
-struct Dowry {
+pub(crate) struct Dowry {
     limit: i64,
     koin: i64,
     exp: i64,
@@ -768,14 +768,23 @@ pub(crate) fn anger_eff_mood(mood: &str, anger: f64) -> String {
     }
 }
 
+/// `c.charCodeAt(0)`: unit UTF-16 pertama; emoji astral menyumbang high
+/// surrogate-nya saja.
+fn unit_utf16(c: char) -> u32 {
+    let u = c as u32;
+    if u > 0xFFFF {
+        (u - 0x1_0000) / 0x400 + 0xD800
+    } else {
+        u
+    }
+}
+
 /// `getDailyMood` (`src/lib/romance.js:30-40`).
 pub(crate) fn get_daily_mood(sender_jid: &str, date_str: &str) -> &'static str {
     let seed = format!("{date_str}_{sender_jid}");
     let mut h: u32 = 0;
     for c in seed.chars() {
-        // `c.charCodeAt(0)` = unit UTF-16 PERTAMA; emoji astral menyumbang
-        // high surrogate-nya saja.
-        let unit = c.encode_utf16().next().unwrap_or(0) as u32;
+        let unit = unit_utf16(c);
         h = h.wrapping_mul(31).wrapping_add(unit);
     }
     let r = (h % 10000) as f64 / 10000.0;
@@ -794,12 +803,14 @@ pub(crate) fn get_daily_mood(sender_jid: &str, date_str: &str) -> &'static str {
 
 /// `moodState` (`gachawaifu.js:64-68`).
 pub(crate) fn mood_state(waifu: &Map<String, Value>, sender: &str, now: i64) -> String {
-    if let Some(until) = mstr(waifu.get("moodUntil")) {
-        if iso_to_ms(&until).is_some_and(|t| now < t) {
-            if let Some(kind) = waifu.get("mood").and_then(|m| m.get("type")).and_then(Value::as_str) {
-                return kind.to_string();
-            }
-        }
+    if let Some(until) = mstr(waifu.get("moodUntil"))
+        && iso_to_ms(&until).is_some_and(|t| now < t)
+        && let Some(kind) = waifu
+            .get("mood")
+            .and_then(|m| m.get("type"))
+            .and_then(Value::as_str)
+    {
+        return kind.to_string();
     }
     get_daily_mood(sender, &today_str(now)).to_string()
 }
@@ -834,7 +845,7 @@ pub(crate) fn anger_meter(waifu: &Map<String, Value>) -> String {
 pub(crate) fn backfill_personality(name: &str) -> &'static str {
     let mut h: u32 = 0;
     for c in name.chars() {
-        let unit = c.encode_utf16().next().unwrap_or(0) as u32;
+        let unit = unit_utf16(c);
         h = h.wrapping_mul(31).wrapping_add(unit);
     }
     ["tsundere", "deredere", "kuudere", "dandere", "genki"][(h % 5) as usize]
@@ -1587,10 +1598,10 @@ fn action_engine(
         let koin = eff.change.max(0) * 100;
 
         let mut patch = waifu_patch(w);
-        if koin > 0 {
-            if let Some(v) = koin_gain(user, koin) {
-                patch.insert("koin".into(), jnum(v as f64));
-            }
+        if koin > 0
+            && let Some(v) = koin_gain(user, koin)
+        {
+            patch.insert("koin".into(), jnum(v as f64));
         }
         let mut rpg = rpg_map(ctx);
         let new_exp = apply_exp(&mut rpg, old_exp(user), result.exp);
@@ -1676,10 +1687,10 @@ fn action_engine(
     w.insert("affection".into(), jnum(new_aff));
 
     let mut patch = waifu_patch(w);
-    if event_koin != 0 {
-        if let Some(v) = koin_gain(user, event_koin) {
-            patch.insert("koin".into(), jnum(v as f64));
-        }
+    if event_koin != 0
+        && let Some(v) = koin_gain(user, event_koin)
+    {
+        patch.insert("koin".into(), jnum(v as f64));
     }
     let mut rpg = rpg_map(ctx);
     let gain_exp = result.exp + if event_exp { 15 } else { 0 };
@@ -1825,13 +1836,13 @@ mod tests {
 
     fn patch_to(r: &Reply, jid: &str) -> Map<String, Value> {
         for m in r.mutations() {
-            if let Mutation::SetUser { jid: j, data } = m {
-                if j == jid {
-                    return data
-                        .as_object()
-                        .cloned()
-                        .unwrap_or_else(|| panic!("data bukan object: {data}"));
-                }
+            if let Mutation::SetUser { jid: j, data } = m
+                && j == jid
+            {
+                return data
+                    .as_object()
+                    .cloned()
+                    .unwrap_or_else(|| panic!("data bukan object: {data}"));
             }
         }
         panic!("tidak ada SetUser untuk {jid}");
@@ -1925,11 +1936,17 @@ mod tests {
 
     #[test]
     fn tiap_teks_aksi_memakai_placeholder_n() {
+        // Teks JS yang memang tidak memakai `${n}` (`src/lib/waifu.js:35,38,57`).
+        const TANPA_N: [&str; 3] = ["peluk_depan", "mesra", "bulanmadu_hotel"];
         for a in ACTIONS_APPROACH
             .iter()
             .chain(ACTIONS_INTIM)
             .chain(ACTIONS_MARRIED)
         {
+            if TANPA_N.contains(&a.key) {
+                assert!(!a.text.contains("{n}"), "{}", a.key);
+                continue;
+            }
             assert!(a.text.contains("{n}"), "{} tanpa {{n}}", a.key);
             assert!(find_action(a.key).is_some(), "{} tidak ketemu", a.key);
         }
