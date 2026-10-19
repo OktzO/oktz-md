@@ -6,6 +6,11 @@
 //!
 //! Pakai `oktz_plugin_api::ffmpeg::jalankan_dengan_masukan` (ffmpeg baca dari
 //! `pipe:0`, tulis ke `pipe:1`). Tidak ada dependensi fluent-ffmpeg baru.
+//!
+//! `ponytail:` JS mengirim kartu `🎞️ *PROSES ENHANCE DIMULAI*` sebelum ffmpeg;
+//! di sini tidak dikirim supaya satu pemanggilan handler tetap satu balasan
+//! (pakai `Reply::Sequence` kalau balasan progres dibutuhkan). `fileName:
+//! HDVID-<ms>.mp4` tidak ada di `Reply::video`; `mimetype` sudah dipasang.
 
 use oktz_plugin_api::ffmpeg;
 use oktz_plugin_api::{Ctx, IncomingKind, MediaSource, QuotedKind, Reply, plugin};
@@ -19,28 +24,30 @@ fn help(prefix: &str) -> String {
          *Cara Pakai:*\n\
          👉 Kirim video (atau document video) dengan caption `{prefix}hdvid`\n\
          👉 Atau reply video (atau document video) dengan `{prefix}hdvid`\n\n\
-         ⚠️ _Fitur Premium, proses bisa memakan waktu tergantung ukuran video._"
+         ⚠️ _Fitur Premium, proses bisa memakan waktu tergantung ukuran ya kak!_"
     )
 }
 
 /// `m.isVideo || (m.quoted && m.quoted.type === "videoMessage")` atau
 /// document video.
 fn is_video_input(ctx: &Ctx) -> bool {
-    match &ctx.media {
+    let dari_pemicu = match &ctx.media {
         Some(m) => {
             m.kind == IncomingKind::Video
                 || (m.kind == IncomingKind::Document
-                    && m.mimetype.as_deref().map_or(false, |mt| mt.starts_with("video")))
+                    && m.mimetype.as_deref().is_some_and(|mt| mt.starts_with("video")))
         }
         None => false,
-    } || ctx
+    };
+    let dari_quoted = ctx
         .quoted()
         .map(|q| {
             q.kind == QuotedKind::Video
                 || (q.kind == QuotedKind::Document
-                    && q.mimetype.as_deref().map_or(false, |mt| mt.starts_with("video")))
+                    && q.mimetype.as_deref().is_some_and(|mt| mt.starts_with("video")))
         })
-        .unwrap_or(false)
+        .unwrap_or(false);
+    dari_pemicu || dari_quoted
 }
 
 #[plugin(
@@ -70,31 +77,35 @@ pub fn hdvid(ctx: Ctx) -> Reply {
         .map(|q| {
             q.kind == QuotedKind::Video
                 || (q.kind == QuotedKind::Document
-                    && q.mimetype.as_deref().map_or(false, |mt| mt.starts_with("video")))
+                    && q.mimetype.as_deref().is_some_and(|mt| mt.starts_with("video")))
         })
         .unwrap_or(false)
     {
         match ctx.download_quoted_media() {
             Ok(b) => b,
             Err(_) => {
-                return Reply::text("❌ *GAGAL*\n\nAduh kak, videonya gagal diunduh! Coba kirim ulang ya.");
+                return Reply::text("❌ *GAGAL*\n\nAduh kak, videonya gagal diunduh! Coba kirim ulang ya.")
+                    .with_reaction("❌");
             }
         }
     } else {
         match ctx.download_media() {
             Ok(b) => b,
             Err(_) => {
-                return Reply::text("❌ *GAGAL*\n\nAduh kak, videonya gagal diunduh! Coba kirim ulang ya.");
+                return Reply::text("❌ *GAGAL*\n\nAduh kak, videonya gagal diunduh! Coba kirim ulang ya.")
+                    .with_reaction("❌");
             }
         }
     };
 
     if buffer.is_empty() {
-        return Reply::text("❌ *GAGAL*\n\nAduh kak, videonya gagal diunduh! Coba kirim ulang ya.");
+        return Reply::text("❌ *GAGAL*\n\nAduh kak, videonya gagal diunduh! Coba kirim ulang ya.")
+            .with_reaction("❌");
     }
 
     if buffer.len() as u64 > MAX_SIZE {
-        return Reply::text("❌ *FILE TERLALU BESAR*\n\nMaaf kak, maksimal ukuran video cuma 50MB ya!");
+        return Reply::text("❌ *FILE TERLALU BESAR*\n\nMaaf kak, maksimal ukuran video cuma 50MB ya!")
+            .with_reaction("❌");
     }
 
     let argumen = [
@@ -122,11 +133,13 @@ pub fn hdvid(ctx: Ctx) -> Reply {
             return Reply::text(format!(
                 "❌ Maaf kak, proses enhance videonya gagal! 😭\n\nDetail: {e}"
             ))
+            .with_reaction("❌")
         }
     };
 
+    // `mimetype: "video/mp4"` dari JS; `fileName` tidak ada di `Reply::video`.
     Reply::video(
-        MediaSource::bytes(result),
+        MediaSource::bytes(result).with_mimetype("video/mp4"),
         "✨ *PROSES SELESAI* ✨\n\nIni dia hasil videonya kak, udah jauh lebih mulus dan HD kan? 😍",
     )
     .with_reaction("✅")
@@ -135,54 +148,8 @@ pub fn hdvid(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
-    use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
-
-    #[derive(Debug, Default)]
-    struct Stub {
-        balasan: Option<Vec<u8>>,
-        seen: Mutex<Vec<String>>,
-    }
-
-    impl Stub {
-        fn bytes(b: Vec<u8>) -> Arc<Stub> {
-            Arc::new(Stub {
-                balasan: Some(b),
-                seen: Mutex::new(Vec::new()),
-            })
-        }
-        fn offline() -> Arc<Stub> {
-            Arc::new(Stub {
-                balasan: None,
-                seen: Mutex::new(Vec::new()),
-            })
-        }
-    }
-
-    impl HttpGet for Stub {
-        fn get(&self, _url: &str) -> Result<HttpResponse, HttpError> {
-            self.seen.lock().unwrap().push("get".into());
-            Err(oktz_plugin_api::HttpError {
-                message: "tidak dipakai".into(),
-            })
-        }
-        fn post_json(&self, _: &str, _: &serde_json::Value) -> Result<HttpResponse, HttpError> {
-            unimplemented!()
-        }
-        fn post_form(&self, _: &str, _: &str) -> Result<HttpResponse, HttpError> {
-            unimplemented!()
-        }
-        fn post_multipart(
-            &self,
-            _: &str,
-            _: &[(&str, HttpBody)],
-        ) -> Result<HttpResponse, HttpError> {
-            unimplemented!()
-        }
-    }
 
     fn ctx_media(kind: IncomingKind, mime: Option<&str>) -> Ctx {
         Ctx {

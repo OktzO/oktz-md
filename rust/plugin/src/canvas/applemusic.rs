@@ -7,14 +7,12 @@
 //! `src/canvas/mod.rs` secara manual (mod.rs milik plugin lain).
 
 use oktz_plugin_api::{
-    Ctx, HttpCall, HttpError, HttpGet, HttpResponse, IncomingKind, MediaError, MediaFetch,
-    MediaOrigin, MediaSource, MultipartPart, Reply, plugin,
+    Ctx, HttpCall, HttpError, HttpGet, IncomingKind, MediaSource, MultipartPart, Reply, plugin,
 };
 
 use serde_json::Value;
 
 use crate::tools::phisingataubukan::encode_uri_component;
-use oktz_plugin_api::HttpBody;
 
 /// `applemusic.js:4-10` — kartu pakai saat gambar/teks/pemisah `|` belum lengkap.
 fn help(prefix: &str) -> String {
@@ -44,15 +42,15 @@ fn upload_cover(http: &dyn HttpGet, buffer: &[u8]) -> Result<String, String> {
                 MultipartPart::file("file", "image.jpg", buffer.to_vec()).with_mimetype("image/jpeg"),
             ]),
         )
-        .map_err(|e: HttpError| format!("upload gagal: {e}"))?;
+        .map_err(|e: HttpError| format!("upload gagal: {}", e.message))?;
     let data = res.json().unwrap_or(Value::Null);
     if let Some(Value::String(p)) = data.get("path") {
         return Ok(p.clone());
     }
-    if let Some(Value::String(u)) = data
+    if let Some(u) = data
         .get("files")
         .and_then(Value::as_array)
-        .and_then(|a| a.get(0))
+        .and_then(|a| a.first())
         .and_then(|f| f.get("url"))
         .and_then(Value::as_str)
     {
@@ -130,7 +128,7 @@ pub fn applemusic(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    use oktz_plugin_api::{HttpBody, HttpResponse, MediaError, MediaFetch, MediaOrigin};
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -174,6 +172,12 @@ mod tests {
             _: &[(&str, oktz_plugin_api::HttpBody)],
         ) -> Result<HttpResponse, HttpError> {
             self.respond(url)
+        }
+        /// Plugin memakai `HttpCall::multipart` (`applemusic.js:23-27`);
+        /// default `HttpGet::call` menolak multipart, jadi stub wajib
+        /// menimpanya (pola sama dengan `search/animeapaini.rs`).
+        fn call(&self, req: &HttpCall) -> Result<HttpResponse, HttpError> {
+            self.respond(&req.url)
         }
     }
 
@@ -300,6 +304,7 @@ mod tests {
     #[test]
     fn upload_gagal_mengembalikan_pesan_gagal_dan_reaksi_silang() {
         // Unduh sukses (media ada), upload (termai) gagal.
+        #[derive(Debug)]
         struct UpFail;
         impl HttpGet for UpFail {
             fn get(&self, _: &str) -> Result<HttpResponse, HttpError> {
@@ -346,6 +351,7 @@ mod tests {
     #[test]
     fn api_canvas_gagal_mengembalikan_pesan_gagal_dan_reaksi_silang() {
         // Upload sukses (termai JSON), GET API (izuka) gagal.
+        #[derive(Debug)]
         struct UpOk;
         impl HttpGet for UpOk {
             fn get(&self, _: &str) -> Result<HttpResponse, HttpError> {

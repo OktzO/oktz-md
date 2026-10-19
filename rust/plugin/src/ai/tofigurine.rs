@@ -7,10 +7,6 @@
 
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 
-use crate::common::error_template;
-use oktz_plugin_api::HttpError;
-use serde_json::Value;
-
 const PROMPT: &str = "Using the model, create a 1/7 scale commercialized figurine of the characters in the picture, \
 in a realistic style, in a real environment. The figurine is placed on a computer desk. \
 The figurine has a round transparent acrylic base, with no text on the base. \
@@ -87,49 +83,63 @@ pub fn tofigurine(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::{HttpBody, HttpResponse, IncomingKind, MediaError, MediaFetch};
-    use serde_json::json;
+    use oktz_plugin_api::{
+        HttpBody, HttpError, HttpResponse, IncomingKind, MediaError, MediaFetch, QuotedKind,
+    };
+    use serde_json::Value;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
 
+    /// Stub `HttpGet` berurutan `(status, body)`; habis = balasan terakhir
+    /// dipakai lagi, daftar kosong = offline. `call` dipakai `live3d`.
     #[derive(Debug, Default)]
     struct StubHttp {
-        balasan: Option<Vec<u8>>,
+        balasan: Mutex<Vec<(u16, Vec<u8>)>>,
+        hitung: Mutex<usize>,
         seen: Mutex<Vec<String>>,
     }
 
     impl StubHttp {
-        fn bytes(b: Vec<u8>) -> Arc<StubHttp> {
+        fn urutan(daftar: Vec<(u16, Vec<u8>)>) -> Arc<StubHttp> {
             Arc::new(StubHttp {
-                balasan: Some(b),
+                balasan: Mutex::new(daftar),
+                hitung: Mutex::new(0),
                 seen: Mutex::new(Vec::new()),
             })
         }
+        /// Satu balasan byte yang dipakai berulang (test yang tidak sampai `live3d`).
+        fn bytes(b: Vec<u8>) -> Arc<StubHttp> {
+            Self::urutan(vec![(200, b)])
+        }
         fn offline() -> Arc<StubHttp> {
-            Arc::new(StubHttp {
-                balasan: None,
-                seen: Mutex::new(Vec::new()),
-            })
+            Self::urutan(Vec::new())
         }
     }
 
     impl oktz_plugin_api::HttpGet for StubHttp {
         fn call(&self, req: &oktz_plugin_api::HttpCall) -> Result<HttpResponse, HttpError> {
             self.seen.lock().unwrap().push(req.url.clone());
-            match &self.balasan {
-                Some(b) => Ok(HttpResponse {
-                    status: 200,
-                    body: HttpBody::Bytes {
-                        data: Arc::from(b.clone()),
-                        mimetype: None,
-                    },
-                    headers: Vec::new(),
-                }),
-                None => Err(oktz_plugin_api::HttpError {
+            let mut h = self.hitung.lock().unwrap();
+            let b = self.balasan.lock().unwrap();
+            if b.is_empty() {
+                return Err(HttpError {
                     message: "offline".into(),
-                }),
+                });
             }
+            let i = (*h).min(b.len() - 1);
+            *h += 1;
+            let (status, data) = b[i].clone();
+            drop(b);
+            drop(h);
+            Ok(HttpResponse {
+                status,
+                body: HttpBody::Bytes {
+                    data: Arc::from(data),
+                    mimetype: None,
+                },
+                headers: Vec::new(),
+            })
         }
         fn get(&self, _: &str) -> Result<HttpResponse, HttpError> {
             unimplemented!("lewat call")
@@ -149,9 +159,21 @@ mod tests {
         }
     }
 
-    #[derive(Debug, Default)]
+    #[derive(Debug)]
     struct StubMedia {
         hasil: Result<Vec<u8>, MediaError>,
+    }
+
+    /// `Result<Vec<u8>, MediaError>` tidak punya `Default`; stub bawaan =
+    /// unduhan selalu gagal (test yang tidak sampai tahap unduh).
+    impl Default for StubMedia {
+        fn default() -> Self {
+            Self {
+                hasil: Err(MediaError {
+                    message: "kosong".into(),
+                }),
+            }
+        }
     }
 
     impl MediaFetch for StubMedia {
@@ -161,20 +183,11 @@ mod tests {
     }
 
     fn ctx_gambar(buffer: Vec<u8>, quoted: bool) -> Ctx {
-        let kind = if quoted {
-            oktz_plugin_api::IncomingMedia {
-                kind: IncomingKind::Image,
-                mimetype: Some("image/jpeg".into()),
-                file_name: None,
-                caption: String::new(),
-            }
-        } else {
-            oktz_plugin_api::IncomingMedia {
-                kind: IncomingKind::Image,
-                mimetype: Some("image/jpeg".into()),
-                file_name: None,
-                caption: String::new(),
-            }
+        let kind = oktz_plugin_api::IncomingMedia {
+            kind: IncomingKind::Image,
+            mimetype: Some("image/jpeg".into()),
+            file_name: None,
+            caption: String::new(),
         };
         Ctx {
             sender: ME.into(),
@@ -187,7 +200,7 @@ mod tests {
                     sender: ME.into(),
                     chat: ME.into(),
                     text: String::new(),
-                    kind: IncomingKind::Image,
+                    kind: QuotedKind::Image,
                     mimetype: None,
                     file_name: None,
                     from_me: false,
@@ -202,10 +215,6 @@ mod tests {
             http: StubHttp::bytes(vec![1, 2, 3]),
             ..Ctx::default()
         }
-    }
-
-    fn run(buffer: Vec<u8>, quoted: bool) -> Reply {
-        tofigurine(ctx_gambar(buffer, quoted))
     }
 
     fn text_of(r: &Reply) -> String {
@@ -253,7 +262,7 @@ mod tests {
                 sender: ME.into(),
                 chat: ME.into(),
                 text: String::new(),
-                kind: IncomingKind::Video,
+                kind: QuotedKind::Video,
                 mimetype: None,
                 file_name: None,
                 from_me: false,
@@ -296,7 +305,14 @@ mod tests {
 
     #[test]
     fn jalur_berhasil_mengirim_gambar_byte_dan_reaksi_check() {
-        let http = StubHttp::bytes(vec![7, 8, 9]);
+        // `live3d`: upload, PUT byte, sign, nanobanana, ambil gambar.
+        let http = StubHttp::urutan(vec![
+            (200, br#"{"result":{"url":"https://u/x","object_name":"o/1"}}"#.to_vec()),
+            (200, Vec::new()),
+            (200, br#"{"result":{"url":"https://s/x.jpg"}}"#.to_vec()),
+            (200, br#"{"status":true,"data":{"result_url":"https://h/y.png"}}"#.to_vec()),
+            (200, vec![7, 8, 9]),
+        ]);
         let ctx = Ctx {
             http,
             ..ctx_gambar(vec![1, 2, 3], false)
@@ -320,7 +336,13 @@ mod tests {
     #[test]
     fn quoted_digunakan_saat_ada() {
         // quoted image harus dipakai (origin Quoted), bukan media trigger.
-        let http = StubHttp::bytes(vec![5, 6]);
+        let http = StubHttp::urutan(vec![
+            (200, br#"{"result":{"url":"https://u/x","object_name":"o/1"}}"#.to_vec()),
+            (200, Vec::new()),
+            (200, br#"{"result":{"url":"https://s/x.jpg"}}"#.to_vec()),
+            (200, br#"{"status":true,"data":{"result_url":"https://h/y.png"}}"#.to_vec()),
+            (200, vec![5, 6]),
+        ]);
         let ctx = Ctx {
             http,
             media: Some(oktz_plugin_api::IncomingMedia {
@@ -334,7 +356,7 @@ mod tests {
                 sender: ME.into(),
                 chat: ME.into(),
                 text: String::new(),
-                kind: IncomingKind::Image,
+                kind: QuotedKind::Image,
                 mimetype: None,
                 file_name: None,
                 from_me: false,

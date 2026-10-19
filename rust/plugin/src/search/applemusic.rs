@@ -192,7 +192,10 @@ mod tests {
             http,
             ..Default::default()
         };
-        (oktz_plugin_api::find("applemusic").unwrap().handler)(ctx)
+        // `find("applemusic")` menunjuk plugin canvas (aliasnya `applemusic`,
+        // `plugins/canvas/applemusic.js:6`), jadi handler berkas ini dipanggil
+        // langsung seperti test plugin lain.
+        applemusic(ctx)
     }
 
     fn text_of(r: &Reply) -> &str {
@@ -218,7 +221,10 @@ mod tests {
 
     #[test]
     fn registers_with_the_js_plugin_config() {
-        let p = oktz_plugin_api::find("applemusic").unwrap();
+        // Key `applemusic` di JS bentrok dengan alias `canvas/applemusic.js:6`
+        // (name `applemusic-canvas`); tetap dipertahankan. Biar tidak ambigu,
+        // plugin dicari lewat alias uniknya (`plugins/search/applemusic.js:5`).
+        let p = oktz_plugin_api::find("amusic").unwrap();
         assert_eq!(p.meta.name, "applemusic");
         assert_eq!(p.meta.alias, ["amusic", "am"]);
         assert_eq!(p.meta.category, "search");

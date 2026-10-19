@@ -6,17 +6,13 @@
 //! mirip `await` berurutan di JS). Satu reaksi akhir (`✅`/`❌`/`☢`).
 
 use serde_json::Value;
-use oktz_plugin_api::{Ctx, HttpCall, HttpError, HttpGet, MediaSource, Reply, plugin};
+use oktz_plugin_api::{Ctx, HttpError, MediaSource, Reply, plugin};
 
-use crate::common::{days_from_civil, error_template, jakarta_parts, js_truthy_value, MONTHS_ID};
+use crate::common::{days_from_civil, jakarta_parts, js_truthy, js_truthy_value, MONTHS_ID};
 use crate::tools::phisingataubukan::encode_uri_component;
 
 const BASE_URL: &str = "https://api.myquran.com/v2/sholat";
 const ADZAN_URL: &str = "https://files.catbox.moe/z2bj5s.mp3";
-
-const WAKTU: [&str; 8] = [
-    "imsak", "subuh", "terbit", "dhuha", "dzuhur", "ashar", "maghrib", "isya",
-];
 
 const HARI_ID: [&str; 7] = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 
@@ -85,7 +81,8 @@ fn ambil_jadwal(data: &Value) -> &Value {
     is_bot_admin = false
 )]
 pub fn jadwalsholat(ctx: Ctx) -> Reply {
-    let city = ctx.args.join(" ").trim();
+    let argumen = ctx.args.join(" ");
+    let city = argumen.trim();
     let city = if city.is_empty() { "Jakarta" } else { city };
 
     let Ok(kota) = cari_kota(&ctx, city) else {
@@ -101,7 +98,7 @@ pub fn jadwalsholat(ctx: Ctx) -> Reply {
         return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
     let body = res.json().unwrap_or(serde_json::Value::Null);
-    if !js_truthy_value(body.get("status")) {
+    if !js_truthy(body.get("status")) {
         return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     }
     let jadwal_data = body.get("data").filter(|d| js_truthy_value(d));
@@ -125,7 +122,7 @@ pub fn jadwalsholat(ctx: Ctx) -> Reply {
         .unwrap_or("");
 
     let today = tanggal_lengkap(crate::common::now_ms());
-    let mut caption = format!(
+    let caption = format!(
         "🕌 *ᴊᴀᴅᴡᴀʟ sʜᴏʟᴀᴛ*\n\
          ╭┈┈⬡「 📍 *{lokasi}* 」\n\
          ┃ 📅 {today}\n\
@@ -153,10 +150,7 @@ pub fn jadwalsholat(ctx: Ctx) -> Reply {
     );
 
     // Coba unduh audio adzan; kalau gagal, hanya kirim teks.
-    let adzan_ok = match ctx.http.get(ADZAN_URL) {
-        Ok(_) => true,
-        Err(_) => false,
-    };
+    let adzan_ok = ctx.http.get(ADZAN_URL).is_ok();
 
     if adzan_ok {
         Reply::sequence(vec![
@@ -175,7 +169,7 @@ fn cari_kota(ctx: &Ctx, query: &str) -> Result<Option<serde_json::Value>, HttpEr
     let Some(body) = res.json() else {
         return Ok(None);
     };
-    if !js_truthy_value(body.get("status")) {
+    if !js_truthy(body.get("status")) {
         return Ok(None);
     }
     Ok(body
@@ -189,11 +183,18 @@ fn cari_kota(ctx: &Ctx, query: &str) -> Result<Option<serde_json::Value>, HttpEr
 // Test
 // ---------------------------------------------------------------------------
 
+/// `jakarta_parts` ke milidetik (untuk test hari).
+#[cfg(test)]
+fn jakarta_parts_to_ms(y: i64, m: u32, d: u32, h: u32, mi: u32, s: u32) -> i64 {
+    let days = days_from_civil(y, m, d);
+    let secs = days * 86_400 + (h as i64) * 3600 + (mi as i64) * 60 + s as i64;
+    (secs - 7 * 3600) * 1000
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::{HttpBody, HttpResponse};
-    use serde_json::json;
+    use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -322,13 +323,23 @@ mod tests {
         let r = run(http, "Jakarta");
         let t = text_of(&r);
         assert!(t.starts_with("🕌 *ᴊᴀᴅᴡᴀʟ sʜᴏʟᴀᴛ*\n╭┈┈⬡「 📍 *KOTA JAKARTA* 」\n┃ 📅 "), "{t}");
-        // Harus ada nama hari Indonesia + tanggal.
-        assert!(t.contains("Januari") || t.contains("Februari") || t.contains("Maret"), "{t}");
+        // Nama bulan tidak boleh di-hardcode ke awal tahun: `formatNow` JS
+        // (`plugins/religi/jadwalsholat.js:40`) memakai bulan tanggal berjalan,
+        // jadi test ini bisa dijalankan kapan saja.
+        assert!(
+            HARI_ID.iter().any(|h| t.contains(*h))
+                && MONTHS_ID.iter().any(|m| t.contains(*m)),
+            "{t}"
+        );
     }
 
     #[test]
     fn status_falsy_menggunakan_error_template() {
-        let http = Stub::with_balasan(vec![r#"{"status":false}"#.to_string()]);
+        // `{"status":false}` di respons *kota* berarti `searchKota` → null
+        // (pesan tidak ditemukan, `sholat-api.js:12-17`). Yang masuk `catch`
+        // (`jadwalsholat.js:90-92`) adalah status falsy dari `getTodaySchedule`
+        // (`sholat-api.js:43-47`), jadi stub kedua harus respons jadwal.
+        let http = Stub::with_balasan(vec![kota_json(), r#"{"status":false}"#.to_string()]);
         let r = run(http, "Jakarta");
         assert_eq!(
             text_of(&r),
@@ -353,9 +364,11 @@ mod tests {
 
     #[test]
     fn waktu_kosong_dijadikan_tanda_hubung() {
+        // Stub lama bukan JSON valid (ada `\"` di dalam raw string), jadi kena
+        // cabang error sebelum sempat memeriksa `|| "-"` (`sholat-api.js:53`).
         let http = Stub::with_balasan(vec![
             kota_json(),
-            r#"{"status":true,"data":{"jadwal":{"imsak":"","subuh":"04:20"},\"lokasi\":\"X\"}}"#.to_string(),
+            r#"{"status":true,"data":{"jadwal":{"imsak":"","subuh":"04:20"},"lokasi":"X"}}"#.to_string(),
         ]);
         let r = run(http, "Jakarta");
         let t = text_of(&r);
@@ -366,7 +379,7 @@ mod tests {
     #[test]
     fn adzan_url_dipanggil_setelah_jadwal() {
         let http = Stub::with_balasan(vec![kota_json(), jadwal_json(), "audio".to_string()]);
-        let r = run(http, "Jakarta");
+        let r = run(http.clone(), "Jakarta");
         let seen = http.seen.lock().unwrap();
         assert_eq!(seen.len(), 3);
         assert!(seen[2].contains(ADZAN_URL), "{:?}", seen);
@@ -381,12 +394,4 @@ mod tests {
         let ms = jakarta_parts_to_ms(2026, 1, 18, 0, 0, 0);
         assert_eq!(HARI_ID[hari_index_ms(ms)], "Minggu");
     }
-}
-
-/// `jakarta_parts` ke milidetik (untuk test hari).
-#[cfg(test)]
-fn jakarta_parts_to_ms(y: i64, m: u32, d: u32, h: u32, mi: u32, s: u32) -> i64 {
-    let days = days_from_civil(y, m, d);
-    let secs = days * 86_400 + (h as i64) * 3600 + (mi as i64) * 60 + s as i64;
-    (secs - 7 * 3600) * 1000
 }

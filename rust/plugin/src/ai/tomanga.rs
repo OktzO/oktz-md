@@ -1,8 +1,7 @@
 //! `plugins/ai/tomanga.js` — ubah foto ke gaya manga Jepang lewat `oktz_scraper::seaart::live3d`.
 //! Ponytail: `m.react('🕕')` hilang karena `Reply` hanya satu reaksi; hanya `✅`/`❌`/`☢` akhir.
 
-use oktz_plugin_api::{Ctx, IncomingKind, MediaError, MediaSource, Reply, plugin, MediaFetch};
-use oktz_plugin_api::MediaOrigin;
+use oktz_plugin_api::{Ctx, IncomingKind, MediaError, MediaSource, Reply, plugin};
 
 const PROMPT: &str = "Transform this image into Japanese manga style illustration. \
 Apply black and white manga aesthetics with dramatic shading, speed lines, \
@@ -14,10 +13,10 @@ const HELP: &str = "📖 *ᴛᴏ ᴍᴀɴɢᴀ*\n\n> Kirim/reply gambar untuk di
 const GAGAL_DOWNLOAD: &str = "❌ Gagal mendownload gambar";
 
 fn ambil_gambar(ctx: &Ctx) -> Option<Result<Vec<u8>, MediaError>> {
-    if let Some(q) = ctx.quoted() {
-        if q.kind.is_image() {
-            return Some(ctx.download_quoted_media());
-        }
+    if let Some(q) = ctx.quoted()
+        && q.kind.is_image()
+    {
+        return Some(ctx.download_quoted_media());
     }
     if ctx.is_media_kind(IncomingKind::Image) {
         return Some(ctx.download_media());
@@ -60,7 +59,7 @@ pub fn tomanga(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::{HttpBody, HttpGet, HttpResponse, IncomingMedia};
+    use oktz_plugin_api::{HttpBody, HttpGet, HttpResponse, IncomingMedia, MediaFetch, MediaOrigin};
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug, Default)]
@@ -81,6 +80,11 @@ mod tests {
     }
 
     impl HttpGet for HttpStub {
+        /// `live3d` memakai `HttpCall` (PUT byte mentah + multipart), jadi
+        /// `call` diarahkan ke balasan berurutan yang sama seperti `get`.
+        fn call(&self, req: &oktz_plugin_api::HttpCall) -> Result<HttpResponse, HttpError> {
+            self.get(&req.url)
+        }
         fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
             self.seen.lock().unwrap().push(url.to_string());
             let mut h = self.hitung.lock().unwrap();
@@ -97,7 +101,7 @@ mod tests {
         fn post_multipart(&self, _: &str, _: &[(&str, HttpBody)]) -> Result<HttpResponse, HttpError> { unimplemented!() }
     }
 
-    #[derive(Debug, Default)]
+    #[derive(Debug)]
     struct MediaStub(Result<Vec<u8>, MediaError>);
     impl MediaFetch for MediaStub {
         fn download(&self, _: MediaOrigin) -> Result<Vec<u8>, MediaError> { self.0.clone() }
@@ -126,7 +130,9 @@ mod tests {
     }
 
     fn image_bytes(r: &Reply) -> Vec<u8> {
-        match r.without_mutations() {
+        // JS `m.react('✅')` (`tomanga.js:55`) membungkus balasan jadi
+        // `Reaction`; lepas dulu supaya isi gambarnya bisa diperiksa.
+        match r.without_mutations().tanpa_reaksi() {
             Reply::Image { media, .. } => match media {
                 Some(MediaSource::Bytes { data, .. }) => data.to_vec(),
                 m => panic!("harus bytes, dapat {m:?}"),

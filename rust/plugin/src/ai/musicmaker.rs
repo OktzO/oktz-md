@@ -13,7 +13,7 @@ use serde_json::Value;
 pub(crate) fn api_url(prompt: &str) -> String {
     format!(
         "https://api.nexray.eu.cc/ai/suno?prompt={}",
-        crate::tools::phisingataubukan::encode_uri_component(&prompt)
+        crate::tools::phisingataubukan::encode_uri_component(prompt)
     )
 }
 
@@ -88,7 +88,12 @@ pub fn musicmaker(ctx: Ctx) -> Reply {
     };
     let data = res.json().unwrap_or(Value::Null);
     let status_ok = data.get("status").is_some_and(crate::common::js_truthy_value);
-    let Some(r) = data.get("result").filter(|_| status_ok) else {
+    // JS `!data.status || !data.result` (`musicmaker.js:39`): `result` harus
+    // truthy juga — `result: null` di JS masuk cabang gagal, bukan jadi caption "null".
+    let Some(r) = data
+        .get("result")
+        .filter(|v| status_ok && crate::common::js_truthy_value(v))
+    else {
         return Reply::text(AI_GAGAL).with_reaction("❌");
     };
 
@@ -101,7 +106,6 @@ pub fn musicmaker(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -159,7 +163,9 @@ mod tests {
         }
     }
 
-    fn run_dengan_kunci(http: Arc<Stub>, text: &str) -> Reply {
+    /// Helper generik: `Ctx::http` bertipe `Arc<dyn HttpGet>`, jadi stub apa
+    /// pun (mis. `Teks` untuk body bukan JSON) bisa dipakai di sini.
+    fn run_dengan_kunci<H: HttpGet + 'static>(http: Arc<H>, text: &str) -> Reply {
         let mut args = text.split_whitespace();
         let ctx = Ctx {
             text: text.to_string(),
@@ -189,7 +195,9 @@ mod tests {
     }
 
     fn urutan_media(r: &Reply) -> Vec<(String, Option<String>)> {
-        match r.without_mutations() {
+        // JS `m.react("✅")` terakhir (`musicmaker.js:63`) membungkus balasan
+        // jadi `Reaction`; lepas dulu supaya isi Sequence-nya bisa diperiksa.
+        match r.without_mutations().tanpa_reaksi() {
             Reply::Sequence(list) => list
                 .iter()
                 .filter_map(|e| match e {
@@ -199,7 +207,7 @@ mod tests {
                             _ => None,
                         })))
                     }
-                    Reply::Image { media, caption, .. } => Some((
+                    Reply::Image { media, .. } => Some((
                         "image".to_string(),
                         media.as_ref().and_then(|m| match m {
                             MediaSource::Url { url, .. } => Some(url.clone()),
@@ -283,6 +291,7 @@ mod tests {
         let http = Stub::offline();
         let _ = http;
         // `offline` selalu error get; untuk body bukan JSON gunakan balasan string.
+        #[derive(Debug)]
         struct Teks(String);
         impl HttpGet for Teks {
             fn get(&self, _: &str) -> Result<HttpResponse, HttpError> {

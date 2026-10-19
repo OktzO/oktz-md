@@ -5,8 +5,6 @@
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::error_template;
-
 pub(crate) fn help(prefix: &str) -> String {
     format!(
         "📥 *ᴀʟʟ ɪɴ ᴏɴᴇ ᴅᴏᴡɴʟᴏᴀᴅᴇʀ*\n\n> Download dari berbagai platform!\n\n╭┈┈⬡「 🌐 *ᴘʟᴀᴛꜰᴏʀᴍ* 」\n┃ • Instagram\n┃ • TikTok\n┃ • Facebook\n┃ • Twitter/X\n┃ • YouTube\n┃ • Pinterest\n┃ • CapCut\n┃ • Threads / Reddit\n╰┈┈┈┈┈┈┈┈⬡\n\n> *Contoh:* {prefix}aio https://instagram.com/p/xxx",
@@ -16,19 +14,6 @@ pub(crate) fn help(prefix: &str) -> String {
 
 const INVALID_URL: &str = "❌ URL tidak valid! Harus dimulai dengan http/https";
 const NO_MEDIA: &str = "❌ Gagal mengambil media. Pastikan URL valid.";
-
-fn media_pertama(result: &Value) -> Option<(String, String)> {
-    let daftar = result.get("media").and_then(Value::as_array)?;
-    let item = daftar.first()?;
-    let tipe = item.get("type").and_then(Value::as_str).unwrap_or("");
-    let url = item.get("url").and_then(Value::as_str)?.to_string();
-    let jenis = match tipe {
-        "video" => "video",
-        "audio" => "audio",
-        _ => "image",
-    };
-    Some((jenis.to_string(), url))
-}
 
 #[plugin(
     name = "aio",
@@ -82,10 +67,9 @@ pub fn aio(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
-    #[derive(Debug, Default)]
+    #[derive(Debug)]
     struct Stub {
         result: Result<String, ()>,
         seen: Mutex<Vec<String>>,
@@ -162,7 +146,7 @@ mod tests {
     fn platform_tidak_dikenali_diatasi_error_template_tanpa_request() {
         // aiodl melempar sebelum berjaringan, handler tangkap semua error.
         let http = Stub::offline();
-        let r = run(http, "https://contoh.example/x");
+        let r = run(http.clone(), "https://contoh.example/x");
         assert_eq!(
             text_of(&r),
             "☢ Kayaknya command `.aio` lagi ada kendala\n\

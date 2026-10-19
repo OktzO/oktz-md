@@ -45,3 +45,18 @@ pub mod tooilpainting;
 pub mod toblack;
 pub mod toisland;
 pub mod txt2img;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod bananagen;
+pub mod musicmaker;
+pub mod to3d;
+pub mod tocartoon;
+pub mod tochibi;
+pub mod tofigurine;
+pub mod tomanga;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod toemotebatu;
+pub mod tofigurev2;
+pub mod toghibli;
+pub mod tomekah;

@@ -22,17 +22,13 @@ use serde_json::Value;
 /// Satu hasil track dari SoundCloud.
 #[derive(Clone, Debug)]
 struct Track {
-    id: String,
     title: String,
     url: String,
-    user_id: String,
     artwork: Option<String>,
-    duration: String,
     plays: String,
     likes: String,
     comments: String,
     reposts: String,
-    created_at: String,
 }
 
 /// Cari lagu: ambil HTML, ekstraksi #__NEXT_DATA__, parse JSON, map tracks.
@@ -56,7 +52,7 @@ fn sc_search(http: &dyn oktz_plugin_api::HttpGet, query: &str) -> Result<Vec<Tra
         .and_then(|v| v.as_object())
         .map_or(Vec::new(), |obj| {
             obj.values()
-                .filter_map(|v| track_from_value(v))
+                .filter_map(track_from_value)
                 .filter(|t| !t.title.is_empty())
                 .collect()
         });
@@ -66,9 +62,8 @@ fn sc_search(http: &dyn oktz_plugin_api::HttpGet, query: &str) -> Result<Vec<Tra
 /// Ekstraksi isi teks dari elemen `#__NEXT_DATA__`.
 fn extract_next_data(html: &str) -> String {
     let pola = r#"id="__NEXT_DATA__""#;
-    let mut start = 0;
-    while let Some(pos) = html[start..].find(pola) {
-        let abs = start + pos;
+    // Kemunculan pertama saja — JS `cheerio` mengambil elemen pertama.
+    if let Some(abs) = html.find(pola) {
         // Cari `>` setelah atribut
         let after = &html[abs + pola.len()..];
         let gt = match after.find('>') {
@@ -88,19 +83,15 @@ fn extract_next_data(html: &str) -> String {
 /// Map satu objek track JSON ke struct Track.
 fn track_from_value(v: &Value) -> Option<Track> {
     let data = v.get("data")?;
-    let id = data.get("id").and_then(Value::as_u64).map_or("-".to_string(), |n| n.to_string());
     let title = data.get("title").and_then(Value::as_str).unwrap_or("-").to_string();
     let url = data.get("permalink_url").and_then(Value::as_str).unwrap_or("-").to_string();
-    let user_id = data.get("user_id").and_then(Value::as_u64).map_or("-".to_string(), |n| n.to_string());
     let artwork = data.get("artwork_url").and_then(Value::as_str).map(|s| s.to_string());
-    let duration = data.get("duration").and_then(Value::as_u64).map_or("-".to_string(), |n| n.to_string());
     let plays = data.get("playback_count").and_then(Value::as_u64).map_or("-".to_string(), |n| n.to_string());
     let likes = data.get("likes_count").and_then(Value::as_u64).map_or("-".to_string(), |n| n.to_string());
     let comments = data.get("comment_count").and_then(Value::as_u64).map_or("-".to_string(), |n| n.to_string());
     let reposts = data.get("reposts_count").and_then(Value::as_u64).map_or("-".to_string(), |n| n.to_string());
-    let created_at = data.get("created_at").and_then(Value::as_str).unwrap_or("-").to_string();
 
-    Some(Track { id, title, url, user_id, artwork, duration, plays, likes, comments, reposts, created_at })
+    Some(Track { title, url, artwork, plays, likes, comments, reposts })
 }
 
 /// Encode query parameter seperti `encodeURIComponent` JS.
@@ -180,8 +171,7 @@ pub fn soundcloud(ctx: Ctx) -> Reply {
     let mut txt = "🎧 *HASIL PENCARIAN SOUNDCLOUD* 🎧\n\n".to_string();
     let mut content_txt = String::new();
     let limit = tracks.len().min(5);
-    for i in 0..limit {
-        let d = &tracks[i];
+    for (i, d) in tracks.iter().enumerate().take(limit) {
         content_txt.push_str(&format!("🎵 *Title :* {}\n", d.title));
         content_txt.push_str(&format!("🔗 *Url :* {}\n", d.url));
         content_txt.push_str(&format!("👁️ *Views :* {}\n", d.plays));
@@ -348,7 +338,7 @@ mod tests {
     #[test]
     fn sc_search_mengembalikan_dua_track() {
         let http = StubHttp::body(HTML_WITH_DATA);
-        let tracks = sc_search(&http, "jazz").unwrap();
+        let tracks = sc_search(http.as_ref(), "jazz").unwrap();
         assert_eq!(tracks.len(), 2);
         assert_eq!(tracks[0].title, "Lagu Satu");
         assert_eq!(tracks[1].title, "Lagu Dua");

@@ -5,10 +5,11 @@
 //! masih terlihat setelah request selesai) yang dipasang. Gambar banner
 //! dikirim tanpa `quoted` karena `Reply::Image` tidak punya bidang quoted.
 
-use oktz_plugin_api::{Ctx, HttpCall, HttpError, HttpGet, MediaSource, Reply, plugin};
+use oktz_plugin_api::{Ctx, HttpCall, MediaSource, Reply, plugin};
+#[cfg(test)]
+use oktz_plugin_api::{HttpError, HttpGet};
 use serde_json::Value;
 
-use crate::common::error_template;
 use crate::tools::phisingataubukan::encode_uri_component;
 
 const API: &str = "https://api.nexray.eu.cc/stalker/freefire";
@@ -36,7 +37,7 @@ fn sistem_error() -> String {
         .to_string()
 }
 
-/// `${value}` untuk nilai JSON di template literal.
+/// `String(v)` untuk nilai JSON yang masuk ke template literal.
 fn js_str(v: &Value) -> String {
     match v {
         Value::String(s) => s.clone(),
@@ -47,10 +48,19 @@ fn js_str(v: &Value) -> String {
     }
 }
 
+/// `${v || "-"}` — nilai falsy JS (`null`, `0`, `""`, `false`) jadi `-`.
+fn dash(v: &Value) -> String {
+    if crate::common::js_truthy_value(v) {
+        js_str(v)
+    } else {
+        "-".to_string()
+    }
+}
+
 /// `r.language ? r.language.replace("Language_", "") : "-"`.
 fn lang(v: Option<&Value>) -> String {
     match v {
-        Some(Value::String(s)) => s.replace("Language_", "-"),
+        Some(Value::String(s)) if !s.is_empty() => s.replace("Language_", ""),
         _ => "-".to_string(),
     }
 }
@@ -58,7 +68,7 @@ fn lang(v: Option<&Value>) -> String {
 /// `r.mode_prefer ? r.mode_prefer.replace("ModePrefer_", "") : "-"`.
 fn mode_prefer(v: Option<&Value>) -> String {
     match v {
-        Some(Value::String(s)) => s.replace("ModePrefer_", "-"),
+        Some(Value::String(s)) if !s.is_empty() => s.replace("ModePrefer_", ""),
         _ => "-".to_string(),
     }
 }
@@ -75,7 +85,7 @@ fn guild_name(v: Option<&Value>) -> String {
     name = "ffstalk",
     alias = ["freefireid", "stalkff", "ff"],
     category = "stalker",
-    description = "Melihat informasi lengkap akun Free Fire berdasarkan ID",
+    description = "Melihat informasi lengkap akun Free Fire berdasarkan ID.",
     usage = ".ffstalk <id>",
     example = ".ffstalk 470699855",
     cooldown = 10,
@@ -98,14 +108,14 @@ pub fn ffstalk(ctx: Ctx) -> Reply {
     }
 
     let Ok(res) = ctx.http.call(
-        &HttpCall::get(&format!("{API}?uid={}", encode_uri_component(&uid)))
+        &HttpCall::get(format!("{API}?uid={}", encode_uri_component(&uid)))
             .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"),
     ) else {
         return Reply::text(sistem_error()).with_reaction("☢");
     };
     let data = res.json().unwrap_or(Value::Null);
 
-    if !crate::common::js_truthy_value(data.get("status")) || data.get("result").is_none() {
+    if !crate::common::js_truthy(data.get("status")) || !crate::common::js_truthy(data.get("result")) {
         return Reply::text(gagal(&uid)).with_reaction("❌");
     }
 
@@ -113,53 +123,53 @@ pub fn ffstalk(ctx: Ctx) -> Reply {
     let mut caption = "🔥 *FREE FIRE STALK - PROFILE INFO* 🔥\n\n".to_string();
     caption.push_str(&format!("Halo! Ini dia hasil pencarian profil untuk UID *{}*:\n\n", js_str(&r["uid"])));
     caption.push_str("👤 *INFO DASAR*\n");
-    caption.push_str(&format!("  - Nama: *{}*\n", js_str(&r["name"])));
+    caption.push_str(&format!("  - Nama: *{}*\n", dash(&r["name"])));
     caption.push_str(&format!(
         "  - Level: {} (EXP: {})\n",
-        js_str(&r["level"]),
-        js_str(&r["exp"])
+        dash(&r["level"]),
+        dash(&r["exp"])
     ));
-    caption.push_str(&format!("  - Region: {}\n", js_str(&r["region"])));
-    caption.push_str(&format!("  - Likes: {} ❤️\n", js_str(&r["likes"])));
-    caption.push_str(&format!("  - Credit Score: {}\n", js_str(&r["credit_score"])));
-    caption.push_str(&format!("  - Bio: {}\n\n", js_str(&r["signature"])));
+    caption.push_str(&format!("  - Region: {}\n", dash(&r["region"])));
+    caption.push_str(&format!("  - Likes: {} ❤️\n", dash(&r["likes"])));
+    caption.push_str(&format!("  - Credit Score: {}\n", dash(&r["credit_score"])));
+    caption.push_str(&format!("  - Bio: {}\n\n", dash(&r["signature"])));
 
     caption.push_str("🏆 *RANKING & AKTIVITAS*\n");
     caption.push_str(&format!(
         "  - BR Rank Point: {} (Max: {})\n",
-        js_str(&r["br_rank_point"]),
-        js_str(&r["br_max_rank"])
+        dash(&r["br_rank_point"]),
+        dash(&r["br_max_rank"])
     ));
     caption.push_str(&format!(
         "  - CS Rank Point: {} (Max: {})\n",
-        js_str(&r["cs_rank_point"]),
-        js_str(&r["cs_max_rank"])
+        dash(&r["cs_rank_point"]),
+        dash(&r["cs_max_rank"])
     ));
-    caption.push_str(&format!("  - Season ID: {}\n", js_str(&r["season_id"])));
-    caption.push_str(&format!("  - Akun Dibuat: {}\n", js_str(&r["created_at"])));
-    caption.push_str(&format!("  - Terakhir Login: {}\n\n", js_str(&r["last_login"])));
+    caption.push_str(&format!("  - Season ID: {}\n", dash(&r["season_id"])));
+    caption.push_str(&format!("  - Akun Dibuat: {}\n", dash(&r["created_at"])));
+    caption.push_str(&format!("  - Terakhir Login: {}\n\n", dash(&r["last_login"])));
 
     caption.push_str("🛡️ *GUILD INFO*\n");
     let gname = guild_name(r.get("guild_name"));
     caption.push_str(&format!("  - Nama Guild: {gname}\n"));
     if gname != "Tidak ada guild" {
-        caption.push_str(&format!("  - Level Guild: {}\n", js_str(&r["guild_level"])));
+        caption.push_str(&format!("  - Level Guild: {}\n", dash(&r["guild_level"])));
         caption.push_str(&format!(
             "  - Anggota: {}/{}\n",
-            js_str(&r["guild_member"]),
-            js_str(&r["guild_capacity"])
+            dash(&r["guild_member"]),
+            dash(&r["guild_capacity"])
         ));
         caption.push_str(&format!(
             "  - Ketua Guild: {} (UID: {})\n",
-            js_str(&r["guild_leader_name"]),
-            js_str(&r["guild_leader_uid"])
+            dash(&r["guild_leader_name"]),
+            dash(&r["guild_leader_uid"])
         ));
     }
     caption.push('\n');
 
     caption.push_str("🐾 *PET INFO*\n");
-    caption.push_str(&format!("  - Pet Level: {}\n", js_str(&r["pet_level"])));
-    caption.push_str(&format!("  - Pet EXP: {}\n\n", js_str(&r["pet_exp"])));
+    caption.push_str(&format!("  - Pet Level: {}\n", dash(&r["pet_level"])));
+    caption.push_str(&format!("  - Pet EXP: {}\n\n", dash(&r["pet_exp"])));
 
     caption.push_str("🔧 *LAINNYA*\n");
     caption.push_str(&format!("  - Bahasa: {}\n", lang(r.get("language"))));
@@ -187,7 +197,6 @@ pub fn ffstalk(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";

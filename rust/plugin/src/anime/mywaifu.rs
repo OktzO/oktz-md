@@ -61,8 +61,8 @@ pub(crate) fn api_url(is_nsfw: bool) -> String {
         ENDPOINT,
         encode_uri_component(if is_nsfw { "true" } else { "false" }),
         encode_uri_component(ORDER_BY),
-        encode_uri_component(PAGE.to_string()),
-        encode_uri_component(PAGE_SIZE.to_string()),
+        encode_uri_component(&PAGE.to_string()),
+        encode_uri_component(&PAGE_SIZE.to_string()),
     )
 }
 
@@ -90,7 +90,7 @@ pub fn mywaifu(ctx: Ctx) -> Reply {
 
     let is_nsfw = mode == "nsfw";
 
-    let Ok(res) = ctx.http.call(&HttpCall::get(&api_url(is_nsfw))) else {
+    let Ok(res) = ctx.http.call(&HttpCall::get(api_url(is_nsfw))) else {
         return Reply::text(GAGAL_API).with_reaction("❌");
     };
     let data = res.json().unwrap_or(serde_json::Value::Null);
@@ -131,7 +131,6 @@ pub fn mywaifu(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -272,7 +271,9 @@ mod tests {
         let panggilan = http.panggilan.lock().unwrap().clone();
         assert_eq!(panggilan.len(), 1);
         assert_eq!(panggilan[0], api_url(true));
-        match r.without_mutations() {
+        // JS `m.react('✅')` (`mywaifu.js:103`) membungkus Sequence (caption +
+        // 10 gambar); lepas `Reaction` dulu untuk memeriksa isinya.
+        match r.without_mutations().tanpa_reaksi() {
             Reply::Sequence(balasan) => {
                 assert_eq!(balasan.len(), 11, "1 caption + 10 gambar");
                 assert!(balasan[0].text_body().is_some(), "elemen pertama adalah caption");

@@ -76,7 +76,7 @@ pub fn alightmotion(ctx: Ctx) -> Reply {
     // `m.react("🕕")` di `:31` terjadi sebelum pemeriksaan; `Reply` hanya mampu
     // membawa satu reaksi, jadi yang ikut ke balasan hanyalah reaksi penutup.
     let Ok(res) = ctx.http.get(&api_url(text)) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
     let body = res.json().unwrap_or(Value::Null);
     let Some(url) = download_url(&body) else {
@@ -87,17 +87,18 @@ pub fn alightmotion(ctx: Ctx) -> Reply {
     };
 
     let file_name = format!("AlightMotion_{}.zip", ctx.config().bot.name);
-    Reply::document(MediaSource::url(url), &file_name)
-        .with_mimetype("application/zip")
-        .with_caption("✅ Berhasil mengunduh preset Alight Motion!")
-        .with_reaction("✅")
+    Reply::document(
+        MediaSource::url(url).with_mimetype("application/zip"),
+        &file_name,
+    )
+    .with_caption("✅ Berhasil mengunduh preset Alight Motion!")
+    .with_reaction("✅")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -251,14 +252,14 @@ mod tests {
     fn jalur_berhasil_mengirim_dokumen_dengan_url_dan_nama_berkas() {
         let body = serde_json::json!({ "status": true, "data": { "url": "https://cdn/file.zip" } });
         let http = Stub::body(body.clone());
-        let r = run(http, "https://alight.link/abc");
+        let r = run(http.clone(), "https://alight.link/abc");
         assert_eq!(reaction_of(&r), Some("✅"));
         let Reply::Document {
             media,
             file_name,
             caption,
             ..
-        } = r.without_mutations()
+        } = r.without_mutations().tanpa_reaksi()
         else {
             panic!("harus document, dapat {:?}", r.without_mutations());
         };
@@ -299,7 +300,8 @@ mod tests {
             ..Ctx::default()
         };
         let r = alightmotion(ctx);
-        let Reply::Document { file_name, .. } = r.without_mutations() else {
+        // `m.react("✅")` membungkus balasan dokumen (`alightmotion.js:63`).
+        let Reply::Document { file_name, .. } = r.without_mutations().tanpa_reaksi() else {
             panic!("harus document");
         };
         assert_eq!(file_name, "AlightMotion_Oktz Bot.zip");
@@ -319,8 +321,9 @@ mod tests {
 
     #[test]
     fn error_template_mengikuti_ganti_prefix_dan_command() {
+        // `prefix || '.'` / `command || '?'` di `src/lib/error.js:5-6`.
         assert_eq!(
-            crate::common::error_template("", ""),
+            error_template("", ""),
             "☢ Kayaknya command `.?` lagi ada kendala\n\
              Silahkan coba lagi nanti, User\n\n\
              _Jika masalah berlanjut, silahkan hubungi owner bot_"

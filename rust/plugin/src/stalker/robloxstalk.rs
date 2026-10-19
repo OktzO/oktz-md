@@ -1,11 +1,12 @@
 //! `plugins/stalker/robloxstalk.js` — stalk akun Roblox lewat beberapa endpoint
 //! Roblox API secara berurutan.
 //! Ponytail: `toLocaleString` angka tidak direplikasi (angka ditulis polos),
+//! `description.substring(0, 300)` dipotong per `char` (JS per unit UTF-16),
 //! dan `created` ditulis mentah karena `Ctx` tidak punya parser tanggal ISO
 //! bawaan (ponytail: tambahkan field tanggal ke `Ctx` kalau diperlukan).
 
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 const NOT_FOUND: &str = "❌ Username *{username}* tidak ditemukan";
 
@@ -16,20 +17,16 @@ pub(crate) fn help(prefix: &str) -> String {
     )
 }
 
-fn get_path<'a>(v: &'a Value, path: &[&str]) -> Option<&'a Value> {
-    let mut cur = v;
-    for seg in path {
-        cur = cur.get(*seg)?;
-    }
-    Some(cur)
-}
-
 fn num(v: Option<&Value>) -> i64 {
     v.and_then(Value::as_i64).unwrap_or(0)
 }
 
 fn top_groups(groups: &Value) -> String {
-    let daftar = groups.get("data").and_then(Value::as_array).unwrap_or(&Vec::new());
+    let daftar = groups
+        .get("data")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
     let mut out = String::new();
     for g in daftar.iter().take(5) {
         let nama = g.get("group").and_then(|x| x.get("name")).and_then(Value::as_str).unwrap_or("-");
@@ -42,7 +39,11 @@ fn top_groups(groups: &Value) -> String {
 }
 
 fn top_games(games: &Value) -> String {
-    let daftar = games.get("data").and_then(Value::as_array).unwrap_or(&Vec::new());
+    let daftar = games
+        .get("data")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
     let mut out = String::new();
     for g in daftar.iter().take(5) {
         let nama = g.get("name").and_then(Value::as_str).unwrap_or("-");
@@ -54,7 +55,11 @@ fn top_games(games: &Value) -> String {
 }
 
 fn top_badges(badges: &Value) -> String {
-    let daftar = badges.get("data").and_then(Value::as_array).unwrap_or(&Vec::new());
+    let daftar = badges
+        .get("data")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
     let mut out = String::new();
     for b in daftar.iter().take(5) {
         let nama = b.get("name").and_then(Value::as_str).unwrap_or("-");
@@ -67,7 +72,11 @@ fn top_badges(badges: &Value) -> String {
 
 fn top_inventory(inventory: &Value) -> String {
     if !inventory.is_array() {
-        return format!("  ◦ {}\n", inventory.as_str().unwrap_or("private / tidak tersedia"));
+        let teks = inventory
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .unwrap_or("private / tidak tersedia");
+        return format!("  ◦ {teks}\n");
     }
     let daftar = inventory.as_array().unwrap();
     let mut out = String::new();
@@ -80,23 +89,22 @@ fn top_inventory(inventory: &Value) -> String {
     out
 }
 
+/// `presenceType[res.presence.userPresenceType] || res.presence.userPresenceType`
+/// — tipe yang tidak dikenal ditulis sebagai angkanya.
 fn presence_text(presence: &Value) -> String {
     let tipe = num(presence.get("userPresenceType"));
     let label = match tipe {
-        0 => "Offline",
-        1 => "Online",
-        2 => "In Game",
-        3 => "In Studio",
-        _ => "",
+        0 => "Offline".to_string(),
+        1 => "Online".to_string(),
+        2 => "In Game".to_string(),
+        3 => "In Studio".to_string(),
+        lain => lain.to_string(),
     };
     let loc = presence.get("lastLocation").and_then(Value::as_str).unwrap_or("-");
     let place = presence.get("placeId").and_then(Value::as_str).unwrap_or("-");
     let game = presence.get("gameId").and_then(Value::as_str).unwrap_or("-");
-    if label.is_empty() {
-        format!("tidak tersedia\n")
-    } else {
-        format!("Status: {label}\n  Last Location: {loc}\n  PlaceId: {place}\n  GameId: {game}\n")
-    }
+    // Baris baru penutup: JS menulis `${presInfo}\n` + `\n\n` sebelum Bio.
+    format!("Status: {label}\n  Last Location: {loc}\n  PlaceId: {place}\n  GameId: {game}\n")
 }
 
 #[plugin(
@@ -135,31 +143,38 @@ pub fn robloxstalk(ctx: Ctx) -> Reply {
         _ => return Reply::text(NOT_FOUND.replace("{username}", username)).with_reaction("❌"),
     };
     let user = &data[0];
-    let userId = num(user.get("id"));
+    let user_id = num(user.get("id"));
 
-    let detail_url = format!("https://users.roblox.com/v1/users/{userId}");
+    let detail_url = format!("https://users.roblox.com/v1/users/{user_id}");
     let detail = http.get(&detail_url).ok().and_then(|r| r.json()).unwrap_or(Value::Null);
-    let avatar = http.get(&format!("https://thumbnails.roblox.com/v1/users/avatar?userIds={userId}&size=420x420&format=Png")).ok().and_then(|r| r.json()).unwrap_or(Value::Null);
-    let followers = http.get(&format!("https://friends.roblox.com/v1/users/{userId}/followers/count")).ok().and_then(|r| r.json()).unwrap_or(Value::Null);
-    let following = http.get(&format!("https://friends.roblox.com/v1/users/{userId}/followings/count")).ok().and_then(|r| r.json()).unwrap_or(Value::Null);
-    let friends = http.get(&format!("https://friends.roblox.com/v1/users/{userId}/friends/count")).ok().and_then(|r| r.json()).unwrap_or(Value::Null);
-    let groups = http.get(&format!("https://groups.roblox.com/v2/users/{userId}/groups/roles")).ok().and_then(|r| r.json()).unwrap_or(Value::Null);
-    let games = http.get(&format!("https://games.roblox.com/v2/users/{userId}/games?limit=50")).ok().and_then(|r| r.json()).unwrap_or(Value::Null);
-    let badges = http.get(&format!("https://badges.roblox.com/v1/users/{userId}/badges?limit=50")).ok().and_then(|r| r.json()).unwrap_or(Value::Null);
-    let inventory = http.get(&format!("https://inventory.roblox.com/v1/users/{userId}/assets/collectibles?limit=50")).ok().and_then(|r| r.json()).unwrap_or(Value::Null);
+    let avatar = http.get(&format!("https://thumbnails.roblox.com/v1/users/avatar?userIds={user_id}&size=420x420&format=Png")).ok().and_then(|r| r.json()).unwrap_or(Value::Null);
+    let followers = http.get(&format!("https://friends.roblox.com/v1/users/{user_id}/followers/count")).ok().and_then(|r| r.json()).unwrap_or(Value::Null);
+    let following = http.get(&format!("https://friends.roblox.com/v1/users/{user_id}/followings/count")).ok().and_then(|r| r.json()).unwrap_or(Value::Null);
+    let friends = http.get(&format!("https://friends.roblox.com/v1/users/{user_id}/friends/count")).ok().and_then(|r| r.json()).unwrap_or(Value::Null);
+    let groups = http.get(&format!("https://groups.roblox.com/v2/users/{user_id}/groups/roles")).ok().and_then(|r| r.json()).unwrap_or(Value::Null);
+    let games = http.get(&format!("https://games.roblox.com/v2/users/{user_id}/games?limit=50")).ok().and_then(|r| r.json()).unwrap_or(Value::Null);
+    let badges = http.get(&format!("https://badges.roblox.com/v1/users/{user_id}/badges?limit=50")).ok().and_then(|r| r.json()).unwrap_or(Value::Null);
+    let inventory = http.get(&format!("https://inventory.roblox.com/v1/users/{user_id}/assets/collectibles?limit=50")).ok().and_then(|r| r.json()).unwrap_or(Value::Null);
 
-    let presence = http.post_json("https://presence.roblox.com/v1/presence/users", &serde_json::json!({ "userIds": [userId] })).ok().and_then(|r| r.json()).unwrap_or(Value::Null);
+    let presence = http.post_json("https://presence.roblox.com/v1/presence/users", &serde_json::json!({ "userIds": [user_id] })).ok().and_then(|r| r.json()).unwrap_or(Value::Null);
 
     let verified = user.get("hasVerifiedBadge").is_some_and(|v| v.as_bool().unwrap_or(false));
     let created = detail.get("created").and_then(Value::as_str).unwrap_or("-");
     let display_name = detail.get("displayName").and_then(Value::as_str).unwrap_or("-");
     let desc = detail.get("description").and_then(Value::as_str).unwrap_or("-");
-    let avatar_url = avatar.get("data").and_then(|a| a.first()).and_then(|x| x.get("imageUrl")).and_then(Value::as_str).unwrap_or("");
-    let nama = user.get("name").and_then(Value::as_str).unwrap_or(username);
+    let avatar_url = avatar
+        .get("data")
+        .and_then(Value::as_array)
+        .and_then(|a| a.first())
+        .and_then(|x| x.get("imageUrl"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    // `res.username` di JS = `detail.name`, bukan `name` hasil search.
+    let nama = detail.get("name").and_then(Value::as_str).unwrap_or(username);
 
     let caption = format!(
         "🎮 *ʀᴏʙʟᴏx sᴛᴀʟᴋ*\n\n*PROFILE*\n🆔 *ID*: {id}\n🎄 *Username*: {nama}\n📛 *Display*: {display}\n✅ *Verified*: {verified}\n📅 *Created*: {created}\n\n*SOCIAL*\n👥 *Friends*: {friends}\n👤 *Followers*: {followers}\n➕ *Following*: {following}\n\n*PRESENCE*\n{presence}\n\n📝 *Bio:*\n{bio}\n👥 *Groups* ({gcount}):\n{groups}🎮 *Games* ({gamest}):\n{games}🏆 *Badges* ({badgest}):\n{badges}🎒 *Inventory*:\n{inventory}🔗 https://roblox.com/users/{id}/profile",
-        id = userId,
+        id = user_id,
         nama = nama,
         display = display_name,
         verified = if verified { "Ya" } else { "Tidak" },
@@ -167,7 +182,11 @@ pub fn robloxstalk(ctx: Ctx) -> Reply {
         friends = num(friends.get("count")),
         followers = num(followers.get("count")),
         following = num(following.get("count")),
-        presence = presence.get("userPresences").and_then(|a| a.first()).map_or("tidak tersedia".to_string(), |p| presence_text(p)),
+        presence = presence
+            .get("userPresences")
+            .and_then(Value::as_array)
+            .and_then(|a| a.first())
+            .map_or("tidak tersedia\n".to_string(), presence_text),
         bio = if desc.is_empty() { "-".to_string() } else { desc.chars().take(300).collect() },
         gcount = groups.get("data").and_then(Value::as_array).map_or(0, |a| a.len()),
         groups = top_groups(&groups),
@@ -175,7 +194,7 @@ pub fn robloxstalk(ctx: Ctx) -> Reply {
         games = top_games(&games),
         badgest = badges.get("data").and_then(Value::as_array).map_or(0, |a| a.len()),
         badges = top_badges(&badges),
-        inventory = top_inventory(&inventory),
+        inventory = top_inventory(inventory.get("data").unwrap_or(&Value::Null)),
     );
 
     if !avatar_url.is_empty() {
@@ -184,13 +203,10 @@ pub fn robloxstalk(ctx: Ctx) -> Reply {
     Reply::text(caption).with_reaction("✅")
 }
 
-use oktz_plugin_api::HttpError;
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::{HttpBody, HttpGet, HttpResponse};
-    use serde_json::json;
+    use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
     use std::sync::{Arc, Mutex};
 
     /// Balasan 11 permintaan secara berurutan; setelah habis, balasan terakhir dipakai lagi.
@@ -238,8 +254,9 @@ mod tests {
             r#"{"data":[{"id":12345,"name":"Linkmon99","hasVerifiedBadge":true}]}"#,
             // detail
             r#"{"id":12345,"name":"Linkmon99","displayName":"Linkmon","description":"Halo saya","created":"2026-01-01T00:00:00Z"}"#,
-            // avatar
-            r#"{"data":[{"imageUrl":"https://cdn/avatar.png"}]}}"#,
+            // avatar — `avatar.data[0]?.imageUrl` (`robloxstalk.js:90`); JSON
+            // harus valid, kurung kurawal penutup cuma satu.
+            r#"{"data":[{"imageUrl":"https://cdn/avatar.png"}]}"#,
             // followers/following/friends
             r#"{"count":100}"#, r#"{"count":50}"#, r#"{"count":20}"#,
             // groups/games/badges/inventory
@@ -285,7 +302,12 @@ mod tests {
         assert!(t.contains("👥 *Groups* (1):"), "{t}");
         assert!(t.contains("🎒 *Inventory*:"), "{t}");
         assert_eq!(reaction_of(&r), Some("✅".to_string()));
-        match r.without_mutations() {
+        // Balasan dibungkus reaksi ✅ (`robloxstalk.js:197-210`), jadi isi pesan
+        // diambil dari dalam `Reply::Reaction`.
+        let Reply::Reaction { reply: isi, .. } = r.without_mutations() else {
+            panic!("harus dibungkus reaksi");
+        };
+        match isi.as_ref() {
             Reply::Image { media, .. } => match media {
                 Some(oktz_plugin_api::MediaSource::Url { url, .. }) => assert_eq!(url, "https://cdn/avatar.png"),
                 m => panic!("harus URL avatar, dapat {m:?}"),

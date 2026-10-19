@@ -10,10 +10,12 @@
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
-/// `PAGE_SIZE` (`waifupool.js:44`).
+/// `PAGE_SIZE` (`waifupool.js:44`). Dipakai hanya oleh test render/paginasi.
+#[cfg(test)]
 pub(crate) const HALAMAN_SIZE: usize = 10;
 
-/// Satu entri waifu dari pool (`waifupool.js:61-63`).
+/// Satu entri waifu dari pool (`waifupool.js:61-63`). Dipakai hanya oleh test.
+#[cfg(test)]
 pub(crate) struct Waifu {
     pub tier: String,
     pub name: String,
@@ -21,7 +23,8 @@ pub(crate) struct Waifu {
     pub personality: String,
 }
 
-/// `tierEmoji(t)` (`waifupool.js:30-32`).
+/// `tierEmoji(t)` (`waifupool.js:30-32`). Dipakai hanya oleh test.
+#[cfg(test)]
 pub(crate) fn emoji_tier(tier: &str) -> &'static str {
     match tier {
         "Common" => "🟢",
@@ -33,12 +36,14 @@ pub(crate) fn emoji_tier(tier: &str) -> &'static str {
     }
 }
 
-/// Parsing nav + query (`waifupool.js:36-39`).
+/// Parsing nav + query (`waifupool.js:36-39`). Dipakai hanya oleh test.
+#[cfg(test)]
 pub(crate) struct NavQuery {
     pub nav: Option<String>,
     pub query: String,
 }
 
+#[cfg(test)]
 pub(crate) fn parse_nav_query(args: &[String]) -> NavQuery {
     let first = args.first().map(|a| a.to_ascii_lowercase()).unwrap_or_default();
     let is_nav = (first == "prev" || first == "next") && args.len() > 1;
@@ -48,27 +53,25 @@ pub(crate) fn parse_nav_query(args: &[String]) -> NavQuery {
     NavQuery { nav, query }
 }
 
-/// Hitung halaman (`waifupool.js:40-43`).
-pub(crate) fn hitung_halaman(page: usize, total: usize, nav: &Option<String>) -> usize {
-    let mut page = page;
+/// Hitung halaman (`waifupool.js:40-43`). Dipakai hanya oleh test.
+#[cfg(test)]
+pub(crate) fn hitung_halaman(page: usize, _total: usize, nav: &Option<String>) -> usize {
     match nav.as_deref() {
-        Some("next") => page += 1,
-        Some("prev") => {
-            if page > 0 {
-                page -= 1;
-            }
-        }
-        _ => {}
+        Some("next") => page + 1,
+        Some("prev") => page.saturating_sub(1),
+        _ => page,
     }
-    page
 }
 
 /// Total halaman (`waifupool.js:53`): `Math.max(1, Math.ceil(pool.length / 10))`.
+/// Dipakai hanya oleh test.
+#[cfg(test)]
 pub(crate) fn total_halaman(pool_len: usize) -> usize {
     pool_len.div_ceil(HALAMAN_SIZE).max(1)
 }
 
-/// Satu baris entri waifu (`waifupool.js:61-63`).
+/// Satu baris entri waifu (`waifupool.js:61-63`). Dipakai hanya oleh test.
+#[cfg(test)]
 pub(crate) fn render_entri(index: usize, w: &Waifu) -> String {
     format!(
         "{}. {} *{}* — {}\n   🏷️ {} | 🎭 {}\n",
@@ -81,7 +84,8 @@ pub(crate) fn render_entri(index: usize, w: &Waifu) -> String {
     )
 }
 
-/// Header teks (`waifupool.js:57-59`).
+/// Header teks (`waifupool.js:57-59`). Dipakai hanya oleh test.
+#[cfg(test)]
 pub(crate) fn render_header(query: Option<&str>, pool_len: usize, cur: usize, total: usize) -> String {
     let mut out = String::from("📖 *WAIFU POOL* 📖\n\n");
     if let Some(q) = query {
@@ -93,9 +97,11 @@ pub(crate) fn render_header(query: Option<&str>, pool_len: usize, cur: usize, to
     out
 }
 
-/// Tidak ada kecocokan (`waifupool.js:50-51`).
+/// Tidak ada kecocokan (`waifupool.js:50-51`). Dipakai hanya oleh test.
+#[cfg(test)]
 pub(crate) const TIDAK_ADA_WAIFU: &str = "🔍 Tidak ada waifu cocok dengan \"{query}\". Coba nama/tier/franchise lain.";
 
+#[cfg(test)]
 pub(crate) fn tidak_ada_waifu(query: &str) -> String {
     TIDAK_ADA_WAIFU.replace("{query}", query)
 }
@@ -147,7 +153,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_nav_query() {
+    fn parse_nav_query_memilih_nav_dan_sisanya() {
         let nq = parse_nav_query(&["prev".into(), "naruto".into()]);
         assert_eq!(nq.nav, Some("prev".to_string()));
         assert_eq!(nq.query, "naruto");
@@ -162,7 +168,9 @@ mod tests {
 
         let nq = parse_nav_query(&["prev".into()]);
         assert_eq!(nq.nav, None);
-        assert_eq!(nq.query, "");
+        // `waifupool.js:37-38`: tanpa argumen kedua `prev` bukan nav, jadi ikut
+        // masuk query — bukan dikonsumsi.
+        assert_eq!(nq.query, "prev");
 
         let nq = parse_nav_query(&[]);
         assert_eq!(nq.nav, None);

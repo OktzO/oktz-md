@@ -8,12 +8,13 @@
 //! `Ctx`, jadi hanya mode stock yang diimplementasikan. Mode watch
 //! melaporkan bahwa tidak tersedia di konteks Rust.
 
-use oktz_plugin_api::{Ctx, HttpCall, HttpMethod, Reply, plugin};
+use oktz_plugin_api::{Ctx, HttpCall, Reply, plugin};
 use serde_json::Value;
 
 const API: &str = "https://api.rifkyshre.biz.id";
 const ROUTE: &str = "/scrape/gag2-stock";
 
+#[cfg(test)]
 fn emoji_for_item(name: &str) -> &'static str {
     let n = name.to_lowercase();
     if n.contains("seed") {
@@ -47,7 +48,7 @@ fn format_stock(d: &Value) -> String {
         d.get("status").and_then(Value::as_str).unwrap_or(""),
         d.get("staleness").and_then(Value::as_str).unwrap_or("")
     ));
-    let cache = d.get("cache").and_then(Value::as_object).cloned().unwrap_or(Value::Null);
+    let cache = d.get("cache").and_then(Value::as_object).cloned().unwrap_or_default();
     lines.push(format!(
         "- 💾 Cache      : *{} (age {}s/{}s)*",
         if cache.get("servedFromCache").and_then(Value::as_bool).unwrap_or(false) {
@@ -60,22 +61,19 @@ fn format_stock(d: &Value) -> String {
     ));
     lines.push(String::new());
 
-    if let Some(weather) = d.get("weather").and_then(Value::as_object) {
-        if weather.get("active").and_then(Value::as_bool).unwrap_or(false) {
-            lines.push(format!(
-                "- ⛅ *WEATHER: {}*",
-                weather.get("type").and_then(Value::as_str).unwrap_or("").to_uppercase()
-            ));
-            if let Some(effects) = weather.get("effects").and_then(Value::as_array) {
-                for eff in effects {
-                    lines.push(format!(
-                        "   - ✨ {}",
-                        eff.as_str().unwrap_or("")
-                    ));
-                }
+    if let Some(weather) = d.get("weather").and_then(Value::as_object)
+        && weather.get("active").and_then(Value::as_bool).unwrap_or(false)
+    {
+        lines.push(format!(
+            "- ⛅ *WEATHER: {}*",
+            weather.get("type").and_then(Value::as_str).unwrap_or("").to_uppercase()
+        ));
+        if let Some(effects) = weather.get("effects").and_then(Value::as_array) {
+            for eff in effects {
+                lines.push(format!("   - ✨ {}", eff.as_str().unwrap_or("")));
             }
-            lines.push(String::new());
         }
+        lines.push(String::new());
     }
 
     for (key, title, emoji) in [
@@ -83,16 +81,16 @@ fn format_stock(d: &Value) -> String {
         ("gear", "GEAR", "⚙️"),
         ("crates", "CRATES", "📦"),
     ] {
-        if let Some(items) = d.get(key).and_then(Value::as_array) {
-            if !items.is_empty() {
-                lines.push(format!("- {} *{} ({})*:", emoji, title, items.len()));
-                for item in items {
-                    let name = item.get("name").and_then(Value::as_str).unwrap_or("");
-                    let qty = item.get("quantity").and_then(Value::as_i64).unwrap_or(0);
-                    lines.push(format!("   - {name} × {qty}"));
-                }
-                lines.push(String::new());
+        if let Some(items) = d.get(key).and_then(Value::as_array)
+            && !items.is_empty()
+        {
+            lines.push(format!("- {} *{} ({})*:", emoji, title, items.len()));
+            for item in items {
+                let name = item.get("name").and_then(Value::as_str).unwrap_or("");
+                let qty = item.get("quantity").and_then(Value::as_i64).unwrap_or(0);
+                lines.push(format!("   - {name} × {qty}"));
             }
+            lines.push(String::new());
         }
     }
 
@@ -171,9 +169,9 @@ mod tests {
     use super::*;
 
     use oktz_plugin_api::{HttpBody, HttpError, HttpResponse};
-    use serde_json::json;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
+    #[derive(Debug)]
     struct Stub {
         body: Option<Value>,
     }
@@ -288,10 +286,13 @@ mod tests {
 
     #[test]
     fn emoji_for_item_berdasar_nama() {
-        assert_eq!(emoji_for_item("Benih Apel"), "🌱");
-        assert_eq!(emoji_for_item("Minyak Tanam"), "💧");
-        assert_eq!(emoji_for_item("Kotak Hias"), "📦");
-        assert_eq!(emoji_for_item("Telur Emas"), "🥚");
+        // `emojiForItem` (`gag2.js:38-45`) mencocokkan kata kunci INGGRIS;
+        // nama Indonesia seperti "Benih Apel" jatuh ke emoji default.
+        assert_eq!(emoji_for_item("Seed Apel"), "🌱");
+        assert_eq!(emoji_for_item("Watering Can"), "💧");
+        assert_eq!(emoji_for_item("Crate Hias"), "📦");
+        assert_eq!(emoji_for_item("Egg Emas"), "🥚");
+        assert_eq!(emoji_for_item("Benih Apel"), "•");
         assert_eq!(emoji_for_item("Batu"), "•");
     }
 }

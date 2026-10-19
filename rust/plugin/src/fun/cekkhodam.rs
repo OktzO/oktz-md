@@ -10,7 +10,7 @@
 
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 
-const KHODAMS: [(&str, &str); 67] = [
+const KHODAMS: [(&str, &str); 47] = [
     ("Harimau Putih", "Kamu kuat dan berani seperti harimau, karena pendahulumu mewariskan kekuatan besar padamu."),
     ("Lampu Tertidur", "Terlihat ngantuk tapi selalu memberikan cahaya yang hangat"),
     ("Panda Ompong", "Kamu menggemaskan dan selalu berhasil membuat orang tersenyum dengan keanehanmu."),
@@ -119,7 +119,6 @@ pub fn cekkhodam(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -193,7 +192,7 @@ mod tests {
     }
 
     fn run_dengan_mention(http: Arc<Stub>, mention: &str) -> Reply {
-        let mut ctx = Ctx {
+        let ctx = Ctx {
             text: "".to_string(),
             args: Vec::new(),
             sender: ME.into(),
@@ -216,7 +215,7 @@ mod tests {
 
     #[test]
     fn khodam_terpilih_dari_daftar() {
-        let _ = run(Stub::bytes(b"audio"), "");
+        let _ = run(Stub::bytes(b"audio".to_vec()), "");
         // Hanya memastikan tidak panic dan mengembalikan audio.
     }
 
@@ -239,7 +238,7 @@ mod tests {
 
     #[test]
     fn mention_digunakan_sebagai_target() {
-        let r = run_dengan_mention(Stub::bytes(b"x"), "628999@s.whatsapp.net");
+        let r = run_dengan_mention(Stub::bytes(b"x".to_vec()), "628999@s.whatsapp.net");
         assert_eq!(reaction_of(&r), Some("✅"));
     }
 }

@@ -10,7 +10,7 @@
 //! secara manual (mod.rs sudah milik plugin lain, dilarang disentuh).
 
 use oktz_plugin_api::{Ctx, HttpCall, MediaSource, Reply, plugin};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 const BASE: &str = "https://searchthatsong.com";
 const UA: &str = "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36 VyrSTS/1.0";
@@ -27,19 +27,22 @@ fn header_dasar() -> HttpCall {
 /// Ekstrak `session_id` dari header `set-cookie`.
 fn extract_session_id(headers: &[(String, String)]) -> Option<String> {
     for (k, v) in headers {
-        if k.eq_ignore_ascii_case("set-cookie") {
-            if let Some(m) = v.find("session_id=") {
-                let after = &v[m + "session_id=".len()..];
-                let end = after.find(';').unwrap_or(after.len());
-                return Some(after[..end].to_string());
-            }
+        if k.eq_ignore_ascii_case("set-cookie")
+            && let Some(m) = v.find("session_id=")
+        {
+            let after = &v[m + "session_id=".len()..];
+            let end = after.find(';').unwrap_or(after.len());
+            return Some(after[..end].to_string());
         }
     }
     None
 }
 
-/// Satu permintaan JSON POST, mengembalikan (status, headers, body-parse).
-fn json_post(http: &dyn oktz_plugin_api::HttpGet, url: &str, body: &Value, cookie: Option<&str>) -> Result<(u16, Vec<(String, String)>, Value), oktz_plugin_api::HttpError> {
+/// Hasil satu permintaan JSON POST: (status, headers, body yang sudah di-parse).
+type JsonPost = (u16, Vec<(String, String)>, Value);
+
+/// Satu permintaan JSON POST.
+fn json_post(http: &dyn oktz_plugin_api::HttpGet, url: &str, body: &Value, cookie: Option<&str>) -> Result<JsonPost, oktz_plugin_api::HttpError> {
     let mut req = header_dasar();
     req.url = url.to_string();
     if let Some(c) = cookie {
@@ -130,14 +133,18 @@ pub fn searchthatsong(ctx: Ctx) -> Reply {
     let result = match search(ctx.http.as_ref(), &query) {
         Ok(v) => v,
         Err(_) => {
-            return Reply::text("😔 Terjadi kesalahan saat mencari lagu. Server mungkin sedang bermasalah.");
+            // `searchthatsong.js:165-166` — reaksi ☢ lalu pesan kesalahan.
+            return Reply::text("😔 Terjadi kesalahan saat mencari lagu. Server mungkin sedang bermasalah.")
+                .with_reaction("☢");
         }
     };
 
     let r = build_result(&result);
     let song = r.get("song").and_then(Value::as_str);
     if song.is_none() {
-        return Reply::text("⚠️ Lagu tidak ditemukan. Coba gunakan lirik yang lebih spesifik.");
+        // `searchthatsong.js:126-128` — reaksi ❌ dipasang sebelum balasan.
+        return Reply::text("⚠️ Lagu tidak ditemukan. Coba gunakan lirik yang lebih spesifik.")
+            .with_reaction("❌");
     }
     let song = song.unwrap();
 
@@ -185,7 +192,6 @@ pub fn searchthatsong(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug, Default)]
@@ -197,9 +203,9 @@ mod tests {
     }
 
     impl Stub {
-        fn ordered(responses: Vec<&str>) -> Arc<Stub> {
+        fn ordered(responses: Vec<String>) -> Arc<Stub> {
             Arc::new(Stub {
-                responses: Mutex::new(responses.into_iter().map(|s| s.to_string()).collect()),
+                responses: Mutex::new(responses),
                 headers_list: Mutex::new(Vec::new()),
                 seen: Mutex::new(Vec::new()),
                 hit: Mutex::new(0),
@@ -215,7 +221,13 @@ mod tests {
             *hit += 1;
             self.headers_list.lock().unwrap().push(req.headers.clone());
             let responses = self.responses.lock().unwrap();
-            let body = responses.get(i).cloned().unwrap_or_default();
+            // Balasan habis = transport error (`req.on("error", reject)`,
+            // `searchthatsong.js:58`), bukan balasan 200 berbody kosong.
+            let Some(body) = responses.get(i).cloned() else {
+                return Err(HttpError {
+                    message: "jaringan mati".into(),
+                });
+            };
             Ok(HttpResponse {
                 status: 200,
                 body: HttpBody::Bytes {
@@ -244,7 +256,9 @@ mod tests {
     }
 
     fn run(http: Arc<Stub>, text: &str) -> Reply {
-        let args: Vec<String> = text.split_whitespace().skip(1).map(|s| s.to_string()).collect();
+        // `m.text`/`m.args` = teks setelah command word (`serialize.js:406-407`),
+        // jadi pemanggil mengirim teks setelah nama command, bukan pesan penuh.
+        let args: Vec<String> = text.split_whitespace().map(|s| s.to_string()).collect();
         let ctx = Ctx {
             text: text.to_string(),
             args,
@@ -280,7 +294,9 @@ mod tests {
 
     #[test]
     fn tanpa_query_tampilkan_petunjuk() {
-        let r = run(Stub::ordered(vec![]), ".searchthatsong");
+        // `searchthatsong.js:115-119` — `m.args.join(" ") || m.text?.trim()`
+        // keduanya kosong → kartu petunjuk, tanpa reaksi.
+        let r = run(Stub::ordered(vec![]), "");
         assert!(body(&r).contains("Masukkan potongan lirik"));
         assert_eq!(reaction(&r), None);
     }
@@ -306,7 +322,7 @@ mod tests {
             route.to_string(),
             full.to_string(),
         ]);
-        let r = run(http.clone(), ".searchthatsong ku menangis membayangkan");
+        let r = run(http.clone(), "ku menangis membayangkan");
         assert!(body(&r).contains("Ku Menangis Membayangkan"));
         assert!(body(&r).contains("Artis Contoh"));
         assert_eq!(reaction(&r), Some("✅"));
@@ -322,15 +338,18 @@ mod tests {
             serde_json::json!({ "session_id": "x", "route": "r" }).to_string(),
             serde_json::json!({ "answer": {} }).to_string(),
         ]);
-        let r = run(http, ".searchthatsong xyz");
+        let r = run(http, "xyz");
         assert!(body(&r).contains("Lagu tidak ditemukan"));
-        assert_eq!(reaction(&r), Some("✅"));
+        // `searchthatsong.js:127` — reaksi ❌ sebelum balasan, bukan ✅.
+        assert_eq!(reaction(&r), Some("❌"));
     }
 
     #[test]
     fn kegagalan_jaringan() {
         let http = Stub::ordered(vec![]);
-        let r = run(http, ".searchthatsong ku menangis");
+        let r = run(http, "ku menangis");
         assert!(body(&r).contains("kesalahan saat mencari lagu"));
+        // `searchthatsong.js:165` — reaksi ☢ sebelum balasan.
+        assert_eq!(reaction(&r), Some("☢"));
     }
 }

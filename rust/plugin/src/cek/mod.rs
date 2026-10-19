@@ -45,3 +45,6 @@ pub mod cektsundere;
 pub mod cekumur;
 pub mod cekwibu;
 pub mod cekyandere;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod cekfemboy;

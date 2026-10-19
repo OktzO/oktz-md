@@ -752,3 +752,110 @@ dengan `[lib] path = "lib.rs"`) — folder `src/` dihapus.
 - Sisa `Prefix saat ini: ...` yang tidak ada di JS: `ai/tomekah.rs`,
   `ai/toemotebatu.rs`, `rpg/dice.rs` (belum terdaftar) — buang saat
   mendaftarkannya.
+
+## 27. Kapabilitas API yang diminta 52 berkas gelombang 4
+
+Dikumpulkan dari catatan subagent saat mendaftarkan batch ini. Semuanya sudah
+diberi `ponytail:` di masing-masing berkas; daftar ini yang dipakai kalau
+`Ctx`/`Reply` diperluas.
+
+`Reply`:
+- `contextInfo` — `forwardingScore`/`isForwarded` (`playtiktok`),
+  `forwardedNewsletterMessageInfo`/`saluranCtx()` (`donasi`, `leave`,
+  `emojitoanimasi`, `jadwalsholat`, `invoicemaker`).
+- `quoted: m` per balasan (dipakai hampir semua plugin JS).
+- Tombol interaktif + `buttonParamsJson`/footer (`donasi`, `waifupool`).
+- `fileName` untuk video (`hdvid`: `HDVID-<ms>.mp4`), flag `ptv` (`ptvsearch`).
+- Album WA (`albumMessage` + `relayMessage`) — `mywaifu`, `tiktokfoto`.
+- Reaksi berurutan (JS `m.react('🕕')` lalu `✅`/`☢`): `Reply` cuma membawa satu
+  reaksi. Terdampak `lahelu`, `quotesimage`, `wink`, `imgtoprompt`, `dice`,
+  `leave`, `jadwalsholat`.
+
+`Ctx`:
+- `m.pushName` (teks error template selalu "User").
+- Akses env/`process.env` (mis. `TERMAI_UPLOAD_KEY` di `applemusic`).
+- Jam/tanggal: `Date.now()` dan format ISO + zona `Asia/Jakarta` tanpa crate
+  tanggal (dipakai `wink`, `imgtoprompt`, `discordstalk`, `robloxstalk`).
+- Timer/jeda async (`setTimeout` 4000 `spamngl`, 2500 `dice`) dan kiriman
+  bertahap (pesan progres).
+- `sendToolsPreview` (`lookup`), `saluranCtx()` (`donasi`).
+- Status per-nomor pada `ubah_peserta` (`group/add`: bot admin vs bukan).
+- Parser HTML ala cheerio (`wikipedia`, `soundcloud`, `infotourney`) — sekarang
+  parser manual dengan selector terbatas.
+- `crypto.randomBytes` + `waUploadToServer` (`mywaifu`).
+- Folder nyata di `BerkasPalsu` (`sampah` memakai trik entri penanda).
+- Map paginasi/`searchPool` global (`waifupool`).
+
+Cacat kecil yang masih terbuka (bukan penghalang kompilasi):
+- `fakecall.js:100` memakai reaksi `☢`, port memakai `❌`.
+- `ganti-namadev.js:31-34` selalu menulis kutip tunggal; port mempertahankan
+  kutip asli.
+- `musicmaker.js:20` memakai `m.text?.trim() || m.args.join(" ")`; port cuma
+  cek `is_empty()` sehingga teks spasi-saja berbeda.
+- `imgtoprompt`: unduhan gagal → `GAGAL_UNDUH`, JS `catch` → `te(...)`.
+
+## 28. Survei stub yang tersisa (gelombang 4 lanjutan)
+
+Tiga survei read-only atas 56 berkas stub + 11 berkas catatan. Klasifikasi
+diambil dari stub + JS aslinya, bukan dari tebakan.
+
+PORTABEL (bisa diimplementasi penuh dengan API sekarang):
+- `cek/cekfemboy` — `oktz_scraper::lufemboy`, ffmpeg `jalankan_dengan_masukan`,
+  `Reply::video_gif` semua sudah ada; stub lama salah menyatakan terblokir.
+- `tools/dafont` — scraper `dafont` ada, `ctx.session_*` + `#[answer_handler]`
+  ada; satu-satunya batas: TTL sesi 120s diatur manual.
+- `owner/listsewa` — `db.db.data.sewa` dipetakan ke `settings.sewa`
+  (preseden `group/checksewa.rs:18`).
+
+SEBAGIAN (jalur utama bisa, ada bagian yang tetap tidak bisa):
+- `ai/toemotebatu`, `ai/tofigurev2`, `ai/toghibli`, `ai/tomekah` — jalur API
+  lengkap; yang hilang hanya reaksi kedua (`🕕` lalu `✅`/`❌`/`☢`).
+- `canvas/fakeml`, `canvas/profileig` — unggah multipart sudah bisa
+  (`HttpCall::put`/`multipart`/`MultipartPart::file`), yang hilang reaksi kedua.
+- `download/tiktokdl2` — jalur video/audio bisa; album slide tidak (§12).
+- `fun/gachawaifu`, `nsfw/nsfw` — `is_premium` tidak ada di `Ctx`; kartu
+  `viewOnce` hilang.
+- `group/cekidgc` — butuh internet `ctx.sock` nyata (masih `SockMati`);
+  potongan teks deskripsi 120 char + tombol `cta_copy` hilang.
+- `main/carifitur` — tanpa tombol `single_select`.
+- `store/addproduk` — `uploadImage()` yang mengembalikan URL tidak ada (§13),
+  jadi `imageUrl`/`videoUrl` tak bisa diisi.
+- `owner/ganti-namaowner` — daftar + set nama bisa; cabang `main` yang menulis
+  `config.js` tidak.
+- `owner/setreply`, `owner/setwelcometype` — set varian bisa via
+  `Mutation::SetSetting`; menu tombol + `getAssetBuffer("foto")` tidak.
+- `owner/sewabot` — `status`/`off`/`on`/`cancel` bisa; `confirm`/`leave` butuh
+  fan-out ke JID lain.
+
+TERBLOKIR (jalur utama mustahil sekarang), alasan singkat:
+- `canvas/fakedev7`, `canvas/iqcpink`, `sticker/bratcewek`, `sticker/bratvid`,
+  `sticker/ttp` — rasterizer teks/vektor/gradien; `gambar.rs` cuma
+  resize/grayscale/encode. `iqcpink` juga butuh `m.messageTimestamp`.
+- `game/ulartangga`, `game/werewolf` — `sock.sendPreview` (semua balasan),
+  PM ke JID pemain, timer fase, hadiah ke pemain lain.
+- `owner/addowner`, `owner/backupsc`, `owner/cekschedule`, `owner/chatclear`,
+  `owner/colongpp`, `owner/disableplugin`, `owner/ganti-games`,
+  `owner/ganti-mp3`, `owner/ganti-promote`, `owner/ganti-winner`,
+  `owner/gantiscraper`, `owner/hapusdata`, `owner/listjadibot`, `owner/restart`,
+  `owner/schedule`, `owner/srt`, `owner/stopalljadibot`, `owner/swgc`,
+  `owner/swgcall` — `updateAssetUrl` (unggah + tulis `config.js`), OS/shell,
+  cron/map in-process, `sock.chatModify`, `sock.user.id`, `sendButton`,
+  `groupStatusMessage`, `randomBytes`+album, TTL berbasis timer, fan-out JID.
+- `main/menucat`, `main/sc` — tombol `single_select`/`cta_url`.
+- `main/system` — tanpa eksekusi OS (CPU/RAM/disk).
+- `panel/createserver`, `vps/cekvps`, `vps/delvps`, `vps/sisavps` —
+  `config.pterodactyl`/`config.digitalocean`/`config.vercel` tidak ada di
+  `Runtime` (`config.rs:225-234`).
+- `search/playch` — kirim audio ke JID lain + unggah media.
+- `tools/deploy` — token vercel + ekstrak ZIP.
+- `tools/ocr` — mesin OCR tidak ada di repo.
+- `fun/confess` — kirim ke JID target (`pipeline.rs:3058` selalu ke chat
+  pemicu).
+
+Catatan lintas-berkas yang perlu dibaca kalau kapabilitas ditambah:
+- `ctx.sock` belum dipasang di produksi (`PluginCtxSource::fill`,
+  `pipeline.rs:2151-2170`) dan belum ada `impl Sock` nyata di `oktz-wa`.
+- `ctx.berkas` masih `BerkasPalsu` (memori), jadi efek tulis berkas hilang.
+- `Reply::Interactive` cuma `body`; `cards.rs` punya tombol penuh tapi belum
+  dijembatani.
+- `Ctx` tidak punya `is_premium`, `pushName`, `messageTimestamp`.

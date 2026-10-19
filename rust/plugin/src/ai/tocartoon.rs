@@ -6,8 +6,6 @@
 
 use oktz_plugin_api::{Ctx, IncomingKind, MediaSource, Reply, plugin};
 
-use crate::common::error_template;
-
 use oktz_scraper::seaart::live3d;
 
 /// Prompt kartun (`tocartoon.js:19-22`).
@@ -35,7 +33,7 @@ pub(crate) fn is_image(ctx: &Ctx) -> bool {
 
 /// Unduh buffer media: quoted dulu, baru trigger (`tocartoon.js:39-43`).
 pub(crate) fn unduh_media(ctx: &Ctx) -> Option<Vec<u8>> {
-    if ctx.quoted().is_some() {
+    if ctx.quoted().is_some_and(|q| q.is_media()) {
         ctx.download_quoted_media().ok()
     } else if ctx.is_media() {
         ctx.download_media().ok()
@@ -65,11 +63,11 @@ pub fn tocartoon(ctx: Ctx) -> Reply {
         return Reply::text(pakai(&ctx.prefix));
     }
 
-    let Some(buffer) = async_download_media(&ctx) else {
+    let Some(buffer) = unduh_media(&ctx) else {
         return Reply::text("❌ Gagal mendownload gambar").with_reaction("❌");
     };
 
-    match live3d(&ctx.http, &buffer, PROMPT) {
+    match live3d(ctx.http.as_ref(), &buffer, PROMPT) {
         Ok(image) => Reply::image(MediaSource::bytes(image), String::new()).with_reaction("✅"),
         Err(_) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
     }
@@ -78,30 +76,64 @@ pub fn tocartoon(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::{IncomingMedia, QuotedKind, QuotedMessage};
-    use std::sync::Arc;
+    use oktz_plugin_api::{QuotedKind, QuotedMessage};
+    use std::sync::{Arc, Mutex};
 
+    /// Stub `HttpGet` berurutan `(status, body)`; `call` ditimpa karena
+    /// `live3d` memakai `HttpCall` (PUT byte mentah + multipart). Habis =
+    /// balasan terakhir dipakai lagi; daftar kosong = offline.
     #[derive(Debug, Default)]
     struct StubHttp {
-        bytes: Option<Vec<u8>>,
-        fail: bool,
+        balasan: Mutex<Vec<(u16, String)>>,
+        hitung: Mutex<usize>,
     }
 
-    impl oktz_plugin_api::HttpGet for StubHttp {
-        fn get(&self, _: &str) -> Result<oktz_plugin_api::HttpResponse, oktz_plugin_api::HttpError> {
-            if self.fail {
+    impl StubHttp {
+        fn urutan(daftar: Vec<(u16, &str)>) -> StubHttp {
+            StubHttp {
+                balasan: Mutex::new(daftar.into_iter().map(|(s, t)| (s, t.to_string())).collect()),
+                hitung: Mutex::new(0),
+            }
+        }
+
+        /// Tanpa balasan: setiap permintaan gagal (jaringan mati).
+        fn offline() -> StubHttp {
+            StubHttp::default()
+        }
+
+        fn jawaban(&self) -> Result<oktz_plugin_api::HttpResponse, oktz_plugin_api::HttpError> {
+            let mut h = self.hitung.lock().unwrap();
+            let b = self.balasan.lock().unwrap();
+            if b.is_empty() {
                 return Err(oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 });
             }
+            let i = (*h).min(b.len() - 1);
+            *h += 1;
+            let (status, teks) = b[i].clone();
+            drop(b);
+            drop(h);
             Ok(oktz_plugin_api::HttpResponse {
-                status: 200,
+                status,
                 body: oktz_plugin_api::HttpBody::Bytes {
-                    data: Arc::from(self.bytes.clone().unwrap_or_default()),
+                    data: Arc::from(teks.into_bytes()),
                     mimetype: None,
                 },
                 headers: vec![],
             })
+        }
+    }
+
+    impl oktz_plugin_api::HttpGet for StubHttp {
+        fn get(&self, _: &str) -> Result<oktz_plugin_api::HttpResponse, oktz_plugin_api::HttpError> {
+            self.jawaban()
+        }
+        fn call(
+            &self,
+            _: &oktz_plugin_api::HttpCall,
+        ) -> Result<oktz_plugin_api::HttpResponse, oktz_plugin_api::HttpError> {
+            self.jawaban()
         }
         fn post_json(
             &self,
@@ -165,6 +197,18 @@ mod tests {
         } else {
             None
         };
+        // `live3d` menempuh 5 langkah: upload, PUT byte, sign, nanobanana, ambil gambar.
+        let http = if live3d_fail {
+            StubHttp::offline()
+        } else {
+            StubHttp::urutan(vec![
+                (200, r#"{"result":{"url":"https://u/x","object_name":"o/1"}}"#),
+                (200, ""),
+                (200, r#"{"result":{"url":"https://s/x.jpg"}}"#),
+                (200, r#"{"status":true,"data":{"result_url":"https://h/y.png"}}"#),
+                (200, "CARTOON"),
+            ])
+        };
         let ctx = Ctx {
             prefix: ".".into(),
             command: "tocartoon".into(),
@@ -176,10 +220,7 @@ mod tests {
                 ok: download_ok,
                 bytes: b"IMG".to_vec(),
             }),
-            http: Arc::new(StubHttp {
-                bytes: Some(b"CARTOON".to_vec()),
-                fail: live3d_fail,
-            }),
+            http: Arc::new(http),
             ..Ctx::default()
         };
         tocartoon(ctx)

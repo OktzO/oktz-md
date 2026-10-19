@@ -29,3 +29,21 @@ pub mod videotranscribe;
 // Ditambahkan scripts/pasang-modul.mjs.
 pub mod ipwho;
 pub mod tovideo;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod am_data;
+pub mod cekxl;
+pub mod emojitoanimasi;
+pub mod emojitoimage;
+pub mod hdvid;
+pub mod imgtoprompt;
+pub mod invoicemaker;
+pub mod lookup;
+pub mod sendngl;
+pub mod spamngl;
+pub mod ssweb;
+pub mod tempmail;
+pub mod wink;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod dafont;

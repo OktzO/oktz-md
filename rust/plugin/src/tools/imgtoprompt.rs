@@ -11,7 +11,7 @@
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
-use oktz_scraper::img2prompt;
+use oktz_scraper::img2prompt::imgtoprompt as img2prompt;
 
 /// Balasan saat bukan gambar (`imgtoprompt.js:29-31`).
 pub(crate) const BUKAN_GAMBAR: &str =
@@ -34,6 +34,20 @@ pub(crate) fn sukses(prompt: &str, generated_at: &str) -> String {
         "🎨 *ɪᴍᴀɢᴇ ᴛᴏ ᴘʀᴏᴍᴘᴛ*\n\n\
          ```{prompt}```\n\n\
          > _Generated at: {generated_at}_"
+    )
+}
+
+/// `new Date().toISOString()` — UTC `YYYY-MM-DDTHH:mm:ss.sssZ`.
+///
+/// `jakarta_parts` mengembalikan waktu WIB; kurangi offset supaya yang
+/// keluar komponen UTC, bukan WIB.
+fn iso_now() -> String {
+    let ms = crate::common::now_ms();
+    let (y, m, d, h, mi, s) =
+        crate::common::jakarta_parts(ms - crate::common::JAKARTA_OFFSET_SECS * 1000);
+    format!(
+        "{y:04}-{m:02}-{d:02}T{h:02}:{mi:02}:{s:02}.{:03}Z",
+        ms.rem_euclid(1000)
     )
 }
 
@@ -75,7 +89,7 @@ pub fn imgtoprompt(ctx: Ctx) -> Reply {
         return Reply::text(BUFFER_TIDAK_VALID);
     }
 
-    let hasil = match img2prompt(&ctx.http, &bytes) {
+    let hasil = match img2prompt(ctx.http.as_ref(), &bytes) {
         Ok(v) => v,
         Err(e) => {
             return Reply::text(gagal_generasi(&e.message));
@@ -91,11 +105,14 @@ pub fn imgtoprompt(ctx: Ctx) -> Reply {
         return Reply::text(gagal_generasi(msg));
     }
 
+    // `result.generatedAt || new Date().toISOString()` — string kosong ikut fallback.
     let generated_at = hasil
         .get("generatedAt")
         .and_then(|v| v.as_str())
-        .unwrap_or("");
-    Reply::text(sukses(prompt, generated_at))
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(iso_now);
+    Reply::text(sukses(prompt, &generated_at))
 }
 
 /// Unduh byte gambar: pesan pemicu (image) → quoted (image).
@@ -103,10 +120,10 @@ fn gambar_bytes(ctx: &Ctx) -> Option<Vec<u8>> {
     if ctx.media.as_ref().is_some_and(|m| m.kind == oktz_plugin_api::IncomingKind::Image) {
         return ctx.download_media().ok();
     }
-    if let Some(q) = &ctx.quoted {
-        if q.kind.is_image() {
-            return ctx.download_quoted_media().ok();
-        }
+    if let Some(q) = &ctx.quoted
+        && q.kind.is_image()
+    {
+        return ctx.download_quoted_media().ok();
     }
     None
 }
@@ -118,7 +135,7 @@ fn gambar_bytes(ctx: &Ctx) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
+    use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse, MediaError, MediaFetch, MediaOrigin};
     use serde_json::Value;
     use std::sync::{Arc, Mutex};
 
@@ -181,13 +198,29 @@ mod tests {
         }
     }
 
-    fn run_dengan_media(http: Arc<Stub>, is_trigger: bool) -> Reply {
-        let ctx = Ctx {
+    /// `m.download()` / `m.quoted.download()` palsu; `origin` diabaikan
+    /// seperti stub lainnya.
+    #[derive(Debug)]
+    struct MediaStub(Result<Vec<u8>, MediaError>);
+
+    impl MediaFetch for MediaStub {
+        fn download(&self, _: MediaOrigin) -> Result<Vec<u8>, MediaError> {
+            self.0.clone()
+        }
+    }
+
+    fn ctx_dengan_media(
+        http: Arc<Stub>,
+        is_trigger: bool,
+        unduh: Result<Vec<u8>, MediaError>,
+    ) -> Ctx {
+        Ctx {
             sender: ME.into(),
             chat: ME.into(),
             prefix: ".".into(),
             command: "imgtoprompt".into(),
             http,
+            media_fetch: Arc::new(MediaStub(unduh)),
             media: if is_trigger {
                 Some(oktz_plugin_api::IncomingMedia {
                     kind: oktz_plugin_api::IncomingKind::Image,
@@ -213,8 +246,23 @@ mod tests {
                 })
             },
             ..Ctx::default()
-        };
-        imgtoprompt(ctx)
+        }
+    }
+
+    fn run_dengan_media(http: Arc<Stub>, is_trigger: bool) -> Reply {
+        imgtoprompt(ctx_dengan_media(http, is_trigger, Ok(vec![1, 2, 3])))
+    }
+
+    /// Unduhan gagal (`m.download()` menolak) — default `NoMediaFetch` juga
+    /// begitu, jadi ini menjalankan cabang `GAGAL_UNDUH` (`imgtoprompt.js:40-41`).
+    fn run_unduh_gagal(http: Arc<Stub>) -> Reply {
+        imgtoprompt(ctx_dengan_media(
+            http,
+            true,
+            Err(MediaError {
+                message: "gagal unduh".into(),
+            }),
+        ))
     }
 
     fn run_tanpa_media() -> Reply {
@@ -223,7 +271,7 @@ mod tests {
             chat: ME.into(),
             prefix: ".".into(),
             command: "imgtoprompt".into(),
-            http: Arc::new(Stub::offline()),
+            http: Stub::offline(),
             ..Ctx::default()
         };
         imgtoprompt(ctx)
@@ -242,7 +290,7 @@ mod tests {
     #[test]
     fn unduh_gagal_hasilkan_teks_gagal() {
         let http = Stub::offline();
-        let r = run_dengan_media(http, true);
+        let r = run_unduh_gagal(http);
         assert_eq!(text_of(&r), GAGAL_UNDUH);
     }
 
@@ -271,6 +319,15 @@ mod tests {
         let r = run_dengan_media(http, true);
         let t = text_of(&r);
         assert!(t.starts_with("❌ *ɢᴀɢᴀʟ*"));
+    }
+
+    #[test]
+    fn generated_at_kosong_pakai_waktu_sekarang() {
+        let http = Stub::body(r#"{"prompt":"x","generatedAt":""}"#);
+        let r = run_dengan_media(http, true);
+        let t = text_of(&r);
+        assert!(t.contains("```x```"));
+        assert!(!t.contains("Generated at: _"));
     }
 
     #[test]

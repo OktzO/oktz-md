@@ -15,3 +15,7 @@ pub mod whatrolethis;
 
 // Ditambahkan scripts/pasang-modul.mjs.
 pub mod berita;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod gag2;
+pub mod infotourney;

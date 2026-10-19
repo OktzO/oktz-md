@@ -66,7 +66,7 @@ pub fn playsoundcloud(ctx: Ctx) -> Reply {
 
     let query = ctx.args.join(" ");
 
-    let Ok(search) = search_sound_cloud(&ctx.http, &query) else {
+    let Ok(search) = search_sound_cloud(ctx.http.as_ref(), &query) else {
         return Reply::text("❌ Gagal mencari di SoundCloud");
     };
 
@@ -86,7 +86,7 @@ pub fn playsoundcloud(ctx: Ctx) -> Reply {
         .and_then(|v| v.as_str())
         .unwrap_or("");
 
-    let Ok(download_info) = scdl(&ctx.http, track_url) else {
+    let Ok(download_info) = scdl(ctx.http.as_ref(), track_url) else {
         return Reply::text("❌ Gagal mengambil unduhan SoundCloud");
     };
 
@@ -98,11 +98,9 @@ pub fn playsoundcloud(ctx: Ctx) -> Reply {
         .and_then(|v| v.as_str())
         .or_else(|| track.get("artwork").and_then(|v| v.as_str()));
 
-    let title = download_info
-        .get("title")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+    // JS memakai `downloadInfo.title` sebagai caption audio
+    // (`playsoundcloud.js:54`), tapi `Reply::Audio` tidak punya caption —
+    // variabel `title` lokal di sini cuma memicu peringatan, jadi dihapus.
     let download_url = download_info
         .get("download_url")
         .and_then(|v| v.as_str())
@@ -122,7 +120,6 @@ pub fn playsoundcloud(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     /// Stub yang menjawab GET (pencarian) dan POST form (unduhan) berurutan.
@@ -211,12 +208,16 @@ mod tests {
         }
     }
 
-    const SEARCH_OK: &str = r#"{"success":true,"query":"jazz","total":2,"results":[
-        {"id":1,"title":"Lagu Satu","url":"https://s/1","artwork":"https://a/1.jpg"},
-        {"id":2,"title":"Lagu Dua","url":"https://s/2"}
+    // Stub di bawah adalah respons HTTP mentah, bukan hasil scraper:
+    // `search_sound_cloud` membaca `collection` (`src/scraper/soundcloud.js:27-40`)
+    // dan `scdl` melakukan dua POST ke convertico
+    // (`src/scraper/soundclouddl.js:13-32`).
+    const SEARCH_OK: &str = r#"{"collection":[
+        {"id":1,"title":"Lagu Satu","permalink_url":"https://s/1","artwork_url":"https://a/1.jpg"},
+        {"id":2,"title":"Lagu Dua","permalink_url":"https://s/2"}
     ]}"#;
 
-    const SC_DOWNLOAD_OK: &str = r#"{"title":"Lagu Satu","uploader":"Artis","duration":"3:35","views":"1.234","likes":"56","size":"3.50 MB","thumbnail":"https://t/1.jpg","download_url":"https://dl/1.mp3"}"#;
+    const SC_DOWNLOAD_OK: &str = r#"{"status":true,"title":"Lagu Satu","author":"Artis","duration":215,"view_count":1234,"like_count":56,"thumbnail":"https://t/1.jpg","file_url":"1.mp3","size":5242880,"format":"mp3"}"#;
 
     #[test]
     fn meta_dan_alias() {
@@ -268,7 +269,9 @@ mod tests {
                         assert_eq!(
                             media,
                             &Some(MediaSource::Url {
-                                url: "https://dl/1.mp3".into(),
+                                // `base + 'soundcloud-downloader/' + file_url`
+                                // (`src/scraper/soundclouddl.js:32`).
+                                url: "https://convertico.com/soundcloud-downloader/1.mp3".into(),
                                 mimetype: None,
                             })
                         );
@@ -279,15 +282,17 @@ mod tests {
             other => panic!("harus Sequence, dapat {other:?}"),
         }
         let seen = stub_clone.seen.lock().unwrap().clone();
-        assert_eq!(seen.len(), 2);
+        // Satu GET pencarian + dua POST `scdl` (fetch, download).
+        assert_eq!(seen.len(), 3);
         assert!(seen[0].contains("/search"));
         assert!(seen[1].contains("/soundcloud-downloader/soundcloud-downloader.php"));
+        assert!(seen[2].contains("/soundcloud-downloader/soundcloud-downloader.php"));
     }
 
     #[test]
     fn tanpa_thumbnail_hanya_audio() {
-        let search = r#"{"success":true,"results":[{"id":1,"title":"X","url":"https://s/1"}]}"#;
-        let download = r#"{"title":"X","uploader":"A","duration":"-","views":"-","likes":"-","size":"-","download_url":"https://dl/1.mp3"}"#;
+        let search = r#"{"collection":[{"id":1,"title":"X","permalink_url":"https://s/1"}]}"#;
+        let download = r#"{"status":true,"title":"X","author":"A","duration":0,"view_count":0,"like_count":0,"file_url":"1.mp3","size":0}"#;
         let stub = Stub::baru(&[search, download]);
         let r = run(stub, &["X"]);
         let isi = match r.without_mutations() {
@@ -334,8 +339,8 @@ mod tests {
     #[test]
     fn fallback_artwork_kalau_tidak_ada_thumbnail() {
         // download_info tanpa thumbnail, track punya artwork.
-        let search = r#"{"success":true,"results":[{"id":1,"title":"X","url":"https://s/1","artwork":"https://a/art.jpg"}]}"#;
-        let download = r#"{"title":"X","uploader":"A","duration":"-","views":"-","likes":"-","size":"-","download_url":"https://dl/1.mp3"}"#;
+        let search = r#"{"collection":[{"id":1,"title":"X","permalink_url":"https://s/1","artwork_url":"https://a/art.jpg"}]}"#;
+        let download = r#"{"status":true,"title":"X","author":"A","duration":0,"view_count":0,"like_count":0,"file_url":"1.mp3","size":0}"#;
         let stub = Stub::baru(&[search, download]);
         let r = run(stub, &["X"]);
         let isi = match r.without_mutations() {

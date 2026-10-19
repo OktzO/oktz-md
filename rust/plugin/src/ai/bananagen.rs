@@ -10,10 +10,8 @@
 //! Catatan: baris `pub mod bananagen;` perlu ditambah ke `ai/mod.rs`
 //! secara manual (mod.rs sudah milik plugin lain, dilarang disentuh).
 
-use oktz_plugin_api::{Ctx, MediaError, MediaSource, Reply, plugin};
+use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 use oktz_scraper::seaart::live3d;
-use oktz_plugin_api::HttpError;
-use oktz_plugin_api::MediaOrigin;
 
 #[plugin(
     name = "bananagen",
@@ -85,8 +83,9 @@ pub fn bananagen(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::{HttpBody, HttpGet, HttpResponse, MediaFetch};
-    use serde_json::json;
+    use oktz_plugin_api::{
+        HttpBody, HttpError, HttpGet, HttpResponse, MediaError, MediaFetch, MediaOrigin,
+    };
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug, Default)]
@@ -186,7 +185,7 @@ mod tests {
             chat: "628111@s.whatsapp.net".into(),
             command: "bananagen".into(),
             http,
-            media: media.map(|b| oktz_plugin_api::IncomingMedia {
+            media: media.as_ref().map(|_| oktz_plugin_api::IncomingMedia {
                 kind: oktz_plugin_api::IncomingKind::Image,
                 mimetype: Some("image/jpeg".into()),
                 file_name: None,
@@ -275,7 +274,7 @@ mod tests {
             r#"{"status":true,"data":{"result_url":"https://hasil.example/y.png"}}"#,
             "GAMBAR",
         ]);
-        let r = run(http, Some(vec![9, 8, 7]), false, false, ".bananagen make it anime");
+        let r = run(http.clone(), Some(vec![9, 8, 7]), false, false, ".bananagen make it anime");
         // live3d sukses -> Image dengan reaction ✅
         match r.without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅"),
@@ -291,7 +290,7 @@ mod tests {
             },
             other => panic!("harus Image, dapat {other:?}"),
         }
-        assert_eq!(r.mutations().is_empty(), true);
+        assert!(r.mutations().is_empty());
         let seen = http.seen.lock().unwrap().clone();
         assert_eq!(seen.len(), 5);
     }
@@ -307,6 +306,6 @@ mod tests {
         ]);
         let r = run(http, Some(vec![1, 2, 3]), false, false, ".bananagen make it anime");
         assert!(body(&r).contains("kendala"));
-        assert_eq!(r.mutations().is_empty(), true);
+        assert!(r.mutations().is_empty());
     }
 }

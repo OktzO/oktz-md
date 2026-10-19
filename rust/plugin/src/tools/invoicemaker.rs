@@ -159,7 +159,7 @@ pub fn invoicemaker(ctx: Ctx) -> Reply {
         None => return Reply::text("❌ *ɢᴀɢᴀʟ*\n\n> Balasan API bukan JSON"),
     };
 
-    if !data.get("status").is_some_and(|v| crate::common::js_truthy_value(v))
+    if !data.get("status").is_some_and(crate::common::js_truthy_value)
         || data.get("data").and_then(|v| v.get("image")).and_then(|v| v.get("url")).is_none()
     {
         return Reply::text("❌ *ɢᴀɢᴀʟ*\n\n> API tidak mengembalikan data yang valid");
@@ -184,7 +184,11 @@ pub fn invoicemaker(ctx: Ctx) -> Reply {
         ╭┈┈⬡「 🛒 *ɪᴛᴇᴍs* 」\n",
         if status_v == "paid" { "✅ LUNAS" } else { "❌ BELUM LUNAS" }
     );
-    let items_arr = data_obj.get("items").and_then(|v| v.as_array()).unwrap_or(&[]);
+    let items_arr = data_obj
+        .get("items")
+        .and_then(|v| v.as_array())
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
     for (i, item) in items_arr.iter().enumerate() {
         let nama = item.get("name").and_then(|v| v.as_str()).unwrap_or("");
         let unit = item.get("unit").and_then(|v| v.as_str()).unwrap_or("");
@@ -210,7 +214,6 @@ pub fn invoicemaker(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug, Default)]
@@ -220,17 +223,13 @@ mod tests {
     }
 
     impl Stub {
-        fn json(v: Value) -> Arc<Stub> {
-            Arc::new(Stub {
+        // Mengembalikan `Stub`, bukan `Arc<Stub>`: pemanggil yang membungkus
+        // `Arc::new(...)` supaya tidak jadi `Arc<Arc<Stub>>`.
+        fn json(v: Value) -> Stub {
+            Stub {
                 body: Some(v.to_string()),
                 seen: Mutex::new(Vec::new()),
-            })
-        }
-        fn offline() -> Arc<Stub> {
-            Arc::new(Stub {
-                body: None,
-                seen: Mutex::new(Vec::new()),
-            })
+            }
         }
     }
 
@@ -378,7 +377,7 @@ mod tests {
                 "image": {"url": "https://cdn/invoice.png"}
             }
         })));
-        let r = run(http, &["TokoKu|INV001|15/01/2026|paid|Nasi Goreng:1x:15000,Es Teh:2x:6000|21000"]);
+        let r = run(http.clone(), &["TokoKu|INV001|15/01/2026|paid|Nasi Goreng:1x:15000,Es Teh:2x:6000|21000"]);
         let Some(url) = image_of(&r) else { panic!("harus image"); };
         assert_eq!(url, "https://cdn/invoice.png");
         let cap = body_of(&r);

@@ -93,9 +93,12 @@ pub fn spamngl(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
 
+    use serde_json::Value;
     use oktz_plugin_api::{HttpBody, HttpError, HttpResponse};
     use std::sync::{Arc, Mutex};
 
+    // `HttpGet` butuh `Debug` pada implementor.
+    #[derive(Debug)]
     struct Stub {
         call_count: Mutex<i64>,
     }
@@ -157,7 +160,7 @@ mod tests {
     fn meta_sama_dengan_js() {
         let p = oktz_plugin_api::find("spamngl").unwrap();
         assert_eq!(p.meta.name, "spamngl");
-        assert_eq!(p.meta.alias, [] as [&str; 0]);
+        assert!(p.meta.alias.is_empty(), "alias JS: []");
         assert_eq!(p.meta.category, "tools");
         assert_eq!(p.meta.cooldown, 5);
         assert_eq!(p.meta.energi, 0);
@@ -212,7 +215,7 @@ mod tests {
         let r = spamngl(c);
         assert!(text_of(&r).contains("✅ *DONE*"));
         assert!(text_of(&r).contains("https://ngl.link/xxxx"));
-        assert!(text_of(&r).contains("(3)x"));
+        assert!(text_of(&r).contains("(3x)"));
         assert_eq!(*http.call_count.lock().unwrap(), 3);
     }
 
@@ -227,5 +230,3 @@ mod tests {
         assert_eq!(*http.call_count.lock().unwrap(), 0);
     }
 }
-
-use serde_json::Value;

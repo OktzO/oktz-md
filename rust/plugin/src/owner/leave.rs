@@ -8,11 +8,6 @@
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
-use crate::common::error_template;
-
-const PATTERN_CHAT: &str = r"chat\.whatsapp\.com/([a-zA-Z0-9]{20,})";
-const PATTERN_WAME: &str = r"wa\.me/([a-zA-Z0-9]{20,})";
-
 /// Ekstrak kode undangan dari teks, sama urutan pola dengan JS.
 fn extract_invite_code(text: &str) -> Option<String> {
     // Tanpa crate regex, pemindaian manual: cari `chat.whatsapp.com/` atau
@@ -63,7 +58,8 @@ pub(crate) fn help(prefix: &str) -> String {
     is_bot_admin = false
 )]
 pub fn leave(ctx: Ctx) -> Reply {
-    let input = ctx.args.join(" ").trim();
+    let argumen = ctx.args.join(" ");
+    let input = argumen.trim();
 
     if input.is_empty() {
         if ctx.is_group {
@@ -92,11 +88,11 @@ mod tests {
     #[test]
     fn ekstraksi_kode_undangan_dari_chat_whatsapp() {
         assert_eq!(
-            extract_invite_code("https://chat.whatsapp.com/ABCDEFGHIJKLMNOPQRST"),
+            extract_invite_code("https://chat.whatsapp.com/ABCDEFGHIJKLMNOPQRST").as_deref(),
             Some("ABCDEFGHIJKLMNOPQRST")
         );
         assert_eq!(
-            extract_invite_code("https://chat.whatsapp.com/abcdefghijklmnopqrst"),
+            extract_invite_code("https://chat.whatsapp.com/abcdefghijklmnopqrst").as_deref(),
             Some("abcdefghijklmnopqrst")
         );
     }
@@ -104,7 +100,7 @@ mod tests {
     #[test]
     fn ekstraksi_kode_undangan_dari_wa_me() {
         assert_eq!(
-            extract_invite_code("https://wa.me/ABCDEFGHIJKLMNOPQRST"),
+            extract_invite_code("https://wa.me/ABCDEFGHIJKLMNOPQRST").as_deref(),
             Some("ABCDEFGHIJKLMNOPQRST")
         );
     }

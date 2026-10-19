@@ -83,7 +83,7 @@ pub fn setgoodbyetype(ctx: Ctx) -> Reply {
 
     if !variant.is_empty() {
         let v = variant.trim_start_matches('v');
-        if VARIANTS.iter().any(|(i, ..)| i == v) {
+        if VARIANTS.iter().any(|(i, ..)| *i == v) {
             let id: i64 = v.parse().unwrap_or(1);
             return Reply::text(format!(
                 "✅ *GOODBYE TYPE DIUBAH*\n\n\

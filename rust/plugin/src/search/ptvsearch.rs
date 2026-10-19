@@ -7,8 +7,7 @@
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 use serde_json::Value;
 
-use crate::common::{error_template, random_index};
-use oktz_plugin_api::HttpError;
+use crate::common::random_index;
 
 fn help(prefix: &str) -> String {
     format!(
@@ -57,7 +56,7 @@ pub fn ptvsearch(ctx: Ctx) -> Reply {
         }
     };
 
-    let item = arr[random_index(arr.len())];
+    let item = &arr[random_index(arr.len())];
     let link = item
         .get("link")
         .and_then(Value::as_str)
@@ -77,8 +76,7 @@ pub fn ptvsearch(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::{HttpBody, HttpResponse};
-    use serde_json::json;
+    use oktz_plugin_api::{HttpBody, HttpError, HttpResponse};
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -201,11 +199,13 @@ mod tests {
         // Dua item dengan link; urutan stabil di test karena random_index
         // dipanggil sekali. Kita cakup: link yang keluar harus salah satu dari
         // dua yang diketahui.
+        // `tiktoksearch.js:31` — `link: normalizeUrl(item?.data)`; item tanpa
+        // field `data` dibuang scraper, jadi fixture pakai `data`.
         let body = serde_json::json!({
             "status": true,
             "result": [
-                { "title": "A", "link": "https://tiktok.com/@a/video/1" },
-                { "title": "B", "link": "https://tiktok.com/@b/video/2" },
+                { "title": "A", "data": "https://tiktok.com/@a/video/1" },
+                { "title": "B", "data": "https://tiktok.com/@b/video/2" },
             ]
         });
         let http = Stub::body(body);

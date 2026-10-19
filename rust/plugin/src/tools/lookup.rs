@@ -85,14 +85,15 @@ pub fn lookup(ctx: Ctx) -> Reply {
     let dns_res = ctx.http.get(&dns_url);
     let whois_res = ctx.http.get(&whois_url);
 
-    let dns_ok = dns_res.as_ref().map_or(false, |r| r.status == 200);
-    let whois_ok = whois_res.as_ref().map_or(false, |r| r.status == 200);
+    let dns_ok = dns_res.as_ref().is_ok_and(|r| r.status == 200);
+    let whois_ok = whois_res.as_ref().is_ok_and(|r| r.status == 200);
 
     let dns_text = dns_res.ok().map(|r| r.text());
     let whois_text = whois_res.ok().map(|r| r.text());
 
-    let dns_data = dns_ok.and_then(dns_text.as_deref());
-    let whois_data = whois_ok.and_then(whois_text.as_deref());
+    // `and_then` tidak ada pada `bool`; pilih teks hanya kalau status 200.
+    let dns_data = if dns_ok { dns_text.as_deref() } else { None };
+    let whois_data = if whois_ok { whois_text.as_deref() } else { None };
 
     if dns_data.is_none() && whois_data.is_none() {
         return Reply::text("❌ *ɢᴀɢᴀʟ*\n\n> Tidak dapat memproses domain");
@@ -223,7 +224,9 @@ mod tests {
     fn valid_domain_terima_domain_bener() {
         assert!(valid_domain("google.com"));
         assert!(valid_domain("sub.domain.co.id"));
-        assert!(valid_domain("a-b.c"));
+        // JS menolak `a-b.c`: TLD-nya cuma 1 huruf, sedangkan regex minta
+        // `[a-zA-Z]{2,}` (`lookup.js:34`).
+        assert!(!valid_domain("a-b.c"));
     }
 
     #[test]

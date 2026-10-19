@@ -14,7 +14,7 @@ const STYLES: [&str; 7] = ["apple", "google", "microsoft", "samsung", "whatsapp"
 fn help(prefix: &str) -> String {
     format!(
         "🖼️ *ᴇᴍᴏᴊɪ ᴛᴏ ɪᴍᴀɢᴇ*\n\n\
-         > Konversi emoji ke gambar HD (style Apple)\n\n\
+         > Konversi emoji ke gambar HD\n\n\
          *Format:*\n\
          > `{prefix}emojitoimage <emoji> [style]`\n\n\
          *Contoh:*\n\
@@ -81,19 +81,30 @@ pub fn emojitoimage(ctx: Ctx) -> Reply {
     let body = res.json().unwrap_or(Value::Null);
 
     let status_ok = body.get("status").is_some_and(crate::common::js_truthy_value);
-    let Some(url) = body
+    let url = body
         .get("data")
         .and_then(|d| d.get("url"))
         .and_then(Value::as_str)
-    else {
+        .filter(|s| !s.is_empty());
+    if !status_ok || url.is_none() {
         return Reply::text("❌ *ɢᴀɢᴀʟ*\n\n> Emoji tidak ditemukan atau API error")
             .with_reaction("❌");
-    };
+    }
+    let url = url.unwrap();
 
-    let code = js_str(&body.get("data").and_then(|d| d.get("code")).cloned().unwrap_or(Value::Null));
+    // `${data.data.code || "-"}` (`emojitoimage.js:65`): nilai falsy JS jadi `-`.
+    let code_val = body
+        .get("data")
+        .and_then(|d| d.get("code"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    let code = if crate::common::js_truthy_value(&code_val) {
+        js_str(&code_val)
+    } else {
+        "-".to_string()
+    };
     let caption = format!(
-        "🖼️ *ᴇᴍᴏᴊɪ ᴛᴏ ɪᴍᴀɢᴇ*\n\n> Emoji: {emoji}\n> Style: {style}\n> Code: {code}",
-        code = if code == "null" { "-" } else { code }
+        "🖼️ *ᴇᴍᴏᴊɪ ᴛᴏ ɪᴍᴀɢᴇ*\n\n> Emoji: {emoji}\n> Style: {style}\n> Code: {code}"
     );
 
     Reply::image(MediaSource::url(url), caption).with_reaction("✅")
@@ -103,7 +114,6 @@ pub fn emojitoimage(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -226,9 +236,15 @@ mod tests {
 
     #[test]
     fn style_salah_jadi_apple() {
+        // `emojitoimage.js:32,47` — style di luar STYLES jatuh ke "apple"
+        // sebelum URL dibangun; `api_url` cuma memformat nilai yang diberi.
+        let http = Stub::offline();
+        let r = run_dengan_kunci(http.clone(), "😳 blabla");
+        // Stub offline: permintaan tetap dikirim, balasan jatuh ke error template.
+        assert_eq!(reaction_of(&r), Some("☢"));
         assert_eq!(
-            api_url("😳", "blabla", "KUNCI"),
-            "https://api.neoxr.eu/api/emoimg?q=%F0%9F%98%B3&style=apple&apikey=KUNCI"
+            http.seen.lock().unwrap().as_slice(),
+            &["https://api.neoxr.eu/api/emoimg?q=%F0%9F%98%B3&style=apple&apikey=KUNCI"]
         );
     }
 

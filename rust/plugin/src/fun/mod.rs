@@ -33,3 +33,7 @@ pub mod waifualbum;
 // Ditambahkan scripts/pasang-modul.mjs.
 pub mod husbupool;
 pub mod terima;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod cekkhodam;
+pub mod waifupool;

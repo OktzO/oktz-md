@@ -10,3 +10,7 @@ pub mod linesticker;
 
 // Ditambahkan scripts/pasang-modul.mjs.
 pub mod emojimix;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod brat;
+pub mod stickerly;

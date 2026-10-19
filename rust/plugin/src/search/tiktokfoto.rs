@@ -63,7 +63,7 @@ pub fn tiktokfoto(ctx: Ctx) -> Reply {
 
     let url = format!(
         "https://api.cuki.biz.id/api/search/tiktokfoto?apikey={api_key}&query={}",
-        url_encode(&query)
+        url_encode(query)
     );
 
     let Ok(res) = ctx.http.get(&url) else {
@@ -82,7 +82,7 @@ pub fn tiktokfoto(ctx: Ctx) -> Reply {
     }
 
     let data = body.get("data").unwrap();
-    let results = data.get("results").and_then(Value::as_array).unwrap_or(&vec![]);
+    let results = data.get("results").and_then(Value::as_array).cloned().unwrap_or_default();
     let post = results.first().cloned().unwrap_or(Value::Null);
 
     let images = post.get("images")
@@ -119,7 +119,7 @@ pub fn tiktokfoto(ctx: Ctx) -> Reply {
             .and_then(Value::as_str).unwrap_or(""),
         220,
     );
-    let result_query = data.get("query").and_then(Value::as_str).unwrap_or(&query);
+    let result_query = data.get("query").and_then(Value::as_str).unwrap_or(query);
 
     let caption = format!(
         "📸 *TIKTOK FOTO SEARCH*\n\n\
@@ -146,18 +146,18 @@ pub fn tiktokfoto(ctx: Ctx) -> Reply {
     Reply::sequence(replies)
 }
 
+/// `encodeURIComponent` — sama dengan JS (`tiktokfoto.js:40`).
 fn url_encode(s: &str) -> String {
-    s.chars()
-        .flat_map(|c| {
-            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '~') {
-                vec![c as u8]
-            } else {
-                format!("{c}").into_bytes().iter()
-                    .flat_map(|b| std::iter::once(b'%').chain(std::iter::once(format!("{b:02X}").chars().next().unwrap()).chain(std::iter::once(format!("{b:02X}").chars().nth(1).unwrap()))))
-                    .collect::<Vec<_>>()
-            }
-        })
-        .collect()
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        let c = b as char;
+        if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '!' | '~' | '*' | '\'' | '(' | ')') {
+            out.push(c);
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
 }
 
 #[cfg(test)]

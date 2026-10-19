@@ -68,44 +68,6 @@ pub fn to3d(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
 
-    use oktz_plugin_api::{HttpBody, HttpError, HttpResponse};
-    use serde_json::Value;
-    use std::sync::{Arc, Mutex};
-
-    struct Stub {
-        bytes: Mutex<Vec<u8>>,
-    }
-
-    impl Stub {
-        fn new() -> Arc<Stub> {
-            Arc::new(Stub {
-                bytes: Mutex::new(Vec::new()),
-            })
-        }
-    }
-
-    impl oktz_plugin_api::HttpGet for Stub {
-        fn get(&self, _url: &str) -> Result<HttpResponse, HttpError> {
-            Ok(HttpResponse {
-                status: 200,
-                body: HttpBody::Bytes {
-                    data: Arc::from(b"fake-image-bytes".to_vec()),
-                    mimetype: None,
-                },
-                headers: Vec::new(),
-            })
-        }
-        fn post_json(&self, _: &str, _: &Value) -> Result<HttpResponse, HttpError> {
-            unimplemented!()
-        }
-        fn post_form(&self, _: &str, _: &str) -> Result<HttpResponse, HttpError> {
-            unimplemented!()
-        }
-        fn post_multipart(&self, _: &str, _: &[(&str, HttpBody)]) -> Result<HttpResponse, HttpError> {
-            unimplemented!()
-        }
-    }
-
     fn ctx() -> Ctx {
         Ctx {
             sender: "628111@s.whatsapp.net".into(),
@@ -148,8 +110,17 @@ mod tests {
 
     #[test]
     fn download_gagal_mengembalikan_error() {
-        let r = to3d(ctx());
-        // Ctx::default() punya NoMediaFetch, jadi download gagal.
+        // Media gambar ada, tapi `Ctx::default()` punya NoMediaFetch.
+        let ctx = Ctx {
+            media: Some(oktz_plugin_api::IncomingMedia {
+                kind: oktz_plugin_api::IncomingKind::Image,
+                mimetype: Some("image/jpeg".into()),
+                file_name: None,
+                caption: String::new(),
+            }),
+            ..ctx()
+        };
+        let r = to3d(ctx);
         assert!(text_of(&r).contains("Gagal mendownload gambar"));
     }
 }

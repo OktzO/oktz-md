@@ -6,8 +6,8 @@
 //! `ctx.http`; tidak menyalin logika `stalker-fallback.js` ke sini, melainkan
 //! meniru alurnya (cuki dulu, nexray cadangan) lewat dua permintaan HTTP.
 
-use oktz_plugin_api::{Ctx, HttpGet, Reply, plugin};
-use serde_json::{json, Value};
+use oktz_plugin_api::{Ctx, HttpError, HttpGet, Reply, plugin};
+use serde_json::Value;
 
 /// `sendngl.js:27-32` — pesan saat `link` hilang.
 fn link_missing(prefix: &str) -> String {
@@ -113,7 +113,7 @@ pub fn sendngl(ctx: Ctx) -> Reply {
             "✅ *DONE*\n\nBerhasil mengirim pesan!\nTarget: {link}\nPesan: {kata}"
         ))
         .with_reaction("✅"),
-        Err(_) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
+        Err(_) => Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
     }
 }
 
@@ -121,7 +121,6 @@ pub fn sendngl(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -140,12 +139,6 @@ mod tests {
                 ..Default::default()
             })
         }
-        fn cuki_reject() -> Arc<Stub> {
-            Arc::new(Stub {
-                cuki: Some(serde_json::json!({ "success": false, "error": "nope" }).to_string()),
-                ..Default::default()
-            })
-        }
         fn nexray_ok() -> Arc<Stub> {
             Arc::new(Stub {
                 nexray: Some(serde_json::json!({ "status": true, "result": "ok" }).to_string()),
@@ -153,9 +146,6 @@ mod tests {
             })
         }
         fn all_fail() -> Arc<Stub> {
-            Arc::new(Stub::default())
-        }
-        fn offline() -> Arc<Stub> {
             Arc::new(Stub::default())
         }
     }
@@ -222,6 +212,29 @@ mod tests {
         sendngl(ctx)
     }
 
+    /// `run` dengan `config.APIkey.cuki` terisi — jalur cuki di `sendNgl`
+    /// (`stalker-fallback.js:316-322`) baru jalan kalau key tidak kosong.
+    fn run_dengan_kunci(http: Arc<Stub>, text: &str) -> Reply {
+        let ctx = Ctx {
+            text: text.to_string(),
+            args: text.split_whitespace().map(str::to_string).collect(),
+            sender: ME.into(),
+            chat: ME.into(),
+            prefix: ".".into(),
+            command: "sendngl".into(),
+            http,
+            config: Arc::new(oktz_plugin_api::config::Runtime {
+                api_keys: oktz_plugin_api::config::ApiKeys {
+                    cuki: "KUNCI".into(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            }),
+            ..Ctx::default()
+        };
+        sendngl(ctx)
+    }
+
     fn text_of(r: &Reply) -> String {
         r.without_mutations()
             .text_body()
@@ -277,7 +290,7 @@ mod tests {
     #[test]
     fn spasi_di_sekitar_pipa_dicabut() {
         let http = Stub::cuki_ok();
-        let r = run(http.clone(), "  https://ngl.link/x   |   hai kamu  ");
+        let r = run_dengan_kunci(http.clone(), "  https://ngl.link/x   |   hai kamu  ");
         assert_eq!(
             text_of(&r),
             "✅ *DONE*\n\nBerhasil mengirim pesan!\nTarget: https://ngl.link/x\nPesan: hai kamu"
@@ -288,14 +301,14 @@ mod tests {
     #[test]
     fn cuki_berhasil_tanpa_mengirim_ke_nexray() {
         let http = Stub::cuki_ok();
-        let r = run(http.clone(), "https://ngl.link/x | hai");
+        let r = run_dengan_kunci(http.clone(), "https://ngl.link/x | hai");
         assert_eq!(text_of(&r), "✅ *DONE*\n\nBerhasil mengirim pesan!\nTarget: https://ngl.link/x\nPesan: hai");
         assert_eq!(reaction_of(&r), Some("✅"));
         let seen = http.seen.lock().unwrap().clone();
         assert_eq!(seen.len(), 1);
         assert_eq!(
             seen[0].0,
-            "https://api.cuki.biz.id/api/ephoto/ngl?apikey="
+            "https://api.cuki.biz.id/api/ephoto/ngl?apikey=KUNCI"
         );
         assert_eq!(seen[0].1.as_deref(), Some(r#"{"link":"https://ngl.link/x","text":"hai"}"#));
     }
@@ -321,7 +334,7 @@ mod tests {
             nexray: Some(serde_json::json!({ "status": true }).to_string()),
             ..Default::default()
         });
-        let r = run(http.clone(), "u | t");
+        let r = run_dengan_kunci(http.clone(), "u | t");
         assert_eq!(reaction_of(&r), Some("✅"));
         let seen = http.seen.lock().unwrap().clone();
         assert_eq!(seen.len(), 2);
@@ -342,8 +355,10 @@ mod tests {
 
     #[test]
     fn error_template_mengikuti_ganti_prefix_dan_command() {
+        // `error.js:5-6` memakai `prefix || '.'` dan `command || '?'`;
+        // `crate::common::error_template` tidak punya fallback itu.
         assert_eq!(
-            crate::common::error_template("", ""),
+            error_template("", ""),
             "☢ Kayaknya command `.?` lagi ada kendala\n\
              Silahkan coba lagi nanti, User\n\n\
              _Jika masalah berlanjut, silahkan hubungi owner bot_"

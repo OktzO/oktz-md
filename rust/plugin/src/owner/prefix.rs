@@ -8,8 +8,6 @@
 //! `ponytail:` `m.command?.toLowerCase()` di JS sudah lowercase lewat router,
 //! jadi `ctx.command` dipakai langsung.
 
-use std::sync::Arc;
-
 use oktz_plugin_api::{Ctx, Reply, plugin};
 use serde_json::{Map, Value};
 
@@ -84,7 +82,7 @@ fn noprefix_aktif(data: &Value) -> bool {
 }
 
 /// `prefix.js:23-28` — gabung config prefix + database, dedup.
-fn semua_awalan(ctx: &Ctx, data: &Value) -> Vec<String> {
+fn semua_awalan(_ctx: &Ctx, data: &Value) -> Vec<String> {
     let mut gabung: Vec<String> = vec![CONFIG_PREFIX.to_string()];
     for p in prefixes_arr(data) {
         if !gabung.contains(&p) {
@@ -126,7 +124,7 @@ fn cmd_addprefix(ctx: &Ctx, data: &Value) -> Reply {
     }
 
     let mut data = data.clone();
-    let mut semua = prefixes_arr(data);
+    let mut semua = prefixes_arr(&data);
     for p in &baru {
         if !semua.contains(p) {
             semua.push(p.clone());
@@ -144,7 +142,8 @@ fn cmd_addprefix(ctx: &Ctx, data: &Value) -> Reply {
         ""
     };
     Reply::text(format!(
-        "✅ *ᴘʀᴇғɪx ᴅɪᴛᴀᴍʙᴀʟᴋᴀɴ*\n\n> Added: `{}`\n\n*Semua prefix aktif:*\n> `{}`{}",
+        // "ᴅɪᴛᴀᴍʙᴀʜᴋᴀɴ" = U+029C (ʜ), persis `prefix.js:98`.
+        "✅ *ᴘʀᴇғɪx ᴅɪᴛᴀᴍʙᴀʜᴋᴀɴ*\n\n> Added: `{}`\n\n*Semua prefix aktif:*\n> `{}`{}",
         baru.join("` `"),
         all.join("` `"),
         noprefix_suffix
@@ -211,7 +210,7 @@ fn cmd_hapus_awalan(ctx: &Ctx, data: &Value) -> Reply {
     }
 
     let mut data = data.clone();
-    let semua = prefixes_arr(data);
+    let semua = prefixes_arr(&data);
     let mut deleted: Vec<String> = Vec::new();
     let sisa: Vec<String> = semua.into_iter().filter(|p| {
         if ctx.args.contains(p) {
@@ -286,6 +285,7 @@ fn cmd_reset_awalan(ctx: &Ctx, data: &Value) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::berkas::BerkasPalsu;
+    use std::sync::Arc;
 
     fn ctx() -> Ctx {
         Ctx {
@@ -306,9 +306,13 @@ mod tests {
 
     #[test]
     fn tambah_prefix_baru() {
-        let c = ctx();
+        // `prefix.js:61-64`: tanpa argumen handler hanya menampilkan bantuan.
+        let c = Ctx {
+            args: vec!["!".into()],
+            ..ctx()
+        };
         let r = cmd_addprefix(&c, &muat_awalan(&c));
-        assert!(r.text_body().unwrap().contains("ᴘʀᴇғɪx ᴅɪᴛᴀᴍʙᴀʟᴋᴀɴ"));
+        assert!(r.text_body().unwrap().contains("ᴘʀᴇғɪx ᴅɪᴛᴀᴍʙᴀʜᴋᴀɴ"));
     }
 
     #[test]

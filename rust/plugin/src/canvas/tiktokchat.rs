@@ -4,12 +4,8 @@
 //! `src/canvas/mod.rs` secara manual (mod.rs milik plugin lain).
 
 use oktz_plugin_api::{
-    Ctx, HttpCall, HttpError, HttpGet, HttpResponse, IncomingKind, MediaError, MediaFetch,
-    MediaOrigin, MediaSource, MultipartPart, Reply, plugin,
+    Ctx, HttpCall, HttpError, HttpGet, IncomingKind, MediaSource, MultipartPart, Reply, plugin,
 };
-
-use serde_json::Value;
-use oktz_plugin_api::HttpBody;
 
 /// `tiktokchat.js:23-29` — kartu pakai saat gambar/teks/pemisah `|` belum lengkap.
 fn help(prefix: &str) -> String {
@@ -33,7 +29,7 @@ fn upload_chat(http: &dyn HttpGet, username: &str, message: &str, avatar: &[u8])
                 MultipartPart::file("avatar", "avatar.jpg", avatar.to_vec()).with_mimetype("image/jpeg"),
             ]),
         )
-        .map_err(|e: HttpError| format!("upload gagal: {e}"))?;
+        .map_err(|e: HttpError| format!("upload gagal: {}", e.message))?;
     Ok(res.body.bytes().to_vec())
 }
 
@@ -66,7 +62,8 @@ pub fn tiktokchat(ctx: Ctx) -> Reply {
 
     let mut parts = text.split('|');
     let username = parts.next().unwrap_or("").trim();
-    let message = parts.collect::<Vec<_>>().join("|").trim();
+    let sisa = parts.collect::<Vec<_>>().join("|");
+    let message = sisa.trim();
 
     let buffer = if ctx.quoted().is_some_and(|q| q.kind.is_media()) {
         ctx.download_quoted_media().ok()
@@ -90,29 +87,25 @@ pub fn tiktokchat(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oktz_plugin_api::{HttpBody, HttpResponse, MediaError, MediaFetch, MediaOrigin};
     use serde_json::Value;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     const ME: &str = "628111@s.whatsapp.net";
 
     #[derive(Debug, Default)]
     struct Stub {
         response: Option<Vec<u8>>,
-        seen: Mutex<Vec<String>>,
     }
 
     impl Stub {
         fn online() -> Arc<Stub> {
             Arc::new(Stub {
                 response: Some(b"image-bytes".to_vec()),
-                seen: Mutex::new(Vec::new()),
             })
         }
         fn offline() -> Arc<Stub> {
-            Arc::new(Stub {
-                response: None,
-                seen: Mutex::new(Vec::new()),
-            })
+            Arc::new(Stub { response: None })
         }
     }
 
@@ -132,6 +125,12 @@ mod tests {
             _: &[(&str, oktz_plugin_api::HttpBody)],
         ) -> Result<HttpResponse, HttpError> {
             self.respond(url)
+        }
+        /// Plugin memakai `HttpCall::multipart` (`tiktokchat.js:51-60`);
+        /// default `HttpGet::call` menolak multipart, jadi stub wajib
+        /// menimpanya (pola sama dengan `search/animeapaini.rs`).
+        fn call(&self, req: &HttpCall) -> Result<HttpResponse, HttpError> {
+            self.respond(&req.url)
         }
     }
 
@@ -242,6 +241,7 @@ mod tests {
 
     #[test]
     fn api_gagal_mengembalikan_pesan_gagal_dan_reaksi_silang() {
+        #[derive(Debug)]
         struct UpOk;
         impl HttpGet for UpOk {
             fn get(&self, _: &str) -> Result<HttpResponse, HttpError> {

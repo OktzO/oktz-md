@@ -2258,7 +2258,7 @@ mod tests_batch_g {
         
             "addowner", "addprefix", "addprem", "akses", "arsip", "baca", "bcgc", "cekschedule", "disableplugin", "editproduk",
             "exec", "ganti-asset", "ganti-demote.jpg", "ganti-foto.jpg", "ganti-goodbye.jpg", "ganti-levelup.jpg", "ganti-namadev", "ganti-pp-kosong.jpg", "ganti-rpg.jpg", "ganti-rules.jpg",
-            "ganti-store.jpg", "get", "hapusgrup", "hapussaluran", "leave", "listjadibot", "listjadibotaktif", "mutechat", "onlythisgrup", "pinchat",
+            "ganti-store.jpg", "get", "hapusgrup", "hapussaluran", "leave", "listjadibot", "listjadibotaktif", "listsewa", "mutechat", "onlythisgrup", "pinchat",
             "ptvch", "pushkontak", "renewsewa", "sampah", "setgoodbyetype", "setmenu", "setmenucat", "setownertype", "setwelcometype", "sewabot",
             "star", "stopalljadibot", "stopdandeletejadibot", "stopschedule", "swgcall",
         ];
@@ -4125,11 +4125,12 @@ mod tests_roster_state {
     // berkas yang sama, mis. `sticker/attp2.js` yang memakai nama sekaligus
     // alias `attp2`, atau `main/leaderboard.js` yang mengulang
     // `leaderboard`). Tabrakan baru di luar daftar ini berarti port kita.
-    pub(crate) const JS_COLLISIONS: [&str; 33] = [
-        "asmaulhusna", "attp2", "beli", "berburu", "block", "bratanime", "bucin", "cantik",
-        "cc", "cekjodoh", "cupu", "daftar", "exp", "fakedana", "fakegopay", "fakeovo",
-        "film", "ganteng", "heapsnap", "inspect", "izen", "kaya", "leaderboard", "mimpi",
-        "ngemis", "noob", "paptt", "pintar", "pro", "sroast", "top", "unblock", "wibu",
+    pub(crate) const JS_COLLISIONS: [&str; 36] = [
+        "applemusic", "asmaulhusna", "attp2", "beli", "berburu", "block", "bratanime", "bucin",
+        "cantik", "cc", "cekjodoh", "cupu", "daftar", "exp", "fakedana", "fakegopay",
+        "fakeovo", "film", "ganteng", "heapsnap", "inspect", "izen", "kaya", "leaderboard",
+        "leave", "mimpi", "ngemis", "noob", "paptt", "pintar", "pro", "sroast", "tofigure3",
+        "top", "unblock", "wibu",
     ];
 
     #[test]

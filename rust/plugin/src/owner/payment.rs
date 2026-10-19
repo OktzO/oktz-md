@@ -30,12 +30,9 @@ fn pemilik_atau_nama(m: &serde_json::Value) -> String {
     m.get("holder")
         .and_then(serde_json::Value::as_str)
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| {
-            m.get("name")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("")
-                .to_string()
-        })
+        .or_else(|| m.get("name").and_then(serde_json::Value::as_str))
+        .unwrap_or("")
+        .to_string()
 }
 
 /// `buildPaymentText` dari payment.js.
@@ -53,7 +50,7 @@ fn build_payment_text(
                 .filter(|m| {
                     m.get("number")
                         .and_then(serde_json::Value::as_str)
-                        .map_or(false, |s| !s.is_empty())
+                        .is_some_and(|s| !s.is_empty())
                 })
                 .collect::<Vec<_>>()
         })
@@ -66,19 +63,19 @@ fn build_payment_text(
                 .filter(|b| {
                     b.get("number")
                         .and_then(serde_json::Value::as_str)
-                        .map_or(false, |s| !s.is_empty())
+                        .is_some_and(|s| !s.is_empty())
                 })
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
 
     if !custom_text.is_empty() {
-        let methods_txt = methods.iter().map(metode_baris).collect::<Vec<_>>().join("\n");
-        let banks_txt = banks.iter().map(metode_baris).collect::<Vec<_>>().join("\n");
+        let methods_txt = methods.iter().copied().map(metode_baris).collect::<Vec<_>>().join("\n");
+        let banks_txt = banks.iter().copied().map(metode_baris).collect::<Vec<_>>().join("\n");
         let qris_txt = if payment
-            .get("qris_url")
+            .get("qrisUrl")
             .and_then(serde_json::Value::as_str)
-            .map_or(false, |s| !s.is_empty())
+            .is_some_and(|s| !s.is_empty())
         {
             "✅ Tersedia"
         } else {
@@ -107,10 +104,10 @@ fn build_payment_text(
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("");
             text.push_str(&format!("│  `{nomor}`\n"));
-            if let Some(p) = m.get("holder").and_then(serde_json::Value::as_str) {
-                if !p.is_empty() {
-                    text.push_str(&format!("│  a/n: {p}\n"));
-                }
+            if let Some(p) = m.get("holder").and_then(serde_json::Value::as_str)
+                && !p.is_empty()
+            {
+                text.push_str(&format!("│  a/n: {p}\n"));
             }
         }
         text.push('\n');
@@ -129,19 +126,19 @@ fn build_payment_text(
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("");
             text.push_str(&format!("│  `{nomor}`\n"));
-            if let Some(p) = b.get("holder").and_then(serde_json::Value::as_str) {
-                if !p.is_empty() {
-                    text.push_str(&format!("│  a/n: {p}\n"));
-                }
+            if let Some(p) = b.get("holder").and_then(serde_json::Value::as_str)
+                && !p.is_empty()
+            {
+                text.push_str(&format!("│  a/n: {p}\n"));
             }
         }
         text.push('\n');
     }
 
-    if let Some(qris) = payment.get("qris_url").and_then(serde_json::Value::as_str) {
-        if !qris.is_empty() {
-            text.push_str("📸 *QRIS:* Tersedia (lihat gambar)\n\n");
-        }
+    if let Some(qris) = payment.get("qrisUrl").and_then(serde_json::Value::as_str)
+        && !qris.is_empty()
+    {
+        text.push_str("📸 *QRIS:* Tersedia (lihat gambar)\n\n");
     }
 
     text.push_str("━━━━━━━━━━━━━━━━━━\n");
@@ -207,8 +204,9 @@ pub fn payment(ctx: Ctx) -> Reply {
     let custom_text = ctx
         .setting("customPaymentText")
         .and_then(serde_json::Value::as_str)
-        .unwrap_or("")
-        .to_string();
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| ctx.config().payment.custom_text.clone());
     let bot_name = if ctx.config().bot.name.is_empty() {
         BOT_DEFAULT.to_string()
     } else {
@@ -273,7 +271,7 @@ mod tests {
 
     #[test]
     fn qris_url_dipakai_sebagai_image() {
-        let cfg = serde_json::json!({"qris_url": "https://example.com/qris.jpg"});
+        let cfg = serde_json::json!({"qrisUrl": "https://example.com/qris.jpg"});
         let out = build_payment_text(&cfg, "", "Bot", "Owner");
         assert!(out.contains("📸 *QRIS:* Tersedia"));
     }

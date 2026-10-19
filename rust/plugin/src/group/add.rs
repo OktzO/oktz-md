@@ -37,7 +37,10 @@ const ERR_ALL_IN_GROUP: &str = "❌ *ɢᴀɢᴀʟ*\n\n> Semua nomor sudah ada di
 /// panjang >= 10 — persis `add.js:56-63`.
 fn bersihkan_nomor(arg: &str) -> Option<String> {
     let num: String = arg.chars().filter(|c| c.is_ascii_digit()).collect();
-    let num = num.strip_prefix('0').map_or(num, |sisa| format!("62{sisa}"));
+    let num = match num.strip_prefix('0') {
+        Some(sisa) => format!("62{sisa}"),
+        None => num,
+    };
     if num.len() >= 10 {
         Some(num)
     } else {
@@ -81,7 +84,8 @@ pub fn add(ctx: Ctx) -> Reply {
         return Reply::text(help(&ctx.prefix));
     }
 
-    let mut target_group: Option<String> = None;
+    // `add.js:41` — `let targetGroup = m.isGroup ? m.chat : null`.
+    let mut target_group: Option<String> = ctx.is_group.then(|| ctx.chat.clone());
     let mut target_numbers: Vec<String> = Vec::new();
 
     for arg in &ctx.args {
@@ -204,7 +208,6 @@ pub fn add(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{Participant, Sock, SockError};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -312,7 +315,7 @@ mod tests {
             command: "add".into(),
             is_group,
             sock,
-            roster: oktz_plugin_api::GroupRoster {
+            roster: oktz_plugin_api::registry::GroupRoster {
                 participants: roster,
                 is_bot_admin: true,
             },
@@ -359,7 +362,7 @@ mod tests {
             meta: Some(meta_with_participants("Grup Test", &[])),
             ..Default::default()
         });
-        let r = run(sock, vec![], &["6281234567890", "https://chat.whatsapp.com/abc"], true);
+        let r = run(sock.clone(), vec![], &["6281234567890", "https://chat.whatsapp.com/abc"], true);
         assert!(text_of(&r).contains("berhasil ditambahkan"));
         assert_eq!(reaction_of(&r), Some("✅".to_string()));
         let seen = sock.seen_add.lock().unwrap().clone();
@@ -403,7 +406,7 @@ mod tests {
             command: "add".into(),
             is_group: true,
             sock,
-            roster: oktz_plugin_api::GroupRoster {
+            roster: oktz_plugin_api::registry::GroupRoster {
                 participants: vec![],
                 is_bot_admin: false,
             },

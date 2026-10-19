@@ -47,14 +47,12 @@ impl Stats {
     }
 }
 
-/// `user.inventory[itemKey]--` dan BALIKDeletes kalau sudah nol.
+/// `user.inventory[itemKey]--` — sisa nol tetap TERSIMPAN di objek, bukan
+/// dihapus. JS hanya mengurangi angka; guard `count <= 0` di atasnya yang
+/// membuat nilai negatif tidak pernah terjadi.
 fn consume(inv: &mut Map<String, Value>, key: &str) {
     let left = inv.get(key).and_then(Value::as_i64).unwrap_or(0) - 1;
-    if left <= 0 {
-        inv.remove(key);
-    } else {
-        inv.insert(key.to_string(), serde_json::json!(left));
-    }
+    inv.insert(key.to_string(), serde_json::json!(left));
 }
 
 fn help() -> Reply {
@@ -116,7 +114,7 @@ pub fn use_item(ctx: Ctx) -> Reply {
         }
         "mpotion" => {
             if s.mana >= s.max_mana {
-                return Reply::text("💧 *ᴍᴀɴᴀ ᴘᴇɴᴜʛ*\n\n> Mana kamu sudah penuh!");
+                return Reply::text("💧 *ᴍᴀɴᴀ ᴘᴇɴᴜʜ*\n\n> Mana kamu sudah penuh!");
             }
             s.mana = (s.mana + 50).min(s.max_mana);
             consume(&mut inv, &item_key);
@@ -127,7 +125,7 @@ pub fn use_item(ctx: Ctx) -> Reply {
         }
         "stamina" => {
             if s.stamina >= s.max_stamina {
-                return Reply::text("⚡ *sᴛᴀᴍɪɴᴀ ᴘᴇɴᴜʛ*\n\n> Stamina kamu sudah penuh!");
+                return Reply::text("⚡ *sᴛᴀᴍɪɴᴀ ᴘᴇɴᴜʜ*\n\n> Stamina kamu sudah penuh!");
             }
             s.stamina = (s.stamina + 20).min(s.max_stamina);
             consume(&mut inv, &item_key);
@@ -152,7 +150,7 @@ pub fn use_item(ctx: Ctx) -> Reply {
             consume(&mut inv, &item_key);
             format!(
                 "👞 *ɪᴛᴇᴍ ᴅɪɢᴜɴᴀᴋᴀɴ*\n\n> Kamu memakai *Kulit* sebagai pelindung.\n\
-                 ⚔️ Attack bertambah: +3 (sekarang: {})",
+                 > ⚔️ Attack bertambah: +3 (sekarang: {})",
                 s.attack.unwrap()
             )
         }
@@ -189,7 +187,7 @@ pub fn use_item(ctx: Ctx) -> Reply {
         "bowlramen" => {
             if s.health >= s.max_health {
                 return Reply::text(
-                    "❤️ *ʜᴇᴀʟᴛʜ ᴘᴇɴᴜʛ*\n\n> Nyawa kamu sudah penuh, tidak perlu makan ramen lagi!",
+                    "❤️ *ʜᴇᴀʟᴛʜ ᴘᴇɴᴜʜ*\n\n> Nyawa kamu sudah penuh, tidak perlu makan ramen lagi!",
                 );
             }
             s.health = (s.health + 40).min(s.max_health);
@@ -203,7 +201,7 @@ pub fn use_item(ctx: Ctx) -> Reply {
         "chakra" => {
             if s.stamina >= s.max_stamina {
                 return Reply::text(
-                    "⚡ *sᴛᴀᴍɪɴᴀ ᴘᴇɴᴜʛ*\n\n> Stamina/Chakra kamu sudah penuh!",
+                    "⚡ *sᴛᴀᴍɪɴᴀ ᴘᴇɴᴜʜ*\n\n> Stamina/Chakra kamu sudah penuh!",
                 );
             }
             s.stamina = (s.stamina + 30).min(s.max_stamina);
@@ -219,7 +217,7 @@ pub fn use_item(ctx: Ctx) -> Reply {
             consume(&mut inv, &item_key);
             format!(
                 "🗡️ *ɪᴛᴇᴍ ᴅɪɢᴜɴᴀᴋᴀɴ*\n\n> Kamu melengkapi dirimu dengan *{}*.\n\
-                 ⚔️ Attack bertambah: +2 (sekarang: {})",
+                 > ⚔️ Attack bertambah: +2 (sekarang: {})",
                 item_key.to_uppercase(),
                 s.attack.unwrap()
             )
@@ -406,12 +404,12 @@ mod tests {
     }
 
     #[test]
-    fn healing_caps_at_max_health_and_removes_the_last_stack_entry() {
+    fn healing_caps_at_max_health_and_leaves_the_last_stack_at_zero() {
         // `health` tidak ada -> `|| 100` = 100, sama dengan `maxHealth` 100, jadi
         // clamp kicked in dan potion tetap dimakan.
         let r = run(&["potion"], weak("potion", 1));
         let d = written(&r);
-        assert!(d["inventory"].get("potion").is_none(), "sisa 0 dihapus");
+        assert_eq!(d["inventory"]["potion"], serde_json::json!(0), "sisa 0 tetap ditulis");
         assert_eq!(d["rpg"]["health"], serde_json::json!(60), "10 + 50 = 60");
 
         let r = run(
@@ -451,6 +449,8 @@ mod tests {
         ] {
             let r = run(&[item], bag(item, 2));
             assert!(text_of(&r).contains(expected), "{item}");
+            // Judul kecil-kecil harus persis `ᴘᴇɴᴜʜ` seperti `use.js:68,77,141`.
+            assert!(text_of(&r).contains("ᴘᴇɴᴜʜ"), "{item}: {r:?}");
             assert!(r.mutations().is_empty(), "{item}");
         }
     }
@@ -460,7 +460,7 @@ mod tests {
         for (item, add) in [("leather", 3), ("kunai", 2), ("shuriken", 2)] {
             let r = run(&[item], bag(item, 1));
             let t = text_of(&r);
-            assert!(t.contains(&format!("⚔️ Attack bertambah: +{add} (sekarang: {})", 10 + add)), "{item}: {t}");
+            assert!(t.contains(&format!("> ⚔️ Attack bertambah: +{add} (sekarang: {})", 10 + add)), "{item}: {t}");
             assert_eq!(written(&r)["rpg"]["attack"], serde_json::json!(10 + add), "{item}");
         }
         // Attack yang sudah ada ditambahkan, bukan ditimpa.
@@ -488,7 +488,7 @@ mod tests {
             let d = written(&r);
             let t = text_of(&r);
             assert!(
-                d["inventory"].get("mysterybox").is_none(),
+                d["inventory"]["mysterybox"] == serde_json::json!(0),
                 "kotak dimakan: {d}"
             );
             if t.contains("> 💰 Koin: +") {
@@ -525,7 +525,7 @@ mod tests {
             );
             let d = written(&r);
             let t = text_of(&r);
-            assert_eq!(d["inventory"].get("scroll"), None);
+            assert_eq!(d["inventory"]["scroll"], serde_json::json!(0));
             if t.contains("Ryo (Koin)") {
                 let gain = d["koin"].as_i64().unwrap();
                 assert!((2000..10000).contains(&gain), "{gain}");
@@ -547,7 +547,7 @@ mod tests {
                 let d = written(&r);
                 let t = text_of(&r);
                 assert!(t.contains(&format!("Kamu membuka *{crate_key} Crate*!")), "{t}");
-                assert_eq!(d["inventory"].get(crate_key), None);
+                assert_eq!(d["inventory"][crate_key], serde_json::json!(0));
                 let (money, exp) = if crate_key == "legendary" {
                     (1000..101_000, 100..5100)
                 } else {
@@ -579,7 +579,7 @@ mod tests {
     }
 
     #[test]
-    fn consuming_the_last_copy_removes_the_key_but_leaves_the_others() {
+    fn consuming_the_last_copy_leaves_a_zero_and_keeps_the_others() {
         let r = run(
             &["potion"],
             serde_json::json!({
@@ -588,7 +588,7 @@ mod tests {
             }),
         );
         let inv = written(&r)["inventory"].as_object().unwrap().clone();
-        assert!(!inv.contains_key("potion"), "{inv:?}");
+        assert_eq!(inv["potion"], serde_json::json!(0), "{inv:?}");
         assert_eq!(inv["herb"], serde_json::json!(9), "barang lain tak boleh gone");
     }
 

@@ -6,10 +6,8 @@
 //! kustom melalui `HttpCall::call`. Stub bawaan (`NoHttp`) tidak pernah
 //! jaringan, jadi jalur gagal diuji lewat `Err`.
 
-use oktz_plugin_api::{Ctx, HttpCall, HttpError, HttpGet, MediaSource, Reply, plugin};
-use serde_json::{json, Value};
-
-use crate::common::error_template;
+use oktz_plugin_api::{Ctx, HttpCall, MediaSource, Reply, plugin};
+use serde_json::Value;
 
 const API: &str = "https://api.obscuraworks.org/api/tools/amdata";
 
@@ -96,7 +94,7 @@ pub fn am_data(ctx: Ctx) -> Reply {
     let body = res.json().unwrap_or(Value::Null);
     let info = body.get("data").and_then(|d| d.get("info"));
 
-    if !crate::common::js_truthy_value(body.get("status")) || info.is_none() {
+    if !crate::common::js_truthy(body.get("status")) || !crate::common::js_truthy(info) {
         return Reply::text(GAGAL).with_reaction("❌");
     }
 
@@ -146,7 +144,7 @@ pub fn am_data(ctx: Ctx) -> Reply {
     let max_ff = info.get("maxFFVer").and_then(Value::as_str).unwrap_or("-");
     let share_date = fmt_date(&info.get("shareDate").cloned().unwrap_or(Value::Null));
 
-    let mut msg = format!(
+    let msg = format!(
         "📱 *ᴀʟɪɢʜᴛ ᴍᴏᴛɪᴏɴ ᴅᴀᴛᴀ*\n\n\
          - *Judul* → {title}\n\
          - *Ukuran* → {size}\n\
@@ -160,11 +158,10 @@ pub fn am_data(ctx: Ctx) -> Reply {
          ✨ *Effects* → {effects}"
     );
 
-    if let Some(thumb) = info.get("largeThumbUrl").and_then(Value::as_str) {
-        if !thumb.is_empty() {
-            msg = msg; // caption di bawah
-            return Reply::image(MediaSource::url(thumb.to_string()), msg).with_reaction("✅");
-        }
+    if let Some(thumb) = info.get("largeThumbUrl").and_then(Value::as_str)
+        && !thumb.is_empty()
+    {
+        return Reply::image(MediaSource::url(thumb.to_string()), msg).with_reaction("✅");
     }
 
     Reply::text(msg).with_reaction("✅")
@@ -176,9 +173,9 @@ pub fn am_data(ctx: Ctx) -> Reply {
 
 #[cfg(test)]
 mod tests {
+    use oktz_plugin_api::{HttpError, HttpGet};
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -261,6 +258,7 @@ mod tests {
         let mut ctx = ctx_dengan_kunci();
         ctx.text = text.to_string();
         ctx.args = args.by_ref().map(str::to_string).collect();
+        ctx.http = http;
         am_data(ctx)
     }
 
@@ -303,7 +301,7 @@ mod tests {
     fn kunci_kosong_tetap_dikirim_dalam_header() {
         let http = Stub::body(serde_json::json!({ "status": false }));
         let mut args = "https://alightcreative.com/am/share/abc".split_whitespace();
-        let mut ctx = Ctx {
+        let ctx = Ctx {
             text: "https://alightcreative.com/am/share/abc".into(),
             args: args.by_ref().map(str::to_string).collect(),
             sender: ME.into(),

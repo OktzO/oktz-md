@@ -96,3 +96,14 @@ pub mod mutechat;
 
 // Ditambahkan scripts/pasang-modul.mjs.
 pub mod renewsewa;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod ganti_namadev;
+pub mod leave;
+pub mod payment;
+pub mod prefix;
+pub mod sampah;
+pub mod setgoodbyetype;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod listsewa;

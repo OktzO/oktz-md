@@ -2,9 +2,8 @@
 //! Ponytail: balasan proses intermediate dan nama berkas `wink-${Date.now()}` tidak
 //! direplikasi (Ctx tidak punya epoch); reaksi 🕕 hilang, hanya `✅`/`❌` akhir.
 
-use oktz_plugin_api::{Ctx, IncomingKind, MediaError, MediaSource, Reply, plugin, MediaFetch};
+use oktz_plugin_api::{Ctx, IncomingKind, MediaError, MediaSource, Reply, plugin};
 use oktz_scraper::wink::{plan_poll_budget, wink_enhance, Rencana};
-use oktz_plugin_api::MediaOrigin;
 
 const MAX_BYTES: u64 = 50 * 1024 * 1024;
 
@@ -13,10 +12,10 @@ const GAGAL_UNDUH: &str = "❌ *GAGAL*\n\nVideonya gagal diunduh, coba kirim ula
 const TERLALU_BESAR: &str = "❌ *FILE TERLALU BESAR*\n\nMaksimal *50MB*";
 
 fn ambil_video(ctx: &Ctx) -> Option<Result<Vec<u8>, MediaError>> {
-    if let Some(q) = ctx.quoted() {
-        if q.kind.is_video() {
-            return Some(ctx.download_quoted_media());
-        }
+    if let Some(q) = ctx.quoted()
+        && q.kind.is_video()
+    {
+        return Some(ctx.download_quoted_media());
     }
     if ctx.is_media_kind(IncomingKind::Video) {
         return Some(ctx.download_media());
@@ -77,7 +76,7 @@ pub(crate) fn wink_dengan_rencana(ctx: Ctx, rencana: &Rencana) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::{HttpBody, HttpGet, HttpResponse, IncomingMedia};
+    use oktz_plugin_api::{HttpBody, HttpCall, HttpGet, HttpResponse, IncomingMedia, MediaFetch, MediaOrigin};
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug, Default)]
@@ -95,26 +94,37 @@ mod tests {
                 hitung: Mutex::new(0),
             })
         }
-    }
 
-    impl HttpGet for HttpStub {
-        fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
+        /// Balasan berikutnya dalam urutan, sekaligus mencatat URL.
+        fn jawab(&self, url: &str) -> HttpResponse {
             self.seen.lock().unwrap().push(url.to_string());
             let mut h = self.hitung.lock().unwrap();
             let b = self.balasan.lock().unwrap();
             let i = (*h).min(b.len().saturating_sub(1));
             *h += 1;
-            drop(h);
-            drop(b);
-            let (status, teks) = self.balasan.lock().unwrap()[i].clone();
-            Ok(HttpResponse { status, body: HttpBody::Bytes { data: Arc::from(teks.into_bytes()), mimetype: None }, headers: Vec::new() })
+            let (status, teks) = b[i].clone();
+            HttpResponse { status, body: HttpBody::Bytes { data: Arc::from(teks.into_bytes()), mimetype: None }, headers: Vec::new() }
+        }
+    }
+
+    impl HttpGet for HttpStub {
+        fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
+            Ok(self.jawab(url))
         }
         fn post_json(&self, _: &str, _: &Value) -> Result<HttpResponse, HttpError> { unimplemented!() }
         fn post_form(&self, _: &str, _: &str) -> Result<HttpResponse, HttpError> { unimplemented!() }
         fn post_multipart(&self, _: &str, _: &[(&str, HttpBody)]) -> Result<HttpResponse, HttpError> { unimplemented!() }
+
+        /// Scraper wink selalu lewat `HttpCall::call` (termasuk unggah
+        /// multipart ke Qiniu, yang ditolak default trait) — produksi dilayani
+        /// `UreqHttp::call`, jadi stub ini harus ikut menimpanya.
+        fn call(&self, req: &HttpCall) -> Result<HttpResponse, HttpError> {
+            Ok(self.jawab(&req.url))
+        }
     }
 
-    #[derive(Debug, Default)]
+    // Tanpa `Default`: `Result<Vec<u8>, MediaError>` tidak punya `Default`.
+    #[derive(Debug)]
     struct MediaStub(Result<Vec<u8>, MediaError>);
     impl MediaFetch for MediaStub {
         fn download(&self, _: MediaOrigin) -> Result<Vec<u8>, MediaError> { self.0.clone() }
@@ -147,7 +157,9 @@ mod tests {
     }
 
     fn video_url(r: &Reply) -> String {
-        match r.without_mutations() {
+        // `wink.js` membalas lewat `m.react("✅")` + `m.reply(video)`, jadi
+        // balasan datang terbungkus Reaction.
+        match r.without_mutations().tanpa_reaksi() {
             Reply::Video { media, .. } => match media {
                 Some(MediaSource::Url { url, .. }) => url.clone(),
                 m => panic!("harus URL video, dapat {m:?}"),
@@ -187,7 +199,7 @@ mod tests {
             (200, r#"{"code":0,"data":{"msg_id":"wpr_1"}}"#),
             (200, r#"{"code":0,"data":{"item_list":[{"result":{"error_code":0,"media_info_list":[{"media_data":"https://cdn/hasil.mp4"}]}}]}}"#),
         ]);
-        let r = run(http, Ok(b"VIDEO".to_vec()));
+        let r = run(http.clone(), Ok(b"VIDEO".to_vec()));
         assert_eq!(video_url(&r), "https://cdn/hasil.mp4");
         match r.without_mutations() {
             Reply::Reaction { emoji, .. } => assert_eq!(emoji, "✅"),

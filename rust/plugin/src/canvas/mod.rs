@@ -20,3 +20,8 @@ pub mod starboy;
 
 // Ditambahkan scripts/pasang-modul.mjs.
 pub mod musiccard;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod applemusic;
+pub mod fakecall;
+pub mod tiktokchat;

@@ -13,3 +13,7 @@ pub mod couple;
 
 // Ditambahkan scripts/pasang-modul.mjs.
 pub mod meme;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod lahelu;
+pub mod quotesimage;

@@ -4,24 +4,23 @@
 //! punya timeout global sendiri, jadi timeout per-permintaan tidak ditiru.
 //! Balasan tidak dikutip (JS `m.reply(txt.trim())` polos).
 
-use oktz_plugin_api::{Ctx, HttpCall, HttpError, HttpGet, Reply, plugin};
-use serde_json::{json, Value};
+use oktz_plugin_api::{Ctx, HttpCall, Reply, plugin};
+use serde_json::Value;
 
-use crate::common::{error_template, js_truthy_value};
+use crate::common::js_truthy_value;
 use crate::tools::phisingataubukan::encode_uri_component;
 
 /// `cleanNumber` (`cekxl.js:20-25`): buang non-digit, awalan `0` → `62`, dan
 /// tambah `62` kalau belum ada.
 fn clean_number(raw: &str) -> String {
     let num: String = raw.chars().filter(|c| c.is_ascii_digit()).collect();
-    let num = if num.starts_with('0') {
-        format!("62{}", &num[1..])
+    if let Some(stripped) = num.strip_prefix('0') {
+        format!("62{stripped}")
     } else if num.starts_with("62") {
         num
     } else {
         format!("62{num}")
-    };
-    num
+    }
 }
 
 fn help(prefix: &str) -> String {
@@ -84,7 +83,7 @@ pub fn cekxl(ctx: Ctx) -> Reply {
     }
 
     let Ok(res) = ctx.http.call(
-        &HttpCall::get(&api_url(&clean_num)).header("Accept", "application/json"),
+        &HttpCall::get(api_url(&clean_num)).header("Accept", "application/json"),
     ) else {
         return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
     };
@@ -101,81 +100,78 @@ pub fn cekxl(ctx: Ctx) -> Reply {
 
     let mut txt = format!("📱 *INFORMASI XL/AXIS*\n\n📞 Nomor: *{clean_num}*\n");
 
-    if let Some(v) = data.get("msisdn") {
+    // `if (data.x)` — nilai falsy JS (`0`, `""`, `null`, `false`) tidak ditulis.
+    if let Some(v) = ada(data.get("msisdn")) {
         txt.push_str(&format!("🆔 MSISDN: *{}*\n", js_str(v)));
     }
-    if let Some(v) = data.get("status") {
+    if let Some(v) = ada(data.get("status")) {
         txt.push_str(&format!("📊 Status: *{}*\n", js_str(v)));
     }
-    if let Some(v) = data.get("activeDate") {
+    if let Some(v) = ada(data.get("activeDate")) {
         txt.push_str(&format!("📅 Aktif Sejak: *{}*\n", js_str(v)));
     }
-    if let Some(v) = data.get("expireDate") {
+    if let Some(v) = ada(data.get("expireDate")) {
         txt.push_str(&format!("⏰ Masa Aktif: *{}*\n", js_str(v)));
     }
-    if let Some(v) = data.get("graceDate") {
+    if let Some(v) = ada(data.get("graceDate")) {
         txt.push_str(&format!("⚠️ Masa Tenggang: *{}*\n", js_str(v)));
     }
 
-    if let Some(pkgs) = data.get("packages").and_then(Value::as_array) {
-        if !pkgs.is_empty() {
-            txt.push_str("\n📦 *DAFTAR PAKET AKTIF*\n\n");
-            for pkg in pkgs {
-                let name = pkg
-                    .get("name")
-                    .or_else(|| pkg.get("packageName"))
-                    .and_then(Value::as_str)
-                    .unwrap_or("Paket");
-                txt.push_str(&format!("- *{name}*\n"));
-                let quota = pkg
-                    .get("remainingQuota")
-                    .or_else(|| pkg.get("quota"))
-                    .and_then(Value::as_str)
-                    .map(|s| s.to_string());
-                if let Some(q) = quota {
-                    txt.push_str(&format!("  > Sisa Kuota: *{q}*\n"));
-                }
-                if let Some(v) = pkg.get("totalQuota").and_then(Value::as_str) {
-                    txt.push_str(&format!("  > Total Kuota: *{v}*\n"));
-                }
-                let berlaku = pkg
-                    .get("expireDate")
-                    .or_else(|| pkg.get("validUntil"))
-                    .and_then(Value::as_str);
-                if let Some(b) = berlaku {
-                    txt.push_str(&format!("  > Berlaku Sampai: *{b}*\n"));
-                }
-                if let Some(v) = pkg.get("type").and_then(Value::as_str) {
-                    txt.push_str(&format!("  > Tipe: *{v}*\n"));
-                }
-                txt.push('\n');
+    if let Some(pkgs) = data.get("packages").and_then(Value::as_array)
+        && !pkgs.is_empty()
+    {
+        txt.push_str("\n📦 *DAFTAR PAKET AKTIF*\n\n");
+        for pkg in pkgs {
+            let name = pkg
+                .get("name")
+                .or_else(|| pkg.get("packageName"))
+                .and_then(Value::as_str)
+                .unwrap_or("Paket");
+            txt.push_str(&format!("- *{name}*\n"));
+            let quota = pkg
+                .get("remainingQuota")
+                .or_else(|| pkg.get("quota"))
+                .and_then(Value::as_str)
+                .map(|s| s.to_string());
+            if let Some(q) = quota {
+                txt.push_str(&format!("  > Sisa Kuota: *{q}*\n"));
             }
+            if let Some(v) = pkg.get("totalQuota").and_then(Value::as_str) {
+                txt.push_str(&format!("  > Total Kuota: *{v}*\n"));
+            }
+            let berlaku = pkg
+                .get("expireDate")
+                .or_else(|| pkg.get("validUntil"))
+                .and_then(Value::as_str);
+            if let Some(b) = berlaku {
+                txt.push_str(&format!("  > Berlaku Sampai: *{b}*\n"));
+            }
+            if let Some(v) = pkg.get("type").and_then(Value::as_str) {
+                txt.push_str(&format!("  > Tipe: *{v}*\n"));
+            }
+            txt.push('\n');
         }
     }
 
-    if data.get("balance").is_some() || data.get("pulsa").is_some() {
-        let pulsa = data
-            .get("balance")
-            .or_else(|| data.get("pulsa"))
-            .and_then(Value::as_str)
-            .unwrap_or("");
-        txt.push_str(&format!("💰 *SALDO*\n> Pulsa: *{pulsa}*\n\n"));
+    // `if (data.balance || data.pulsa)` + `${data.balance || data.pulsa}`.
+    if let Some(pulsa) = ada(data.get("balance")).or_else(|| ada(data.get("pulsa"))) {
+        txt.push_str(&format!("💰 *SALDO*\n> Pulsa: *{}*\n\n", js_str(pulsa)));
     }
 
-    if let Some(r) = data.get("result") {
-        if r.is_object() {
-            if let Some(v) = r.get("name").and_then(Value::as_str) {
-                txt.push_str(&format!("👤 Nama Paket: *{v}*\n"));
-            }
-            if let Some(v) = r.get("quota").and_then(Value::as_str) {
-                txt.push_str(&format!("📊 Kuota: *{v}*\n"));
-            }
-            if let Some(v) = r.get("masa_aktif").and_then(Value::as_str) {
-                txt.push_str(&format!("📅 Masa Aktif: *{v}*\n"));
-            }
-            if let Some(v) = r.get("status").and_then(Value::as_str) {
-                txt.push_str(&format!("📊 Status: *{v}*\n"));
-            }
+    if let Some(r) = data.get("result")
+        && r.is_object()
+    {
+        if let Some(v) = ada(r.get("name")) {
+            txt.push_str(&format!("👤 Nama Paket: *{}*\n", js_str(v)));
+        }
+        if let Some(v) = ada(r.get("quota")) {
+            txt.push_str(&format!("📊 Kuota: *{}*\n", js_str(v)));
+        }
+        if let Some(v) = ada(r.get("masa_aktif")) {
+            txt.push_str(&format!("📅 Masa Aktif: *{}*\n", js_str(v)));
+        }
+        if let Some(v) = ada(r.get("status")) {
+            txt.push_str(&format!("📊 Status: *{}*\n", js_str(v)));
         }
     }
 
@@ -188,16 +184,16 @@ pub fn cekxl(ctx: Ctx) -> Reply {
             .as_object()
             .into_iter()
             .flat_map(|m| m.keys())
+            .map(String::as_str)
             .filter(|k| !skip.contains(k))
-            .copied()
             .collect();
         if !extra.is_empty() {
             txt.push_str("\n📋 *DETAIL LAINNYA*\n\n");
             for key in extra {
-                if let Some(v) = data.get(key) {
-                    if v.is_string() || v.is_number() {
-                        txt.push_str(&format!("- {key}: *{}*\n", js_str(v)));
-                    }
+                if let Some(v) = data.get(key)
+                    && (v.is_string() || v.is_number())
+                {
+                    txt.push_str(&format!("- {key}: *{}*\n", js_str(v)));
                 }
             }
         }
@@ -218,6 +214,14 @@ fn js_str(v: &Value) -> String {
     }
 }
 
+/// `if (nilai)` — `None` kalau nilai falsy JS (`0`, `""`, `null`, `false`).
+fn ada(v: Option<&Value>) -> Option<&Value> {
+    match v {
+        Some(x) if js_truthy_value(x) => Some(x),
+        _ => None,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Test
 // ---------------------------------------------------------------------------
@@ -225,8 +229,7 @@ fn js_str(v: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::{HttpBody, HttpResponse};
-    use serde_json::json;
+    use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -344,10 +347,11 @@ mod tests {
 
     #[test]
     fn status_salah_atau_error_hasilkan_not_found() {
+        // `cekxl.js:57` — `!data || data.error || data.status === false`.
+        // `{}` tidak memenuhi ketiganya, jadi tidak ikut di sini.
         for body in [
             serde_json::json!({ "error": true }),
             serde_json::json!({ "status": false }),
-            serde_json::json!({}),
             Value::Null,
         ] {
             let r = run(Stub::body(body.clone()), "083150850721");
@@ -358,6 +362,18 @@ mod tests {
             );
             assert_eq!(reaction_of(&r), Some("❌"), "body {body:?}");
         }
+    }
+
+    #[test]
+    fn body_objek_kosong_bukan_error_menghasilkan_teks_info() {
+        // `cekxl.js:57,62-63,110` — `{}` tidak kena cabang not-found, jadi teks
+        // informasi tetap dibangun (tanpa seksi ekstra) dan reaksi ✅.
+        let r = run(Stub::body(serde_json::json!({})), "083150850721");
+        assert_eq!(reaction_of(&r), Some("✅"));
+        assert_eq!(
+            text_of(&r),
+            "📱 *INFORMASI XL/AXIS*\n\n📞 Nomor: *6283150850721*"
+        );
     }
 
     #[test]

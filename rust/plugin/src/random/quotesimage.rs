@@ -5,6 +5,7 @@
 //! manual di `rust/crates/oktz-plugins/src/random/mod.rs`.
 
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
+use serde_json::Value;
 
 #[plugin(
     name = "quotesimage",
@@ -36,8 +37,8 @@ pub fn quotesimage(ctx: Ctx) -> Reply {
     };
 
     let data = match res.json() {
-        Ok(v) => v,
-        Err(_) => {
+        Some(v) => v,
+        None => {
             return Reply::text("❌ Gagal mengambil quotes image");
         }
     };
@@ -60,9 +61,9 @@ mod tests {
     use super::*;
 
     use oktz_plugin_api::{HttpBody, HttpError, HttpResponse};
-    use serde_json::json;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
+    #[derive(Debug)]
     struct Stub {
         body: Option<Value>,
     }
@@ -183,4 +184,3 @@ mod tests {
     }
 }
 
-use serde_json::Value;

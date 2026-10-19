@@ -11,8 +11,6 @@
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
-use crate::common::error_template;
-
 /// Jalur berkas konfigurasi (`ganti-namadev.js:28`).
 const CONFIG_PATH: &str = "config.js";
 
@@ -118,7 +116,7 @@ pub fn ganti_namadev(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::berkas::BerkasPalsu;
+    use oktz_plugin_api::berkas::{Berkas, BerkasPalsu};
 
     const ME: &str = "628111@s.whatsapp.net";
 
@@ -152,8 +150,23 @@ mod tests {
 
     #[test]
     fn nama_kosong_menghasilkan_bantuan() {
-        let b = berkas_dengan("bot: { developer: 'Zann' }");
-        let r = run(&b, &[]);
+        // `config.bot?.developer` (`ganti-namadev.js:24`) = objek config live;
+        // di port ini `ctx.config()`, bukan isi berkas config.js.
+        let ctx = Ctx {
+            sender: ME.into(),
+            chat: ME.into(),
+            prefix: ".".into(),
+            command: "ganti-namadev".into(),
+            config: std::sync::Arc::new(oktz_plugin_api::config::Runtime {
+                bot: oktz_plugin_api::config::BotInfo {
+                    developer: "Zann".into(),
+                    ..oktz_plugin_api::config::BotInfo::default()
+                },
+                ..oktz_plugin_api::config::Runtime::default()
+            }),
+            ..Ctx::default()
+        };
+        let r = ganti_namadev(ctx);
         assert_eq!(text_of(&r), bantuan(".", "Zann"));
     }
 
@@ -185,10 +198,13 @@ mod tests {
 
     #[test]
     fn spasi_di_sekitar_colon_dipertahankan() {
+        // Regex JS `developer:\s*` (`ganti-namadev.js:31-34`) menuntut titik dua
+        // tepat setelah `developer:`; "developer  :" tidak cocok, jadi isi
+        // berkas TIDAK berubah (hanya config live yang berganti).
         let b = berkas_dengan("developer  :  'Zann'");
         let r = run(&b, &["Budi"]);
         assert_eq!(text_of(&r), sukses("Budi"));
-        assert_eq!(b.baca_teks(CONFIG_PATH).unwrap(), "developer  :  'Budi'");
+        assert_eq!(b.baca_teks(CONFIG_PATH).unwrap(), "developer  :  'Zann'");
     }
 
     #[test]
@@ -201,7 +217,7 @@ mod tests {
 
     #[test]
     fn berkas_tidak_ada_menggunakan_error_template() {
-        let b = BerkasPalsu::baru();
+        let b = std::sync::Arc::new(BerkasPalsu::baru());
         let r = run(&b, &["Budi"]);
         assert_eq!(
             text_of(&r),

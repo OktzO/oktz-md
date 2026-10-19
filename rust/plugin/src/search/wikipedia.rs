@@ -19,14 +19,11 @@
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 use serde_json::Value;
 
-const LANG: &str = "id";
 const LIMIT: usize = 5;
 const BASE: &str = "https://id.wikipedia.org";
-const UA: &str = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Mobile Safari/537.36";
 
 /// Hasil pencarian Wikipedia.
 struct SearchResult {
-    code: u16,
     results: Vec<Value>,
 }
 
@@ -37,7 +34,6 @@ struct Article {
     description: Option<String>,
     url: String,
     extract: Option<String>,
-    sections: Vec<(String, String)>,
     infobox: Vec<(String, String)>,
     images: Vec<(String, Option<String>)>,
 }
@@ -49,29 +45,30 @@ fn search_wikipedia(http: &dyn oktz_plugin_api::HttpGet, query: &str) -> Result<
     let res = http
         .get(&url)
         .map_err(|e| format!("Gagal mencari: {}", e.message))?;
-    let data: Value = res.json().ok().unwrap_or(Value::Null);
+    let data: Value = res.json().unwrap_or(Value::Null);
     let results = data.get("query")
         .and_then(|v| v.get("search"))
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    Ok(SearchResult { code: res.status, results })
+    Ok(SearchResult { results })
 }
 
 /// `getFullArticle` — ambil halaman artikel dan parse.
 fn get_full_article(http: &dyn oktz_plugin_api::HttpGet, title: &str) -> Result<Article, String> {
-    let page_path = format!("/wiki/{}", encode_uri_component(title.replace(' ', "_")));
+    let page_path = format!("/wiki/{}", encode_uri_component(&title.replace(' ', "_")));
     let page_url = format!("{BASE}{page_path}");
     let res = http
         .get(&page_url)
         .map_err(|e| format!("Gagal mengambil artikel: {}", e.message))?;
     let html = res.text();
     let cleaned = remove_unwanted(&html);
-    let page_title = clean_text(extract_by_id(&cleaned, "firstHeading")).unwrap_or_else(|| title.to_string());
+    // `cleanText($("#firstHeading").text()) || title` (`wikipedia.js:106`).
+    let heading = clean_text(&extract_by_id(&cleaned, "firstHeading").unwrap_or_default());
+    let page_title = if heading.is_empty() { title.to_string() } else { heading };
     let description = extract_by_class(&cleaned, "tagline")
         .map(|t| clean_text(&t)).filter(|s| !s.is_empty());
     let intro = intro_paragraphs(&cleaned);
-    let sections = extract_sections(&cleaned);
     let infobox = extract_infobox(&cleaned);
     let images = extract_images(&cleaned, &page_url);
     Ok(Article {
@@ -79,7 +76,6 @@ fn get_full_article(http: &dyn oktz_plugin_api::HttpGet, title: &str) -> Result<
         description,
         url: page_url,
         extract: intro.filter(|s| !s.is_empty()),
-        sections,
         infobox,
         images,
     })
@@ -162,14 +158,9 @@ fn remove_by_class_or_id(html: &str, selector: &str) -> String {
 /// Ekstraksi teks dari elemen dengan id tertentu.
 fn extract_by_id(html: &str, id: &str) -> Option<String> {
     let pola = format!("id=\"{id}\"");
-    let mut start = 0;
-    while let Some(pos) = html[start..].find(&pola) {
-        let abs = start + pos;
-        let tag_start = html[..abs].rfind('<').unwrap_or(abs);
-        let tag_end = match html[abs..].find('>') {
-            Some(g) => abs + g + 1,
-            None => return None,
-        };
+    // Elemen pertama saja, sama seperti selector `cheerio` di JS.
+    if let Some(abs) = html.find(&pola) {
+        let tag_end = abs + html[abs..].find('>')? + 1;
         let after = &html[tag_end..];
         let close_pos = after.find('<').unwrap_or(after.len());
         return Some(html[tag_end..tag_end + close_pos].to_string());
@@ -180,14 +171,10 @@ fn extract_by_id(html: &str, id: &str) -> Option<String> {
 /// Ekstraksi teks dari elemen pertama dengan class tertentu.
 fn extract_by_class(html: &str, class: &str) -> Option<String> {
     let pola = format!("class=\"{class}\"");
-    let mut start = 0;
-    while let Some(pos) = html[start..].find(&pola) {
-        let abs = start + pos;
+    // Elemen pertama saja, sama seperti selector `cheerio` di JS.
+    if let Some(abs) = html.find(&pola) {
         let tag_start = html[..abs].rfind('<').unwrap_or(abs);
-        let tag_end = match html[abs..].find('>') {
-            Some(g) => abs + g + 1,
-            None => return None,
-        };
+        let tag_end = abs + html[abs..].find('>')? + 1;
         let content_start = tag_end;
         // Cari tag penutup — deteksi nama tag
         let tag_name = &html[tag_start + 1..tag_start + 1 + 20];
@@ -204,9 +191,7 @@ fn extract_by_class(html: &str, class: &str) -> Option<String> {
 /// Paragraf pengantar dari `.mw-parser-output > section > p` atau `.mw-parser-output > p`.
 fn intro_paragraphs(html: &str) -> Option<String> {
     // Cari .mw-parser-output
-    let Some(parser) = extract_by_class(html, "mw-parser-output") else {
-        return None;
-    };
+    let parser = extract_by_class(html, "mw-parser-output")?;
     // Cari <p> langsung di dalamnya
     let mut teks = String::new();
     let mut start = 0;
@@ -227,83 +212,6 @@ fn intro_paragraphs(html: &str) -> Option<String> {
         start = abs + 2;
     }
     if teks.is_empty() { None } else { Some(teks) }
-}
-
-/// Ekstraksi sekusi: heading + konten dari `.mw-parser-output > section`.
-fn extract_sections(html: &str) -> Vec<(String, String)> {
-    let mut sections = Vec::new();
-    let Some(parser) = extract_by_class(html, "mw-parser-output") else {
-        return sections;
-    };
-    let mut start = 0;
-    while let Some(pos) = parser[start..].find("<section") {
-        let abs = start + pos;
-        let tag_start = html_find_tag_start(&parser, abs);
-        let tag_end = match parser[abs..].find('>') {
-            Some(g) => abs + g + 1,
-            None => break,
-        };
-        let section_end = match parser[tag_end..].find("</section>") {
-            Some(e) => tag_end + e + "</section>".len(),
-            None => parser.len(),
-        };
-        let section_html = &parser[tag_end..section_end - "</section>".len()];
-        // Cari heading h2 atau h3
-        let heading = extract_first_heading(section_html);
-        if heading.is_empty() || heading.to_lowercase() == "daftar isi" {
-            start = section_end;
-            continue;
-        }
-        // Cari p, ul, ol di dalam section
-        let mut texts = Vec::new();
-        for tag in ["p", "ul", "ol"] {
-            let mut s = 0;
-            while let Some(p) = section_html[s..].find(&format!("<{tag}")) {
-                let abs2 = s + p;
-                let after = &section_html[abs2 + tag.len()..];
-                if after.starts_with('>') || after.starts_with(' ') {
-                    let cs = section_html[abs2 + tag.len() + after.find('>').unwrap_or(0) + 1..]
-                        .find(&format!("</{tag}>"))
-                        .unwrap_or(0);
-                    let content = &section_html[abs2 + tag.len() + after.find('>').unwrap_or(0) + 1..abs2 + tag.len() + after.find('>').unwrap_or(0) + 1 + cs];
-                    let clean = clean_text(content);
-                    if clean.len() > 40 {
-                        texts.push(clean);
-                    }
-                }
-                s = abs2 + tag.len() + 1;
-            }
-        }
-        if !texts.is_empty() {
-            sections.push((heading, texts.join("\n\n")));
-        }
-        start = section_end;
-    }
-    sections
-}
-
-fn html_find_tag_start(html: &str, attr_pos: usize) -> usize {
-    html[..attr_pos].rfind('<').unwrap_or(attr_pos)
-}
-
-fn extract_first_heading(html: &str) -> String {
-    for tag in ["h2", "h3"] {
-        if let Some(t) = extract_by_id(html, "") {
-            if !t.is_empty() { return t; }
-        }
-    }
-    // Coba cari teks h2/h3 langsung
-    let open = "<h2";
-    if let Some(pos) = html.find(open) {
-        let after = &html[pos + 3..];
-        if after.starts_with('>') {
-            let content_start = pos + 4;
-            if let Some(cs) = html[content_start..].find("</h2>") {
-                return clean_text(&html[content_start..content_start + cs]);
-            }
-        }
-    }
-    String::new()
 }
 
 /// Ekstraksi infobox: `.infobox tr` → key (th) + value (td).
@@ -359,22 +267,26 @@ fn extract_images(html: &str, base_url: &str) -> Vec<(String, Option<String>)> {
     let mut start = 0;
     while let Some(pos) = parser[start..].find("<img") {
         let abs = start + pos;
-        let after = &parser[abs + 3..];
+        // `<img`.len() — panjang tag pembuka, bukan 3.
+        let after = &parser[abs + 4..];
         if after.starts_with('>') || after.starts_with(' ') {
             let src = attr_from_tag(&parser[abs..], "src");
-            let alt = attr_from_tag(&parser[abs..], "alt").map(clean_text);
-            if let Some(s) = src {
-                let fixed = fix_url(&s, base_url);
-                if fixed.contains("static/images") || fixed.contains("Semi-protection") || fixed.contains("OOjs_UI") {
-                    start = abs + 3;
-                    continue;
-                }
-                if seen.insert(fixed.clone()) {
-                    images.push((fixed, alt));
-                }
+            let alt = attr_from_tag(&parser[abs..], "alt").map(|s| clean_text(&s));
+            // `const src = fixUrl($(img).attr("src")); if (!src) return;`
+            // (`wikipedia.js:159-162`).
+            let Some(fixed) = src.and_then(|s| fix_url(&s, base_url)) else {
+                start = abs + 4;
+                continue;
+            };
+            if fixed.contains("static/images") || fixed.contains("Semi-protection") || fixed.contains("OOjs_UI") {
+                start = abs + 4;
+                continue;
+            }
+            if seen.insert(fixed.clone()) {
+                images.push((fixed, alt));
             }
         }
-        start = abs + 3;
+        start = abs + 4;
     }
     images
 }
@@ -404,27 +316,9 @@ fn decode_html(text: &str) -> String {
 /// `cleanText` — hapus tag, entitas, referensi [n], spasi berlebih.
 fn clean_text(text: &str) -> String {
     let text = decode_html(text);
-    let text = strip_html_tags(text);
+    let text = strip_html_tags(&text);
     let text = remove_references(&text);
     collapse_whitespace(&text)
-}
-
-/// `cleanBlock` — seperti cleanText tetapi ganti 3+ newline dengan 2.
-fn clean_block(text: &str) -> String {
-    let text = clean_text(text);
-    let text = text.replace(&['\n'][..], "\n");
-    let mut out = String::new();
-    let mut prev_nl = 0;
-    for (i, c) in text.chars().enumerate() {
-        if c == '\n' {
-            if prev_nl > 0 && i - prev_nl <= 1 {
-                continue;
-            }
-            prev_nl = i;
-        }
-        out.push(c);
-    }
-    out
 }
 
 fn strip_html_tags(raw: &str) -> String {
@@ -483,8 +377,9 @@ fn collapse_whitespace(text: &str) -> String {
     out.trim().to_string()
 }
 
-/// `fixUrl` — URL protokol-relatif dan relativ.
-fn fix_url(url: &str, base_url: &str) -> Option<String> {
+/// `fixUrl` — URL protokol-relatif dan relativ. JS mengabaikan `base` dan
+/// selalu memakai `BASE` (`wikipedia.js:56-61`).
+fn fix_url(url: &str, _base_url: &str) -> Option<String> {
     if url.is_empty() {
         return None;
     }
@@ -498,6 +393,7 @@ fn fix_url(url: &str, base_url: &str) -> Option<String> {
 }
 
 /// `uniqueBy` — dedup berdasarkan key.
+#[cfg(test)]
 fn unique_by<T, F>(array: Vec<T>, key: F) -> Vec<T>
 where
     F: Fn(&T) -> String,
@@ -519,7 +415,7 @@ fn encode_uri_component(s: &str) -> String {
     out
 }
 
-fn help(prefix: &str) -> String {
+fn help(_prefix: &str) -> String {
     "❌ Masukkan kata kunci pencarian Wikipedia.\n\nContoh: `.wikipedia Indonesia`".to_string()
 }
 
@@ -595,7 +491,6 @@ mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
     use std::sync::{Arc, Mutex};
-    use serde_json::json;
 
     const SENDER: &str = "628111@s.whatsapp.net";
 

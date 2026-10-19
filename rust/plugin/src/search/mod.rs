@@ -43,3 +43,11 @@ pub mod spotplay;
 
 // Ditambahkan scripts/pasang-modul.mjs.
 pub mod playtiktok;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod playsoundcloud;
+pub mod ptvsearch;
+pub mod searchthatsong;
+pub mod soundcloud;
+pub mod tiktokfoto;
+pub mod wikipedia;

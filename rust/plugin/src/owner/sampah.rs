@@ -53,7 +53,7 @@ pub fn sampah(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::berkas::BerkasPalsu;
+    use oktz_plugin_api::berkas::{Berkas, BerkasPalsu};
 
     fn ctx_sampah(berkas: std::sync::Arc<dyn oktz_plugin_api::berkas::Berkas>) -> Ctx {
         Ctx {
@@ -79,21 +79,23 @@ mod tests {
     #[test]
     fn folder_temp_kosong_mengembalikan_pesan() {
         let b = BerkasPalsu::baru();
-        b.buat_folder("temp").unwrap();
+        // BerkasPalsu tidak punya folder nyata; entri "temp" dipakai sebagai
+        // penanda keberadaannya (`ada("temp")`).
+        b.tulis_teks("temp", "").unwrap();
         let r = sampah(ctx_sampah(std::sync::Arc::new(b)));
         assert_eq!(r.text_body().unwrap(), "📁 Folder temp sudah kosong!");
     }
 
     #[test]
     fn menghapus_file_dalam_temp() {
-        let b = BerkasPalsu::baru();
-        b.buat_folder("temp").unwrap();
+        let b = std::sync::Arc::new(BerkasPalsu::baru());
+        b.tulis_teks("temp", "").unwrap();
         b.tulis_teks("temp/a.txt", "isi a").unwrap();
         b.tulis_teks("temp/b.txt", "isi b").unwrap();
-        let r = sampah(ctx_sampah(std::sync::Arc::new(b)));
+        let r = sampah(ctx_sampah(b.clone()));
         let text = r.text_body().unwrap();
         assert!(text.contains("dihapus: *2*"));
-        assert!((b.ada("temp/a.txt") == false));
-        assert!((b.ada("temp/b.txt") == false));
+        assert!(!b.ada("temp/a.txt"));
+        assert!(!b.ada("temp/b.txt"));
     }
 }

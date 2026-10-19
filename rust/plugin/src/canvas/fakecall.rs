@@ -83,7 +83,7 @@ pub fn fakecall(ctx: Ctx) -> Reply {
 
     // Coba ambil avatar: pesan pemicu (image) → quoted (image) → foto profil.
     let avatar = avatar_bytes(&ctx).or_else(|| {
-        fallback_avatar(&ctx.http).ok().filter(|b| !b.is_empty())
+        fallback_avatar(&*ctx.http).ok().filter(|b| !b.is_empty())
     });
 
     let endpoint = if cmd == "fakecall-ios" {
@@ -92,8 +92,8 @@ pub fn fakecall(ctx: Ctx) -> Reply {
         "fakecall-android"
     };
 
-    let Ok(res) = ctx.http.call(&HttpCall::post(&api_url(endpoint)).multipart(vec![
-        MultipartPart::file("avatarUrl", AVATAR_FILE, avatar.clone()),
+    let Ok(res) = ctx.http.call(&HttpCall::post(api_url(endpoint)).multipart(vec![
+        MultipartPart::file("avatarUrl", AVATAR_FILE, avatar.unwrap_or_default()),
         MultipartPart::field("name", nama),
         MultipartPart::field("duration", durasi),
     ])) else {
@@ -112,10 +112,10 @@ fn avatar_bytes(ctx: &Ctx) -> Option<Vec<u8>> {
     if ctx.media.as_ref().is_some_and(|m| m.kind == oktz_plugin_api::IncomingKind::Image) {
         return ctx.download_media().ok();
     }
-    if let Some(q) = &ctx.quoted {
-        if q.kind.is_image() {
-            return ctx.download_quoted_media().ok();
-        }
+    if let Some(q) = &ctx.quoted
+        && q.kind.is_image()
+    {
+        return ctx.download_quoted_media().ok();
     }
     None
 }
@@ -162,13 +162,12 @@ mod tests {
     }
 
     impl oktz_plugin_api::HttpGet for Stub {
-        fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
+        fn get(&self, _: &str) -> Result<HttpResponse, HttpError> {
             if self.gagal {
                 return Err(oktz_plugin_api::HttpError {
                     message: "offline".into(),
                 });
             }
-            self.panggilan.lock().unwrap().push((url.to_string(), Vec::new()));
             Ok(HttpResponse {
                 status: 200,
                 body: HttpBody::Bytes {
@@ -207,6 +206,45 @@ mod tests {
                 headers: Vec::new(),
             })
         }
+        /// Plugin memakai `HttpCall::multipart` (`fakecall.js:78-93`); default
+        /// `HttpGet::call` menolak multipart, jadi stub menimpanya dan mencatat
+        /// `panggilan` hanya untuk request API (bukan avatar cadangan catbox).
+        fn call(&self, req: &HttpCall) -> Result<HttpResponse, HttpError> {
+            if self.gagal {
+                return Err(oktz_plugin_api::HttpError {
+                    message: "offline".into(),
+                });
+            }
+            let badan = match req.body.as_ref() {
+                Some(HttpBody::Multipart(parts)) => badan_file(parts),
+                _ => Vec::new(),
+            };
+            self.panggilan.lock().unwrap().push((req.url.clone(), badan));
+            Ok(HttpResponse {
+                status: 200,
+                body: HttpBody::Bytes {
+                    data: Arc::from(self.balasan.clone().unwrap_or_default()),
+                    mimetype: None,
+                },
+                headers: Vec::new(),
+            })
+        }
+    }
+
+    /// Badan multipart termasuk `filename` part berkas — `form-data` JS
+    /// (`form.append('avatarUrl', buffer, { filename: 'avatar.jpg' })`).
+    fn badan_file(parts: &[MultipartPart]) -> Vec<u8> {
+        let mut out = Vec::new();
+        for p in parts {
+            out.extend_from_slice(format!("{}=", p.name).as_bytes());
+            if let Some(nama_berkas) = &p.file_name {
+                out.extend_from_slice(nama_berkas.as_bytes());
+                out.push(b' ');
+            }
+            out.extend_from_slice(p.body.bytes());
+            out.push(b'\n');
+        }
+        out
     }
 
     fn badan_multipart(parts: &[(&str, HttpBody)]) -> Vec<u8> {

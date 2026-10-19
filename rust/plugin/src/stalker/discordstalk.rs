@@ -9,10 +9,6 @@
 //! `d.created_at` di JS di-parse `new Date(...)` (terima string ISO). Di sini
 //! hanya angka epoch ms (atau string numerik) yang diformat; nilai lain jadi
 //! `-`. Tambahkan pemroses ISO ke `crate::common` kalau butuh ketepatan penuh.
-//!
-//! Helper `error_template` disalin (duplikasi sengaja) karena fungsi itu
-//! private di `download/alightmotion.rs` dan brief melarang menyentuh file
-//! plugin lain.
 
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 use serde_json::Value;
@@ -48,7 +44,7 @@ fn js_str(v: &Value) -> String {
 
 /// `discordstalk.js:55-57` — `fromTimestamp(created_at, "D MMMM YYYY")`.
 /// Hanya epoch ms (detik sebagai string numerik juga diterima) yang
-// diformat ke zona Asia/Jakarta; yang tak tertolak jadi `-`.
+/// diformat ke zona Asia/Jakarta; yang tak tertolak jadi `-`.
 fn created_at_text(value: Option<&Value>) -> String {
     let ms = match value {
         Some(Value::Number(n)) => n.as_i64(),
@@ -69,23 +65,21 @@ fn created_at_text(value: Option<&Value>) -> String {
     }
 }
 
-/// Ambil field string dari `d`; `null`/hilang jadi `"-"`.
+/// `${d.key || "-"}` — nilai falsy JS (`null`, `0`, `""`, `false`, hilang)
+/// jadi `-`.
 fn field_str(d: &Value, key: &str) -> String {
-    d.get(key)
-        .and_then(Value::as_str)
-        .map(String::from)
-        .unwrap_or_else(|| match d.get(key) {
-            Some(v) if !v.is_null() => js_str(v),
-            _ => "-".to_string(),
-        })
+    match d.get(key) {
+        Some(v) if crate::common::js_truthy_value(v) => js_str(v),
+        _ => "-".to_string(),
+    }
 }
 
 /// `discordstalk.js:59-66` — caption hasil stalk.
 fn caption(d: &Value) -> String {
-    let discriminator = d
-        .get("discriminator")
-        .and_then(Value::as_str)
-        .unwrap_or("0");
+    let discriminator = match d.get("discriminator") {
+        Some(v) if crate::common::js_truthy_value(v) => js_str(v),
+        _ => "0".to_string(),
+    };
     let created_date = created_at_text(d.get("created_at"));
     format!(
         "🎮 *ᴅɪsᴄᴏʀᴅ sᴛᴀʟᴋ*\n\n\
@@ -98,22 +92,8 @@ fn caption(d: &Value) -> String {
         field_str(d, "username"),
         field_str(d, "global_name"),
         discriminator,
-        js_str(&d.get("id").unwrap_or(&Value::Null)),
+        js_str(d.get("id").unwrap_or(&Value::Null)),
         created_date,
-    )
-}
-
-/// `src/lib/error.js` + `config.errorTemplate` (`config.js:153`).
-///
-/// `pushName || 'User'` jadi `'User'` karena `m.pushName` tidak ada di `Ctx`;
-// `prefix || '.'` dan `command || '?'` tetap dihormati.
-fn error_template(prefix: &str, command: &str) -> String {
-    let prefix = if prefix.is_empty() { "." } else { prefix };
-    let command = if command.is_empty() { "?" } else { command };
-    format!(
-        "☢ Kayaknya command `{prefix}{command}` lagi ada kendala\n\
-         Silahkan coba lagi nanti, User\n\n\
-         _Jika masalah berlanjut, silahkan hubungi owner bot_"
     )
 }
 
@@ -135,7 +115,7 @@ pub fn discordstalk(ctx: Ctx) -> Reply {
         return Reply::text(help(&ctx.prefix));
     }
 
-    if !user_id.bytes().all(|b| matches!(b, b'0'..=b'9')) {
+    if !user_id.bytes().all(|b| b.is_ascii_digit()) {
         return Reply::text(
             "❌ User ID harus berupa angka. Contoh: 297574907510784000",
         );
@@ -147,20 +127,24 @@ pub fn discordstalk(ctx: Ctx) -> Reply {
     };
     let body = res.json().unwrap_or(Value::Null);
     let status_ok = body.get("status").is_some_and(crate::common::js_truthy_value);
+    // `!res.data?.status || !res.data?.data` — data falsy ikut gagal.
     let Some(d) = body
         .get("data")
-        .filter(|v| status_ok && !v.is_null())
+        .filter(|v| status_ok && crate::common::js_truthy_value(v))
     else {
         return Reply::text(format!("❌ User ID *{user_id}* tidak ditemukan"))
             .with_reaction("❌");
     };
 
     let caption_text = caption(d);
-    let avatar_url = js_str(&d.get("avatar_url").unwrap_or(&Value::Null));
-    let has_avatar = d.get("avatar_url").is_some_and(|v| !v.is_null());
+    // `if (d.avatar_url)` — nilai falsy JS tidak dikirim sebagai gambar.
+    let avatar = d
+        .get("avatar_url")
+        .filter(|v| crate::common::js_truthy_value(v))
+        .map(js_str);
 
-    if has_avatar && !avatar_url.is_empty() {
-        Reply::image(MediaSource::url(avatar_url), caption_text).with_reaction("✅")
+    if let Some(url) = avatar {
+        Reply::image(MediaSource::url(url), caption_text).with_reaction("✅")
     } else {
         Reply::text(caption_text).with_reaction("✅")
     }
@@ -170,7 +154,6 @@ pub fn discordstalk(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -336,28 +319,35 @@ mod tests {
 
     #[test]
     fn berhasil_dengan_avatar_mengirim_gambar_dengan_caption() {
-        let created_at = 1_768_564_200_000i64; // 2026-01-15T08:30:00Z -> 15 Januari 2026 WIB
+        // 1768564200000 = 2026-01-16T11:50:00Z, WIB 18:50 → 16 Januari 2026
+        // (`discordstalk.js:55-57`).
+        let created_at = 1_768_564_200_000i64;
         let body = serde_json::json!({
             "status": true,
             "data": {
                 "username": "oktzz",
                 "global_name": "Oktz",
                 "discriminator": "1234",
-                "id": 297574907510784000,
+                "id": 297574907510784000i64,
                 "created_at": created_at,
                 "avatar_url": "https://cdn/avatar.png"
             }
         });
         let http = Stub::body(body.clone());
-        let r = run(http, "297574907510784000");
+        let r = run(http.clone(), "297574907510784000");
         assert_eq!(reaction_of(&r), Some("✅"));
-        match r.without_mutations() {
+        // Balasan dibungkus reaksi ✅ (`discordstalk.js:68-78`), jadi isi pesan
+        // diambil dari dalam `Reply::Reaction`.
+        let Reply::Reaction { reply: isi, .. } = r.without_mutations() else {
+            panic!("harus dibungkus reaksi");
+        };
+        match isi.as_ref() {
             Reply::Image { media, caption, .. } => {
                 assert!(caption.contains("👤 *Username:* oktzz"));
                 assert!(caption.contains("📛 *Display Name:* Oktz"));
                 assert!(caption.contains("🔢 *Discriminator:* #1234"));
                 assert!(caption.contains("🆔 *User ID:* 297574907510784000"));
-                assert!(caption.contains("📅 *Dibuat:* 15 Januari 2026"));
+                assert!(caption.contains("📅 *Dibuat:* 16 Januari 2026"));
                 assert_eq!(
                     media,
                     &Some(MediaSource::Url {
@@ -399,7 +389,7 @@ mod tests {
     #[test]
     fn created_at_hanya_terima_epoch_angka() {
         // 1767225600000 = 2026-01-01T00:00:00Z -> 07:00 WIB, 1 Januari 2026
-        assert_eq!(created_at_text(Some(&serde_json::json!(1767225600000))), "1 Januari 2026");
+        assert_eq!(created_at_text(Some(&serde_json::json!(1767225600000i64))), "1 Januari 2026");
         assert_eq!(created_at_text(Some(&serde_json::json!("1767225600000"))), "1 Januari 2026");
         // String ISO tidak bisa di-parse tanpa crate tanggal -> "-"
         assert_eq!(

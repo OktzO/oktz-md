@@ -72,3 +72,6 @@ pub mod maling;
 // Ditambahkan scripts/pasang-modul.mjs.
 pub mod duel;
 pub mod nulis;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod dice;

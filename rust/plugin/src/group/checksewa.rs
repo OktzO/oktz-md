@@ -350,11 +350,13 @@ mod tests {
 
     #[test]
     fn a_tenant_inside_three_days_gets_the_amber_reaction_and_the_warning() {
-        let soon = crate::common::now_ms() + 2 * 86_400_000i64;
+        // Toleransi 1 jam: handler menghitung sisa dari `now` sendiri, jadi
+        // selisih beberapa milidetik pun memotong hasil `Math.floor`.
+        let soon = crate::common::now_ms() + 2 * 86_400_000i64 + 3_600_000;
         let r = run(CHAT, tenant(serde_json::json!({ "expiredAt": soon })));
         let t = text_of(&r);
         assert!(t.starts_with("⏱️ *STATUS SEWA*"), "{t}");
-        assert!(t.contains("Sisa waktu: *2 hari*"), "{t}");
+        assert!(t.contains("Sisa waktu: *2 hari"), "{t}");
         assert!(
             t.ends_with("\n\n⚠️ Sewa hampir habis! Hubungi owner bot untuk perpanjang."),
             "{t}"

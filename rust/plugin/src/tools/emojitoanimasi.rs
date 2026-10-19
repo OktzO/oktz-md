@@ -76,6 +76,11 @@ pub fn emojitoanimasi(ctx: Ctx) -> Reply {
         return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
             .with_reaction("☢");
     };
+    // axios melempar untuk 4xx/5xx; di sini status dicek manual.
+    if !(200..300).contains(&webp_res.status) {
+        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+            .with_reaction("☢");
+    }
     let bytes = webp_res.body.bytes().to_vec();
 
     // `contextInfo: saluranCtx()` tidak tersedia di `Reply::Sticker` —
@@ -87,7 +92,6 @@ pub fn emojitoanimasi(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
-    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     /// Stub dengan antrean respons: panggilan pertama JSON, berikutnya byte.
@@ -107,7 +111,8 @@ mod tests {
         fn webp(bytes: &[u8]) -> Arc<Stub> {
             Arc::new(Stub {
                 antrean: Mutex::new(vec![
-                    Ok(String::new()), // placeholder, diganti handler uji
+                    // Respons API pertama: JSON valid berisi URL webp.
+                    Ok(r#"{"status":true,"data":{"url":"https://x.webp"}}"#.to_string()),
                     Ok(String::from_utf8_lossy(bytes).to_string()),
                 ]),
                 seen: Mutex::new(Vec::new()),
@@ -201,7 +206,7 @@ mod tests {
     #[test]
     fn tanpa_emoji_tampilkan_pakai_tanpa_reaksi() {
         let http = Stub::offline();
-        let r = run(http, "");
+        let r = run(http.clone(), "");
         assert_eq!(teks(&r), pakai("."));
         assert_eq!(reaksi(&r), None);
         assert!(http.seen.lock().unwrap().is_empty());
@@ -254,7 +259,7 @@ mod tests {
             Reply::Sticker { media } => {
                 assert_eq!(
                     media,
-                    &Some(MediaSource::Bytes {
+                    Some(MediaSource::Bytes {
                         data: Arc::from(b"WEBP".to_vec()),
                         mimetype: None,
                     })

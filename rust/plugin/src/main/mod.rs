@@ -11,3 +11,6 @@ pub mod tqto;
 pub mod leaderboard;
 pub mod ping;
 pub mod stopjadibot;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod donasi;

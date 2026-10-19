@@ -17,7 +17,6 @@
 //! disentuh agent porting per aturan PORT-BRIEF #2).
 
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
-use serde_json::Value;
 
 /// Satu turnamen dari halaman infotourney.
 #[derive(Clone, Debug)]
@@ -56,16 +55,13 @@ fn parse_tournaments(html: &str, base_url: &str) -> Vec<Tournament> {
         // Cari penutup div.item
         let after = &html[tag_end..];
         let close_pos = after.find("</div>").unwrap_or(after.len());
-        let item_html = &html[tag_start..tag_end + close_pos + 6];
+        let akhir = (tag_end + close_pos + 6).min(html.len());
+        let item_html = &html[tag_start..akhir];
 
-        let title = attr_value(item_html, "h2[itemprop=\"name\"] a")
-            .or_else(|| tag_text(item_html, "h2"))
-            .unwrap_or_default();
-        let link = attr_href(item_html, "h2[itemprop=\"name\"] a").unwrap_or_default();
-        let image = attr_src(item_html, "p img").unwrap_or_default();
-        let date_raw = attr_value(item_html, "time[itemprop=\"datePublished\"]")
-            .or_else(|| attr_value(item_html, "datetime"))
-            .unwrap_or_default();
+        let title = tag_text(item_html, "a").unwrap_or_default();
+        let link = attr_href(item_html).unwrap_or_default();
+        let image = attr_src(item_html).unwrap_or_default();
+        let date_raw = attr_value(item_html, "datetime").unwrap_or_default();
 
         let date_published = if !date_raw.is_empty() {
             format_tanggal(&date_raw)
@@ -89,51 +85,44 @@ fn parse_tournaments(html: &str, base_url: &str) -> Vec<Tournament> {
                 url,
             });
         }
-        i = tag_end + close_pos + 6;
+        i = akhir;
     }
     turnamen
 }
 
-/// Nilai atribut `nama` dari tag pertama yang cocok selector sederhana.
-fn attr_value(html: &str, _selector: &str) -> Option<String> {
-    // Selector sederhana: cari atribut nama="..." dalam html
-    let pola = "name=\"";
-    // Coba cari data-* atau atribut biasa
-    for nama in ["href", "src", "datetime", "data-title", "data-audio"] {
-        let pola2 = format!("{nama}=\"");
-        let mut start = 0;
-        while let Some(pos) = html[start..].find(&pola2) {
-            let abs = start + pos + pola2.len();
-            let end = html[abs..].find('"')?;
-            return Some(html[abs..abs + end].to_string());
-        }
-        start = abs;
-    }
-    None
+/// Nilai atribut `nama` dari kemunculan pertama di HTML.
+fn attr_value(html: &str, nama: &str) -> Option<String> {
+    let pola = format!("{nama}=\"");
+    let pos = html.find(&pola)?;
+    let mulai = pos + pola.len();
+    let akhir = html[mulai..].find('"')?;
+    Some(html[mulai..mulai + akhir].to_string())
 }
 
-/// Nilai `href` dari tag `<a>` pertama.
-fn attr_href(html: &str, _selector: &str) -> Option<String> {
+/// Nilai `href` dari atribut pertama.
+fn attr_href(html: &str) -> Option<String> {
     attr_value(html, "href")
 }
 
-/// Nilai `src` dari tag `<img>` pertama.
-fn attr_src(html: &str, _selector: &str) -> Option<String> {
+/// Nilai `src` dari atribut pertama.
+fn attr_src(html: &str) -> Option<String> {
     attr_value(html, "src")
 }
 
-/// Teks dari tag pertama bernama `nama`.
+/// Teks di dalam tag pertama bernama `nama` (tanpa tag pembuka ber-atribut).
 fn tag_text(html: &str, nama: &str) -> Option<String> {
     let open = format!("<{nama}");
     let mut start = 0;
     while let Some(pos) = html[start..].find(&open) {
         let abs = start + pos;
-        let after = &html[abs + open.len()..];
-        if after.starts_with('>') || after.starts_with(' ') {
-            let content_start = abs + open.len();
+        let sisa = &html[abs + open.len()..];
+        if (sisa.starts_with('>') || sisa.starts_with(' '))
+            && let Some(gt) = html[abs..].find('>')
+        {
+            let isi = abs + gt + 1;
             let close = format!("</{nama}>");
-            if let Some(cs) = html[content_start..].find(&close) {
-                return Some(html[content_start..content_start + cs].to_string());
+            if let Some(cs) = html[isi..].find(&close) {
+                return Some(html[isi..isi + cs].to_string());
             }
         }
         start = abs + open.len();
@@ -145,9 +134,13 @@ fn tag_text(html: &str, nama: &str) -> Option<String> {
 fn tag_inner_html(html: &str, _selector: &str) -> String {
     // Cari <p style="..."> ... </p>
     let pola = r#"<p style="text-align: center;">"#;
-    let start = html.find(pola)?;
+    let Some(start) = html.find(pola) else {
+        return String::new();
+    };
     let after = start + pola.len();
-    let end = html[after..].find("</p>")?;
+    let Some(end) = html[after..].find("</p>") else {
+        return String::new();
+    };
     html[after..after + end].to_string()
 }
 
@@ -201,16 +194,12 @@ fn format_tanggal(date_str: &str) -> String {
         let time_part = &s[pos + 1..];
         let time_part = time_part.split('.').next().unwrap_or(time_part);
         let time_part = time_part.split('+').next().unwrap_or(time_part);
-        if let Some(spasi) = date_part.find('-') {
+        if date_part.contains('-') {
             // Sudah format tanggal, gabungkan
             return format!("{} {}", date_part, time_part);
         }
     }
     s.to_string()
-}
-
-fn help(prefix: &str) -> String {
-    "🏆 *ɪɴꜰᴏ ᴛᴜʀɴᴀᴍᴇɴ ᴍᴏʙɪʟᴇ ʟᴇɢᴇɴᴅs*\n\n> 5 Turnamen Terbaru".to_string()
 }
 
 #[plugin(
@@ -260,11 +249,11 @@ pub fn infotourney(ctx: Ctx) -> Reply {
         text.push_str(&format!("🔗 {}\n\n", t.url));
     }
 
-    if let Some(first) = tampil.first() {
-        if !first.image_url.is_empty() {
-            return Reply::image(MediaSource::url(first.image_url.clone()), text)
-                .with_reaction("✅");
-        }
+    if let Some(first) = tampil.first()
+        && !first.image_url.is_empty()
+    {
+        return Reply::image(MediaSource::url(first.image_url.clone()), text)
+            .with_reaction("✅");
     }
 
     Reply::text(text).with_reaction("✅")
@@ -274,6 +263,7 @@ pub fn infotourney(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::{HttpBody, HttpError, HttpGet, HttpResponse};
+    use serde_json::Value;
     use std::sync::{Arc, Mutex};
 
     const SENDER: &str = "628111@s.whatsapp.net";
@@ -428,7 +418,7 @@ mod tests {
     fn turnamen_dengan_gambar_mengembalikan_image_reply() {
         let http = StubHttp::body(HTML);
         let r = run(http);
-        match r.without_mutations() {
+        match r.without_mutations().tanpa_reaksi() {
             Reply::Image { media, caption, .. } => {
                 let src = media.as_ref().expect("harus ada media");
                 assert_eq!(src, &MediaSource::url("https://infotourney.com/img/ml1.jpg"));

@@ -4,16 +4,14 @@
 //! `ponytail:` JS mengirim tombol interaktif (`sendButton`/`interactiveButtons`)
 //! yang tidak ada dalam enum `Reply`; kirimannya disederhanakan jadi teks, atau
 //! gambar QRIS dengan teks sebagai caption kalau `qrisUrl` terisi. Footer dan
-//! `contextInfo` (newsletter) tidak dapat dicerminkan di API plugin.
+//! `contextInfo` (newsletter) tidak dapat dicerminkan di API plugin —
+//! `saluran.id`/`saluran.name` (default id `120363400911374213@newsletter`)
+//! hanya dipakai untuk `contextInfo` itu, jadi tidak dibaca di sini.
 
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
-use oktz_plugin_api::HttpError;
 
-const DEFAULT_SALURAN_ID: &str = "120363400911374213@newsletter";
-
-/// Huruf pertama di-kecilkan lalu hurur depan di-capitalize (`dana` → `Dana`).
-fn nama_pay(pay: &serde_json::Value) -> String {
-    let nama = pay.get("name").and_then(serde_json::Value::as_str).unwrap_or("");
+/// Huruf pertama di-kecilkan lalu huruf depan di-capitalize (`dana` → `Dana`).
+fn nama_pay(nama: &str) -> String {
     let kecil = nama.to_lowercase();
     let mut chars = kecil.chars();
     match chars.next() {
@@ -50,9 +48,11 @@ fn ikon_link(nama: &str) -> &'static str {
 )]
 pub fn donasi(ctx: Ctx) -> Reply {
     let config = ctx.config();
-    let bot_name = config.bot.name.as_deref().unwrap_or("Bot");
-    let saluran_id = config.saluran.id.as_deref().unwrap_or(DEFAULT_SALURAN_ID);
-    let saluran_name = config.saluran.name.as_deref().unwrap_or(bot_name);
+    let bot_name = if config.bot.name.is_empty() {
+        "Bot"
+    } else {
+        config.bot.name.as_str()
+    };
 
     let donasi = &config.donasi;
     let payments = &donasi.payment;
@@ -74,17 +74,13 @@ pub fn donasi(ctx: Ctx) -> Reply {
     if !payments.is_empty() || !links.is_empty() {
         text.push_str("Pembayaran\n");
         for pay in payments {
-            let nama = nama_pay(pay);
-            let nomor = pay.get("number").and_then(serde_json::Value::as_str).unwrap_or("");
-            let holder = pay.get("holder").and_then(serde_json::Value::as_str).unwrap_or("");
+            let nama = nama_pay(&pay.name);
             text.push_str(&format!("🏦 *{nama}*\n"));
-            text.push_str(&format!("◦ {nomor} (a/n {holder})\n"));
+            text.push_str(&format!("◦ {} (a/n {})\n", pay.number, pay.holder));
         }
         for link in links {
-            let nama = link.get("name").and_then(serde_json::Value::as_str).unwrap_or("");
-            let url = link.get("url").and_then(serde_json::Value::as_str).unwrap_or("");
-            text.push_str(&format!("{} *{nama}*\n", ikon_link(nama)));
-            text.push_str(&format!("{url}\n"));
+            text.push_str(&format!("{} *{}*\n", ikon_link(&link.name), link.name));
+            text.push_str(&format!("{}\n", link.url));
         }
     } else {
         text.push_str("╭┈┈⬡「 💳 *ᴘᴀʏᴍᴇɴᴛ* 」\n");
@@ -106,15 +102,12 @@ pub fn donasi(ctx: Ctx) -> Reply {
     text.push_str(&format!("Contact: @{owner_nomor}\n"));
 
     // QRIS image (bytes) sebagai media, teks sebagai caption.
-    if !qris_url.is_empty() {
-        match ctx.http.get(qris_url) {
-            Ok(res) => {
-                let data = res.body.bytes().to_vec();
-                if !data.is_empty() {
-                    return Reply::image(MediaSource::bytes(data), text.trim().to_string());
-                }
-            }
-            Err(_) => {}
+    if !qris_url.is_empty()
+        && let Ok(res) = ctx.http.get(qris_url)
+    {
+        let data = res.body.bytes().to_vec();
+        if !data.is_empty() {
+            return Reply::image(MediaSource::bytes(data), text.trim().to_string());
         }
     }
 
@@ -128,8 +121,7 @@ pub fn donasi(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::{HttpBody, HttpResponse};
-    use serde_json::json;
+    use oktz_plugin_api::{HttpBody, HttpError, HttpResponse};
     use std::sync::{Arc, Mutex};
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -292,15 +284,15 @@ mod tests {
     #[test]
     fn qris_gagal_digagal_dan_teks_dikirim() {
         let r = run(Stub::offline());
-        assert!(text_of(r).starts_with("DONASI KE OWNER"));
+        assert!(text_of(&r).starts_with("DONASI KE OWNER"));
     }
 
     #[test]
     fn nama_pay_capitalize_huruf_pertama() {
-        assert_eq!(nama_pay(&serde_json::json!({ "name": "dana" })), "Dana");
-        assert_eq!(nama_pay(&serde_json::json!({ "name": "GOPAY" })), "Gopay");
-        assert_eq!(nama_pay(&serde_json::json!({ "name": "OVO" })), "Ovo");
-        assert_eq!(nama_pay(&serde_json::json!({})), "");
+        assert_eq!(nama_pay("dana"), "Dana");
+        assert_eq!(nama_pay("GOPAY"), "Gopay");
+        assert_eq!(nama_pay("OVO"), "Ovo");
+        assert_eq!(nama_pay(""), "");
     }
 
     #[test]

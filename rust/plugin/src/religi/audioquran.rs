@@ -8,9 +8,8 @@
 //! Semua pemanggilan API lewat `ctx.http.get` dengan `terima_semua_status()`
 //! (mirip `validateStatus: () => true` di axios). Header `Origin`/`Referer`
 //! dibawa pada setiap permintaan.
-use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
+use oktz_plugin_api::{Ctx, Reply, plugin};
 use serde_json::Value;
-use serde_json::json;
 
 const API: &str = "https://www.mp3quran.net/api/v3";
 
@@ -53,11 +52,11 @@ fn levenshtein(a: &str, b: &str) -> usize {
     let m = a.len();
     let n = b.len();
     let mut dp: Vec<Vec<usize>> = vec![vec![0; n + 1]; m + 1];
-    for i in 0..=m {
-        dp[i][0] = i;
+    for (i, baris) in dp.iter_mut().enumerate() {
+        baris[0] = i;
     }
-    for j in 0..=n {
-        dp[0][j] = j;
+    for (j, sel) in dp[0].iter_mut().enumerate() {
+        *sel = j;
     }
     let a_chars: Vec<char> = a.chars().collect();
     let b_chars: Vec<char> = b.chars().collect();
@@ -109,7 +108,7 @@ pub fn audioquran(ctx: Ctx) -> Reply {
         let Ok(surah_id) = surah_id_str.parse::<i64>() else {
             return Reply::text("❌ Format salah! Contoh: `.audio-quran audio sudais 1`");
         };
-        if surah_id < 1 || surah_id > 114 {
+        if !(1..=114).contains(&surah_id) {
             return Reply::text("❌ Surah harus antara 1-114.");
         }
         let reciter_query = ctx.args[1..ctx.args.len() - 1].join(" ").trim().to_lowercase();
@@ -166,7 +165,7 @@ pub fn audioquran(ctx: Ctx) -> Reply {
         let mut txt = format!("🕌 *{message}*\n\n");
 
         if mode == "reciters" {
-            let reciters = r.get("reciters").and_then(Value::as_array).unwrap_or(&vec![]);
+            let reciters = r.get("reciters").and_then(Value::as_array).cloned().unwrap_or_default();
             for q in reciters.iter().take(50) {
                 let id = q.get("id").and_then(Value::as_i64).unwrap_or(0);
                 let name = q.get("name").and_then(Value::as_str).unwrap_or("-");
@@ -178,7 +177,7 @@ pub fn audioquran(ctx: Ctx) -> Reply {
                 txt.push_str(&format!("\n> ... +{} qari lainnya.", total - 50));
             }
         } else if mode == "suwar" {
-            let suwar = r.get("suwar").and_then(Value::as_array).unwrap_or(&vec![]);
+            let suwar = r.get("suwar").and_then(Value::as_array).cloned().unwrap_or_default();
             for s in suwar {
                 let id = s.get("id").and_then(Value::as_i64).unwrap_or(0);
                 let name = s.get("name").and_then(Value::as_str).unwrap_or("-");
@@ -186,14 +185,14 @@ pub fn audioquran(ctx: Ctx) -> Reply {
                 txt.push_str(&format!("- #{id} *{name}* ({typ})\n"));
             }
         } else if mode == "riwayat" {
-            let riwayat = r.get("riwayat").and_then(Value::as_array).unwrap_or(&vec![]);
+            let riwayat = r.get("riwayat").and_then(Value::as_array).cloned().unwrap_or_default();
             for rw in riwayat {
                 let id = rw.get("id").and_then(Value::as_i64).unwrap_or(0);
                 let name = rw.get("name").and_then(Value::as_str).unwrap_or("-");
                 txt.push_str(&format!("- #{id} *{name}*\n"));
             }
         } else if mode == "radios" {
-            let radios = r.get("radios").and_then(Value::as_array).unwrap_or(&vec![]);
+            let radios = r.get("radios").and_then(Value::as_array).cloned().unwrap_or_default();
             for rd in radios.iter().take(50) {
                 let id = rd.get("id").and_then(Value::as_i64).unwrap_or(0);
                 let name = rd.get("name").and_then(Value::as_str).unwrap_or("-");
@@ -245,7 +244,7 @@ fn mp3quran(ctx: &Ctx, input: &Value) -> Result<Value, String> {
             return Err("Gagal terhubung ke mp3quran".to_string());
         };
         let body = res.json().unwrap_or(Value::Null);
-        let all = body.get("reciters").and_then(Value::as_array).unwrap_or(&vec![]);
+        let all = body.get("reciters").and_then(Value::as_array).cloned().unwrap_or_default();
 
         let mut matches: Vec<&Value> = all.iter()
             .filter(|r| r.get("name").and_then(Value::as_str).unwrap_or("").to_lowercase().contains(&reciter_query))
@@ -279,9 +278,9 @@ fn mp3quran(ctx: &Ctx, input: &Value) -> Result<Value, String> {
         if matches.is_empty() {
             let threshold = if reciter_query.len() <= 4 { 1 } else { 2 };
             let mut fuzzy_hits: Vec<(&Value, usize)> = Vec::new();
-            for r in all {
+            for r in &all {
                 let name = r.get("name").and_then(Value::as_str).unwrap_or("");
-                let tokens: Vec<&str> = name.split(|c| c == ' ' || c == '-' || c == '\'').filter(|s| !s.is_empty()).collect();
+                let tokens: Vec<&str> = name.split([' ', '-', '\'']).filter(|s| !s.is_empty()).collect();
                 for tok in tokens {
                     let d = levenshtein(&reciter_query, tok);
                     if d <= threshold {
@@ -297,7 +296,7 @@ fn mp3quran(ctx: &Ctx, input: &Value) -> Result<Value, String> {
         if matches.is_empty() {
             let mut ranked: Vec<(String, usize)> = all.iter().map(|r| {
                 let name = r.get("name").and_then(Value::as_str).unwrap_or("").to_string();
-                let tokens: Vec<&str> = name.split(|c| c == ' ' || c == '-' || c == '\'').filter(|s| !s.is_empty()).collect();
+                let tokens: Vec<&str> = name.split([' ', '-', '\'']).filter(|s| !s.is_empty()).collect();
                 let best = tokens.iter().map(|tok| levenshtein(&reciter_query, tok)).min().unwrap_or(usize::MAX);
                 (name, best)
             }).collect();
@@ -313,7 +312,7 @@ fn mp3quran(ctx: &Ctx, input: &Value) -> Result<Value, String> {
 
         let mut audios: Vec<Value> = Vec::new();
         for reciter in &matches {
-            let moshaf_list = reciter.get("moshaf").and_then(Value::as_array).unwrap_or(&vec![]);
+            let moshaf_list = reciter.get("moshaf").and_then(Value::as_array).cloned().unwrap_or_default();
             for moshaf in moshaf_list {
                 let surah_list_str = moshaf.get("surah_list").and_then(Value::as_str).unwrap_or("");
                 let surah_list: Vec<i64> = surah_list_str.split(',')
@@ -374,14 +373,14 @@ fn build_audio_url(server_base: &str, surah_id: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn levenshtein_mirip_js() {
         assert_eq!(levenshtein("kitten", "sitting"), 3);
         assert_eq!(levenshtein("", ""), 0);
         assert_eq!(levenshtein("abc", "abc"), 0);
-        assert_eq!(levenshtein("sudais", "sudaes"), 2);
+        // `plugins/religi/audioquran.js:167-184`: cuma i→e di posisi kelima → 1.
+        assert_eq!(levenshtein("sudais", "sudaes"), 1);
     }
 
     #[test]

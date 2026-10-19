@@ -179,7 +179,7 @@ mod tests {
     #[test]
     fn tanpa_url_tampilkan_pakai() {
         let http = Stub::offline();
-        let r = run(http, "");
+        let r = run(http.clone(), "");
         assert_eq!(teks(&r), pakai("."));
         assert_eq!(reaksi(&r), None);
         assert!(http.seen.lock().unwrap().is_empty());
@@ -242,7 +242,7 @@ mod tests {
             Reply::Image { media, .. } => {
                 assert_eq!(
                     media,
-                    &Some(MediaSource::Bytes {
+                    Some(MediaSource::Bytes {
                         data: Arc::from(b"PNG".to_vec()),
                         mimetype: None,
                     })

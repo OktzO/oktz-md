@@ -8,10 +8,9 @@
 //! Catatan: baris `pub mod tempmail;` perlu ditambah ke `tools/mod.rs`
 //! secara manual (mod.rs sudah milik plugin lain, dilarang disentuh).
 
-use oktz_plugin_api::{Ctx, HttpCall, HttpError, Mutation, Reply, plugin};
+use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
 use oktz_scraper::tempmail::{temp_mail_create, temp_mail_inbox};
 use serde_json::{json, Value};
-use oktz_plugin_api::HttpGet;
 
 #[plugin(
     name = "tempmail",
@@ -66,7 +65,12 @@ pub fn tempmail(ctx: Ctx) -> Reply {
                     .to_string();
 
                 let mut user_data = ctx.user_data.clone();
-                user_data.insert("tempmail".to_string(), serde_json::json!(email.clone()));
+                // JS: `db.getUser(sender) || {}` lalu `.tempmail = email`.
+                if let Some(obj) = user_data.as_object_mut() {
+                    obj.insert("tempmail".to_string(), json!(email.clone()));
+                } else {
+                    user_data = json!({ "tempmail": email.clone() });
+                }
 
                 return Reply::text(format!(
                     "📧 *Email Sementara Dibuat!*\n\n\
@@ -100,7 +104,7 @@ pub fn tempmail(ctx: Ctx) -> Reply {
             .with_reaction("❌");
         };
 
-        match temp_mail_inbox(ctx.http.as_ref(), &email) {
+        match temp_mail_inbox(ctx.http.as_ref(), email) {
             Ok(res) => {
                 if !res.get("status").and_then(Value::as_bool).unwrap_or(false) {
                     let error = res
@@ -122,7 +126,11 @@ pub fn tempmail(ctx: Ctx) -> Reply {
                     .with_reaction("📭");
                 }
 
-                let messages = res.get("messages").and_then(Value::as_array).unwrap_or(&Vec::new());
+                let kosong: Vec<Value> = Vec::new();
+                let messages = res
+                    .get("messages")
+                    .and_then(Value::as_array)
+                    .unwrap_or(&kosong);
                 let mut txt = format!(
                     "📬 *Inbox — {} Pesan*\n\n\
                      > Email: *{}*\n\n",
@@ -165,16 +173,13 @@ pub fn tempmail(ctx: Ctx) -> Reply {
         }
     }
 
-    Reply::text(format!(
-        "❌ *Opsi Tidak Valid*\n\n> Gunakan *.tempmail create* atau *.tempmail inbox*"
-    ))
+    Reply::text("❌ *Opsi Tidak Valid*\n\n> Gunakan *.tempmail create* atau *.tempmail inbox*")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oktz_plugin_api::{HttpBody, HttpResponse};
-    use serde_json::json;
+    use oktz_plugin_api::{HttpBody, HttpCall, HttpError, HttpGet, HttpResponse};
     use std::sync::{Arc, Mutex};
 
     #[derive(Debug, Default)]
@@ -182,6 +187,8 @@ mod tests {
         responses: Mutex<Vec<(String, String)>>, // (url contains, body)
         seen: Mutex<Vec<String>>,
         hit: Mutex<usize>,
+        /// `Some` = transport error, jalur `catch` di scraper.
+        galat: Option<String>,
     }
 
     impl Stub {
@@ -190,6 +197,14 @@ mod tests {
                 responses: Mutex::new(responses),
                 seen: Mutex::new(Vec::new()),
                 hit: Mutex::new(0),
+                galat: None,
+            })
+        }
+
+        fn gagal(pesan: &str) -> Arc<Stub> {
+            Arc::new(Stub {
+                galat: Some(pesan.to_string()),
+                ..Default::default()
             })
         }
     }
@@ -197,6 +212,11 @@ mod tests {
     impl HttpGet for Stub {
         fn call(&self, req: &HttpCall) -> Result<HttpResponse, HttpError> {
             self.seen.lock().unwrap().push(req.url.clone());
+            if let Some(pesan) = &self.galat {
+                return Err(HttpError {
+                    message: pesan.clone(),
+                });
+            }
             let mut hit = self.hit.lock().unwrap();
             let i = *hit;
             *hit += 1;
@@ -301,10 +321,11 @@ mod tests {
 
     #[test]
     fn create_gagal_tanpa_status() {
-        let http = Stub::with_responses(vec![(
-            "email/new".to_string(),
-            r#"{"status":false,"error":"server busy"}"#.to_string(),
-        )]);
+        // `TempMailCreate` cuma mengembalikan `status:false` kalau axios
+        // melempar (`tempmail.js:30-32`); body 200 berisi `"status":false`
+        // tetap dianggap sukses oleh scraper. Jadi kegagalan disimulasikan
+        // lewat error transport.
+        let http = Stub::gagal("server busy");
         let r = run(http, "create", serde_json::json!({}));
         assert!(body(&r).contains("Gagal Bikin Email"));
         assert!(body(&r).contains("server busy"));

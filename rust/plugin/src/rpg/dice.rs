@@ -9,7 +9,7 @@
 //! manual (mod.rs sudah milik plugin lain, dilarang disentuh).
 
 use oktz_plugin_api::{Ctx, Mutation, Reply, plugin};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use crate::common::{parse_int, roll};
 
@@ -68,12 +68,12 @@ fn dice_emoji(result: u32) -> &'static str {
 pub fn dice(ctx: Ctx) -> Reply {
     let guess = ctx
         .args
-        .get(0)
+        .first()
         .and_then(|a| parse_int(a))
         .unwrap_or(0);
     let bet = ctx.args.get(1).and_then(|a| parse_int(a)).unwrap_or(0);
 
-    if guess < 1 || guess > 6 {
+    if !(1..=6).contains(&guess) {
         return Reply::text(help(&ctx.prefix));
     }
 
@@ -95,7 +95,7 @@ pub fn dice(ctx: Ctx) -> Reply {
     let after_bet = koin - bet;
     let result = roll(6) + 1; // 1..=6
     let emoji = dice_emoji(result);
-    let is_win = guess == result;
+    let is_win = guess == i64::from(result);
 
     let mut txt = format!(
         "*MANGKOK DIBUKA!* 🎲💥\n\n\
@@ -104,12 +104,17 @@ pub fn dice(ctx: Ctx) -> Reply {
     );
 
     let mut new_user = user;
-    new_user.insert("koin".to_string(), serde_json::json!(after_bet));
+    let final_koin = if is_win { after_bet + bet * 5 } else { after_bet };
+    // `user.koin -= bet` / `user.koin = (user.koin || 0) + winnings`
+    // (`dice.js:47`, `:63`) — objek user dari store disalin lalu `koin` diganti.
+    if new_user.is_object() {
+        new_user["koin"] = serde_json::json!(final_koin);
+    } else {
+        new_user = serde_json::json!({ "koin": final_koin });
+    }
 
     if is_win {
         let winnings = bet * 5;
-        let final_koin = after_bet + winnings;
-        new_user.insert("koin".to_string(), serde_json::json!(final_koin));
         txt.push_str(&format!(
             "🎉 *GILA LU HOKI BANGET!*\n\
              💰 Uang Berlipat 5x: *+Rp {}*",
@@ -134,10 +139,9 @@ pub fn dice(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn run(args: &[&str], user_data: Value) -> Reply {
-        let mut args_vec: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
+        let args_vec: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
         // dice <guess> <bet>
         let ctx = Ctx {
             command: "dice".into(),
