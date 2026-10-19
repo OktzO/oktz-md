@@ -853,9 +853,66 @@ TERBLOKIR (jalur utama mustahil sekarang), alasan singkat:
   pemicu).
 
 Catatan lintas-berkas yang perlu dibaca kalau kapabilitas ditambah:
-- `ctx.sock` belum dipasang di produksi (`PluginCtxSource::fill`,
-  `pipeline.rs:2151-2170`) dan belum ada `impl Sock` nyata di `oktz-wa`.
+- `ctx.sock` sudah dipasang di produksi (`SockKlien`, `bot.rs` wiring) —
+  `nama_kontak` (`sock.getName`) tetap tidak bisa karena klien tidak menyimpan
+  toko kontak.
 - `ctx.berkas` masih `BerkasPalsu` (memori), jadi efek tulis berkas hilang.
 - `Reply::Interactive` cuma `body`; `cards.rs` punya tombol penuh tapi belum
   dijembatani.
 - `Ctx` tidak punya `is_premium`, `pushName`, `messageTimestamp`.
+
+## 29. Config file, launcher Node, dan sock produksi
+
+`rust/config.json` + `Config::load()` (`lib/oktz-core/config.rs`) jadi pengganti
+`config.js` untuk yang paling sering diubah user: `info`, `owner`, `bot`,
+`session`, `database`, `turso`, `sticker`, `saluran`, `apiKeys`.
+
+Aturan timpa: nilai yang diisi menang atas env/`.env`; string kosong berarti
+"jangan sentuh"; kunci tak dikenal diabaikan (jadi `_petunjuk` aman); file rusak
+atau salah tipe = error saat start, bukan fallback diam. Lokasi file lewat
+`OKTZ_CONFIG`. `owner.number` kosong di env DAN file jatuh ke bawaan
+`config.js`.
+
+Sudah ada konsumennya: `owner.name`/`owner.number` (identitas router), `bot`,
+`info`, `sticker`, `saluran`, `apiKeys` (lewat `Config::runtime()` → `Ctx::config()`),
+`database.path`, `turso.url`/`authToken`, `session.pairingNumber` (argumen
+`oktz pair-code` kosong), `session.usePairingCode` (mode `oktz pair`).
+
+Sudah dibaca tapi BELUM ada konsumen — jangan diklaim berfungsi:
+`session.qrDir`, `qrPngWidth`, `qrMaxPrints`, `pairingRateLimitCooldownMs`,
+`pairingFallbackToQr`, `keepAliveIntervalMs`; `turso.enabled` masih sekadar
+ditampilkan saat boot.
+
+Blok `config.js` yang belum punya jalur file: `messages`, `features`,
+`autoWork`, `registration`, `ui`, `energi`, `groupProtection`, `payment`,
+`donasi`, `effectApi`, `pterodactyl`, `digitalocean`, `geminiApiKey`,
+`autoaiPersonas`, `mode`, `command`, `dev`.
+
+Launcher panel: `rust/launcher.js` (+ `package.json`) menjalankan
+`target/release/oktz` sebagai child process, stdio + sinyal + exit code
+diteruskan; binary bisa dialihkan lewat `OKTZ_BIN`, argumen diteruskan apa
+adanya (tanpa argumen = `run`).
+
+Sock produksi: `SockKlien` (`lib/oktz-wa/sock_client.rs`) mengisi 15 dari 16
+method `Sock` (grup, foto profil, presence, read receipt, status teks, profil
+bisnis). `nama_kontak` (`sock.getName`) tidak bisa: klien tidak menyimpan toko
+kontak — errornya eksplisit. Sinkron→asinkron lewat `block_in_place` +
+`Handle::block_on`; runtime current-thread ditolak sebagai `SockError`.
+
+Dua panggilan sync itu dipakai `execute_group_decision`: `KickAndReply` kini
+benar-benar menghapus → kick (`ubah_peserta(..., Keluar)`) → balas, urutannya
+sama dengan `src/lib/group-protection.js:1234-1242`; kegagalan kick ditelan
+dengan `warn` seperti JS. Fallback `KICK_FALLBACK` (cabang `catch` di
+`handleAntilinkGc/All`) belum dijalankan.
+
+Roster grup juga sudah dipasang dari `ClientSender` (`bot.rs` wiring), jadi
+`Ctx.roster` tidak lagi kosong di produksi.
+
+Db sesi kini durable: `prepare_store` memakai ulang db yang sidik creds-nya
+cocok (`<db>.ident` berisi `registration_id:identitas`), jadi device yang
+dirotasi library + sesi ratchet bertahan antar-restart. Db tanpa marker atau
+ber-sidik beda tetap dibangun ulang. Write-back `creds.json` tetap TIDAK ada
+dan itu disengaja (`bot.rs:302-331`: rollback kunci senyap).
+
+Belum: `ctx.berkas` nyata, `Reply::Interactive`, daemon shutdown, handler event
+lanjutan.

@@ -424,3 +424,15 @@ Pemicu utama test agent yang gagal: assertion memakai delimiter markdown yang be
 - Bahasa komentar & dokumen: Indonesia (casual-teknis). Identifier kode: Inggris.
 - Commit kecil & sering, pesan konvensional (`feat(core): …`, `test(plugin/rpg): …`).
 - Tanpa klaim "selesai/berhasil" tanpa bukti (`cargo test`, `clippy -D warnings`, ukuran binary, RSS terukur).
+
+## Produksi inti: config + sock (2026-10-19)
+
+- `rust/config.json` + `Config::load()`/`apply_file()`/`runtime()` di
+  `lib/oktz-core/config.rs`; `main.rs` dan `bot.rs` memakai `Config::load()`.
+- Mode baru `oktz pair` (code/QR mengikuti config); `pair-code` tanpa argumen
+  memakai `session.pairingNumber`.
+- `rust/launcher.js` + `package.json` untuk panel egg Node.js.
+- `lib/oktz-wa/sock_client.rs`: `impl Sock` nyata di atas klien WhatsApp,
+  dipasang lewat `Pipeline::with_sock`; roster produksi dipasang dari
+  `ClientSender`; `KickAndReply` mengeksekusi kick.
+- Batas yang belum dikerjakan ada di `docs/rust-rewrite/BLOCKED.md` §29.
