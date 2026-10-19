@@ -41,7 +41,7 @@ oktz-router = { path = "lib/oktz-router" }
 oktz-plugins = { path = "plugin" }
 serde_json.workspace = true
 tracing.workspace = true
-tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "time"] }
+tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "time", "signal"] }
 
 # panic=unwind (bukan abort) supaya catch_unwind per plugin handler bisa
 # menahan error plugin tanpa mematikan bot — syarat tests/handler-error-visibility.

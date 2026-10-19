@@ -1,0 +1,68 @@
+{
+  "_petunjuk": [
+    "Config bot Rust oktz, sepadan config.js bot JS.",
+    "Nilai terisi menang atas .env; string kosong berarti jangan sentuh.",
+    "Lokasi file bisa dipindah lewat env OKTZ_CONFIG."
+  ],
+
+  "info": {
+    "website": "https://oktzz.xyz",
+    "grupwa": "https://chat.whatsapp.com/H1MOIGsWKuK1ulzOBAjW9b"
+  },
+
+  "owner": {
+    "name": "Oktz",
+    "number": ["6285608953677"]
+  },
+
+  "bot": {
+    "name": "Oktz Bot",
+    "version": "3.3.1",
+    "developer": "Zann",
+    "website": "https://oktzz.xyz"
+  },
+
+  "session": {
+    "pairingNumber": "6285143885645",
+    "usePairingCode": true,
+    "pairingRateLimitCooldownMs": 3600000,
+    "pairingFallbackToQr": true,
+    "qrDir": "qr",
+    "qrPngWidth": 320,
+    "qrMaxPrints": 5,
+    "keepAliveIntervalMs": 30000
+  },
+
+  "database": {
+    "path": "./database/main"
+  },
+
+  "turso": {
+    "url": "",
+    "authToken": "",
+    "syncInterval": 5000,
+    "enabled": true
+  },
+
+  "sticker": {
+    "packname": "𝗙𝗢𝗧𝗢 𝗗𝗘𝗟𝗨𝗫𝗘",
+    "author": "Zann"
+  },
+
+  "saluran": {
+    "id": "120363411617217441@newsletter",
+    "name": "Join saluran resmi Oktz",
+    "link": "https://whatsapp.com/channel/0029Vb8z7S0KrWQvCa8i0J0I"
+  },
+
+  "apiKeys": {
+    "neoxr": "",
+    "fgsi": "",
+    "groq": "",
+    "covenant": "",
+    "obscura": "",
+    "firefly": "",
+    "cuki": "",
+    "linode": ""
+  }
+}

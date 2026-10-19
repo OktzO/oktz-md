@@ -36,6 +36,7 @@ use std::time::Instant;
 use oktz_plugin_api::registry::{GroupRoster, HttpGet, MediaSource, Mutation, Participant};
 use oktz_plugin_api::{NoHttp, QuotedKind, QuotedMessage, SessionStore, new_session_store};
 use oktz_plugin_api::{Ctx, PluginEntry, Reply};
+use oktz_plugin_api::{Sock, SockMati};
 use oktz_router::gates::{
     AutoWorkDecision, AutoWorkGuard, AutoWorkSettings, EnergiSettings, resolve_energi_enabled,
 };
@@ -2138,6 +2139,8 @@ struct PluginCtxSource {
     /// `config.js` untuk `ctx.config()`. Default-nya `Runtime::default()`
     /// yang kosong; produksi memasang lewat `Pipeline::with_config`.
     config: Arc<oktz_core::config::Runtime>,
+    /// `sock` JS. Default [`SockMati`].
+    sock: Arc<dyn Sock>,
 }
 
 impl PluginCtxSource {
@@ -2167,6 +2170,7 @@ impl PluginCtxSource {
         c.sessions = self.sessions.clone();
         c.http = self.http.clone();
         c.config = self.config.clone();
+        c.sock = self.sock.clone();
     }
 }
 
@@ -2355,6 +2359,7 @@ impl Pipeline {
                 sessions: new_session_store(),
                 http: Arc::new(NoHttp),
                 config: Arc::new(oktz_core::config::Runtime::default()),
+                sock: Arc::new(SockMati),
             },
             ctx,
             sender,
@@ -2398,6 +2403,12 @@ impl Pipeline {
     /// Pasang `config.js` runtime untuk `ctx.config()`.
     pub fn with_config(mut self, config: oktz_core::config::Runtime) -> Self {
         self.plugin_src.config = Arc::new(config);
+        self
+    }
+
+    /// Pasang `sock` JS untuk `ctx.sock()`. Default-nya [`SockMati`].
+    pub fn with_sock(mut self, sock: Arc<dyn Sock>) -> Self {
+        self.plugin_src.sock = sock;
         self
     }
 
@@ -2721,6 +2732,22 @@ impl Pipeline {
                 chat = %caller.chat,
                 id = %m.info.id,
                 "gagal menghapus pesan terlarangan"
+            );
+        }
+        // JS: delete → kick → reply. Kegagalan kick juga ditelan supaya pesan
+        // peringatan tetap terkirim (`src/lib/group-protection.js:1234-1242`).
+        if matches!(decision, group::Decision::KickAndReply(_))
+            && let Err(e) = self.plugin_src.sock.ubah_peserta(
+                &caller.chat,
+                std::slice::from_ref(&caller.sender),
+                oktz_plugin_api::AksiPeserta::Keluar,
+            )
+        {
+            tracing::warn!(
+                error = %e,
+                chat = %caller.chat,
+                peserta = %caller.sender,
+                "gagal kick peserta"
             );
         }
         match decision.reply_text() {
@@ -4756,6 +4783,7 @@ fn group_number_and_long_number_are_rejected() {
             sessions: new_session_store(),
             http: Arc::new(NoHttp),
             config: Arc::new(oktz_core::config::Runtime::default()),
+            sock: Arc::new(SockMati),
         }
     }
 
@@ -6169,5 +6197,104 @@ fn a_null_access_field_keeps_the_existing_grant() {
         src.fill(&mut c);
         assert!(c.http.get("https://example.invalid").is_err());
         assert!(c.http.post_json("https://example.invalid", &Value::Null).is_err());
+    }
+
+    /// `Sock` uji: hanya `ubah_peserta` yang dicatat, sisanya error.
+    #[derive(Debug, Default)]
+    struct SockUji {
+        aksi: Mutex<Vec<(String, Vec<String>, oktz_plugin_api::AksiPeserta)>>,
+    }
+
+    macro_rules! sock_tolak {
+        ($($nama:ident($($arg:ident: $tipe:ty),* $(,)?) -> $hasil:ty;)*) => {
+            $(
+                fn $nama(&self, $($arg: $tipe),*) -> Result<$hasil, oktz_plugin_api::SockError> {
+                    $(let _ = $arg;)*
+                    Err(oktz_plugin_api::SockError::baru("sock uji"))
+                }
+            )*
+        };
+    }
+
+    impl Sock for SockUji {
+        fn ubah_peserta(
+            &self,
+            jid: &str,
+            peserta: &[String],
+            aksi: oktz_plugin_api::AksiPeserta,
+        ) -> Result<(), oktz_plugin_api::SockError> {
+            self.aksi
+                .lock()
+                .unwrap()
+                .push((jid.to_string(), peserta.to_vec(), aksi));
+            Ok(())
+        }
+
+        sock_tolak! {
+            ada_whatsapp(nomor: &[String]) -> Vec<oktz_plugin_api::AdaWhatsapp>;
+            foto_profil(jid: &str, tipe: &str) -> Option<String>;
+            metadata_grup(jid: &str) -> Value;
+            semua_grup() -> Value;
+            set_foto_profil(jid: &str, isi: &[u8]) -> ();
+            keluar_grup(jid: &str) -> ();
+            kode_undangan(jid: &str) -> String;
+            info_undangan(kode: &str) -> Value;
+            buat_grup(subjek: &str, peserta: &[String]) -> Value;
+            terima_undangan(kode: &str) -> String;
+            tandai_dibaca(pesan: &[Value]) -> ();
+            presence(jenis: &str, jid: &str) -> ();
+            status_teks(jid: &str) -> Value;
+            nama_kontak(jid: &str) -> String;
+            profil_bisnis(jid: &str) -> Option<Value>;
+        }
+    }
+
+    #[test]
+    fn ctx_sock_mengikuti_sumber_yang_dipasang() {
+        let mut src = plugin_src_with("{}");
+        src.sock = Arc::new(SockUji::default());
+        let mut c = Ctx::default();
+        src.fill(&mut c);
+        assert_eq!(
+            c.sock().ada_whatsapp(&[]).unwrap_err().pesan,
+            "sock uji",
+            "Ctx harus memakai sock dari sumber, bukan SockMati"
+        );
+    }
+
+    #[tokio::test]
+    async fn keputusan_kick_menghapus_mengkick_lalu_membalas() {
+        let sender = Arc::new(RecordingSender::default());
+        let sock = Arc::new(SockUji::default());
+        let ctx = StoreContext::new(store_with("kick-path", "{}"));
+        let p = Pipeline::new(ctx, sender.clone(), BOT, ParseOptions::default())
+            .with_sock(sock.clone());
+
+        let m = inbound("https://contoh.invalid", MEMBER, GROUP, true, "K1");
+        let caller = p.caller_of(&m);
+        p.execute_group_decision(group::Decision::KickAndReply("dikick".into()), &m, &caller)
+            .await
+            .expect("keputusan kick harus jalan tanpa menggagalkan pipeline");
+
+        assert_eq!(
+            sender.deleted(),
+            vec![(GROUP.to_string(), "K1".to_string(), MEMBER.to_string())],
+            "pesan dihapus lebih dulu"
+        );
+        let aksi = sock.aksi.lock().unwrap().clone();
+        assert_eq!(
+            aksi,
+            vec![(
+                GROUP.to_string(),
+                vec![MEMBER.to_string()],
+                oktz_plugin_api::AksiPeserta::Keluar
+            )],
+            "kick lewat sock.ubah_peserta setelah delete"
+        );
+        assert!(
+            sender.texts().iter().any(|t| t.contains("dikick")),
+            "balasan terkirim setelah kick: {:?}",
+            sender.texts()
+        );
     }
 }

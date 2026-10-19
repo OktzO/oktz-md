@@ -36,11 +36,11 @@ fn data_dir(env: Option<&str>) -> PathBuf {
 
 /// Root db sekali pakai untuk `smoke` / `send`.
 ///
-/// Bedanya sengaja: dua subcommand itu selalu membangun db dari nol dari
-/// creds + fixture (`prepare_store` menghapus file lama sebelum menulis),
-/// jadi isinya disposable dan tidak pernah dibaca lagi. Temp dir +
-/// nama per-pid (lihat [`dev_db`]) supaya dua run paralel tidak saling
-/// menghapus. Tetap bisa dipindah ke direktori nyata lewat [`DB_DIR_ENV`].
+/// Bedanya sengaja: dua subcommand itu tidak butuh sesi lama, jadi db-nya
+/// disposable — nama per-pid membuat tiap run dapat file sendiri, dan
+/// `prepare_store` hanya memakai ulang db yang sidik creds-nya cocok.
+/// Temp dir + nama per-pid (lihat [`dev_db`]) supaya dua run paralel tidak
+/// saling menghapus; lokasinya bisa dipindah lewat [`DB_DIR_ENV`].
 fn dev_dir(env: Option<&str>) -> PathBuf {
     match env.map(str::trim).filter(|v| !v.is_empty()) {
         Some(v) => PathBuf::from(v),
@@ -84,7 +84,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     let mode = args.get(1).map(|s| s.as_str()).unwrap_or("boot");
 
-    let cfg = Config::from_env();
+    let cfg = Config::load()?;
     let db_dir_env = oktz_core::env::Env::get(DB_DIR_ENV);
 
     if mode == "verify-db" {
@@ -123,7 +123,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // `oktz run [creds] [settings.json] [hold_secs] [fixture_sesi.json]` — jalur
     // produksi: connect dengan pipeline router terpasang, jadi command masuk
-    // benar-benar mencapai plugin. smoke/send sengaja lewat pairing_run langsung
+    // benar-benar mencapai plugin. `hold_secs` 0 (default) = daemon sampai
+    // SIGINT/SIGTERM. smoke/send sengaja lewat pairing_run langsung
     // dan tidak memakai pipeline. Fixture sesi opsional: tanpa itu semua pesan
     // dari kontak lama gagal decrypt, karena device baru tidak punya ratchet.
     if mode == "run" {
@@ -132,31 +133,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .cloned()
             .unwrap_or_else(|| "../storage/session/creds.json".into());
         let settings = args.get(3).cloned();
-        let hold: u64 = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(3600);
+        // 0 = tanpa batas (daemon). Default lama (3600) mematikan bot produksi
+        // setelah satu jam.
+        let hold: u64 = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(0);
         let fixture = args.get(5).map(|s| s.trim()).filter(|s| !s.is_empty());
         return run(&creds, settings.as_deref(), hold, fixture).await;
     }
 
-    // `oktz pair-code <nomor> [db] [hold]` / `oktz pair-qr [db] [hold]`
-    if mode == "pair-code" || mode == "pair-qr" {
+    // `oktz pair [db] [hold]` — pilih pairing code/QR dari `config.json`
+    // (`session.usePairingCode`). `oktz pair-code [nomor] [db] [hold]` /
+    // `oktz pair-qr [db] [hold]` tetap ada untuk memaksa salah satu.
+    if mode == "pair" || mode == "pair-code" || mode == "pair-qr" {
         // Device row di db pairing selalu dibuat baru, jadi path default-nya
         // tidak boleh menimpa db bot yang sedang dipakai — makanya nama file
         // terpisah dari db smoke/send.
+        let pakai_kode = match mode {
+            "pair-code" => true,
+            "pair-qr" => false,
+            _ => cfg.session.use_pairing_code,
+        };
         let db = db_arg(resolve_db(
-            args.get(if mode == "pair-code" { 3 } else { 2 }).map(|s| s.as_str()),
+            args.get(if pakai_kode { 3 } else { 2 }).map(|s| s.as_str()),
             data_dir(db_dir_env.as_deref()).join("oktz-pair.db"),
         ))?;
         let hold: u64 = args
-            .get(if mode == "pair-code" { 4 } else { 3 })
+            .get(if pakai_kode { 4 } else { 3 })
             .and_then(|s| s.parse().ok())
             .unwrap_or(300);
 
-        let out = if mode == "pair-code" {
-            let Some(nomor) = args.get(2) else {
+        let out = if pakai_kode {
+            // Nomor dari argumen; kosong = pakai `session.pairingNumber`
+            // supaya nomor tidak wajib di-hardcode di command panel.
+            let nomor = args
+                .get(2)
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .unwrap_or_else(|| cfg.session.pairing_number.clone());
+            if nomor.is_empty() {
                 eprintln!("pemakaian: oktz pair-code <nomor> [db] [hold_secs]");
+                eprintln!("nomor belum diisi: lewat argumen atau session.pairingNumber di config.json");
                 std::process::exit(2);
-            };
-            oktz_wa::pairing_run::pair_code_flow(&db, nomor, hold).await
+            }
+            oktz_wa::pairing_run::pair_code_flow(&db, &nomor, hold).await
         } else {
             oktz_wa::pairing_run::pair_qr_flow(&db, hold).await
         };
@@ -291,6 +310,30 @@ fn creds_for_guard(path: &str) -> serde_json::Value {
     oktz_wa::bot::load_guard_creds(Some(path))
 }
 
+/// Tunggu sinyal berhenti: Ctrl-C atau SIGTERM (panel mengirim yang terakhir).
+async fn tunggu_sinyal() {
+    #[cfg(unix)]
+    {
+        let mut term = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(error = %e, "SIGTERM tidak bisa dipasang; hanya Ctrl-C yang aktif");
+                let _ = tokio::signal::ctrl_c().await;
+                return;
+            }
+        };
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = term.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
+}
+
 /// Jalur produksi: connect lewat `connect_device` sehingga pipeline router
 /// terpasang dan command masuk benar-benar mencapai plugin.
 ///
@@ -298,6 +341,8 @@ fn creds_for_guard(path: &str) -> serde_json::Value {
 /// jalan dengan default (semua mode public, semua group `all`) — bot tetap
 /// merespons, hanya gating per-grup yang tidak berlaku. Lokasi db mengikuti
 /// `OKTZ_DB_DIR` supaya run lokal tidak butuh `/var/lib/oktz`.
+///
+/// `hold_secs` = 0 berarti jalan sampai sinyal berhenti (daemon).
 async fn run(
     creds: &str,
     settings: Option<&str>,
@@ -328,9 +373,14 @@ async fn run(
     })
     .await?;
 
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(hold_secs);
-    while tokio::time::Instant::now() < deadline {
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    if hold_secs == 0 {
+        tunggu_sinyal().await;
+    } else {
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(hold_secs);
+        tokio::select! {
+            _ = tokio::time::sleep_until(deadline) => {}
+            _ = tunggu_sinyal() => {}
+        }
     }
     println!(
         "{}",
@@ -527,7 +577,7 @@ mod tests {
         assert_ne!(
             a, b,
             "dua proses smoke paralel harus tidak berebut file db yang sama \
-             — `prepare_store` menghapus file lama sebelum menulis"
+             — tiap proses memakai db sendiri"
         );
         assert_eq!(
             dev_db(&dev_dir(None), "send", 111).file_name().unwrap(),

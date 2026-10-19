@@ -134,16 +134,20 @@ impl PipelineWiring {
         let pipeline = match slot.as_ref() {
             Some(p) => p.clone(),
             None => {
+                let sender = Arc::new(ClientSender::new(client.clone()));
                 let p = Arc::new(
                     Pipeline::new(
                         self.ctx.clone(),
-                        Arc::new(ClientSender::new(client.clone())),
+                        sender.clone(),
                         self.bot_id.clone(),
                         ParseOptions::default(),
                     )
                     .with_identity(self.identity.clone())
                     .with_http(Arc::new(UreqHttp::new()))
-                    .with_config(self.config.clone()),
+                    .with_config(self.config.clone())
+                    // `Ctx.sock` + roster nyata dari klien yang sama.
+                    .with_sock(crate::sock_client::SockKlien::baru(client.clone()))
+                    .with_roster_source(sender),
                 );
                 *slot = Some(p.clone());
                 p
@@ -242,7 +246,21 @@ pub async fn build_device(c: &creds::Creds) -> Result<whatsapp_rust::wacore::sto
     }
     Ok(d)
 }
+/// Db sesi lama boleh dipakai ulang hanya kalau sidik creds-nya cocok.
+///
+/// Db tanpa marker sidik dianggap tidak sah: device row di dalamnya bisa
+/// berasal dari creds lain, dan memakainya bersama creds baru membuat sinyal
+/// tidak nyambung.
+fn sesi_lama_boleh_dipakai(db_ada: bool, marker: Option<&str>, sidik: &str) -> bool {
+    db_ada && marker.is_some_and(|m| m.trim() == sidik)
+}
+
 /// Buka store sqlite, simpan device, muat sesi onigis, lalu siap connect.
+///
+/// Db sesi yang sudah ada dan ber-sidik sama DIPAKAI ULANG: di situ device
+/// yang sudah dirotasi library + sesi ratchet bertahan, jadi restart tidak
+/// memaksa dekripsi ulang dari nol. Db yang hilang atau ber-sidik beda
+/// dibangun ulang dari creds.
 pub async fn prepare_store(
     creds_path: &str,
     db_path: &str,
@@ -255,19 +273,34 @@ pub async fn prepare_store(
     if let Some(parent) = db.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let _ = std::fs::remove_file(&db);
-    let store = SqliteStore::new(db.to_str().context("path tidak utf8")?).await?;
 
     // Satu-satunya tempat di crate ini yang benar-benar menulis device row,
     // jadi ini juga tempat yang tahu di mana artefak sesi durable hidup.
     // Dipakai [`pairing_run::purge_handler`] saat logout dipercaya.
     pairing_run::note_store_path(&db);
 
+    let mut ident = crate::creds::b64(&c.signed_identity_key.public)?;
+    let sidik = format!(
+        "{}:{}",
+        c.registration_id,
+        ident.iter().map(|b| format!("{b:02x}")).collect::<String>()
+    );
+    let marker = db.with_extension("ident");
+    let marker_isi = std::fs::read_to_string(&marker).ok();
+    let db_ada = db.exists();
+
+    if sesi_lama_boleh_dipakai(db_ada, marker_isi.as_deref(), &sidik) {
+        tracing::info!(db = %db.display(), "db sesi dipakai ulang (sesi ratchet lama dipertahankan)");
+        return Ok(SqliteStore::new(db.to_str().context("path tidak utf8")?).await?);
+    }
+
+    let _ = std::fs::remove_file(&db);
+    let store = SqliteStore::new(db.to_str().context("path tidak utf8")?).await?;
+
     let device = build_device(&c).await?;
     store.save_device_data_for_device(1, &device).await?;
 
     if let Some(fx) = session_fixture {
-        let mut ident = crate::creds::b64(&c.signed_identity_key.public)?;
         if ident.len() == 32 {
             ident.insert(0, 0x05);
         }
@@ -278,6 +311,12 @@ pub async fn prepare_store(
             write_failed = report.write_failed,
             "sesi ratchet dimuat (hanya yang benar-benar tersimpan)"
         );
+    }
+
+    // Marker gagal ditulis bukan alasan gagal start — efeknya hanya db ini
+    // dibangun ulang pada start berikutnya.
+    if let Err(e) = std::fs::write(&marker, &sidik) {
+        tracing::warn!(error = %e, path = %marker.display(), "gagal menulis sidik sesi");
     }
     Ok(store)
 }
@@ -436,7 +475,7 @@ where
 {
     let creds = load_guard_creds(None);
 
-    let cfg = oktz_core::config::Config::from_env();
+    let cfg = oktz_core::config::Config::load().context("baca config.json")?;
     let settings = settings_path(
         &cfg.database.path,
         oktz_core::env::Env::get(SETTINGS_ENV).as_deref(),
@@ -445,7 +484,7 @@ where
         &settings,
         cfg.owner_numbers.clone(),
         bot_id_from(&creds),
-        oktz_core::config::Runtime::from_config(),
+        cfg.runtime(),
     ) {
         Ok(w) => Some(Arc::new(w)),
         Err(e) => {
@@ -489,6 +528,17 @@ mod tests {
             resolve_creds_path(Some("/a/creds.json"), Some("/b/creds.json")),
             Some(PathBuf::from("/a/creds.json"))
         );
+    }
+
+    #[test]
+    fn sesi_lama_dipakai_hanya_kalau_sidik_creds_cocok() {
+        assert!(sesi_lama_boleh_dipakai(true, Some("7:abc\n"), "7:abc"));
+        assert!(!sesi_lama_boleh_dipakai(true, Some("8:abc"), "7:abc"));
+        assert!(
+            !sesi_lama_boleh_dipakai(true, None, "7:abc"),
+            "db tanpa marker sidik tidak boleh dipercaya"
+        );
+        assert!(!sesi_lama_boleh_dipakai(false, Some("7:abc"), "7:abc"));
     }
 
     #[test]

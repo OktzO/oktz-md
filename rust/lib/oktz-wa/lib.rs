@@ -14,6 +14,7 @@ pub mod pipeline_gate;
 pub mod reply_variant;
 pub mod rss;
 pub mod session;
+pub mod sock_client;
 
 pub use bot::{build_device, connect_device, prepare_store};
 pub use cards::{biz_node, build_card, build_list};
