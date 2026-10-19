@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
+use oktz_plugin_api::berkas::BerkasNyata;
 use oktz_plugin_api::UreqHttp;
 use oktz_router::ParseOptions;
 use oktz_store::json_store::JsonStore;
@@ -147,6 +148,11 @@ impl PipelineWiring {
                     .with_config(self.config.clone())
                     // `Ctx.sock` + roster nyata dari klien yang sama.
                     .with_sock(crate::sock_client::SockKlien::baru(client.clone()))
+                    // `fs` Nyata berakar ke cwd — launcher sudah men-set cwd ke
+                    // akar repo, jadi jalur `./database/...` sama dengan JS.
+                    .with_berkas(Arc::new(BerkasNyata::baru(
+                        std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+                    )))
                     .with_roster_source(sender),
                 );
                 *slot = Some(p.clone());

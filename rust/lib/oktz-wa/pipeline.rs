@@ -33,6 +33,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::Instant;
 
+use oktz_plugin_api::berkas::Berkas;
 use oktz_plugin_api::registry::{GroupRoster, HttpGet, MediaSource, Mutation, Participant};
 use oktz_plugin_api::{NoHttp, QuotedKind, QuotedMessage, SessionStore, new_session_store};
 use oktz_plugin_api::{Ctx, PluginEntry, Reply};
@@ -2143,6 +2144,9 @@ struct PluginCtxSource {
     config: Arc<oktz_core::config::Runtime>,
     /// `sock` JS. Default [`SockMati`].
     sock: Arc<dyn Sock>,
+    /// `fs` untuk plugin. Default [`BerkasPalsu`]; produksi memasang
+    /// [`BerkasNyata`] berakar ke direktori kerja.
+    berkas: Arc<dyn Berkas>,
 }
 
 impl PluginCtxSource {
@@ -2173,6 +2177,7 @@ impl PluginCtxSource {
         c.http = self.http.clone();
         c.config = self.config.clone();
         c.sock = self.sock.clone();
+        c.berkas = self.berkas.clone();
     }
 }
 
@@ -2362,6 +2367,7 @@ impl Pipeline {
                 http: Arc::new(NoHttp),
                 config: Arc::new(oktz_core::config::Runtime::default()),
                 sock: Arc::new(SockMati),
+                berkas: Arc::new(oktz_plugin_api::berkas::BerkasPalsu::baru()),
             },
             ctx,
             sender,
@@ -2411,6 +2417,12 @@ impl Pipeline {
     /// Pasang `sock` JS untuk `ctx.sock()`. Default-nya [`SockMati`].
     pub fn with_sock(mut self, sock: Arc<dyn Sock>) -> Self {
         self.plugin_src.sock = sock;
+        self
+    }
+
+    /// Pasang `fs` untuk `ctx.berkas`. Default-nya [`BerkasPalsu`].
+    pub fn with_berkas(mut self, berkas: Arc<dyn Berkas>) -> Self {
+        self.plugin_src.berkas = berkas;
         self
     }
 
@@ -5179,6 +5191,7 @@ fn group_number_and_long_number_are_rejected() {
             http: Arc::new(NoHttp),
             config: Arc::new(oktz_core::config::Runtime::default()),
             sock: Arc::new(SockMati),
+            berkas: Arc::new(oktz_plugin_api::berkas::BerkasPalsu::baru()),
         }
     }
 
@@ -6900,6 +6913,53 @@ fn a_null_access_field_keeps_the_existing_grant() {
             ctx_of(&mentah).map(|c| c.mentioned_jid.clone()).unwrap_or_default(),
             vec![MEMBER.to_string()],
             "mention harus nomor telepon, bukan LID"
+        );
+    }
+
+    #[test]
+    fn ctx_berkas_default_palsu_dan_produksi_bisa_nyata() {
+        let akar = std::env::temp_dir().join(format!(
+            "oktz-berkas-{}",
+            SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&akar).unwrap();
+        let ctx = StoreContext::new(store_with(
+            "berkas",
+            r#"{"users":{},"groups":{},"settings":{}}"#,
+        ));
+        let nyata = Arc::new(
+            Pipeline::new(
+                ctx.clone(),
+                Arc::new(RecordingSender::default()),
+                BOT,
+                ParseOptions::default(),
+            )
+            .with_berkas(Arc::new(oktz_plugin_api::berkas::BerkasNyata::baru(&akar))),
+        );
+        let mut c = Ctx {
+            chat: GROUP.to_string(),
+            sender: MEMBER.to_string(),
+            ..Ctx::default()
+        };
+        nyata.plugin_src.fill(&mut c);
+        c.berkas.tulis_teks("uji.txt", "halo").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(akar.join("uji.txt")).unwrap(),
+            "halo",
+            "BerkasNyata harus menulis ke disk"
+        );
+
+        let palsu = Arc::new(Pipeline::new(
+            ctx,
+            Arc::new(RecordingSender::default()),
+            BOT,
+            ParseOptions::default(),
+        ));
+        palsu.plugin_src.fill(&mut c);
+        c.berkas.tulis_teks("palsu.txt", "halo").unwrap();
+        assert!(
+            !akar.join("palsu.txt").exists(),
+            "default pipeline tidak boleh menyentuh disk"
         );
     }
 
