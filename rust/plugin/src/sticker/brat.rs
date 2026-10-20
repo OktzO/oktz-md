@@ -6,13 +6,10 @@
 //! sebagai sticker (`brat.js:148-153`).
 //!
 //! `ponytail:` yang belum bisa, beserta alasannya:
-//! - Menu `brat`/`bratmenu` (`brat.js:65-119`) butuh
-//!   `wrapInteractive`/`prepareWAMessageMedia`/`generateWAMessageFromContent`
-//!   + `sock.relayMessage`; `Reply::Interactive` hanya membawa `body`, jadi
-//!     yang terkirim cuma caption menunya — tanpa tombol `single_select`,
-//!     footer `Pilih variant brat favorit kamu`, dan header gambar
-//!     `getAssetBuffer("foto")` (pola `search/film.rs`). Isi barisnya tetap
-//!     dicerminkan di test supaya perubahan JS-nya kelihatan.
+//! - Menu `brat`/`bratmenu` (`brat.js:65-119`) dikirim sebagai kartu
+//!   interaktif dengan `single_select` + footer persis JS; yang belum bisa
+//!   hanya header gambarnya (`getAssetBuffer("foto")` +
+//!   `prepareWAMessageMedia` — tidak ada uploader di `Reply`).
 //! - Fallback `generateBrat` (canvas, `src/lib/brat.js:384-445`): tidak ada
 //!   renderer teks di Rust. Saat API gagal atau gambarnya blank, alurnya
 //!   berhenti di `error_template` + `☢` (`brat.js:154-157`), bukan render
@@ -22,11 +19,61 @@
 //! `NOTE (mod.rs):` tambahkan `pub mod brat;` ke `sticker/mod.rs` secara
 //! manual kalau berkas ini didaftarkan (mod.rs bukan milik tugas ini).
 
+use oktz_plugin_api::registry::InteractiveButton;
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 
 /// Caption menu (`brat.js:66-67`).
 pub(crate) const CAPTION_MENU: &str =
     "🌿 *kamu mau buat brat yak, silahkan pilih variant brat tombol dibawah*";
+
+/// `BRAT_VARIANTS` + `buildVariantRows` (`brat.js:24-63`) — isi baris
+/// `single_select` menu.
+pub(crate) fn baris_varian(prefix: &str, text: &str) -> Vec<(String, String, String)> {
+    [
+        ("Brat Default", "Sticker brat versi biasa", "bratimg"),
+        ("Brat Green", "Variant brat warna hijau", "bratgreen"),
+        ("Brat Cewek", "Variant brat cewek", "bratcewek"),
+        ("Brat Anime", "Variant brat anime", "animebrat"),
+        ("Brat Video", "Sticker brat animated", "bratvid"),
+        ("Brat Video V2", "Sticker brat video v2", "bratvid2"),
+    ]
+    .iter()
+    .map(|(judul, des, cmd)| {
+        (
+            (*judul).to_string(),
+            format!("{des} • .{cmd} <text>"),
+            format!("{prefix}{cmd} {text}").trim().to_string(),
+        )
+    })
+    .collect()
+}
+
+/// `sendBratMenu` (`brat.js:65-119`) tanpa header gambar.
+fn menu_brat(prefix: &str, text: &str) -> Reply {
+    let rows: Vec<serde_json::Value> = baris_varian(prefix, text)
+        .into_iter()
+        .map(|(title, description, id)| {
+            serde_json::json!({
+                "title": title,
+                "description": description,
+                "id": id,
+            })
+        })
+        .collect();
+
+    Reply::interactive(CAPTION_MENU)
+        .with_footer("Pilih variant brat favorit kamu")
+        .with_button(InteractiveButton::new(
+            "single_select",
+            serde_json::json!({
+                "title": "🌾 Pilih Variant Brat",
+                "sections": [{
+                    "title": "Variant Brat",
+                    "rows": rows,
+                }],
+            }),
+        ))
+}
 
 /// Kartu pakai saat teks kosong (`brat.js:130-134`).
 pub(crate) fn pakai(prefix: &str) -> String {
@@ -104,9 +151,7 @@ pub(crate) fn is_blank(buf: &[u8]) -> bool {
 pub fn brat(ctx: Ctx) -> Reply {
     let command = ctx.command.to_lowercase();
     if command == "brat" || command == "bratmenu" {
-        return Reply::Interactive {
-            body: CAPTION_MENU.to_string(),
-        };
+        return menu_brat(&ctx.prefix, &ctx.text);
     }
 
     if ctx.text.is_empty() {
@@ -118,12 +163,12 @@ pub fn brat(ctx: Ctx) -> Reply {
     let (parsed, _blur) = parse_brat_args(&ctx.text);
 
     let Ok(res) = ctx.http.get(&api_url(&parsed)) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+        return Reply::text(crate::common::error_template(&ctx))
             .with_reaction("☢");
     };
     // `if (!res.ok) throw` (`src/lib/brat.js:455`).
     if !(200..300).contains(&res.status) {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+        return Reply::text(crate::common::error_template(&ctx))
             .with_reaction("☢");
     }
     let buf = res.body.bytes().to_vec();
@@ -131,7 +176,7 @@ pub fn brat(ctx: Ctx) -> Reply {
     // image")` (`brat.js:143`) — di JS memicu `generateBrat`, di sini tidak
     // ada padanannya.
     if is_blank(&buf) {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+        return Reply::text(crate::common::error_template(&ctx))
             .with_reaction("☢");
     }
 
@@ -242,28 +287,6 @@ mod tests {
         }
     }
 
-    /// Cermin `BRAT_VARIANTS` + `buildVariantRows` (`brat.js:24-63`) — isi menu
-    /// yang tidak bisa dikirim karena `Reply::Interactive` tanpa tombol.
-    fn baris_varian(prefix: &str, text: &str) -> Vec<(String, String, String)> {
-        [
-            ("Brat Default", "Sticker brat versi biasa", "bratimg"),
-            ("Brat Green", "Variant brat warna hijau", "bratgreen"),
-            ("Brat Cewek", "Variant brat cewek", "bratcewek"),
-            ("Brat Anime", "Variant brat anime", "animebrat"),
-            ("Brat Video", "Sticker brat animated", "bratvid"),
-            ("Brat Video V2", "Sticker brat video v2", "bratvid2"),
-        ]
-        .iter()
-        .map(|(judul, des, cmd)| {
-            (
-                (*judul).to_string(),
-                format!("{des} • .{cmd} <text>"),
-                format!("{prefix}{cmd} {text}").trim().to_string(),
-            )
-        })
-        .collect()
-    }
-
     #[test]
     fn meta_sama_dengan_js() {
         let p = oktz_plugin_api::find("brat").unwrap();
@@ -286,17 +309,28 @@ mod tests {
     }
 
     #[test]
-    fn menu_brat_mengirim_caption_tanpa_tombol_dan_tanpa_request() {
+    fn menu_brat_mengirim_kartu_tombol_tanpa_request() {
         for cmd in ["brat", "bratmenu"] {
             let http = Stub::offline();
             let r = run(http.clone(), cmd, "Hai semua");
-            assert_eq!(
-                r.without_mutations(),
-                &Reply::Interactive {
-                    body: CAPTION_MENU.to_string()
-                },
-                "command {cmd}"
-            );
+            let Reply::Interactive {
+                body,
+                footer,
+                buttons,
+            } = r.without_mutations()
+            else {
+                panic!("command {cmd}: harus kartu interaktif");
+            };
+            assert_eq!(body, CAPTION_MENU, "command {cmd}");
+            assert_eq!(footer.as_deref(), Some("Pilih variant brat favorit kamu"));
+            assert_eq!(buttons.len(), 1);
+            assert_eq!(buttons[0].name, "single_select");
+            assert_eq!(buttons[0].params["title"], "🌾 Pilih Variant Brat");
+            assert_eq!(buttons[0].params["sections"][0]["title"], "Variant Brat");
+            let rows = buttons[0].params["sections"][0]["rows"].as_array().unwrap();
+            assert_eq!(rows.len(), 6);
+            assert_eq!(rows[0]["title"], "Brat Default");
+            assert_eq!(rows[0]["id"], ".bratimg Hai semua");
             assert_eq!(reaksi(&r), None, "menu JS tidak bereaksi");
             assert!(http.seen.lock().unwrap().is_empty());
         }
@@ -421,7 +455,7 @@ mod tests {
         ];
         for http in gagal {
             let r = run(http, "bratimg", "halo");
-            assert_eq!(teks(&r), crate::common::error_template(".", "bratimg"));
+            assert_eq!(teks(&r), crate::common::error_template_bawaan(".", "bratimg"));
             assert_eq!(reaksi(&r), Some("☢"));
         }
     }

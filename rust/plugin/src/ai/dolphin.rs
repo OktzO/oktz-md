@@ -118,7 +118,7 @@ pub fn dolphin(ctx: Ctx) -> Reply {
 
     match dolphin_ai(&*ctx.http, question, template.unwrap_or("logical")) {
         Ok(answer) => Reply::text(answer).with_reaction("✅"),
-        Err(_) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
+        Err(_) => Reply::text(crate::common::error_template(&ctx)).with_reaction("☢"),
     }
 }
 
@@ -321,7 +321,7 @@ mod tests {
     fn a_stream_without_content_is_the_same_error_the_js_throws() {
         let http = Stub::ok("data: {\"choices\":[]}\n\n");
         let r = run(http.clone(), "x");
-        assert_eq!(body(&r), crate::common::error_template(".", "dolphin"));
+        assert_eq!(body(&r), crate::common::error_template_bawaan(".", "dolphin"));
         assert!(matches!(
             r.without_mutations(),
             Reply::Reaction { emoji, .. } if emoji == "☢"
@@ -331,6 +331,6 @@ mod tests {
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "halo");
-        assert_eq!(body(&r), crate::common::error_template(".", "dolphin"));
+        assert_eq!(body(&r), crate::common::error_template_bawaan(".", "dolphin"));
     }
 }

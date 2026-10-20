@@ -75,7 +75,7 @@ pub fn emojitoimage(ctx: Ctx) -> Reply {
 
     let api_key = ctx.config().api_keys.neoxr.clone();
     let Ok(res) = ctx.http.get(&api_url(&emoji, &style, &api_key)) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+        return Reply::text(crate::common::error_template(&ctx))
             .with_reaction("☢");
     };
     let body = res.json().unwrap_or(Value::Null);

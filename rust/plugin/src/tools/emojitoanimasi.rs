@@ -63,7 +63,7 @@ pub fn emojitoanimasi(ctx: Ctx) -> Reply {
 
     let apikey = ctx.config().api_keys.neoxr.clone();
     let Ok(res) = ctx.http.get(&api_url(emoji, &apikey)) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+        return Reply::text(crate::common::error_template(&ctx))
             .with_reaction("☢");
     };
     let data = res.json().unwrap_or(Value::Null);
@@ -73,12 +73,12 @@ pub fn emojitoanimasi(ctx: Ctx) -> Reply {
 
     let webp_url = data["data"]["url"].as_str().unwrap_or("");
     let Ok(webp_res) = ctx.http.get(webp_url) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+        return Reply::text(crate::common::error_template(&ctx))
             .with_reaction("☢");
     };
     // axios melempar untuk 4xx/5xx; di sini status dicek manual.
     if !(200..300).contains(&webp_res.status) {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+        return Reply::text(crate::common::error_template(&ctx))
             .with_reaction("☢");
     }
     let bytes = webp_res.body.bytes().to_vec();
@@ -241,7 +241,7 @@ mod tests {
         let r = run(http, "😳");
         assert_eq!(
             teks(&r),
-            crate::common::error_template(".", "emojitoanimasi")
+            crate::common::error_template_bawaan(".", "emojitoanimasi")
         );
         assert_eq!(reaksi(&r), Some("☢"));
     }

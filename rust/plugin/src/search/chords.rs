@@ -113,7 +113,7 @@ pub fn chords(ctx: Ctx) -> Reply {
     }
 
     let Some(resp) = ctx.http.get(&api_url(text)).ok() else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
 
     match chord_text(&resp.json().unwrap_or(Value::Null)) {

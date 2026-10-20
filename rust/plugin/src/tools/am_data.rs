@@ -89,7 +89,7 @@ pub fn am_data(ctx: Ctx) -> Reply {
             .header("Content-Type", "application/json")
             .json(&serde_json::json!({ "url": url })),
     ) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     let body = res.json().unwrap_or(Value::Null);
     let info = body.get("data").and_then(|d| d.get("info"));
@@ -408,7 +408,7 @@ mod tests {
     #[test]
     fn kegagalan_jaringan_menggunakan_error_template() {
         let r = run(Stub::offline(), "https://alightcreative.com/am/share/abc");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "am-data"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "am-data"));
         assert_eq!(reaction_of(&r), Some("☢"));
     }
 }

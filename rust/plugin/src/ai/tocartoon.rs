@@ -69,7 +69,7 @@ pub fn tocartoon(ctx: Ctx) -> Reply {
 
     match live3d(ctx.http.as_ref(), &buffer, PROMPT) {
         Ok(image) => Reply::image(MediaSource::bytes(image), String::new()).with_reaction("✅"),
-        Err(_) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
+        Err(_) => Reply::text(crate::common::error_template(&ctx)).with_reaction("☢"),
     }
 }
 
@@ -292,7 +292,7 @@ mod tests {
         let r = run(true, false, true, true);
         assert_eq!(
             teks(&r),
-            crate::common::error_template(".", "tocartoon")
+            crate::common::error_template_bawaan(".", "tocartoon")
         );
         assert_eq!(reaksi(&r), Some("☢"));
     }

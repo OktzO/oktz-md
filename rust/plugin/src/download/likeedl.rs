@@ -108,7 +108,7 @@ pub fn likeedl(ctx: Ctx) -> Reply {
     // kosong, dan `catch` di plugin ikut membawa `te(...)` dengan reaksi jam
     // yang sudah menyala sejak baris 35.
     let Ok(value) = oktz_scraper::likee::likee(ctx.http.as_ref(), url) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("🕕");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("🕕");
     };
 
     let data = hasil_dari(&value);
@@ -362,14 +362,14 @@ mod tests {
             serde_json::json!({ "template": "" }),
         ] {
             let r = run(Stub::body(body.clone()), "https://likee.video/@x");
-            assert_eq!(text_of(&r), crate::common::error_template(".", "lkdl"), "body {body}");
+            assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "lkdl"), "body {body}");
         }
     }
 
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "https://likee.video/@x");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "lkdl"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "lkdl"));
     }
 
     #[test]

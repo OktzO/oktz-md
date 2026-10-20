@@ -108,7 +108,7 @@ pub fn pinvid(ctx: Ctx) -> Reply {
 
     // `m.react("🕕")` di `:49` sudah jalan sebelum request.
     let Ok(res) = ctx.http.get(&api_url(query)) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
 
     let body = res.json().unwrap_or(Value::Null);
@@ -288,7 +288,7 @@ mod tests {
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "anime");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "pinvid"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "pinvid"));
         assert_eq!(reaction_of(&r), Some("☢"));
     }
 

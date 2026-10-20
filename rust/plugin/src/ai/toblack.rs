@@ -58,7 +58,7 @@ pub fn toblack(ctx: Ctx) -> Reply {
 
     match oktz_scraper::seaart::live3d(ctx.http.as_ref(), &buffer, PROMPT) {
         Ok(gambar) => Reply::image(MediaSource::bytes(gambar), String::new()).with_reaction("✅"),
-        Err(_) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
+        Err(_) => Reply::text(crate::common::error_template(&ctx)).with_reaction("☢"),
     }
 }
 

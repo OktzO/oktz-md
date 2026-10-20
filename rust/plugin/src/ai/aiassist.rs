@@ -211,7 +211,7 @@ pub fn aiassist(ctx: Ctx) -> Reply {
         Err(AiFailure::Rejected(e)) => {
             Reply::text(failed("AI Assistant Error", &e)).with_reaction("☢")
         }
-        Err(AiFailure::Transport) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+        Err(AiFailure::Transport) => Reply::text(crate::common::error_template(&ctx))
             .with_reaction("☢"),
     }
 }
@@ -420,7 +420,7 @@ mod tests {
     #[test]
     fn a_transport_failure_falls_back_to_the_shared_error_template() {
         let r = run(Stub::offline(), "halo");
-        assert_eq!(body(&r), crate::common::error_template(".", "aiassist"));
+        assert_eq!(body(&r), crate::common::error_template_bawaan(".", "aiassist"));
         assert!(matches!(
             r.without_mutations(),
             Reply::Reaction { emoji, .. } if emoji == "☢"

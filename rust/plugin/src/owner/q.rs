@@ -105,9 +105,10 @@ mod tests {
 
     #[test]
     fn every_alias_resolves_back_to_this_plugin() {
-        for a in ["quoted", "inspect"] {
-            assert_eq!(find(a).unwrap().meta.name, "q", "alias {a}");
-        }
+        // `inspect` juga nama `plugins/utility/inspect.js`; nama didahulukan
+        // (`plugins.js:539`), jadi alias `inspect` bukan milik q.
+        assert_eq!(find("quoted").unwrap().meta.name, "q");
+        assert_eq!(find("inspect").unwrap().meta.name, "inspect");
     }
 
     #[test]

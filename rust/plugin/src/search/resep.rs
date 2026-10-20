@@ -142,7 +142,7 @@ pub fn resep(ctx: Ctx) -> Reply {
     // `getDatabase()` + `db.getUser`/`db.save` (untuk `user.resep_session`)
     // tidak tersedia di Ctx, dan `resepAnswerHandler` butuh pendaftaran
     // answer_handler. Diakhiri error_template seperti swm.rs.
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢")
+    Reply::text(crate::common::error_template(&ctx)).with_reaction("☢")
 }
 
 #[cfg(test)]
@@ -259,7 +259,7 @@ mod tests {
         let r = resep(ctx);
         assert_eq!(
             r.without_mutations().text_body().unwrap(),
-            crate::common::error_template(".", "resep")
+            crate::common::error_template_bawaan(".", "resep")
         );
         assert!(
             matches!(

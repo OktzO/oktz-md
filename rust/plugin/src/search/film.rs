@@ -108,7 +108,7 @@ pub fn film(ctx: Ctx) -> Reply {
     }
 
     let Some(resp) = ctx.http.get(&api_url(&query)).ok() else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     let data = resp.json().unwrap_or(Value::Null);
 
@@ -118,13 +118,11 @@ pub fn film(ctx: Ctx) -> Reply {
     // String non-kosong lolos guard lalu `films.forEach` melempar TypeError
     // di JS -> `catch` -> template error.
     let Some(films) = data.get("data").and_then(Value::as_array) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     let films = &films[..films.len().min(10)];
 
-    Reply::Interactive {
-        body: format_list(films, &query),
-    }
+    Reply::interactive(format_list(films, &query))
     .with_reaction("✅")
 }
 
@@ -319,7 +317,7 @@ mod tests {
     #[test]
     fn a_non_array_payload_hits_the_catch_branch_like_the_foreach_type_error() {
         let r = run(Stub::new(r#"{"status": true, "data": "x"}"#), "q");
-        assert_eq!(body_of(&r), crate::common::error_template(".", "film"));
+        assert_eq!(body_of(&r), crate::common::error_template_bawaan(".", "film"));
         assert_eq!(reaction_of(&r), Some("☢"));
     }
 

@@ -65,7 +65,7 @@ pub fn ganti_foto(ctx: Ctx) -> Reply {
 
     // `updateAssetUrl('foto', buffer, 'foto.jpeg')` tidak tersedia —
     // diakhiri error_template seperti swm.rs.
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢")
+    Reply::text(crate::common::error_template(&ctx)).with_reaction("☢")
 }
 
 #[cfg(test)]
@@ -168,14 +168,14 @@ mod tests {
     #[test]
     fn quoted_gambar_dipakai_unduh() {
         let r = run(false, true, true);
-        assert_eq!(teks(&r), crate::common::error_template(".", "ganti-foto.jpg"));
+        assert_eq!(teks(&r), crate::common::error_template_bawaan(".", "ganti-foto.jpg"));
         assert_eq!(reaksi(&r), Some("☢"));
     }
 
     #[test]
     fn trigger_gambar_dipakai_unduh() {
         let r = run(true, false, true);
-        assert_eq!(teks(&r), crate::common::error_template(".", "ganti-foto.jpg"));
+        assert_eq!(teks(&r), crate::common::error_template_bawaan(".", "ganti-foto.jpg"));
         assert_eq!(reaksi(&r), Some("☢"));
     }
 

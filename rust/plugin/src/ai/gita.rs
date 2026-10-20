@@ -64,11 +64,11 @@ pub fn gita(ctx: Ctx) -> Reply {
     // `gita.js:33-36` — semua kegagalan provider (termasuk cuki yang key-nya
     // kosong) berakhir di satu `catch` yang sama, jadi pesannya sama.
     let Some(body) = ctx.http.get(&url).ok().and_then(|r| r.json()) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
 
     if falsy(body.get("status")) || falsy(body.get("result")) {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     }
 
     let answer = match body.get("result") {
@@ -233,7 +233,7 @@ mod tests {
             r#"{"status":true}"#,
         ] {
             let r = run(Stub::ok(payload), "dharma");
-            assert_eq!(body(&r), crate::common::error_template(".", "gita"), "{payload}");
+            assert_eq!(body(&r), crate::common::error_template_bawaan(".", "gita"), "{payload}");
             assert!(matches!(
                 r.without_mutations(),
                 Reply::Reaction { emoji, .. } if emoji == "☢"
@@ -244,7 +244,7 @@ mod tests {
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "dharma");
-        assert_eq!(body(&r), crate::common::error_template(".", "gita"));
+        assert_eq!(body(&r), crate::common::error_template_bawaan(".", "gita"));
         assert!(matches!(
             r.without_mutations(),
             Reply::Reaction { emoji, .. } if emoji == "☢"

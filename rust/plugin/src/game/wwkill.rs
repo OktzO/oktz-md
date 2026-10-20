@@ -39,7 +39,7 @@ pub(crate) fn role_name(key: &str) -> &'static str {
 /// `te(prefix, command, pushName)` (`src/lib/error.js:3-9`).
 /// `Ctx` tidak membawa `pushName`, jadi `{pushName}` jadi `User` seperti di JS.
 pub(crate) fn error_reply(prefix: &str, command: &str) -> Reply {
-    Reply::text(crate::common::error_template(prefix, command))
+    Reply::text(crate::common::error_template_bawaan(prefix, command))
 }
 
 /// Hasil aksi malam: teks balasan + apa yang harus ditulis ke state game.

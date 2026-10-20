@@ -79,13 +79,13 @@ pub fn txt2img(ctx: Ctx) -> Reply {
     );
 
     let Ok(res) = ctx.http.get(&url) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     let data = res.json().unwrap_or(Value::Null);
 
     let Some(url_hasil) = data.get("data").and_then(|d| d.get("url")).and_then(Value::as_str)
     else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
 
     Reply::image(MediaSource::url(url_hasil.to_string()), "").with_reaction("✅")
@@ -251,7 +251,7 @@ mod tests {
             let r = run(Stub::body(body.clone()), "sunset");
             assert_eq!(
                 text_of(&r),
-                crate::common::error_template(".", "txt2img"),
+                crate::common::error_template_bawaan(".", "txt2img"),
                 "body {body:?}"
             );
             assert_eq!(reaction_of(&r), Some("☢"), "body {body:?}");
@@ -285,7 +285,7 @@ mod tests {
     #[test]
     fn kegagalan_jaringan_menggunakan_error_template() {
         let r = run(Stub::offline(), "sunset");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "txt2img"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "txt2img"));
         assert_eq!(reaction_of(&r), Some("☢"));
     }
 }

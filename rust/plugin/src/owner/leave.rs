@@ -65,7 +65,7 @@ pub fn leave(ctx: Ctx) -> Reply {
         if ctx.is_group {
             // `ponytail:` `m.groupMetadata` dan `sock.groupLeave` tidak tersedia
             // di registry; grup aktif tidak dapat ditargetkan.
-            return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+            return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
         }
         return Reply::text(help(&ctx.prefix));
     }
@@ -76,7 +76,7 @@ pub fn leave(ctx: Ctx) -> Reply {
 
     // `ponytail:` `sock.groupGetInviteInfo` dan `sock.groupLeave` tidak tersedia
     // di registry, jadi operasi grup tidak dapat dieksekusi.
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢")
+    Reply::text(crate::common::error_template(&ctx)).with_reaction("☢")
 }
 
 #[cfg(test)]
@@ -156,7 +156,7 @@ mod tests {
             ..Ctx::default()
         };
         let r = leave(ctx);
-        assert_eq!(r.without_mutations().text_body().unwrap(), crate::common::error_template(".", "leave"));
+        assert_eq!(r.without_mutations().text_body().unwrap(), crate::common::error_template_bawaan(".", "leave"));
         assert!(matches!(r.without_mutations(), Reply::Reaction { .. }));
     }
 }

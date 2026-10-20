@@ -63,7 +63,7 @@ pub fn tojapanese(ctx: Ctx) -> Reply {
 
     // `uploadImage` + `applyImageEffect('tojapanese', ...)` tidak tersedia —
     // diakhiri error_template seperti swm.rs.
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢")
+    Reply::text(crate::common::error_template(&ctx)).with_reaction("☢")
 }
 
 #[cfg(test)]
@@ -168,7 +168,7 @@ mod tests {
         let r = run(false, true, true);
         assert_eq!(
             teks(&r),
-            crate::common::error_template(".", "tojapanese")
+            crate::common::error_template_bawaan(".", "tojapanese")
         );
         assert_eq!(reaksi(&r), Some("☢"));
     }
@@ -178,7 +178,7 @@ mod tests {
         let r = run(true, false, true);
         assert_eq!(
             teks(&r),
-            crate::common::error_template(".", "tojapanese")
+            crate::common::error_template_bawaan(".", "tojapanese")
         );
         assert_eq!(reaksi(&r), Some("☢"));
     }

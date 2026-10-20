@@ -249,7 +249,7 @@ pub fn npmstalk(ctx: Ctx) -> Reply {
     }
 
     let Some(profil) = profil else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
 
     let teks = caption(&profil);

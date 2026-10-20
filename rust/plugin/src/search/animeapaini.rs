@@ -241,7 +241,7 @@ pub fn animeapaini(ctx: Ctx) -> Reply {
         .call(&HttpCall::post(ENDPOINT).multipart(vec![image_part(buffer)]))
         .ok()
     else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
 
     let data = resp.json().unwrap_or(Value::Null);
@@ -249,7 +249,7 @@ pub fn animeapaini(ctx: Ctx) -> Reply {
         return Reply::text(NOT_FOUND).with_reaction("❌");
     }
     let Some(matched) = first_match(&data) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     let result = data.get("result").unwrap_or(&Value::Null);
 
@@ -611,7 +611,7 @@ mod tests {
             r#"{"status": true, "result": {"full_matches": "ab"}}"#,
         ] {
             let r = run(Api::new(body), true, None);
-            assert_eq!(body_of(&r), crate::common::error_template(".", "animeapaini"), "{body}");
+            assert_eq!(body_of(&r), crate::common::error_template_bawaan(".", "animeapaini"), "{body}");
             assert_eq!(reaction_of(&r), Some("☢"), "{body}");
         }
     }

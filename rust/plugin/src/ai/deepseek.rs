@@ -127,7 +127,7 @@ pub fn deepseek(ctx: Ctx) -> Reply {
     let raw = match ctx.http.post_json(ENDPOINT, &body) {
         Ok(r) => r.text(),
         Err(_) => {
-            return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+            return Reply::text(crate::common::error_template(&ctx))
                 .with_reaction("☢");
         }
     };
@@ -359,7 +359,7 @@ mod tests {
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "halo");
-        assert_eq!(body(&r), crate::common::error_template(".", "deepseek"));
+        assert_eq!(body(&r), crate::common::error_template_bawaan(".", "deepseek"));
         assert!(matches!(
             r.without_mutations(),
             Reply::Reaction { emoji, .. } if emoji == "☢"

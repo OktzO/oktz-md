@@ -77,7 +77,7 @@ fn settings_text(prefix: &str, on: bool) -> String {
 /// Cabang `* all`: gerbang owner, lalu jalur `catch` milik JS sendiri karena
 /// `groupFetchAllParticipating` tidak ada di `Ctx`.
 fn global_unavailable(ctx: &Ctx) -> Reply {
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢")
+    Reply::text(crate::common::error_template(ctx)).with_reaction("☢")
 }
 
 #[plugin(
@@ -257,7 +257,7 @@ mod tests {
         assert_eq!(reaction_of(&r), "☢");
         assert_eq!(
             text_of(&r),
-            crate::common::error_template(".", "welcome")
+            crate::common::error_template_bawaan(".", "welcome")
         );
         assert!(r.mutations().is_empty(), "tidak ada grup yang ditulis");
     }

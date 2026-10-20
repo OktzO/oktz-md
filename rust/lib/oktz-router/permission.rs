@@ -29,6 +29,9 @@ pub struct Caller {
     pub is_premium: bool,
     pub is_admin: bool,
     pub is_bot_admin: bool,
+    /// `m.pushName` — nama tampilan pengirim (`MessageInfo.push_name`, atribut
+    /// `notify`; kosong kalau WA tidak mengirimkannya).
+    pub push_name: String,
     /// `m.mentionedJid` — router meneruskannya apa adanya ke `Ctx`.
     pub mentioned: Vec<String>,
     /// `m.quoted` — pesan yang di-reply, diteruskan ke `Ctx`.

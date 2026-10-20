@@ -30,7 +30,7 @@ const CDN: &str = "https://images.dotgg.gg/bluearchive/characters/";
 /// langsung ditangkap `catch` (`bluearchive-char.js:160-163`) yang hanya
 /// memanggil `te(...)`, tanpa menyertakan `error.message`.
 fn gagal(ctx: &Ctx) -> Reply {
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢")
+    Reply::text(crate::common::error_template(ctx)).with_reaction("☢")
 }
 
 /// `if (!name)` (`bluearchive-char.js:80`) — teks literal, bukan `te`.
@@ -471,7 +471,7 @@ mod tests {
         let r = run(stub.clone(), "sinkronisasi");
         assert_eq!(
             teks(&r),
-            crate::common::error_template(".", "bluearchive-char"),
+            crate::common::error_template_bawaan(".", "bluearchive-char"),
             "saran dari JS juga tidak ikut — thrown sebelum sampai ke sana"
         );
         assert_eq!(stub.seen.lock().unwrap().len(), 1, "hanya daftar yang diambil");
@@ -480,25 +480,25 @@ mod tests {
     #[test]
     fn an_empty_catalog_finds_nothing_and_errors() {
         let r = run(Stub::new("[]", DETAIL), "shiroko");
-        assert_eq!(teks(&r), crate::common::error_template(".", "bluearchive-char"));
+        assert_eq!(teks(&r), crate::common::error_template_bawaan(".", "bluearchive-char"));
     }
 
     #[test]
     fn a_list_that_is_not_an_array_errors_instead_of_panicking() {
         let r = run(Stub::new(r#"{"error":"nope"}"#, DETAIL), "shiroko");
-        assert_eq!(teks(&r), crate::common::error_template(".", "bluearchive-char"));
+        assert_eq!(teks(&r), crate::common::error_template_bawaan(".", "bluearchive-char"));
     }
 
     #[test]
     fn a_catalog_entry_without_url_errors_like_the_js_typeerror() {
         let r = run(Stub::new(r#"[{"name":"Tanpa URL"}]"#, DETAIL), "apa saja");
-        assert_eq!(teks(&r), crate::common::error_template(".", "bluearchive-char"));
+        assert_eq!(teks(&r), crate::common::error_template_bawaan(".", "bluearchive-char"));
     }
 
     #[test]
     fn an_unreachable_api_errors_without_panicking() {
         let r = run(Stub::offline(), "shiroko");
-        assert_eq!(teks(&r), crate::common::error_template(".", "bluearchive-char"));
+        assert_eq!(teks(&r), crate::common::error_template_bawaan(".", "bluearchive-char"));
     }
 
     #[test]

@@ -149,7 +149,7 @@ pub fn githubdl(ctx: Ctx) -> Reply {
     };
     // `await res.json()` melempar kalau body bukan JSON → `catch` plugin.
     let Some(repo_data) = response.json() else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     let default_branch = repo_data
         .get("default_branch")
@@ -173,7 +173,7 @@ pub fn githubdl(ctx: Ctx) -> Reply {
             Reply::text(zip_filename(&repo, &branch)).with_reaction("✅")
         }
         Ok(_) => Reply::text(bad_branch(&branch, &default_branch)).with_reaction("❌"),
-        Err(_) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
+        Err(_) => Reply::text(crate::common::error_template(&ctx)).with_reaction("☢"),
     }
 }
 
@@ -420,7 +420,7 @@ mod tests {
     #[test]
     fn a_body_that_is_not_json_reports_the_system_error() {
         let r = run(Stub::repo_not_json(), &["niceplugin", "NiceBot"]);
-        assert_eq!(text_of(&r), crate::common::error_template(".", "githubdl"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "githubdl"));
         assert!(
             matches!(r.without_mutations(), Reply::Reaction { emoji, .. } if emoji == "☢"),
             "harus bereaksi ☢"
@@ -430,6 +430,6 @@ mod tests {
     #[test]
     fn a_transport_failure_on_the_zip_check_reports_the_system_error() {
         let r = run(Stub::zip_offline(), &["niceplugin", "NiceBot"]);
-        assert_eq!(text_of(&r), crate::common::error_template(".", "githubdl"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "githubdl"));
     }
 }

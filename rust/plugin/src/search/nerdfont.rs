@@ -11,10 +11,12 @@
 //!    satu item tanpa `Version:`/`Info:`/gambar membuat SELURUH permintaan
 //!    gagal. `parse_fonts` mengembalikan `Err` untuk itu, persis `throw`.
 //! 2. `sock.sendMessage` dengan `interactiveButtons` + `buttonParamsJson`
-//!    tidak ada padanannya di `Reply`; `Reply::Interactive` hanya membawa
-//!    teks. Isi baris tombol tetap ditulis sebagai fungsi murni.
+//!    diteruskan apa adanya: `single_select` + `sections[0].rows` jadi
+//!    `InteractiveButton`.
 
+use oktz_plugin_api::registry::InteractiveButton;
 use oktz_plugin_api::{Ctx, Reply, plugin};
+use serde_json::json;
 
 
 /// `nerdfont.js:5` — satu-satunya endpoint.
@@ -214,22 +216,32 @@ fn tag_punya_kelas(html: &str, pos: usize, class: &str) -> bool {
         .any(|k| k == class)
 }
 
-/// `nerdfont.js:71-92` — teks kartu interaktif.
-pub(crate) fn kartu(fonts: &[Font], prefix: &str) -> String {
-    let mut baris_tombol = String::new();
-    for font in fonts {
-        let (header, title, description, id) = baris(font, prefix);
-        baris_tombol.push_str(&format!(
-            "header: {header}\ntitle: {title}\ndescription: {description}\nid: {id}\n\n"
-        ));
-    }
-    format!(
-        "Silahkan pilih font yang ingin kamu download\n\
-         Click tombol di bawah ini\n\
-         Pilih Font Disini\n\
-         Aku harap, font ini dapat membantu kamu\n\
-         Font Pilihan\n{baris_tombol}"
-    )
+/// `nerdfont.js:71-92` — kartu interaktif beserta barisnya.
+pub(crate) fn kartu(fonts: &[Font], prefix: &str) -> Reply {
+    let rows: Vec<serde_json::Value> = fonts
+        .iter()
+        .map(|font| {
+            let (header, title, description, id) = baris(font, prefix);
+            json!({
+                "header": header,
+                "title": title,
+                "description": description,
+                "id": id,
+            })
+        })
+        .collect();
+    let params = json!({
+        "title": "Pilih Font Disini",
+        "sections": [{
+            "title": "Aku harap, font ini dapat membantu kamu",
+            "highlight_label": "Font Pilihan",
+            "rows": rows,
+        }],
+    });
+
+    Reply::interactive("Silahkan pilih font yang ingin kamu download")
+        .with_footer("Click tombol di bawah ini")
+        .with_button(InteractiveButton::new("single_select", params))
 }
 
 #[plugin(
@@ -252,15 +264,13 @@ pub fn nerdfont(ctx: Ctx) -> Reply {
     // `nerdfont.js` TIDAK pernah membaca `m.text`: parameter `<query>` di
     // `usage` cuma sisa. Permintaan tetap jalan untuk input kosong.
     let Ok(res) = ctx.http.get(URL) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command));
+        return Reply::text(crate::common::error_template(&ctx));
     };
     let html = res.text();
 
     match parse_fonts(&html) {
-        Ok(fonts) => Reply::Interactive {
-            body: kartu(&fonts, &ctx.prefix),
-        },
-        Err(_) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)),
+        Ok(fonts) => kartu(&fonts, &ctx.prefix),
+        Err(_) => Reply::text(crate::common::error_template(&ctx)),
     }
 }
 
@@ -469,7 +479,7 @@ Info: Y</div>
     </div>"#;
         assert!(parse_fonts(html).is_err());
         let r = run(Stub::html(html), "");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "nerdfont"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "nerdfont"));
     }
 
     #[test]
@@ -516,33 +526,52 @@ Info: Y</div>
         let html = SEBUAH_ITEM.repeat(500);
         let fonts = parse_fonts(&html).unwrap();
         assert_eq!(fonts.len(), 500);
-        let teks = kartu(&fonts, ".");
-        assert!(teks.starts_with("Silahkan pilih font yang ingin kamu download"));
-        assert!(teks.contains("id: .nerdfont-ambil Coolvetica"), "{teks}");
+        let r = kartu(&fonts, ".");
+        assert_eq!(text_of(&r), "Silahkan pilih font yang ingin kamu download");
+        let Reply::Interactive { buttons, .. } = r.without_mutations() else {
+            panic!("harus kartu interaktif");
+        };
+        assert_eq!(buttons.len(), 1);
+        let rows = buttons[0].params["sections"][0]["rows"].as_array().unwrap();
+        assert_eq!(rows.len(), 500);
+        assert_eq!(rows[499]["id"], ".nerdfont-ambil Coolvetica");
     }
 
     #[test]
     fn the_card_carries_the_button_rows_in_order() {
         let fonts = parse_fonts(SEBUAH_ITEM).unwrap();
-        let teks = kartu(&fonts, "!");
+        let r = kartu(&fonts, "!");
+        let Reply::Interactive {
+            body,
+            footer,
+            buttons,
+        } = r.without_mutations()
+        else {
+            panic!("harus kartu interaktif");
+        };
+        assert_eq!(body, "Silahkan pilih font yang ingin kamu download");
+        assert_eq!(footer.as_deref(), Some("Click tombol di bawah ini"));
+        assert_eq!(buttons[0].name, "single_select");
+        assert_eq!(buttons[0].params["title"], "Pilih Font Disini");
         assert_eq!(
-            teks,
-            "Silahkan pilih font yang ingin kamu download\n\
-             Click tombol di bawah ini\n\
-             Pilih Font Disini\n\
-             Aku harap, font ini dapat membantu kamu\n\
-             Font Pilihan\n\
-             header: Font Coolvetica\n\
-             title: A Font based on Font-A-Ware\n\
-             description: Version: 1.1.0\n\
-             id: !nerdfont-ambil Coolvetica\n\n"
+            buttons[0].params["sections"][0]["highlight_label"],
+            "Font Pilihan"
+        );
+        assert_eq!(
+            buttons[0].params["sections"][0]["rows"],
+            json!([{
+                "header": "Font Coolvetica",
+                "title": "A Font based on Font-A-Ware",
+                "description": "Version: 1.1.0",
+                "id": "!nerdfont-ambil Coolvetica",
+            }])
         );
     }
 
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "nerdfont"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "nerdfont"));
         let seen = Stub::offline();
         let _ = run(seen.clone(), "Coolvetica");
         assert_eq!(seen.seen.lock().unwrap()[0], URL);

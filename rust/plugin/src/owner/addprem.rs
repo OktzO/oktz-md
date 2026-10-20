@@ -201,7 +201,7 @@ pub fn addprem(ctx: Ctx) -> Reply {
 }
 
 fn error_templ(prefix: &str, command: &str) -> String {
-    crate::common::error_template(prefix, command)
+    crate::common::error_template_bawaan(prefix, command)
 }
 
 #[cfg(test)]

@@ -134,7 +134,7 @@ pub fn npm(ctx: Ctx) -> Reply {
     // `await m.react("🕕")` di `:30` sudah jalan sebelum request, jadi reaksi
     // terakhir pada cabang gagal adalah "☢".
     let Ok(res) = ctx.http.get(&api_url(&query)) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
 
     // `fetch` tidak melempar untuk status 4xx/5xx; `ctx.http.get` sudah
@@ -380,7 +380,7 @@ mod tests {
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "axios");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "npm"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "npm"));
         assert_eq!(reaction_of(&r), Some("☢"));
     }
 

@@ -47,3 +47,9 @@ pub mod wink;
 
 // Ditambahkan scripts/pasang-modul.mjs.
 pub mod dafont;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod styleteks;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod removebg;

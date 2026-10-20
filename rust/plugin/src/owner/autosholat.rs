@@ -325,7 +325,7 @@ pub fn autosholat(ctx: Ctx) -> Reply {
                     "Aduh, aku sudah mencari di database MyQuran tapi nama daerah **{}** tidak dapat kutemukan. Coba nama kota yang lain?",
                     nama
                 )),
-                Err(_) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)),
+                Err(_) => Reply::text(crate::common::error_template(&ctx)),
             }
         }
 
@@ -649,7 +649,7 @@ mod tests {
     #[test]
     fn an_unreachable_kota_search_returns_the_error_template() {
         let r = run_with(&["kota", "Surabaya"], serde_json::json!({}));
-        assert_eq!(text_of(&r), crate::common::error_template(".", "autosholat"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "autosholat"));
         assert!(r.mutations().is_empty());
         match r.without_mutations() {
             Reply::Text { .. } => {}

@@ -69,7 +69,7 @@ pub fn tofigurine(ctx: Ctx) -> Reply {
     let result = match oktz_scraper::seaart::live3d(&*ctx.http, &buffer, PROMPT) {
         Ok(b) => b,
         Err(_) => {
-            return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+            return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
         }
     };
 
@@ -299,7 +299,7 @@ mod tests {
             ..ctx
         };
         let r = tofigurine(ctx);
-        assert_eq!(text_of(&r), crate::common::error_template(".", "tofigure3"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "tofigure3"));
         assert_eq!(reaction_of(&r), Some("☢"));
     }
 

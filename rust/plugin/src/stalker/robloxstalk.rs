@@ -136,7 +136,7 @@ pub fn robloxstalk(ctx: Ctx) -> Reply {
     let search_url = format!("https://users.roblox.com/v1/users/search?keyword={username}&limit=10");
     let search = match http.get(&search_url).and_then(|r| r.json().ok_or_else(|| oktz_plugin_api::HttpError { message: "bukan JSON".into() })) {
         Ok(v) => v,
-        Err(_) => return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
+        Err(_) => return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢"),
     };
     let data = match search.get("data").and_then(Value::as_array) {
         Some(d) if !d.is_empty() => d,

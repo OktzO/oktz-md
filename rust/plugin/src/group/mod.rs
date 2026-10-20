@@ -102,3 +102,6 @@ pub mod pinchat;
 
 // Ditambahkan scripts/pasang-modul.mjs.
 pub mod add;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod groupinfo;

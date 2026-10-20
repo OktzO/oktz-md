@@ -102,7 +102,7 @@ pub fn setmenucat(ctx: Ctx) -> Reply {
     // `ponytail:` `db.setting("menucatVariant", selected.id)` + `db.save()`
     // (penulisan database) tidak tersedia di registry Rust, jadi perubahan
     // tidak dapat disimpan.
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢")
+    Reply::text(crate::common::error_template(&ctx)).with_reaction("☢")
 }
 
 #[cfg(test)]
@@ -198,7 +198,7 @@ mod tests {
         let r = setmenucat(ctx);
         assert_eq!(
             r.without_mutations().text_body().unwrap(),
-            crate::common::error_template(".", "setmenucat")
+            crate::common::error_template_bawaan(".", "setmenucat")
         );
         assert!(matches!(r.without_mutations(), Reply::Reaction { .. }));
     }

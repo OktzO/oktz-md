@@ -52,6 +52,23 @@ impl ButtonAction {
             Self::SendLocation => "send_location",
         }
     }
+
+    /// `name` string dari `interactiveButtons[]` JS. `None` = nama di luar
+    /// daftar yang dikenal WA.
+    pub fn from_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "quick_reply" => Self::QuickReply,
+            "single_select" => Self::SingleSelect,
+            "cta_url" => Self::CtaUrl,
+            "cta_copy" => Self::CtaCopy,
+            "cta_call" => Self::CtaCall,
+            "cta_reminder" => Self::CtaReminder,
+            "cta_cancel_reminder" => Self::CtaCancelReminder,
+            "address_message" => Self::AddressMessage,
+            "send_location" => Self::SendLocation,
+            _ => return None,
+        })
+    }
 }
 
 /// Satu baris di dalam `single_select`. Field yang tidak diisi dilewati dari

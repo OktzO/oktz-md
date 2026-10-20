@@ -140,7 +140,7 @@ pub fn filmget(ctx: Ctx) -> Reply {
     }
 
     let Some(resp) = ctx.http.get(&api_url(url)).ok() else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     let data = resp.json().unwrap_or(Value::Null);
 
@@ -157,9 +157,7 @@ pub fn filmget(ctx: Ctx) -> Reply {
         let _ = ctx.http.get(thumb);
     }
 
-    Reply::Interactive {
-        body: format_text(film, streams, downloads),
-    }
+    Reply::interactive(format_text(film, streams, downloads))
     .with_reaction("✅")
 }
 
@@ -380,7 +378,7 @@ mod tests {
     #[test]
     fn a_transport_failure_on_the_endpoint_reports_the_error_template() {
         let r = run(Stub::empty(), "https://tv.neoxr.eu/film/civil-war");
-        assert_eq!(body_of(&r), crate::common::error_template(".", "filmget"));
+        assert_eq!(body_of(&r), crate::common::error_template_bawaan(".", "filmget"));
         assert_eq!(reaction_of(&r), Some("☢"));
     }
 

@@ -4,9 +4,9 @@
 
 use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
 
-const PROMPT: &str = "Transform this image into a tropical island scene. \
-Place the subject in a beautiful island environment with clear blue ocean, palm trees, and warm sunlight. \
-Add realistic lighting, shadows, and vibrant tropical colors. \
+const PROMPT: &str = "Transform this image into a tropical island scene. \n\
+Place the subject in a beautiful island environment with clear blue ocean, palm trees, and warm sunlight. \n\
+Add realistic lighting, shadows, and vibrant tropical colors. \n\
 Keep the original identity, high detail, cinematic, photorealistic.";
 
 /// Kartu pakai saat tidak ada gambar.
@@ -54,14 +54,30 @@ pub fn toisland(ctx: Ctx) -> Reply {
         return Reply::text(help(&ctx.prefix));
     }
 
+    // toisland.js:36 — `m.react('🕕')` sebelum unduh, jadi reaksi itu ikut di
+    // semua cabang setelah cek gambar.
+    let jam = || Reply::None.with_reaction("🕕");
+
     let Some(buffer) = ambil_buffer(&ctx) else {
         // toisland.js:46-49 — `m.react('❌')` lalu `m.reply` pesan gagal unduh.
-        return Reply::text("❌ Gagal mendownload gambar").with_reaction("❌");
+        return Reply::sequence(vec![
+            jam(),
+            Reply::None.with_reaction("❌"),
+            Reply::text("❌ Gagal mendownload gambar"),
+        ]);
     };
 
     match oktz_scraper::seaart::live3d(ctx.http.as_ref(), &buffer, PROMPT) {
-        Ok(gambar) => Reply::image(MediaSource::bytes(gambar), String::new()).with_reaction("✅"),
-        Err(_) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
+        Ok(gambar) => Reply::sequence(vec![
+            jam(),
+            Reply::None.with_reaction("✅"),
+            Reply::image(MediaSource::bytes(gambar), String::new()),
+        ]),
+        Err(_) => Reply::sequence(vec![
+            jam(),
+            Reply::None.with_reaction("☢"),
+            Reply::text(crate::common::error_template(&ctx)),
+        ]),
     }
 }
 
@@ -188,13 +204,18 @@ mod tests {
     }
 
     fn text_of(r: &Reply) -> String {
-        r.without_mutations().text_body().unwrap_or("").to_string()
+        match r.without_mutations() {
+            Reply::Sequence(v) => v.iter().map(text_of).find(|t| !t.is_empty()).unwrap_or_default(),
+            lain => lain.text_body().unwrap_or("").to_string(),
+        }
     }
 
-    fn reaction_of(r: &Reply) -> Option<&str> {
+    /// Emoji reaksi berurutan (`m.react` bisa dipanggil beberapa kali).
+    fn reactions_of(r: &Reply) -> Vec<String> {
         match r.without_mutations() {
-            Reply::Reaction { emoji, .. } => Some(emoji.as_str()),
-            _ => None,
+            Reply::Sequence(v) => v.iter().flat_map(reactions_of).collect(),
+            Reply::Reaction { emoji, .. } => vec![emoji.clone()],
+            _ => Vec::new(),
         }
     }
 
@@ -208,7 +229,7 @@ mod tests {
             Ok(Vec::new()),
         ));
         assert_eq!(text_of(&r), help("."));
-        assert_eq!(reaction_of(&r), None);
+        assert!(reactions_of(&r).is_empty());
     }
 
     #[test]
@@ -223,7 +244,7 @@ mod tests {
             }),
         ));
         assert_eq!(text_of(&r), "❌ Gagal mendownload gambar");
-        assert_eq!(reaction_of(&r), Some("❌"));
+        assert_eq!(reactions_of(&r), ["🕕", "❌"]);
     }
 
     #[test]
@@ -239,6 +260,6 @@ mod tests {
             }),
         ));
         assert_eq!(text_of(&r), "❌ Gagal mendownload gambar");
-        assert_eq!(reaction_of(&r), Some("❌"));
+        assert_eq!(reactions_of(&r), ["🕕", "❌"]);
     }
 }

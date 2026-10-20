@@ -67,7 +67,7 @@ pub(crate) fn not_found(text: &str) -> String {
 
 /// `te(prefix, command, pushName)` (`src/lib/error.js:3-9`).
 pub(crate) fn error_reply(prefix: &str, command: &str) -> String {
-    crate::common::error_template(prefix, command)
+    crate::common::error_template_bawaan(prefix, command)
 }
 
 /// `android1.js:65-74` — caption daftar aplikasi.
@@ -139,9 +139,7 @@ pub fn android1(ctx: Ctx) -> Reply {
     };
     let apps = &apps[..apps.len().min(10)];
 
-    Reply::Interactive {
-        body: format_list(apps, text),
-    }
+    Reply::interactive(format_list(apps, text))
     .with_reaction("✅")
 }
 

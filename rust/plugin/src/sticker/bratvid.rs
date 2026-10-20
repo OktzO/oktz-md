@@ -56,7 +56,7 @@ pub fn bratvid(ctx: Ctx) -> Reply {
 
     // Render `brat-canvas/video` (`bratvid.js:58`) belum ada di Rust —
     // lihat `ponytail:` di atas.
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢")
+    Reply::text(crate::common::error_template(&ctx)).with_reaction("☢")
 }
 
 #[cfg(test)]
@@ -128,7 +128,7 @@ mod tests {
     #[test]
     fn dengan_teks_jatuh_ke_error_template_dan_reaksi_bahu() {
         let r = bratvid(ctx_of("bratvid", "Hai semua"));
-        assert_eq!(teks(&r), crate::common::error_template(".", "bratvid"));
+        assert_eq!(teks(&r), crate::common::error_template_bawaan(".", "bratvid"));
         assert_eq!(reaksi(&r), Some("☢"));
     }
 }

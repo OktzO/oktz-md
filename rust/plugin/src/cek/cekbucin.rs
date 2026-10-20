@@ -87,13 +87,16 @@ mod tests {
 
     #[test]
     fn every_alias_resolves_to_this_plugin() {
-        for key in ["cekbucin","bucin"] {
-            assert_eq!(
-                oktz_plugin_api::find(key).map(|p| p.meta.name.as_str()),
-                Some("cekbucin"),
-                "key {key} salah resolve"
-            );
-        }
+        // `bucin` juga nama `plugins/fun/bucin.js`; nama didahulukan
+        // (`plugins.js:539`), jadi alias `bucin` bukan milik cekbucin.
+        assert_eq!(
+            oktz_plugin_api::find("cekbucin").map(|p| p.meta.name.as_str()),
+            Some("cekbucin")
+        );
+        assert_eq!(
+            oktz_plugin_api::find("bucin").map(|p| p.meta.name.as_str()),
+            Some("bucin")
+        );
     }
 
     #[test]

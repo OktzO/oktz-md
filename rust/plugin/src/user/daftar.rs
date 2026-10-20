@@ -29,7 +29,7 @@ pub fn daftar(ctx: Ctx) -> Reply {
     // `ponytail:` Semua logika daftar (cek isRegistered, sesi registrasi,
     // buat sesi, kirim prompt dengan gambar, m.react) butuh database dan sock
     // yang tidak tersedia di registry Rust.
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+    Reply::text(crate::common::error_template(&ctx))
 }
 
 #[cfg(test)]
@@ -50,7 +50,7 @@ mod tests {
         let r = daftar(ctx);
         assert_eq!(
             r.without_mutations().text_body().unwrap(),
-            crate::common::error_template(".", "daftar")
+            crate::common::error_template_bawaan(".", "daftar")
         );
     }
 }

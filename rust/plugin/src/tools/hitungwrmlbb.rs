@@ -91,7 +91,7 @@ pub fn hitungwrmlbb(ctx: Ctx) -> Reply {
     );
 
     let Ok(res) = ctx.http.get(&url) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("❌");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("❌");
     };
 
     let data = match res.json() {

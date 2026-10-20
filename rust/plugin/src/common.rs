@@ -738,11 +738,44 @@ pub(crate) fn scrub_nama_berkas(nama: &str) -> String {
 
 /// `te(m.prefix, m.command, m.pushName)` (`src/lib/error.js:3-9`).
 ///
-/// `config.errorTemplate` (`config.js:153`) selalu terisi, jadi teks fallback
-/// `☢ *ᴇʀʀᴏʀ*` di `error.js` adalah kode mati — plugin yang memakainya
-/// menyimpang dari JS. `Ctx` tidak punya `m.pushName`, jadi `{pushName}`
-/// selalu jadi `User`, sama seperti `pushName || 'User'` di JS.
-pub(crate) fn error_template(prefix: &str, command: &str) -> String {
+/// `config.errorTemplate` (`config.js:153`) selalu terisi di produksi, jadi
+/// teks fallback `☢ *ᴇʀʀᴏʀ*` di `error.js` adalah kode mati. Template
+/// runtime dibaca dari [`oktz_core::config::Runtime::error_template`];
+/// kosong berarti template bawaan JS di bawah.
+pub(crate) fn error_template(ctx: &oktz_plugin_api::Ctx) -> String {
+    let tpl = ctx.config().error_template.as_str();
+    let tpl = if tpl.is_empty() {
+        "☢ Kayaknya command `{prefix}{command}` lagi ada kendala\n\
+         Silahkan coba lagi nanti, {pushName}\n\n\
+         _Jika masalah berlanjut, silahkan hubungi owner bot_"
+    } else {
+        tpl
+    };
+
+    tpl.replace("{prefix}", if ctx.prefix.is_empty() { "." } else { &ctx.prefix })
+        .replace(
+            "{command}",
+            if ctx.command.is_empty() {
+                "?"
+            } else {
+                &ctx.command
+            },
+        )
+        .replace(
+            "{pushName}",
+            if ctx.push_name.is_empty() {
+                "User"
+            } else {
+                &ctx.push_name
+            },
+        )
+}
+
+/// Template bawaan `error.js` dengan `{pushName}` sudah jadi `User`.
+///
+/// Dipakai test dan helper yang belum punya `Ctx`; jalur produksi memakai
+/// [`error_template`] supaya `config.errorTemplate` + `m.pushName` ikut.
+pub(crate) fn error_template_bawaan(prefix: &str, command: &str) -> String {
     format!(
         "☢ Kayaknya command `{prefix}{command}` lagi ada kendala\n\
          Silahkan coba lagi nanti, User\n\n\
@@ -2254,12 +2287,12 @@ mod tests_batch_g {
             "stop", "stopbcpc", "templateplugin", "uinstalltema", "unban",
             "unblock", "welcomeall",
         
-            "autoclear", "autoreply", "deploy", "ganti-games.jpg", "ganti-promote.jpg", "ganti-winner.jpg", "schedule",
+            "autoclear", "autoreply", "deploy", "ganti-games.jpg", "ganti-large.jpg", "ganti-promote.jpg", "ganti-winner.jpg", "schedule",
         
-            "addowner", "addprefix", "addprem", "akses", "arsip", "baca", "bcgc", "cekschedule", "disableplugin", "editproduk",
+            "addowner", "addprefix", "addprem", "akses", "arsip", "baca", "bcgc", "cekschedule", "clearsessions", "disableplugin", "editproduk",
             "exec", "ganti-asset", "ganti-demote.jpg", "ganti-foto.jpg", "ganti-goodbye.jpg", "ganti-levelup.jpg", "ganti-namadev", "ganti-namaowner", "ganti-pp-kosong.jpg", "ganti-rpg.jpg", "ganti-rules.jpg",
             "ganti-store.jpg", "get", "hapusgrup", "hapussaluran", "leave", "listjadibot", "listjadibotaktif", "listsewa", "mutechat", "onlythisgrup", "pinchat",
-            "ptvch", "pushkontak", "renewsewa", "sampah", "setgoodbyetype", "setmenu", "setmenucat", "setownertype", "setwelcometype", "sewabot",
+            "ptvch", "pushkontak", "renewsewa", "sampah", "savedb", "setgoodbyetype", "setmenu", "setmenucat", "setownertype", "setwelcometype", "sewabot",
             "star", "stopalljadibot", "stopdandeletejadibot", "stopschedule", "swgcall",
         ];
         for m in oktz_plugin_api::all_plugins().iter().map(|p| &p.meta) {
@@ -4125,8 +4158,9 @@ mod tests_roster_state {
     // berkas yang sama, mis. `sticker/attp2.js` yang memakai nama sekaligus
     // alias `attp2`, atau `main/leaderboard.js` yang mengulang
     // `leaderboard`). Tabrakan baru di luar daftar ini berarti port kita.
-    pub(crate) const JS_COLLISIONS: [&str; 37] = [
-        "applemusic", "asmaulhusna", "attp2", "beli", "berburu", "block", "bratanime", "bucin",
+    pub(crate) const JS_COLLISIONS: [&str; 38] = [
+        "applemusic", "asmaulhusna", "attp2", "backupdb", "beli", "berburu", "block", "bratanime",
+        "bucin",
         "cantik", "cc", "cekjodoh", "cupu", "daftar", "exp", "fakedana", "fakegopay",
         "fakeovo", "film", "ganteng", "heapsnap", "inspect", "izen", "kaya", "leaderboard",
         "leave", "mimpi", "ngemis", "noob", "paptt", "pintar", "pro", "profileig", "sroast",
@@ -4511,3 +4545,161 @@ mod tests_batch_fun {
     }
 }
 
+
+#[cfg(test)]
+mod tests_error_template {
+    use super::*;
+    use oktz_plugin_api::Ctx;
+
+    fn ctx(prefix: &str, command: &str, push_name: &str) -> Ctx {
+        Ctx {
+            prefix: prefix.into(),
+            command: command.into(),
+            push_name: push_name.into(),
+            ..Ctx::default()
+        }
+    }
+
+    #[test]
+    fn tanpa_config_memakai_template_bawaan_dan_pushname_pengirim() {
+        // `te()` JS mengganti `{pushName}` dengan nama pengirim; `User`
+        // hanya saat nama kosong (`pushName || 'User'`).
+        assert_eq!(
+            error_template(&ctx(".", "ping", "Zann")),
+            "☢ Kayaknya command `.ping` lagi ada kendala\nSilahkan coba lagi nanti, Zann\n\n_Jika masalah berlanjut, silahkan hubungi owner bot_"
+        );
+        assert_eq!(
+            error_template(&ctx(".", "ping", "")),
+            error_template_bawaan(".", "ping")
+        );
+    }
+
+    #[test]
+    fn config_errortemplate_dipakai_apa_adanya() {
+        let mut c = ctx("!", "tes", "Kak");
+        c.config = std::sync::Arc::new(oktz_plugin_api::config::Runtime {
+            error_template: "ERR {prefix}{command} untuk {pushName}".into(),
+            ..Default::default()
+        });
+        assert_eq!(error_template(&c), "ERR !tes untuk Kak");
+    }
+
+    #[test]
+    fn prefix_dan_command_kosong_jadi_titik_dan_tanya() {
+        // `te()` JS: `prefix || '.'`, `command || '?'`.
+        assert!(error_template(&ctx("", "", "")).starts_with("☢ Kayaknya command `.?` lagi"));
+    }
+}
+
+/// Stub jaringan + media untuk test plugin yang memanggil
+/// `oktz_scraper::seaart::live3d` (`ai/toanime`, `ai/tocermin`).
+#[cfg(test)]
+pub(crate) mod uji {
+    use oktz_plugin_api::{
+        HttpBody, HttpCall, HttpError, HttpGet, HttpResponse, MediaError, MediaFetch, MediaOrigin,
+        Reply,
+    };
+    use std::sync::{Arc, Mutex};
+
+    /// Balasan berurutan per `call`; setelah habis, `Err` ("offline").
+    #[derive(Debug, Default)]
+    pub(crate) struct HttpRangkaian {
+        balasan: Mutex<Vec<String>>,
+        seen: Mutex<Vec<String>>,
+        hitung: Mutex<usize>,
+    }
+
+    impl HttpRangkaian {
+        pub(crate) fn urutan(daftar: Vec<String>) -> Arc<Self> {
+            Arc::new(Self {
+                balasan: Mutex::new(daftar),
+                seen: Mutex::new(Vec::new()),
+                hitung: Mutex::new(0),
+            })
+        }
+
+        pub(crate) fn offline() -> Arc<Self> {
+            Self::urutan(Vec::new())
+        }
+
+        pub(crate) fn terlihat(&self) -> Vec<String> {
+            self.seen.lock().unwrap().clone()
+        }
+    }
+
+    /// Lima balasan `live3d` (unggah, PUT, tanda tangan, provider, gambar).
+    pub(crate) fn alur_live3d(gambar: &[u8]) -> Vec<String> {
+        vec![
+            r#"{"result":{"url":"https://unggah.example/x","object_name":"obj/1"}}"#.to_string(),
+            String::new(),
+            r#"{"result":{"url":"https://signed.example/x.jpg"}}"#.to_string(),
+            r#"{"status":true,"data":{"result_url":"https://hasil.example/y.png"}}"#.to_string(),
+            String::from_utf8_lossy(gambar).into_owned(),
+        ]
+    }
+
+    impl HttpGet for HttpRangkaian {
+        fn call(&self, req: &HttpCall) -> Result<HttpResponse, HttpError> {
+            self.seen.lock().unwrap().push(req.url.clone());
+            let i = {
+                let mut hitung = self.hitung.lock().unwrap();
+                let i = *hitung;
+                *hitung += 1;
+                i
+            };
+            let balasan = self.balasan.lock().unwrap().get(i).cloned();
+            match balasan {
+                Some(b) => Ok(HttpResponse {
+                    status: 200,
+                    body: HttpBody::Bytes {
+                        data: Arc::from(b.into_bytes()),
+                        mimetype: None,
+                    },
+                    headers: vec![("content-type".to_string(), "image/png".to_string())],
+                }),
+                None => Err(HttpError {
+                    message: "offline".into(),
+                }),
+            }
+        }
+        fn get(&self, _: &str) -> Result<HttpResponse, HttpError> {
+            unimplemented!("pakai call")
+        }
+        fn post_json(&self, _: &str, _: &serde_json::Value) -> Result<HttpResponse, HttpError> {
+            unimplemented!("pakai call")
+        }
+        fn post_form(&self, _: &str, _: &str) -> Result<HttpResponse, HttpError> {
+            unimplemented!("pakai call")
+        }
+        fn post_multipart(&self, _: &str, _: &[(&str, HttpBody)]) -> Result<HttpResponse, HttpError> {
+            unimplemented!("pakai call")
+        }
+    }
+
+    /// `m.download()` palsu, tanpa jaringan.
+    #[derive(Debug)]
+    pub(crate) struct MediaStub(pub(crate) Result<Vec<u8>, MediaError>);
+
+    impl MediaFetch for MediaStub {
+        fn download(&self, _: MediaOrigin) -> Result<Vec<u8>, MediaError> {
+            self.0.clone()
+        }
+    }
+
+    /// Teks pertama yang ditemukan di dalam `Reply` (Sequence diratakan).
+    pub(crate) fn teks(r: &Reply) -> String {
+        match r.without_mutations() {
+            Reply::Sequence(v) => v.iter().map(teks).find(|t| !t.is_empty()).unwrap_or_default(),
+            lain => lain.text_body().unwrap_or("").to_string(),
+        }
+    }
+
+    /// Emoji reaksi berurutan.
+    pub(crate) fn reaksi(r: &Reply) -> Vec<String> {
+        match r.without_mutations() {
+            Reply::Sequence(v) => v.iter().flat_map(reaksi).collect(),
+            Reply::Reaction { emoji, .. } => vec![emoji.clone()],
+            _ => Vec::new(),
+        }
+    }
+}

@@ -78,12 +78,12 @@ pub fn android1_get(ctx: Ctx) -> Reply {
     // `throw new Error("Gagal mengambil detail APK")` dilempar ke `catch`, jadi
     // hasilnya template error yang sama seperti di `info/jadwalbola.rs`.
     let Some(resp) = ctx.http.get(&api_url(url)).ok() else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     let data = resp.json().unwrap_or(Value::Null);
 
     if !js_truthy(data.get("status")) || !js_truthy(data.get("data")) {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     }
     let app = data.get("data").unwrap_or(&Value::Null);
 
@@ -95,9 +95,7 @@ pub fn android1_get(ctx: Ctx) -> Reply {
             app.get("name").and_then(Value::as_str).unwrap_or(""),
         )
         .with_reaction("✅"),
-        None => Reply::Interactive {
-            body: NO_DOWNLOAD_URL.to_string(),
-        }
+        None => Reply::interactive(NO_DOWNLOAD_URL.to_string())
         .with_reaction("⚠️"),
     }
 }
@@ -277,7 +275,7 @@ mod tests {
             "<html>bukan json</html>",
         ] {
             let r = run(Stub::new(body), "https://an1.com/a");
-            assert_eq!(body_of(&r), crate::common::error_template(".", "android1-get"), "{body}");
+            assert_eq!(body_of(&r), crate::common::error_template_bawaan(".", "android1-get"), "{body}");
             assert_eq!(reaction_of(&r), Some("☢"), "{body}");
         }
     }

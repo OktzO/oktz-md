@@ -532,7 +532,7 @@ pub fn profileig(ctx: Ctx) -> Reply {
     // `profileig.js:57-61` — SEMUA kegagalan (unduh, unggah, API, kirim) masuk
     // catch yang sama: template error + reaksi ❌.
     let gagal = || {
-        Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("❌")
+        Reply::text(crate::common::error_template(&ctx)).with_reaction("❌")
     };
 
     let Ok(img_url) = gambar_atau_pp(&ctx, is_image) else {
@@ -938,7 +938,7 @@ mod tests {
             media_gambar(),
             Some(QuotedKind::Text),
         ));
-        assert_eq!(teks(&r), crate::common::error_template(".", "profileig"));
+        assert_eq!(teks(&r), crate::common::error_template_bawaan(".", "profileig"));
         assert_eq!(reaksi(&r), Some("❌".into()));
         assert_eq!(*http.unduhan.lock().unwrap(), [MediaOrigin::Quoted]);
         assert_eq!(*sock.dipanggil.lock().unwrap(), 0);
@@ -1011,7 +1011,7 @@ mod tests {
             media_gambar(),
             None,
         ));
-        assert_eq!(teks(&r), crate::common::error_template(".", "profileig"));
+        assert_eq!(teks(&r), crate::common::error_template_bawaan(".", "profileig"));
         assert_eq!(reaksi(&r), Some("❌".into()));
         assert_eq!(http.panggilan.lock().unwrap().len(), 8);
     }
@@ -1030,7 +1030,7 @@ mod tests {
             media_gambar(),
             None,
         ));
-        assert_eq!(teks(&r), crate::common::error_template(".", "profileig"));
+        assert_eq!(teks(&r), crate::common::error_template_bawaan(".", "profileig"));
         assert_eq!(reaksi(&r), Some("❌".into()));
     }
 

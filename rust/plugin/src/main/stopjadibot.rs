@@ -25,7 +25,7 @@ use oktz_plugin_api::{Ctx, Reply, plugin};
 pub fn stopjadibot(ctx: Ctx) -> Reply {
     // `ponytail:` Semua operasi jadibot butuh jadibot-manager yang tidak
     // tersedia di registry Rust.
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+    Reply::text(crate::common::error_template(&ctx))
 }
 
 #[cfg(test)]
@@ -46,7 +46,7 @@ mod tests {
         let r = stopjadibot(ctx);
         assert_eq!(
             r.without_mutations().text_body().unwrap(),
-            crate::common::error_template(".", "stopjadibot")
+            crate::common::error_template_bawaan(".", "stopjadibot")
         );
     }
 }

@@ -51,7 +51,7 @@ pub fn bratcewek(ctx: Ctx) -> Reply {
 
     // `parseBratArgs(text)` + `generateBrat({ bgColor: "#FFC0CB" })`
     // (`bratcewek.js:30-35`) belum bisa — lihat `ponytail:` di atas.
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢")
+    Reply::text(crate::common::error_template(&ctx)).with_reaction("☢")
 }
 
 #[cfg(test)]
@@ -127,7 +127,7 @@ mod tests {
         let r = bratcewek(ctx_of("bratcewek", "Hai   semua"));
         assert_eq!(
             teks(&r),
-            crate::common::error_template(".", "bratcewek")
+            crate::common::error_template_bawaan(".", "bratcewek")
         );
         assert_eq!(reaksi(&r), Some("☢"));
     }
@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn error_template_memakai_command_yang_dipanggil() {
         let r = bratcewek(ctx_of("bratgirl", "Hai semua"));
-        assert_eq!(teks(&r), crate::common::error_template(".", "bratgirl"));
+        assert_eq!(teks(&r), crate::common::error_template_bawaan(".", "bratgirl"));
         assert_eq!(reaksi(&r), Some("☢"));
     }
 }

@@ -112,7 +112,7 @@ pub(crate) fn render(target_jid: &str) -> String {
 )]
 pub fn tod(ctx: Ctx) -> Reply {
     if ctx.roster.is_empty() {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command));
+        return Reply::text(crate::common::error_template(&ctx));
     }
     let jid = ctx.roster.participants[random_index(ctx.roster.participants.len())].jid.clone();
     Reply::Text {
@@ -260,7 +260,7 @@ mod tests {
         let out = run(GroupRoster::default(), "tod");
         assert_eq!(
             out.text_body(),
-            Some(crate::common::error_template(".", "tod").as_str()),
+            Some(crate::common::error_template_bawaan(".", "tod").as_str()),
             "harus template error"
         );
     }

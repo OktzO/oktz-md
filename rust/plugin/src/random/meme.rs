@@ -30,7 +30,7 @@ pub fn meme(ctx: Ctx) -> Reply {
     let url = format!("https://api.neoxr.eu/api/meme?apikey={api_key}");
 
     let Ok(res) = ctx.http.get(&url) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     let body = res.json().unwrap_or(Value::Null);
     let data = body.get("data");
@@ -38,7 +38,7 @@ pub fn meme(ctx: Ctx) -> Reply {
         .and_then(|d| d.get("url").and_then(Value::as_str))
         .filter(|s| !s.is_empty())
     else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     let title = data
         .and_then(|d| d.get("title").and_then(Value::as_str))

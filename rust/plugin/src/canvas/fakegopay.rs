@@ -75,7 +75,7 @@ pub fn fakegopay(ctx: Ctx) -> Reply {
     // `await m.react("🕕")` lalu `await m.react("✅")` / `"❌"` — `Reply` hanya
     // menyimpan satu reaksi, jadi yang dipegang adalah reaksi terakhir.
     let Ok(res) = ctx.http.get(&api_url(&args)) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("❌");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("❌");
     };
 
     Reply::image(MediaSource::bytes(res.body.bytes().to_vec()), CAPTION).with_reaction("✅")
@@ -276,7 +276,7 @@ mod tests {
         };
         let r = (oktz_plugin_api::find("fakegopay").unwrap().handler)(ctx);
         assert!(!r.has_media());
-        assert_eq!(text_of(&r), crate::common::error_template(".", "fakegopay"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "fakegopay"));
         assert_eq!(reaction_of(&r), Some("❌"));
     }
 }

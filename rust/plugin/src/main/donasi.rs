@@ -230,6 +230,7 @@ mod tests {
                 link: "https://whatsapp.com/channel/x".into(),
             },
             api_keys: Default::default(),
+            error_template: String::new(),
         }
     }
 

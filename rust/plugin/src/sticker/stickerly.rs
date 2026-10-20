@@ -109,7 +109,7 @@ fn unduh_pack(ctx: &Ctx, pack: &str) -> Reply {
     let gagal_ambil = || Reply::text("❌ Gagal mengambil detail pack.").with_reaction("❌");
     // `packInfo.trayResourceUrl.split(...)` di JS melempar kalau fieldnya tidak
     // ada; lemparan itu ditangkap `catch` luar (`stickerly.js:181-185`).
-    let rusak = || Reply::text(error_template(&ctx.prefix, "stickerly")).with_reaction("☢");
+    let rusak = || Reply::text(error_template(ctx)).with_reaction("☢");
 
     let Ok(res) = ctx.http.get(&url_pack(pack)) else {
         return rusak();
@@ -182,7 +182,7 @@ pub fn stickerly(ctx: Ctx) -> Reply {
     }
 
     let Ok(res) = ctx.http.get(&url_pencarian(teks)) else {
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(error_template(&ctx)).with_reaction("☢");
     };
     let data = res.json().unwrap_or(Value::Null);
     let tidak_ditemukan = || {

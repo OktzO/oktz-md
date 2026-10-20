@@ -9,7 +9,7 @@
 //! `form-data` multipart → `HttpCall::post(...).multipart(...)`.
 //! Header `form.getHeaders()` tidak ditiru (`HttpGet` tidak punya setter
 //! header per-request).
-//! `te(...)` → `crate::common::error_template(&ctx.prefix, &ctx.command)`.
+//! `te(...)` → `crate::common::error_template(&ctx)`.
 
 use oktz_plugin_api::{Ctx, HttpCall, HttpError, MediaSource, MultipartPart, Reply, plugin};
 
@@ -97,7 +97,7 @@ pub fn fakecall(ctx: Ctx) -> Reply {
         MultipartPart::field("name", nama),
         MultipartPart::field("duration", durasi),
     ])) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("❌");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("❌");
     };
 
     Reply::image(
@@ -356,7 +356,7 @@ mod tests {
     fn gagal_jaringan_menggunakan_error_template_dan_reaksi_sil() {
         let http = Stub::offline();
         let r = run(http.clone(), "fakecall", "Zann | 03:33");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "fakecall"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "fakecall"));
         assert_eq!(reaksi(&r), Some("❌"));
     }
 

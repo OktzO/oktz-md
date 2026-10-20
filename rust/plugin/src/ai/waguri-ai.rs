@@ -51,7 +51,7 @@ pub fn waguri_ai(ctx: Ctx) -> Reply {
         Err(AiFailure::Rejected(e)) => {
             Reply::text(failed("Waguri AI Error", &e)).with_reaction("☢")
         }
-        Err(AiFailure::Transport) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+        Err(AiFailure::Transport) => Reply::text(crate::common::error_template(&ctx))
             .with_reaction("☢"),
     }
 }
@@ -249,7 +249,7 @@ mod tests {
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "halo");
-        assert_eq!(body(&r), crate::common::error_template(".", "waguri-ai"));
+        assert_eq!(body(&r), crate::common::error_template_bawaan(".", "waguri-ai"));
         assert_eq!(emoji(&r), "☢");
     }
 }

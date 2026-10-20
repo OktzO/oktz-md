@@ -158,7 +158,7 @@ pub fn mcpedl(ctx: Ctx) -> Reply {
                 .header("user-agent", "Mozilla/5.0"),
         )
     else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
 
     // `if (!data?.status || !Array.isArray(data?.data?.results)) throw` (`:39`).
@@ -170,7 +170,7 @@ pub fn mcpedl(ctx: Ctx) -> Reply {
             .and_then(|d| d.get("results"))
             .is_some_and(Value::is_array);
     if !sah {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     }
     let data = &body["data"];
 

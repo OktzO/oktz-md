@@ -55,7 +55,7 @@ pub fn text2img2(ctx: Ctx) -> Reply {
     // `text2img2.js:34-36` — byte terlalu pendek dianggap body bukan gambar
     // lalu dilempar, jadi masuk `catch`.
     if data.len() < MIN_BYTES {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("❌");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("❌");
     }
 
     Reply::image(MediaSource::bytes(data), prompt).with_reaction("✅")
@@ -216,7 +216,7 @@ mod tests {
     fn a_body_shorter_than_one_hundred_bytes_falls_into_the_catch_branch() {
         // `text2img2.js:34` — 99 byte sudah ditolak, 100 byte lolos.
         let r = run(Stub::ok(vec![7u8; 99]), "kucing");
-        assert_eq!(body(&r), crate::common::error_template(".", "text2img2"));
+        assert_eq!(body(&r), crate::common::error_template_bawaan(".", "text2img2"));
         assert!(matches!(
             r.without_mutations(),
             Reply::Reaction { emoji, .. } if emoji == "❌"
@@ -232,7 +232,7 @@ mod tests {
             run(Stub::ok(Vec::new()), "kucing"),
             run(Stub::offline(), "kucing"),
         ] {
-            assert_eq!(body(&r), crate::common::error_template(".", "text2img2"));
+            assert_eq!(body(&r), crate::common::error_template_bawaan(".", "text2img2"));
             assert!(matches!(
                 r.without_mutations(),
                 Reply::Reaction { emoji, .. } if emoji == "❌"

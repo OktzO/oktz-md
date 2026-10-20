@@ -232,8 +232,11 @@ mod tests {
 
     #[test]
     fn every_alias_resolves_to_this_plugin() {
-        for a in ["beli", "jual", "toko", "store", "sell"] {
-            assert_eq!(oktz_plugin_api::find(a).unwrap().meta.name, "shop");
+        // `beli` juga nama `plugins/store/beli.js`; nama didahulukan
+        // (`plugins.js:539`), jadi alias `beli` bukan milik shop.
+        assert_eq!(oktz_plugin_api::find("beli").unwrap().meta.name, "beli");
+        for a in ["jual", "toko", "store", "sell"] {
+            assert_eq!(oktz_plugin_api::find(a).unwrap().meta.name, "shop", "alias {a}");
         }
     }
 

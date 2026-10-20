@@ -67,7 +67,7 @@ use whatsapp_rust::waproto::whatsapp::__buffa::oneof::message::interactive_respo
 use whatsapp_rust::wacore::download::MediaType;
 use whatsapp_rust::wacore_binary::Node;
 
-use crate::cards::{Card, biz_node};
+use crate::cards::{Button, ButtonAction, Card, biz_node};
 use crate::pipeline_gate::{self, GateState};
 
 // =============================================================================
@@ -1637,10 +1637,22 @@ pub fn render_reply(
             text_message(text, &[], quote),
             Vec::new(),
         ))),
-        Reply::Interactive { body } => Ok(Some(Rendered::wire(
-            Card::new(body).to_message(),
-            vec![biz_node()],
-        ))),
+        Reply::Interactive { body, footer, buttons } => {
+            let mut card = Card::new(body);
+            if let Some(f) = footer {
+                card = card.footer(f);
+            }
+            for b in buttons {
+                let action = ButtonAction::from_name(&b.name).ok_or_else(|| {
+                    PipelineError::Unsupported(format!(
+                        "tombol native-flow `{}` tidak dikenal WA",
+                        b.name
+                    ))
+                })?;
+                card = card.button(Button::new(action, b.params.clone()));
+            }
+            Ok(Some(Rendered::wire(card.to_message(), vec![biz_node()])))
+        }
         // Reaksi bukan message; dikirim lewat `send_reaction`, bukan render.
         Reply::Reaction { .. } => Err(PipelineError::Unsupported(
             "Reaction harus lewat send_reaction, bukan render".into(),
@@ -2525,6 +2537,7 @@ impl Pipeline {
             is_premium: self.identity.is_premium(&sender),
             is_admin: s.is_group && self.identity.is_admin(&sender),
             is_bot_admin: false,
+            push_name: m.info.push_name.clone(),
             mentioned: mentioned_jids(m),
             quoted: quoted_of(m),
             media,
@@ -3609,6 +3622,7 @@ impl EventHandler for PipelineHandler {
 mod tests {
     use super::*;
     use crate::grup_event::PesertaGrup;
+    use oktz_plugin_api::registry::InteractiveButton;
     use serde_json::json;
     use whatsapp_rust::{GroupParticipant, ParticipantType};
     use whatsapp_rust::types::message::MessageSource;
@@ -4151,7 +4165,7 @@ fn group_number_and_long_number_are_rejected() {
 
     #[test]
     fn interactive_reuses_card_and_adds_biz_node() {
-        let r = render_reply(&Reply::Interactive { body: "pilih".into() }, &ReplyTarget::default())
+        let r = render_reply(&Reply::interactive("pilih"), &ReplyTarget::default())
             .unwrap()
             .unwrap();
         assert_eq!(r.extra_nodes.len(), 1, "node biz wajib untuk native-flow");
@@ -4166,6 +4180,46 @@ fn group_number_and_long_number_are_rejected() {
             panic!("harus native_flow");
         };
         assert_eq!(nf.message_params_json, None);
+        assert!(nf.buttons.is_empty(), "tanpa interactiveButtons[]");
+    }
+
+    #[test]
+    fn interactive_meneruskan_tombol_dari_interactivebuttons_js() {
+        let r = render_reply(
+            &Reply::interactive("hasil").with_button(InteractiveButton::copy(
+                "📋 Copy Hasil Teks",
+                "copy",
+                "hasil",
+            )),
+            &ReplyTarget::default(),
+        )
+        .unwrap()
+        .unwrap();
+        let inner = r
+            .message
+            .view_once_message
+            .as_option()
+            .and_then(|v| v.message.as_option())
+            .expect("dibungkus viewOnceMessage");
+        let im = inner.interactive_message.as_option().expect("interactive");
+        let Some(ImOneof::NativeFlowMessage(nf)) = im.interactive_message.as_ref() else {
+            panic!("harus native_flow");
+        };
+        assert_eq!(nf.buttons.len(), 1);
+        let b = &nf.buttons[0];
+        assert_eq!(b.name.as_deref(), Some("cta_copy"));
+        let params: serde_json::Value =
+            serde_json::from_str(b.button_params_json.as_deref().unwrap()).unwrap();
+        assert_eq!(params["copy_code"], "hasil");
+        assert_eq!(params["id"], "copy");
+
+        // Nama aksi di luar daftar WA ditolak, bukan dikirim buta.
+        let err = render_reply(
+            &Reply::interactive("x").with_button(InteractiveButton::new("cta_misterius", serde_json::json!({}))),
+            &ReplyTarget::default(),
+        )
+        .unwrap_err();
+        assert!(matches!(err, PipelineError::Unsupported(_)));
     }
 
     #[test]
@@ -4481,7 +4535,7 @@ fn group_number_and_long_number_are_rejected() {
                 text: "q".into(),
                 mentions: vec![],
             },
-            Reply::Interactive { body: "b".into() },
+            Reply::interactive("b"),
             Reply::image(MediaSource::bytes(vec![1]), "c"),
             Reply::Sticker {
                 media: Some(MediaSource::bytes(vec![1])),

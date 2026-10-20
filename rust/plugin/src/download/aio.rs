@@ -42,7 +42,7 @@ pub fn aio(ctx: Ctx) -> Reply {
 
     let hasil = oktz_scraper::aio::aiodl(&*ctx.http, url);
     let Ok(result) = hasil else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     let Some(media) = result.get("media").and_then(Value::as_array) else {
         return Reply::text(NO_MEDIA).with_reaction("❌");

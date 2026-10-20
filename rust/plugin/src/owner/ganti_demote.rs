@@ -61,7 +61,7 @@ pub fn ganti_demote(ctx: Ctx) -> Reply {
 
     // `ponytail:` `updateAssetUrl('demote', buffer, 'demote.jpeg')` dan
     // pembaruan config realtime tidak tersedia di registry Rust.
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+    Reply::text(crate::common::error_template(&ctx))
 }
 
 #[cfg(test)]

@@ -143,7 +143,7 @@ pub fn caribug(ctx: Ctx) -> Reply {
     }
 
     let Ok(res) = ctx.http.get(&api_url(&code, &api_key)) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     let body = res.json().unwrap_or(Value::Null);
 

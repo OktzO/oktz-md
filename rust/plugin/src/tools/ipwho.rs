@@ -59,7 +59,7 @@ pub fn ipwho(ctx: Ctx) -> Reply {
     let Some(data) = ctx.http.get(&url).ok().and_then(|r| r.json()) else {
         // `fetch` gagal ATAU `res.json()` gagal (badan kosong/bukan JSON)
         // sama-sama masuk `catch` JS (`ipwho.js:40-41`, `ipwho.js:87-90`).
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+        return Reply::text(crate::common::error_template(&ctx))
             .with_reaction("☢");
     };
 

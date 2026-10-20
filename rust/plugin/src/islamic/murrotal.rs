@@ -142,7 +142,7 @@ pub fn murrotal(ctx: Ctx) -> Reply {
     let daftar = match fetch_surah_list(ctx.http.as_ref()) {
         Ok(d) => d,
         Err(_) => {
-            return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command));
+            return Reply::text(crate::common::error_template(&ctx));
         }
     };
 

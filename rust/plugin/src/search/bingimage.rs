@@ -72,7 +72,7 @@ pub fn bingimage(ctx: Ctx) -> Reply {
         return Reply::text(no_query(&ctx.prefix));
     }
 
-    let error = crate::common::error_template(&ctx.prefix, &ctx.command);
+    let error = crate::common::error_template(&ctx);
     let Some(resp) = ctx.http.get(&api_url(&query)).ok() else {
         return Reply::text(error).with_reaction("☢");
     };
@@ -293,7 +293,7 @@ mod tests {
             r#"{"status": true}"#,
         ] {
             let r = run(Stub::new(body), "rem");
-            assert_eq!(body_of(&r), crate::common::error_template(".", "carigambar"), "{body}");
+            assert_eq!(body_of(&r), crate::common::error_template_bawaan(".", "carigambar"), "{body}");
             assert_eq!(reaction_of(&r), Some("☢"), "{body}");
         }
     }
@@ -302,7 +302,7 @@ mod tests {
     fn one_failed_image_download_rejects_the_whole_promise_all() {
         let http = Stub::offline(DUA_HASIL);
         let r = run(http.clone(), "rem");
-        assert_eq!(body_of(&r), crate::common::error_template(".", "carigambar"));
+        assert_eq!(body_of(&r), crate::common::error_template_bawaan(".", "carigambar"));
         assert_eq!(reaction_of(&r), Some("☢"));
         assert_eq!(http.seen.lock().unwrap().len(), 2, "berhenti di gambar pertama");
     }

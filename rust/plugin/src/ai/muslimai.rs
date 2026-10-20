@@ -82,7 +82,7 @@ pub fn muslimai(ctx: Ctx) -> Reply {
     // itu masuk `catch`, sama seperti `fetch` yang melempar untuk status itu.
     let body = serde_json::json!({ "query": text, "distinctId": DISTINCT_ID });
     let Ok(res) = ctx.http.post_json(ENDPOINT, &body) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
 
     Reply::text(parse(&res.text())).with_reaction("✅")
@@ -260,7 +260,7 @@ mod tests {
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "Apa itu sholat?");
-        assert_eq!(body(&r), crate::common::error_template(".", "muslimai"));
+        assert_eq!(body(&r), crate::common::error_template_bawaan(".", "muslimai"));
         assert!(matches!(
             r.without_mutations(),
             Reply::Reaction { emoji, .. } if emoji == "☢"

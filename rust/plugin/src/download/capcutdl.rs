@@ -82,7 +82,7 @@ pub fn capcutdl(ctx: Ctx) -> Reply {
     let data = match fetch_capcut(url) {
         Ok(data) => data,
         Err(()) => {
-            return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("🕕");
+            return Reply::text(crate::common::error_template(&ctx)).with_reaction("🕕");
         }
     };
 
@@ -184,7 +184,7 @@ mod tests {
         // `fetch_capcut` selalu gagal di port ini, jadi handler tidak pernah
         // mencapai cabang media — persis yang terjadi kalau scraper melempar.
         let r = run("https://www.capcut.com/t/xxx");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "ccdl"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "ccdl"));
         assert!(
             matches!(r.without_mutations(), Reply::Reaction { emoji, .. } if emoji == "🕕"),
             "reaksi jam harus tetap ada di cabang catch"

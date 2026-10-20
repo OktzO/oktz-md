@@ -27,7 +27,7 @@ use oktz_plugin_api::{Ctx, Reply, plugin};
 pub fn unreg(ctx: Ctx) -> Reply {
     // `ponytail:` `db.getUser(m.sender)` tidak tersedia; tanpa store, user
     // selalu dianggap belum terdaftar.
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+    Reply::text(crate::common::error_template(&ctx))
 }
 
 #[cfg(test)]
@@ -48,7 +48,7 @@ mod tests {
         let r = unreg(ctx);
         assert_eq!(
             r.without_mutations().text_body().unwrap(),
-            crate::common::error_template(".", "unreg")
+            crate::common::error_template_bawaan(".", "unreg")
         );
     }
 }

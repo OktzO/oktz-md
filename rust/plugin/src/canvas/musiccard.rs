@@ -77,7 +77,7 @@ pub fn musiccard(ctx: Ctx) -> Reply {
 
     // `ImageUploadService` (pixhost.to) dan `api.nexray.eu.cc/canvas/musiccard`
     // tidak tersedia — diakhiri error_template seperti swm.rs.
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢")
+    Reply::text(crate::common::error_template(&ctx)).with_reaction("☢")
 }
 
 #[cfg(test)]
@@ -211,7 +211,7 @@ mod tests {
         let r = run(false, true, "Judul|Artis");
         assert_eq!(
             teks(&r),
-            crate::common::error_template(".", "musiccard")
+            crate::common::error_template_bawaan(".", "musiccard")
         );
         assert_eq!(reaksi(&r), Some("☢"));
     }
@@ -221,7 +221,7 @@ mod tests {
         let r = run(true, false, "Judul|Artis");
         assert_eq!(
             teks(&r),
-            crate::common::error_template(".", "musiccard")
+            crate::common::error_template_bawaan(".", "musiccard")
         );
         assert_eq!(reaksi(&r), Some("☢"));
     }

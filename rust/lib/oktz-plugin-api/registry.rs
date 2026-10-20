@@ -98,6 +98,39 @@ impl MediaSource {
     }
 }
 
+/// Satu tombol native-flow — `interactiveButtons[]` JS apa adanya.
+///
+/// `name` adalah nama aksi WA (`cta_copy`, `quick_reply`, `single_select`,
+/// `cta_url`, ...) dan `params` objek yang jadi `buttonParamsJson`. Bentuk
+/// params sudah ditentukan WA, jadi plugin yang mengirimkannya mentah —
+/// pipeline hanya memetakan `name`, bukan menafsir isi params.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InteractiveButton {
+    pub name: String,
+    pub params: Value,
+}
+
+impl InteractiveButton {
+    pub fn new(name: impl Into<String>, params: Value) -> Self {
+        Self {
+            name: name.into(),
+            params,
+        }
+    }
+
+    /// `{ name: "cta_copy", buttonParamsJson: JSON.stringify({display_text, id, copy_code}) }`.
+    pub fn copy(display_text: impl Into<String>, id: impl Into<String>, copy_code: impl Into<String>) -> Self {
+        Self::new(
+            "cta_copy",
+            serde_json::json!({
+                "display_text": display_text.into(),
+                "id": id.into(),
+                "copy_code": copy_code.into(),
+            }),
+        )
+    }
+}
+
 /// Satu perubahan state yang diminta plugin.
 ///
 /// Setara salah satu dari pemanggilan tulis di `src/lib/database.js`:
@@ -205,7 +238,16 @@ pub enum Reply {
         mentions: Vec<String>,
     },
     /// Card/button list interaktif (WA native flow).
-    Interactive { body: String },
+    ///
+    /// `buttons` adalah `interactiveButtons` JS apa adanya: `name` aksi
+    /// (`cta_copy`, `quick_reply`, ...) + objek `buttonParamsJson`. Pipeline
+    /// yang memetakan ke proto; nama tak dikenal ditolak, bukan dibuang.
+    /// `footer` = `footer` JS; `None` berarti footer tidak dikirim.
+    Interactive {
+        body: String,
+        footer: Option<String>,
+        buttons: Vec<InteractiveButton>,
+    },
     /// Reaksi emoji pada pesan yang memicu (JS `m.react`).
     ///
     /// 502 plugin JS memakainya, jadi absen di enum berarti setiap plugin itu
@@ -285,6 +327,34 @@ impl Reply {
         Self::TextNoMention {
             text: text.into(),
         }
+    }
+
+    /// Card/button list interaktif tanpa tombol. Tambah tombol lewat
+    /// [`Reply::with_button`] dan footer lewat [`Reply::with_footer`].
+    pub fn interactive(body: impl Into<String>) -> Self {
+        Self::Interactive {
+            body: body.into(),
+            footer: None,
+            buttons: Vec::new(),
+        }
+    }
+
+    /// `footer` pada kartu interaktif (JS `sendMessage({ footer })`).
+    pub fn with_footer(mut self, footer: impl Into<String>) -> Self {
+        if let Self::Interactive { footer: f, .. } = &mut self {
+            *f = Some(footer.into());
+        }
+        self
+    }
+
+    /// Tambah satu `interactiveButtons[]` JS ke [`Self::Interactive`].
+    /// `Reply` non-interaktif dikembalikan apa adanya supaya pemanggil tidak
+    /// perlu memeriksa varian.
+    pub fn with_button(mut self, button: InteractiveButton) -> Self {
+        if let Self::Interactive { buttons, .. } = &mut self {
+            buttons.push(button);
+        }
+        self
     }
 
     /// Image siap kirim. Caption kosong berarti tanpa caption — WA menerima
@@ -537,7 +607,7 @@ impl Reply {
             Self::Image { caption, .. } => Some(caption),
             Self::Video { caption, .. } => Some(caption),
             Self::Document { caption, .. } => Some(caption),
-            Self::Interactive { body } => Some(body),
+            Self::Interactive { body, .. } => Some(body),
             Self::Reaction { reply, .. } => reply.text_body(),
             // `Sticker`/`Audio` tidak punya teks — router tidak boleh reply
             // teks kosong. Cabang `Mutate` mustahil (`without_mutations` sudah
@@ -732,6 +802,12 @@ pub struct Ctx {
     pub http: Arc<dyn HttpGet>,
     pub is_group: bool,
     pub is_owner: bool,
+    /// `m.isPremium` — pengirim terdaftar di daftar premium
+    /// (`config.isPremium`, `src/lib/database.js:636`).
+    pub is_premium: bool,
+    /// `m.pushName` — nama tampilan pengirim. Kosong kalau WA tidak
+    /// mengirimkan atribut `notify`.
+    pub push_name: String,
     pub uptime_secs: u64,
     /// `m.groupMetadata.participants` — roster grup untuk pesan ini.
     /// Kosong kalau bukan grup atau metadata tidak bisa dibaca.
@@ -982,10 +1058,20 @@ pub fn count() -> usize {
 }
 
 pub fn find(command: &str) -> Option<&'static PluginEntry> {
-    all_plugins()
+    let semua = all_plugins();
+    // `plugins.js:539-544`: nama di `commands` dicek dulu, alias hanya dipakai
+    // kalau nama tidak ada. Alias tidak boleh menimpa plugin yang namanya
+    // persis sama (mis. alias `backupdb` di `savedb` vs nama `backupdb`).
+    semua
         .iter()
         .copied()
-        .find(|e| e.meta.matches(command))
+        .find(|e| e.meta.name == command)
+        .or_else(|| {
+            semua
+                .iter()
+                .copied()
+                .find(|e| e.meta.alias.iter().any(|a| a == command))
+        })
 }
 
 // ---------------------------------------------------------------------------
@@ -1441,6 +1527,8 @@ impl Default for Ctx {
             http: Arc::new(NoHttp),
             is_group: false,
             is_owner: false,
+            is_premium: false,
+            push_name: String::new(),
             uptime_secs: 0,
             roster: GroupRoster::default(),
             user_data: Value::Null,

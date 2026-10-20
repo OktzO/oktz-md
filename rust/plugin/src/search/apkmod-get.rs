@@ -95,13 +95,13 @@ pub fn apkmod_get(ctx: Ctx) -> Reply {
     }
 
     let Some(resp) = ctx.http.get(&api_url(&query, &no)).ok() else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     let data = resp.json().unwrap_or(Value::Null);
 
     // `!data?.status || !data?.data` -> `throw new Error(...)` -> `catch`.
     if !js_truthy(data.get("status")) || !js_truthy(data.get("data")) {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     }
     let app = data.get("data").unwrap_or(&Value::Null);
 
@@ -112,9 +112,7 @@ pub fn apkmod_get(ctx: Ctx) -> Reply {
             file_name(file, app),
         )
         .with_reaction("✅"),
-        None => Reply::Interactive {
-            body: NO_DOWNLOAD_URL.to_string(),
-        }
+        None => Reply::interactive(NO_DOWNLOAD_URL.to_string())
         .with_reaction("⚠️"),
     }
 }
@@ -317,7 +315,7 @@ mod tests {
             "<html>bukan json</html>",
         ] {
             let r = run(Stub::new(body), "1 vpn");
-            assert_eq!(body_of(&r), crate::common::error_template(".", "apkmod-get"), "{body}");
+            assert_eq!(body_of(&r), crate::common::error_template_bawaan(".", "apkmod-get"), "{body}");
             assert_eq!(reaction_of(&r), Some("☢"), "{body}");
         }
     }

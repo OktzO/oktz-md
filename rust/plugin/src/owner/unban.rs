@@ -191,9 +191,10 @@ mod tests {
 
     #[test]
     fn every_alias_resolves_to_this_plugin() {
-        for a in ["delban", "unblock"] {
-            assert_eq!(oktz_plugin_api::find(a).unwrap().meta.name, "unban");
-        }
+        // `unblock` juga nama `plugins/owner/unblock.js`; nama didahulukan
+        // (`plugins.js:539`), jadi alias `unblock` bukan milik unban.
+        assert_eq!(oktz_plugin_api::find("delban").unwrap().meta.name, "unban");
+        assert_eq!(oktz_plugin_api::find("unblock").unwrap().meta.name, "unblock");
     }
 
     #[test]

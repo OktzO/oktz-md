@@ -125,7 +125,7 @@ pub(crate) fn tidak_ada_waifu(query: &str) -> String {
 pub fn waifupool(ctx: Ctx) -> Reply {
     // `searchPool` data dan `sendButton` tidak tersedia — diakhiri error
     // template seperti swm.rs.
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢")
+    Reply::text(crate::common::error_template(&ctx)).with_reaction("☢")
 }
 
 #[cfg(test)]
@@ -235,7 +235,7 @@ mod tests {
         let r = waifupool(ctx);
         assert_eq!(
             r.without_mutations().text_body().unwrap(),
-            crate::common::error_template(".", "waifupool")
+            crate::common::error_template_bawaan(".", "waifupool")
         );
         assert!(
             matches!(

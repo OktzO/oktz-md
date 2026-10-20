@@ -144,7 +144,7 @@ pub fn ganti_namaowner(ctx: Ctx) -> Reply {
         // ponytail: penulisan config.js tidak punya efek di produksi
         // (`ctx.berkas` = `BerkasPalsu`, `ctx.config` Arc tak termutasi). JS
         // berakhir di `catch` saat penulisan gagal, dan itu yang dikirim.
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command));
+        return Reply::text(crate::common::error_template(&ctx));
     }
 
     // `input[0].replace(/[^0-9]/g, "")`.
@@ -325,7 +325,7 @@ mod tests {
         let r = run(&["main", "Budi", "Santoso"], Value::Null);
         assert_eq!(
             text_of(&r),
-            crate::common::error_template(".", "ganti-namaowner")
+            crate::common::error_template_bawaan(".", "ganti-namaowner")
         );
         assert!(r.mutations().is_empty(), "tidak ada yang bisa disimpan");
     }

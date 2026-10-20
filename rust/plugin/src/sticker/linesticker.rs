@@ -108,7 +108,7 @@ pub fn linesticker(ctx: Ctx) -> Reply {
     }
 
     let Ok(res) = ctx.http.get(&api_url(url, &apikey)) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+        return Reply::text(crate::common::error_template(&ctx))
             .with_reaction("☢");
     };
     let data = res.json().unwrap_or(serde_json::Value::Null);
@@ -130,7 +130,7 @@ pub fn linesticker(ctx: Ctx) -> Reply {
     // packname+author) tidak tersedia di `Reply::Sticker` — diakhiri error
     // template seperti swm.rs (info pack dicatat untuk port selanjutnya).
     let _ = (title, author, animated, sticker_urls);
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢")
+    Reply::text(crate::common::error_template(&ctx)).with_reaction("☢")
 }
 
 #[cfg(test)]

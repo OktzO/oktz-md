@@ -71,7 +71,7 @@ fn settings_text(prefix: &str, on: bool) -> String {
 /// Cabang `* all`: gerbang owner, lalu jalur `catch` milik JS sendiri karena
 /// `groupFetchAllParticipating` tidak ada di `Ctx`.
 fn global_unavailable(ctx: &Ctx) -> Reply {
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢")
+    Reply::text(crate::common::error_template(ctx)).with_reaction("☢")
 }
 
 #[plugin(
@@ -189,9 +189,10 @@ mod tests {
 
     #[test]
     fn every_alias_resolves_back_to_this_plugin() {
-        for a in ["bye", "leave"] {
-            assert_eq!(find(a).map(|e| e.meta.name.as_str()), Some("goodbye"), "{a}");
-        }
+        // `leave` juga nama `plugins/owner/leave.js`; nama didahulukan
+        // (`plugins.js:539`), jadi alias `leave` bukan milik goodbye.
+        assert_eq!(find("bye").map(|e| e.meta.name.as_str()), Some("goodbye"));
+        assert_eq!(find("leave").map(|e| e.meta.name.as_str()), Some("leave"));
     }
 
     #[test]

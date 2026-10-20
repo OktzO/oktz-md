@@ -6,7 +6,7 @@
 //! `Reply::voice_note` (contextInfo/saluran diabaikan, `Reply` tidak bawa
 //! contextInfo).
 //! `fs` temp + ffmpeg → `ctx.berkas()` + `oktz_plugin_api::ffmpeg`.
-//! `te(...)` → `crate::common::error_template(&ctx.prefix, &ctx.command)`.
+//! `te(...)` → `crate::common::error_template(&ctx)`.
 
 use oktz_plugin_api::{
     Ctx, HttpCall, HttpError, MediaSource, Reply, plugin,
@@ -114,7 +114,7 @@ pub fn ttselon(ctx: Ctx) -> Reply {
     }
 
     let Ok(res) = ctx.http.call(&HttpCall::get(&api_url(text))) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     let data = res.json().unwrap_or(Value::Null);
 
@@ -123,14 +123,14 @@ pub fn ttselon(ctx: Ctx) -> Reply {
     };
 
     let Ok(audio_res) = ctx.http.call(&HttpCall::get(&url)) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     let wav = audio_res.body.bytes().to_vec();
 
     let opus = match konversi_ke_opus(ctx.berkas(), &wav) {
         Ok(b) => b,
         Err(_) => {
-            return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+            return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
         }
     };
 
@@ -283,7 +283,7 @@ mod tests {
     fn gagal_jaringan_api_menggunakan_error_template() {
         let http = Stub::offline();
         let r = run(http.clone(), "halo");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "ttselon"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "ttselon"));
         assert_eq!(reaksi(&r), Some("☢"));
     }
 

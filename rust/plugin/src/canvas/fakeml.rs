@@ -510,7 +510,7 @@ pub fn fakeml(ctx: Ctx) -> Reply {
         // balasan berurutan.
         Some(Err(())) => {
             return Reply::sequence_text([
-                crate::common::error_template(&ctx.prefix, &ctx.command),
+                crate::common::error_template(&ctx),
                 MINTA_GAMBAR.to_string(),
             ]);
         }
@@ -849,7 +849,7 @@ mod tests {
         assert_eq!(
             urutan_teks(&r),
             vec![
-                crate::common::error_template(".", "fakeml"),
+                crate::common::error_template_bawaan(".", "fakeml"),
                 MINTA_GAMBAR.to_string()
             ]
         );
@@ -878,7 +878,7 @@ mod tests {
         assert_eq!(
             urutan_teks(&r),
             vec![
-                crate::common::error_template(".", "fakeml"),
+                crate::common::error_template_bawaan(".", "fakeml"),
                 MINTA_GAMBAR.to_string()
             ]
         );

@@ -98,7 +98,7 @@ pub fn pin(ctx: Ctx) -> Reply {
             Reply::text(GAGAL_MEMUAT).with_reaction("❌")
         }
         // `pin.js:127-131` — `m.pushName` tidak ada di `Ctx`, jadi "User".
-        Err(()) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
+        Err(()) => Reply::text(crate::common::error_template(&ctx)).with_reaction("☢"),
     }
 }
 
@@ -175,7 +175,7 @@ mod tests {
     #[test]
     fn a_query_reaches_the_error_branch_while_the_resolver_is_missing() {
         let r = run("Zhao Lusi");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "pin"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "pin"));
         assert_eq!(reaction_of(&r), Some("☢"));
     }
 

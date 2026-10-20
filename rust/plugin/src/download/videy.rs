@@ -99,7 +99,7 @@ pub fn videy(ctx: Ctx) -> Reply {
         // `videy.js:82-105` — tanpa `error.tried`, `missingEnvNameOf` dan
         // `adaNormalisasiGagal` sama-sama `false`, jadi template error yang
         // menyala. `m.pushName` tidak ada di `Ctx`, jadi `User` yang dipakai.
-        Err(()) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
+        Err(()) => Reply::text(crate::common::error_template(&ctx)).with_reaction("☢"),
     }
 }
 
@@ -223,7 +223,7 @@ mod tests {
     #[test]
     fn the_resolve_failure_lands_on_the_generic_catch_branch() {
         let r = run("https://videy.co/v?id=7ZH1ZRIF");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "videy"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "videy"));
         assert_eq!(reaksi(&r), Some("☢"));
     }
 

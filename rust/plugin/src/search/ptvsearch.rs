@@ -45,7 +45,7 @@ pub fn ptvsearch(ctx: Ctx) -> Reply {
     let videos = match oktz_scraper::tiktoksearch::tiktok_search_video(&*ctx.http, &query) {
         Ok(v) => v,
         Err(_) => {
-            return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+            return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
         }
     };
 
@@ -190,7 +190,7 @@ mod tests {
     #[test]
     fn status_falsy_melempar_dan_menghasilkan_error_template() {
         let r = run(Stub::body(serde_json::json!({ "status": false, "message": "batas tercapai" })), "anime");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "ptvsearch"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "ptvsearch"));
         assert_eq!(reaction_of(&r), Some("☢"));
     }
 
@@ -237,7 +237,7 @@ mod tests {
     #[test]
     fn kegagalan_jaringan_menggunakan_error_template() {
         let r = run(Stub::offline(), "anime");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "ptvsearch"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "ptvsearch"));
         assert_eq!(reaction_of(&r), Some("☢"));
     }
 }

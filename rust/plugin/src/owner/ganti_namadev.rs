@@ -7,7 +7,7 @@
 //! `tulis_teks()` jalur `"config.js"` (relatif ke akar aset = CWD).
 //! Regex tanpa crate `regex` (tidak ada di Cargo.toml): cari `developer:`,
 //! lewati spasi, ambil antiko cutip, ganti isinya.
-//! `te(...)` → `crate::common::error_template(&ctx.prefix, &ctx.command)`.
+//! `te(...)` → `crate::common::error_template(&ctx)`.
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 
@@ -96,14 +96,14 @@ pub fn ganti_namadev(ctx: Ctx) -> Reply {
     let konten = match ctx.berkas().baca_teks(CONFIG_PATH) {
         Ok(k) => k,
         Err(_) => {
-            return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command));
+            return Reply::text(crate::common::error_template(&ctx));
         }
     };
 
     let baru = ganti_developer(&konten, &nama_baru);
 
     if ctx.berkas().tulis_teks(CONFIG_PATH, &baru).is_err() {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command));
+        return Reply::text(crate::common::error_template(&ctx));
     }
 
     Reply::text(sukses(&nama_baru))
@@ -221,7 +221,7 @@ mod tests {
         let r = run(&b, &["Budi"]);
         assert_eq!(
             text_of(&r),
-            crate::common::error_template(".", "ganti-namadev")
+            crate::common::error_template_bawaan(".", "ganti-namadev")
         );
     }
 

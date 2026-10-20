@@ -373,7 +373,9 @@ mod tests {
                 "628123@g.us": {
                     "name": "Grupku",
                     "addedAt": WAKTU,
-                    "expiredAt": crate::common::now_ms() + 400 * 86_400_000i64,
+                    // +1 jam: sisa tetap "400d" walau `now_ms()` di handler
+                    // bergerak beberapa milidetik setelah JSON dibuat.
+                    "expiredAt": crate::common::now_ms() + 400 * 86_400_000i64 + 3_600_000,
                 }
             }),
         ));

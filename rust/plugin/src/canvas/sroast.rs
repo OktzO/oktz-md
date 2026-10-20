@@ -56,7 +56,7 @@ pub fn sroast(ctx: Ctx) -> Reply {
     // dapat dibawa, jadi reaksi akhir adalah ✅ atau ☢.
     match buat_stiker_roast(t1, &t2, t3) {
         Ok(_buffer) => Reply::text("Stiker roast berhasil dibuat.").with_reaction("✅"),
-        Err(_) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
+        Err(_) => Reply::text(crate::common::error_template(&ctx)).with_reaction("☢"),
     }
 }
 

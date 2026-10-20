@@ -108,7 +108,7 @@ pub fn cekfemboy(ctx: Ctx) -> Reply {
     // dan itu tidak mungkin dari cabang di atas; `Err` tetap ditangani supaya
     // tidak ada panic.
     let Ok(hasil) = cek_femboy(&*ctx.http, &nama) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command));
+        return Reply::text(crate::common::error_template(&ctx));
     };
     let teks_hasil = hasil
         .get("hasil")

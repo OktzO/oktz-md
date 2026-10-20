@@ -126,7 +126,9 @@ mod tests {
 
     #[test]
     fn every_alias_resolves_to_this_plugin() {
-        assert_eq!(oktz_plugin_api::find("ngemis").unwrap().meta.name, "beg");
+        // `ngemis` juga nama `plugins/rpg/ngemis.js`; nama didahulukan
+        // (`plugins.js:539`), jadi alias `ngemis` bukan milik beg.
+        assert_eq!(oktz_plugin_api::find("ngemis").unwrap().meta.name, "ngemis");
     }
 
     #[test]

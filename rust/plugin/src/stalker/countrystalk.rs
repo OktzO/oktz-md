@@ -169,7 +169,7 @@ pub fn countrystalk(ctx: Ctx) -> Reply {
     let api_key = ctx.config().api_keys.neoxr.clone();
     let query = encode_uri_component(&text);
     let Ok(res) = ctx.http.get(&api_url(&query, &api_key)) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
 
     let body = res.json().unwrap_or(Value::Null);
@@ -412,7 +412,7 @@ mod tests {
         let r = countrystalk(ctx(Stub::gagal(), "x"));
         assert_eq!(
             r.without_mutations().text_body(),
-            Some(crate::common::error_template(".", "country").as_str())
+            Some(crate::common::error_template_bawaan(".", "country").as_str())
         );
         assert_eq!(reaction_of(&r), Some("☢"));
     }

@@ -187,6 +187,8 @@ impl<'a, C: RouterContext> Router<'a, C> {
                 .unwrap_or_else(|| Arc::new(oktz_plugin_api::NoMediaFetch)),
             is_group: caller.is_group,
             is_owner: caller.is_owner,
+            is_premium: caller.is_premium,
+            push_name: caller.push_name.clone(),
             uptime_secs: self.ctx.uptime_secs(),
             // Field `Ctx` yang lain (roster, state store, sessions, http) diisi
             // `oktz-wa::pipeline` lewat pembungkus handler; router tidak punya

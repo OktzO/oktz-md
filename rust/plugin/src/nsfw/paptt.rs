@@ -42,7 +42,7 @@ pub fn paptt(ctx: Ctx) -> Reply {
     // `await m.react("🕕")` pembuka di JS digantikan reaksi penutup: `Reply`
     // hanya menyimpan satu reaksi, jadi yang terakhir (`✅`/`❌`) yang pegang.
     let Ok(res) = ctx.http.get(API_URL) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("❌");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("❌");
     };
 
     Reply::image(MediaSource::bytes(res.body.bytes().to_vec()), CAPTION).with_reaction("✅")
@@ -238,18 +238,19 @@ mod tests {
         };
         let r = run(ctx);
         assert!(!r.has_media());
-        assert_eq!(text_of(&r), crate::common::error_template("!", "paptt"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan("!", "paptt"));
         assert_eq!(reaction_of(&r), Some("❌"));
     }
 
     #[test]
-    fn an_empty_prefix_and_command_still_render_the_template_verbatim() {
+    fn an_empty_prefix_and_command_fall_back_to_dot_and_question_mark() {
         let r = run(Ctx {
             prefix: String::new(),
             command: String::new(),
             ..Default::default()
         });
-        assert_eq!(text_of(&r), crate::common::error_template("", ""));
+        // `te()` JS: `prefix || '.'`, `command || '?'`.
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "?"));
         assert_eq!(reaction_of(&r), Some("❌"));
     }
 

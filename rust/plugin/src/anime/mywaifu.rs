@@ -4,7 +4,7 @@
 //! `sock.waUploadToServer`/`relayMessage` diabaikan — `Reply` tidak bawa
 //! contextInfo/messageSecret, dan pipeline yang meng-upload media Url.
 //! `m.react('🕕')`/`'✅'`/`'❌'` → satu reaksi terakhir.
-//! `te(...)` → `crate::common::error_template(&ctx.prefix, &ctx.command)`.
+//! `te(...)` → `crate::common::error_template(&ctx)`.
 
 use oktz_plugin_api::{Ctx, HttpCall, MediaSource, Reply, plugin};
 

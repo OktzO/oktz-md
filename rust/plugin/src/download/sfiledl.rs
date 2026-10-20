@@ -112,7 +112,7 @@ pub fn sfiledl(ctx: Ctx) -> Reply {
         // `sfiledl.js:85-109` — tanpa `error.tried`, `missingEnvNameOf` dan
         // `adaNormalisasiGagal` sama-sama `false`, jadi template error yang
         // menyala. `m.pushName` tidak ada di `Ctx`, jadi `User` yang dipakai.
-        Err(()) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
+        Err(()) => Reply::text(crate::common::error_template(&ctx)).with_reaction("☢"),
     }
 }
 
@@ -239,7 +239,7 @@ mod tests {
         // Tidak ada `error.tried`, jadi `missingEnvNameOf` dan
         // `adaNormalisasiGagal` keduanya false.
         let r = run("https://sfile.mobi/xxxxx");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "sfiledl"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "sfiledl"));
         assert_eq!(reaksi(&r), Some("☢"));
     }
 

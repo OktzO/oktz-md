@@ -82,7 +82,7 @@ pub fn stopscheduler(ctx: Ctx) -> Reply {
     // `stopSchedulerByName` / `stopSholatScheduler` / `getDatabase` /
     // `db.setting` tidak tersedia di Ctx — diakhiri error_template seperti
     // swm.rs.
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢")
+    Reply::text(crate::common::error_template(&ctx)).with_reaction("☢")
 }
 
 #[cfg(test)]
@@ -147,7 +147,7 @@ mod tests {
         let r = stopscheduler(ctx);
         assert_eq!(
             r.without_mutations().text_body().unwrap(),
-            crate::common::error_template(".", "stopschedule")
+            crate::common::error_template_bawaan(".", "stopschedule")
         );
         assert!(
             matches!(

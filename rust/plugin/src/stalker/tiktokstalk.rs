@@ -173,7 +173,7 @@ pub fn tiktokstalk(ctx: Ctx) -> Reply {
     }
 
     let Some(profil) = profil else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
 
     let teks = caption(&profil);
@@ -365,7 +365,7 @@ mod tests {
         let r = tiktokstalk(dengan_kunci(Stub::gagal(), "u", "K"));
         assert_eq!(
             r.without_mutations().text_body(),
-            Some(crate::common::error_template(".", "tiktokstalk").as_str())
+            Some(crate::common::error_template_bawaan(".", "tiktokstalk").as_str())
         );
         assert_eq!(reaction_of(&r), Some("☢"));
     }

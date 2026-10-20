@@ -1271,7 +1271,7 @@ fn gacha_waifu(ctx: &Ctx, user: &Map<String, Value>, rng: &mut dyn FnMut() -> f6
         // `picked.keyword` melempar di JS → cabang catch: `te()` + ☢.
         // `ponytail:` `initStats` sudah menulis `user.waifuStats` di memori JS
         // yang ikut ter-flush nanti; di sini tidak ada mutasi.
-        return Reply::text(error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(error_template(ctx)).with_reaction("☢");
     };
 
     let now = now_ms();
@@ -1782,6 +1782,7 @@ pub fn gachawaifu(ctx: Ctx) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::error_template_bawaan;
     use std::collections::VecDeque;
 
     const ME: &str = "628111@s.whatsapp.net";
@@ -2531,7 +2532,7 @@ mod tests {
     fn gacha_dengan_pool_kosong_jatuh_ke_error_template_dan_reaksi_can() {
         // `rollWaifu` JS tetap memanggil rng() sekali walau total bobot 0.
         let r = run("gachawaifu", &["start"], serde_json::json!({ "exp": 0 }), vec![0.0]);
-        assert_eq!(text_of(&r), error_template(".", "gachawaifu"));
+        assert_eq!(text_of(&r), error_template_bawaan(".", "gachawaifu"));
         assert_eq!(reaction_of(&r).as_deref(), Some("☢"));
         assert!(r.mutations().is_empty(), "cabang catch tidak menulis apa pun");
     }

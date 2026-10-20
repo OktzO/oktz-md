@@ -73,7 +73,7 @@ pub fn ssweb(ctx: Ctx) -> Reply {
     };
 
     let Ok(res) = ctx.http.get(&api_url(&url, mode)) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+        return Reply::text(crate::common::error_template(&ctx))
             .with_reaction("☢");
     };
     let bytes = res.body.bytes().to_vec();
@@ -269,7 +269,7 @@ mod tests {
         let r = run(http, "google.com");
         assert_eq!(
             teks(&r),
-            crate::common::error_template(".", "ssweb")
+            crate::common::error_template_bawaan(".", "ssweb")
         );
         assert_eq!(reaksi(&r), Some("☢"));
     }

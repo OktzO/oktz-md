@@ -410,8 +410,9 @@ mod tests {
         assert_eq!(p.meta.category, "canvas");
         assert_eq!(p.meta.cooldown, 5);
         assert_eq!(p.meta.energi, 2);
-        for a in ["applemusic", "applecanvas"] {
-            assert_eq!(oktz_plugin_api::find(a).unwrap().meta.name, "applemusic-canvas");
-        }
+        // `applemusic` juga nama `plugins/search/applemusic.js`; nama
+        // didahulukan (`plugins.js:539`).
+        assert_eq!(oktz_plugin_api::find("applemusic").unwrap().meta.name, "applemusic");
+        assert_eq!(oktz_plugin_api::find("applecanvas").unwrap().meta.name, "applemusic-canvas");
     }
 }

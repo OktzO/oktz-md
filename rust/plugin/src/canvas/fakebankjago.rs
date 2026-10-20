@@ -84,7 +84,7 @@ pub fn fakebankjago(ctx: Ctx) -> Reply {
         encode_uri_component(&clean)
     );
     let Ok(res) = ctx.http.get(&url) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
 
     let caption = format!(
@@ -293,7 +293,7 @@ mod tests {
     #[test]
     fn a_failed_request_reports_the_error_template() {
         let r = run(Stub::offline(), "Furina|10");
-        assert_eq!(body(&r), crate::common::error_template(".", "fakebankjago"));
+        assert_eq!(body(&r), crate::common::error_template_bawaan(".", "fakebankjago"));
         assert_eq!(emoji(&r), "☢");
     }
 

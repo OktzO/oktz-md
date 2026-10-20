@@ -89,7 +89,7 @@ pub fn cocofundl(ctx: Ctx) -> Reply {
     let data = match fetch_cocofun(url) {
         Ok(data) => data,
         Err(()) => {
-            return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("🕕");
+            return Reply::text(crate::common::error_template(&ctx)).with_reaction("🕕");
         }
     };
 
@@ -215,7 +215,7 @@ mod tests {
     #[test]
     fn the_scraper_failure_branch_is_the_error_template() {
         let r = run("https://www.cocofun.com/share/post/xxx");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "cfdl"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "cfdl"));
         assert!(
             matches!(r.without_mutations(), Reply::Reaction { emoji, .. } if emoji == "🕕"),
             "reaksi jam harus tetap ada di cabang catch"

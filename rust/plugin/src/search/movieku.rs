@@ -458,7 +458,7 @@ pub fn movieku(ctx: Ctx) -> Reply {
 
     // `m.react("🔍")` di `:107` sudah jalan sebelum request.
     let Ok(res) = ctx.http.call(&search_request(query)) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
 
     // `res.data?.post?.[0]?.all || []`.
@@ -479,7 +479,7 @@ pub fn movieku(ctx: Ctx) -> Reply {
         .unwrap_or("")
         .to_string();
     let Ok(detail_res) = ctx.http.get(&link) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     let detail = parse_detail(&detail_res.text());
     let txt = format_movie(&detail, movie, query);
@@ -864,7 +864,7 @@ mod tests {
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "avengers");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "movieku"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "movieku"));
     }
 
     #[test]

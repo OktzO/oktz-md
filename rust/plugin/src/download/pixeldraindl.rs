@@ -279,7 +279,7 @@ pub fn pixeldraindl(ctx: Ctx) -> Reply {
         SizeField::Absent => String::new(),
         SizeField::Text(s) => s.to_string(),
         SizeField::BukanTeks => {
-            return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+            return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
         }
     };
 
@@ -533,7 +533,7 @@ assert_eq!(mb("5."), 0.0);
             let r = run(Stub::json(ok_file(nilai.clone())), &["https://pixeldrain.com/u/x"]);
             assert_eq!(
                 text_of(&r).as_deref(),
-                Some(crate::common::error_template(".", "pixeldraindl").as_str()),
+                Some(crate::common::error_template_bawaan(".", "pixeldraindl").as_str()),
                 "{nilai}"
             );
             assert_eq!(reaksi(&r), Some("☢"), "{nilai}");
@@ -541,7 +541,7 @@ assert_eq!(mb("5."), 0.0);
         // String dan null tidak melempar — keduanya jalan biasa.
         for nilai in [serde_json::json!("5 MB"), serde_json::json!(null)] {
             let r = run(Stub::json(ok_file(nilai.clone())), &["https://pixeldrain.com/u/x"]);
-            assert_ne!(text_of(&r).as_deref(), Some(crate::common::error_template(".", "pixeldraindl").as_str()), "{nilai}");
+            assert_ne!(text_of(&r).as_deref(), Some(crate::common::error_template_bawaan(".", "pixeldraindl").as_str()), "{nilai}");
         }
     }
 

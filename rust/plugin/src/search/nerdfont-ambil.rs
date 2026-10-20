@@ -66,14 +66,14 @@ pub fn nerdfont_ambil(ctx: Ctx) -> Reply {
     }
 
     let Ok(res) = ctx.http.get(URL) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command));
+        return Reply::text(crate::common::error_template(&ctx));
     };
     let html = res.text();
 
     // `parse_fonts` `Err` = `TypeError` dari `match(..)[1]`, sama seperti di JS.
     let fonts = match parse_fonts(&html) {
         Ok(f) => f,
-        Err(_) => return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)),
+        Err(_) => return Reply::text(crate::common::error_template(&ctx)),
     };
 
     let Some(font) = cari(&fonts, &query) else {
@@ -276,7 +276,7 @@ Info: A patched font</div>
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "Coolvetica");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "nerdfont-ambil"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "nerdfont-ambil"));
     }
 
     #[test]
@@ -288,7 +288,7 @@ Info: A patched font</div>
       <a class="nf-fa-download" href="/d.zip"></a>
     </div>"#;
         let r = run(Stub::html(rusak), "X");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "nerdfont-ambil"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "nerdfont-ambil"));
     }
 
     #[test]

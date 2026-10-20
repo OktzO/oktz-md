@@ -86,7 +86,7 @@ pub fn jadwalsholat(ctx: Ctx) -> Reply {
     let city = if city.is_empty() { "Jakarta" } else { city };
 
     let Ok(kota) = cari_kota(&ctx, city) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     let Some(kota) = kota else {
         return Reply::text(not_found_kota(city)).with_reaction("❌");
@@ -95,17 +95,17 @@ pub fn jadwalsholat(ctx: Ctx) -> Reply {
     let kota_id = kota.get("id").and_then(Value::as_str).unwrap_or("");
     let (y, m, d, ..) = jakarta_parts(crate::common::now_ms());
     let Ok(res) = ctx.http.get(&jadwal_url(kota_id, (y, m, d))) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     let body = res.json().unwrap_or(serde_json::Value::Null);
     if !js_truthy(body.get("status")) {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     }
     let jadwal_data = body.get("data").filter(|d| js_truthy_value(d));
     let jadwal_data = match jadwal_data {
         Some(d) => d,
         None => {
-            return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+            return Reply::text(crate::common::error_template(&ctx))
                 .with_reaction("☢");
         }
     };
@@ -343,7 +343,7 @@ mod tests {
         let r = run(http, "Jakarta");
         assert_eq!(
             text_of(&r),
-            crate::common::error_template(".", "jadwalsholat"),
+            crate::common::error_template_bawaan(".", "jadwalsholat"),
             "{:?}",
             text_of(&r)
         );
@@ -356,7 +356,7 @@ mod tests {
         let r = run(http, "Jakarta");
         assert_eq!(
             text_of(&r),
-            crate::common::error_template(".", "jadwalsholat"),
+            crate::common::error_template_bawaan(".", "jadwalsholat"),
             "{:?}",
             text_of(&r)
         );

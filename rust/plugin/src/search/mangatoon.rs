@@ -172,7 +172,7 @@ pub fn mangatoon(ctx: Ctx) -> Reply {
                 .header("user-agent", "Mozilla/5.0"),
         )
     else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
 
     // `if (!data?.status || !data?.data?.results) throw` (`:39`) — `results`
@@ -180,10 +180,10 @@ pub fn mangatoon(ctx: Ctx) -> Reply {
     // `results`-nya.
     let body = res.json().unwrap_or(Value::Null);
     let Some(data) = body.get("data") else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     if !crate::common::js_truthy(body.get("status")) || data.get("results").is_none() {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     }
 
     let items = flat_items(data);

@@ -53,11 +53,11 @@ pub fn wormgpt(ctx: Ctx) -> Reply {
     // Semua kegagalan provider (termasuk cuki yang key-nya kosong) berakhir di
     // satu `catch` yang sama di `wormgpt.js:36-40`, jadi pesannya sama.
     let Some(body) = ctx.http.get(&url).ok().and_then(|r| r.json()) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
 
     if !js_truthy(body.get("status")) || !js_truthy(body.get("result")) {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     }
 
     let answer = match body.get("result") {
@@ -231,7 +231,7 @@ mod tests {
             r#"bukan json"#,
         ] {
             let r = run(Stub::ok(payload), "pertanyaan");
-            assert_eq!(body(&r), crate::common::error_template(".", "wormgpt"), "{payload}");
+            assert_eq!(body(&r), crate::common::error_template_bawaan(".", "wormgpt"), "{payload}");
             assert_eq!(emoji(&r), "☢");
         }
     }
@@ -239,7 +239,7 @@ mod tests {
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::offline(), "pertanyaan");
-        assert_eq!(body(&r), crate::common::error_template(".", "wormgpt"));
+        assert_eq!(body(&r), crate::common::error_template_bawaan(".", "wormgpt"));
         assert_eq!(emoji(&r), "☢");
     }
 }

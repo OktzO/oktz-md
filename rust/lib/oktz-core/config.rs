@@ -235,6 +235,8 @@ pub struct Runtime {
     pub donasi: Donasi,
     pub saluran: Saluran,
     pub api_keys: ApiKeys,
+    /// \x60config.errorTemplate\x60 — dipakai \x60common::error_template\x60.
+    pub error_template: String,
 }
 
 impl Default for Runtime {
@@ -278,6 +280,7 @@ impl Default for Runtime {
                 qris: String::new(),
             },
             saluran: Saluran::default(),
+            error_template: String::new(),
             api_keys: ApiKeys {
                 neoxr: String::new(),
                 fgsi: String::new(),
@@ -310,6 +313,9 @@ impl Runtime {
                 name: d("Join saluran resmi Oktz"),
                 link: d("https://whatsapp.com/channel/0029Vb8z7S0KrWQvCa8i0J0I"),
             },
+            // Nilai `config.js:153` apa adanya.
+            error_template: "☢ Kayaknya command `{prefix}{command}` lagi ada kendala\nSilahkan coba lagi nanti, {pushName}\n\n_Jika masalah berlanjut, silahkan hubungi owner bot_"
+                .to_string(),
             api_keys: ApiKeys::default(),
         }
     }
@@ -513,6 +519,9 @@ pub struct Config {
     pub messages: Messages,
     pub bot: BotInfo,
     pub saluran: Saluran,
+    /// `config.js` `errorTemplate` — template pesan galat `src/lib/error.js`.
+    /// Kosong = pakai teks bawaan (sama dengan nilai `config.js`).
+    pub error_template: String,
 }
 
 /// Env yang memindahkan lokasi `config.json`; kosong = `config.json` di cwd.
@@ -560,6 +569,7 @@ impl Config {
             },
             messages: Messages::default(),
             bot: BotInfo::default(),
+            error_template: String::new(),
             saluran: Saluran {
                 id: d("120363411617217441@newsletter"),
                 name: d("Join saluran resmi Oktz"),
@@ -602,6 +612,7 @@ impl Config {
             .as_object()
             .ok_or_else(|| Error::Config("isi config harus objek JSON".into()))?;
 
+        set_teks(root, "errorTemplate", "errorTemplate", &mut self.error_template)?;
         if let Some(m) = objek(root, "owner")? {
             set_teks(m, "name", "owner", &mut self.owner_name)?;
             if let Some(l) = daftar_teks(m, "number", "owner.number")? {
@@ -683,6 +694,9 @@ impl Config {
         rt.sticker = self.sticker.clone();
         rt.saluran = self.saluran.clone();
         rt.api_keys = self.api_keys.clone();
+        if !self.error_template.is_empty() {
+            rt.error_template = self.error_template.clone();
+        }
         rt
     }
 }

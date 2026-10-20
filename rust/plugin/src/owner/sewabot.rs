@@ -113,7 +113,7 @@ fn set_pending(ctx: &Ctx) {
 
 /// `te(m.prefix, m.command, m.pushName)` — `src/lib/error.js`.
 fn te(ctx: &Ctx) -> String {
-    crate::common::error_template(&ctx.prefix, &ctx.command)
+    crate::common::error_template(ctx)
 }
 
 /// Panduan + status (`sewabot.js:30-52`).
@@ -508,7 +508,7 @@ mod tests {
             dengan_sewa(false, serde_json::json!({ "a@g.us": {} })),
             &s,
         );
-        assert_eq!(text_of(&r), crate::common::error_template(".", "sewabot"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "sewabot"));
         assert_eq!(reaksi(&r), Some("✅"));
         let m = init_tersimpan(&r).expect("confirm menulis tabel");
         assert_eq!(m["enabled"], serde_json::json!(true), "{m}");
@@ -577,7 +577,7 @@ mod tests {
             dengan_sewa(true, serde_json::json!({ "a@g.us": {} })),
             &s,
         );
-        assert_eq!(text_of(&r), crate::common::error_template(".", "sewabot"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "sewabot"));
         assert_eq!(reaksi(&r), Some("☢"));
         assert!(r.mutations().is_empty(), "leave tidak menulis store");
     }

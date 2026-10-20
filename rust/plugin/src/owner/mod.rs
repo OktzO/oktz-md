@@ -114,3 +114,12 @@ pub mod ganti_namaowner;
 pub mod setreply;
 pub mod setwelcometype;
 pub mod sewabot;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod savedb;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod clearsessions;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod ganti_large;

@@ -60,7 +60,7 @@ pub fn ganti_rules(ctx: Ctx) -> Reply {
 
     // `ponytail:` `updateAssetUrl('rules', buffer, 'rules.jpeg')` dan
     // pembaruan config realtime tidak tersedia di registry Rust.
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+    Reply::text(crate::common::error_template(&ctx))
 }
 
 #[cfg(test)]

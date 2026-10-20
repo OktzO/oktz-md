@@ -338,7 +338,7 @@ pub fn pddikti(ctx: Ctx) -> Reply {
         }
         let call = request(&detail_path(&ctx.args[1]));
         let Ok(res) = ctx.http.call(&call) else {
-            return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+            return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
         };
         if res.status != 200 {
             return Reply::text(format!(
@@ -366,7 +366,7 @@ pub fn pddikti(ctx: Ctx) -> Reply {
     };
 
     let Ok(res) = ctx.http.call(&request(&path)) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     if res.status != 200 {
         return Reply::text(format!("❌ {}", http_error(res.status, &res.text())))
@@ -763,7 +763,7 @@ mod tests {
     #[test]
     fn a_transport_failure_falls_back_to_the_error_template() {
         let r = run(Stub::offline(), "all gibran");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "pddikti"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "pddikti"));
         assert_eq!(reaction_of(&r), Some("☢"));
     }
 

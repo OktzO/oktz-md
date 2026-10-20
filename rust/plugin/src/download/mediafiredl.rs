@@ -152,7 +152,7 @@ pub fn mediafiredl(ctx: Ctx) -> Reply {
     // `mediafire.js:69` melempar saat `link_download` kosong, jadi scraper itu
     // tidak pernah sampai ke pemeriksaan `mediafiredl.js:50`.
     let Ok(value) = oktz_scraper::mediafire::mediafire(ctx.http.as_ref(), url) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("🕕");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("🕕");
     };
     let result = hasil_dari(&value);
     if result.link_download.is_empty() {
@@ -363,7 +363,7 @@ mod tests {
             "https://www.mediafire.com/file/xxx",
             "<html><body>kosong</body></html>",
         ));
-        assert_eq!(text_of(&r), crate::common::error_template(".", "mfdl"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "mfdl"));
         assert!(
             matches!(r.without_mutations(), Reply::Reaction { emoji, .. } if emoji == "🕕"),
             "reaksi jam harus tetap ada di cabang catch"

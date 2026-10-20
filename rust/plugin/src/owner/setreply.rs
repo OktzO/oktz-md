@@ -131,9 +131,7 @@ pub fn setreply(ctx: Ctx) -> Reply {
         .cloned()
         .unwrap_or(serde_json::json!(1));
 
-    Reply::Interactive {
-        body: daftar(&ctx.prefix, &current),
-    }
+    Reply::interactive(daftar(&ctx.prefix, &current))
 }
 
 #[cfg(test)]

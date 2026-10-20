@@ -317,7 +317,7 @@ pub fn berita(ctx: Ctx) -> Reply {
     let articles = match fetch_rss(ctx.http.as_ref(), source.url) {
         Ok(a) => a,
         Err(_) => {
-            return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command));
+            return Reply::text(crate::common::error_template(&ctx));
         }
     };
 

@@ -27,7 +27,7 @@ use oktz_plugin_api::{Ctx, Reply, plugin};
 pub fn ping(ctx: Ctx) -> Reply {
     // `ponytail:` Semua data sistem (canvas, os.cpus, os.totalmem, process.uptime,
     // dst.) dan render canvas tidak tersedia di registry Rust.
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+    Reply::text(crate::common::error_template(&ctx))
 }
 
 #[cfg(test)]
@@ -48,7 +48,7 @@ mod tests {
         let r = ping(ctx);
         assert_eq!(
             r.without_mutations().text_body().unwrap(),
-            crate::common::error_template(".", "ping")
+            crate::common::error_template_bawaan(".", "ping")
         );
     }
 }

@@ -56,7 +56,7 @@ pub fn attp2(ctx: Ctx) -> Reply {
     // `@napi-rs/canvas`, `addExifToWebp`, dan `sendMessage({sticker})`
     // tidak tersedia di `Ctx`/`Reply` — diakhiri error_template seperti
     // swm.rs.
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢")
+    Reply::text(crate::common::error_template(&ctx)).with_reaction("☢")
 }
 
 #[cfg(test)]
@@ -119,7 +119,7 @@ mod tests {
         let r = attp2(ctx);
         assert_eq!(
             r.without_mutations().text_body().unwrap(),
-            crate::common::error_template(".", "attp2")
+            crate::common::error_template_bawaan(".", "attp2")
         );
         assert!(
             matches!(

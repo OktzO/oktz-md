@@ -511,11 +511,11 @@ pub fn tomekah(ctx: Ctx) -> Reply {
     // JS `catch` (`tomekah.js:52-55`) menangkap upload, efek, dan kirim:
     // semuanya jadi template error + reaksi ☢.
     let Ok(image_url) = upload_image(&*ctx.http, &buffer) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+        return Reply::text(crate::common::error_template(&ctx))
             .with_reaction("☢");
     };
     let Ok(hasil) = apply_image_effect(&*ctx.http, EFEK, &image_url) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command))
+        return Reply::text(crate::common::error_template(&ctx))
             .with_reaction("☢");
     };
     Reply::image(MediaSource::bytes(hasil), String::new()).with_reaction("✅")
@@ -787,7 +787,7 @@ mod tests {
         let balasan: Vec<(u16, Vec<u8>)> = (0..8).map(|_| resp(500, b"")).collect();
         let http = Stub::baru(balasan, Ok(b"gambar-asli".to_vec()));
         let r = tomekah(ctx_stub(http.clone(), media_gambar(), None, "."));
-        assert_eq!(teks(&r), crate::common::error_template(".", "tomekah"));
+        assert_eq!(teks(&r), crate::common::error_template_bawaan(".", "tomekah"));
         assert_eq!(reaksi(&r), Some("☢".into()));
         assert_eq!(http.panggilan.lock().unwrap().len(), 8);
     }
@@ -799,7 +799,7 @@ mod tests {
             Ok(b"gambar-asli".to_vec()),
         );
         let r = tomekah(ctx_stub(http.clone(), media_gambar(), None, "."));
-        assert_eq!(teks(&r), crate::common::error_template(".", "tomekah"));
+        assert_eq!(teks(&r), crate::common::error_template_bawaan(".", "tomekah"));
         assert_eq!(reaksi(&r), Some("☢".into()));
     }
 
@@ -814,7 +814,7 @@ mod tests {
             Ok(b"gambar-asli".to_vec()),
         );
         let r = tomekah(ctx_stub(http.clone(), media_gambar(), None, "."));
-        assert_eq!(teks(&r), crate::common::error_template(".", "tomekah"));
+        assert_eq!(teks(&r), crate::common::error_template_bawaan(".", "tomekah"));
         assert_eq!(reaksi(&r), Some("☢".into()));
     }
 

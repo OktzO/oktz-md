@@ -133,8 +133,8 @@ pub fn setwelcometype(ctx: Ctx) -> Reply {
     }
 
     match daftar(&ctx.prefix, &current) {
-        Some(body) => Reply::Interactive { body },
-        None => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)),
+        Some(body) => Reply::interactive(body),
+        None => Reply::text(crate::common::error_template(&ctx)),
     }
 }
 
@@ -291,7 +291,7 @@ mod tests {
             let r = run(&[], serde_json::json!({ "welcomeType": rusak }));
             assert_eq!(
                 text_of(&r),
-                crate::common::error_template(".", "setwelcometype"),
+                crate::common::error_template_bawaan(".", "setwelcometype"),
                 "{rusak:?}"
             );
             assert!(r.mutations().is_empty(), "{rusak:?}");

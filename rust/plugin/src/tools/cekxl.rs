@@ -85,7 +85,7 @@ pub fn cekxl(ctx: Ctx) -> Reply {
     let Ok(res) = ctx.http.call(
         &HttpCall::get(api_url(&clean_num)).header("Accept", "application/json"),
     ) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     let data = res.json().unwrap_or(Value::Null);
 
@@ -406,7 +406,7 @@ mod tests {
         let r = run(Stub::offline(), "083150850721");
         assert_eq!(
             text_of(&r),
-            crate::common::error_template(".", "cekxl"),
+            crate::common::error_template_bawaan(".", "cekxl"),
         );
         assert_eq!(reaction_of(&r), Some("☢"));
     }

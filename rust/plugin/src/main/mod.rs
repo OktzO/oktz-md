@@ -14,3 +14,11 @@ pub mod stopjadibot;
 
 // Ditambahkan scripts/pasang-modul.mjs.
 pub mod donasi;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod ping2;
+pub mod stats;
+pub mod totalfitur;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod sc;

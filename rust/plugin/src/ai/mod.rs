@@ -60,3 +60,9 @@ pub mod toemotebatu;
 pub mod tofigurev2;
 pub mod toghibli;
 pub mod tomekah;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod tocermin;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod dpsteai;

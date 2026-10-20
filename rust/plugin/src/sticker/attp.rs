@@ -56,7 +56,7 @@ pub fn attp(ctx: Ctx) -> Reply {
     let url = api_url(text, &api_key);
 
     let Ok(res) = ctx.http.get(&url) else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     let body = res.json().unwrap_or(Value::Null);
     let data = body.get("data");
@@ -64,7 +64,7 @@ pub fn attp(ctx: Ctx) -> Reply {
         .and_then(|d| d.get("url").and_then(Value::as_str))
         .filter(|s| !s.is_empty())
     else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
 
     Reply::sticker(MediaSource::url(sticker_url)).with_reaction("✅")

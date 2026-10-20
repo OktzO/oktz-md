@@ -108,7 +108,7 @@ pub fn inspect(ctx: Ctx) -> Reply {
     }
 
     // `sock.groupGetInviteInfo` / `sock.newsletterMsg` tidak tersedia di Ctx.
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢")
+    Reply::text(crate::common::error_template(&ctx)).with_reaction("☢")
 }
 
 #[cfg(test)]
@@ -202,7 +202,7 @@ mod tests {
         };
         let r = inspect(ctx);
         let teks = r.without_mutations().text_body().unwrap();
-        assert_eq!(teks, crate::common::error_template(".", "inspect"));
+        assert_eq!(teks, crate::common::error_template_bawaan(".", "inspect"));
         assert!(
             matches!(
                 r.without_mutations(),

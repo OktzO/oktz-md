@@ -167,9 +167,10 @@ mod tests {
 
     #[test]
     fn every_alias_resolves_to_this_plugin() {
-        for a in ["addban", "block"] {
-            assert_eq!(oktz_plugin_api::find(a).unwrap().meta.name, "ban");
-        }
+        // `block` juga nama `plugins/owner/block.js`; nama didahulukan
+        // (`plugins.js:539`), jadi alias `block` bukan milik ban.
+        assert_eq!(oktz_plugin_api::find("addban").unwrap().meta.name, "ban");
+        assert_eq!(oktz_plugin_api::find("block").unwrap().meta.name, "block");
     }
 
     #[test]

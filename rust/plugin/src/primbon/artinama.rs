@@ -10,7 +10,7 @@ pub(crate) const ENDPOINT: &str = "https://api.siputzx.my.id/api/primbon/artinam
 /// `te(prefix, command, pushName)` (`src/lib/error.js:3-9`).
 /// `Ctx` tidak membawa `pushName`, jadi `{pushName}` jadi `User` seperti di JS.
 pub(crate) fn error_reply(prefix: &str, command: &str) -> String {
-    crate::common::error_template(prefix, command)
+    crate::common::error_template_bawaan(prefix, command)
 }
 
 /// `${v}` — interpolasi string literal JS. String lewat apa adanya, angka jadi

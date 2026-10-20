@@ -134,7 +134,7 @@ pub fn tiktokdl2(ctx: Ctx) -> Reply {
 
     // `tiktokdl2.js:267-271` — catch membalas template error + reaksi ☢.
     let gagal = || {
-        Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢")
+        Reply::text(crate::common::error_template(&ctx)).with_reaction("☢")
     };
 
     // ponytail: JS cuma memakai savett; `ttdown` ditambahkan sebagai cadangan
@@ -466,7 +466,7 @@ mod tests {
             (500, "gagal".to_string(), Vec::new()),
         ]);
         let r = run(http, "https://www.tiktok.com/@budi/video/1");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "tiktok2"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "tiktok2"));
         assert_eq!(reaction_of(&r), Some("☢"));
     }
 
@@ -494,7 +494,7 @@ mod tests {
         // foto itu berakhir di template error.
         let http = Stub::baru(vec![halaman_token(), halaman_foto_saja()]);
         let r = run(http.clone(), "https://www.tiktok.com/@budi/photo/1");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "tiktok2"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "tiktok2"));
         assert_eq!(reaction_of(&r), Some("☢"));
         assert_eq!(http.panggilan.lock().unwrap().len(), 2);
     }
@@ -532,7 +532,7 @@ mod tests {
     fn semua_provider_gagal_masuk_catch() {
         let http = Stub::offline();
         let r = run(http.clone(), "https://www.tiktok.com/@budi/video/1");
-        assert_eq!(text_of(&r), crate::common::error_template(".", "tiktok2"));
+        assert_eq!(text_of(&r), crate::common::error_template_bawaan(".", "tiktok2"));
         assert_eq!(reaction_of(&r), Some("☢"));
         // Urutannya: token savett, TikWM, savett, YuuLabs, MusicalDown — url
         // panjang tidak punya varian `resolved`, jadi tepat 5 percobaan.

@@ -7,7 +7,7 @@
 //! `ctx.download_media()` / `download_quoted_media()`.
 //! `Buffer.isBuffer` / validasi kosong → cek `bytes.len() > 0`.
 //! `result.status === 'eror' || !result.prompt` → teks gagal.
-//! `te(...)` → `crate::common::error_template(&ctx.prefix, &ctx.command)`.
+//! `te(...)` → `crate::common::error_template(&ctx)`.
 
 use oktz_plugin_api::{Ctx, Reply, plugin};
 

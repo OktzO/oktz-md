@@ -283,7 +283,7 @@ pub fn glitchtext(ctx: Ctx) -> Reply {
         // `sock.sendMedia(..., null, m, { type: 'image' })` — caption null,
         // jadi caption kosong dan yang dibawa hanya URL gambarnya.
         Ok(image_url) => Reply::image(MediaSource::url(image_url), "").with_reaction("✅"),
-        Err(_) => Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢"),
+        Err(_) => Reply::text(crate::common::error_template(&ctx)).with_reaction("☢"),
     }
 }
 

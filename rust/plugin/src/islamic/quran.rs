@@ -248,7 +248,7 @@ pub fn quran(ctx: Ctx) -> Reply {
     let data = match fetch_quran(ctx.http.as_ref(), &slug) {
         Ok(d) => d,
         Err(_) => {
-            return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command));
+            return Reply::text(crate::common::error_template(&ctx));
         }
     };
 

@@ -87,7 +87,7 @@ pub(crate) fn berhasil_ganti(id: i64) -> String {
 pub fn setownertype(ctx: Ctx) -> Reply {
     // `db.setting('ownerType')`/`db.save` dan `interactiveButtons` tidak
     // tersedia di Ctx/Reply — diakhiri error_template seperti swm.rs.
-    Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢")
+    Reply::text(crate::common::error_template(&ctx)).with_reaction("☢")
 }
 
 #[cfg(test)]
@@ -178,7 +178,7 @@ mod tests {
         let r = setownertype(ctx);
         assert_eq!(
             r.without_mutations().text_body().unwrap(),
-            crate::common::error_template(".", "setownertype")
+            crate::common::error_template_bawaan(".", "setownertype")
         );
         assert!(
             matches!(

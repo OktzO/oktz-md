@@ -158,7 +158,7 @@ pub fn advance_comparation(ctx: Ctx) -> Reply {
     }
 
     let Some(resp) = ctx.http.get(&search_url(&query, &device_type)).ok() else {
-        return Reply::text(crate::common::error_template(&ctx.prefix, &ctx.command)).with_reaction("☢");
+        return Reply::text(crate::common::error_template(&ctx)).with_reaction("☢");
     };
     let res = resp.json().unwrap_or(Value::Null);
 
@@ -416,7 +416,7 @@ mod tests {
     #[test]
     fn a_transport_failure_reports_the_error_template() {
         let r = run(Stub::empty(), "samsung s24");
-        assert_eq!(body_of(&r), crate::common::error_template(".", "bandingkan-device"));
+        assert_eq!(body_of(&r), crate::common::error_template_bawaan(".", "bandingkan-device"));
         assert_eq!(reaction_of(&r), Some("☢"));
         assert!(r.mutations().is_empty(), "sesi tidak boleh ditulis saat gagal");
     }
