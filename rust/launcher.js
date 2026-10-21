@@ -36,6 +36,9 @@ const REPO = "OktzO/oktz-rs";
 const ASET_STATIS = "oktz-linux-x64-static";
 const ASET_GLIBC = "oktz-linux-x64";
 const ASET = process.env.OKTZ_ASET || ASET_STATIS;
+// Naikkan tiap rilis: panel menyimpan bin/oktz lama, jadi tanpa penanda ini
+// binary baru tidak pernah diunduh dan command baru (mis. menu) tetap hilang.
+const VERSI_BIN = "v0.1.4";
 const KANDIDAT = ["bin/oktz", "target/release/oktz"].map((p) => path.join(AKAR, p));
 const BIN = process.env.OKTZ_BIN
   ? path.resolve(process.env.OKTZ_BIN)
@@ -254,23 +257,39 @@ function siap_dipakai(p) {
   }
 }
 
-if (!siap_dipakai(BIN)) {
-  if (process.env.OKTZ_BIN) {
+// Hanya bin/oktz hasil unduhan yang dicek versinya; binary dev di
+// target/release dan OKTZ_BIN tidak boleh dipaksa unduh.
+const BIN_UNDUHAN = BIN === KANDIDAT[0] && !process.env.OKTZ_BIN;
+const PENANDA = path.join(path.dirname(BIN), ".oktz-versi");
+function versiCocok() {
+  try {
+    return readFileSync(PENANDA, "utf8").trim() === VERSI_BIN;
+  } catch {
+    return false;
+  }
+}
+
+if (!siap_dipakai(BIN) || (BIN_UNDUHAN && !versiCocok())) {
+  if (process.env.OKTZ_BIN && !siap_dipakai(BIN)) {
     console.error(`binary ${BIN} tidak ada/kosong (dari OKTZ_BIN)`);
     process.exit(127);
   }
   if (existsSync(BIN)) {
-    console.error(`[launcher] ${BIN} kosong atau bukan berkas, unduh ulang`);
+    console.error(`[launcher] ${BIN} kosong atau versi lama, unduh ulang`);
   }
   try {
     await unduh();
+    if (BIN_UNDUHAN) writeFileSync(PENANDA, `${VERSI_BIN}\n`);
   } catch (e) {
     console.error(`[launcher] gagal unduh binary: ${e.message}`);
-    console.error(
-      `[launcher] unduh manual: https://github.com/${REPO}/releases/latest (aset ${ASET}), ` +
-        `simpan sebagai ${BIN}`
-    );
-    process.exit(127);
+    if (!siap_dipakai(BIN)) {
+      console.error(
+        `[launcher] unduh manual: https://github.com/${REPO}/releases/latest (aset ${ASET}), ` +
+          `simpan sebagai ${BIN}`
+      );
+      process.exit(127);
+    }
+    console.error(`[launcher] memakai binary lama di ${BIN}`);
   }
   if (!siap_dipakai(BIN)) {
     console.error(`[launcher] ${BIN} masih tidak bisa dipakai setelah unduh`);
@@ -478,24 +497,20 @@ if (ARGS.length > 0) {
 
 async function unduh(nama = ASET) {
   console.log(`[launcher] binary belum ada, unduh ${nama} dari GitHub Release ${REPO}`);
-  const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
-    headers: { "User-Agent": "oktz-rs-launcher" },
-  });
-  if (!r.ok) throw new Error(`HTTP ${r.status} saat cek release terbaru`);
-  const rilis = await r.json();
-  let aset = (rilis.assets || []).find((a) => a.name === nama);
-  if (!aset && nama === ASET_STATIS) {
+  // URL unduh langsung, bukan API: IP panel sering kena rate limit 403.
+  const dasar = `https://github.com/${REPO}/releases/latest/download`;
+  let b = await fetch(`${dasar}/${nama}`);
+  if (!b.ok && nama === ASET_STATIS) {
     console.error(
-      `[launcher] rilis ${rilis.tag_name} belum punya ${ASET_STATIS}, pakai ${ASET_GLIBC}`
+      `[launcher] rilis terbaru belum punya ${ASET_STATIS} (HTTP ${b.status}), pakai ${ASET_GLIBC}`
     );
     nama = ASET_GLIBC;
-    aset = (rilis.assets || []).find((a) => a.name === nama);
+    b = await fetch(`${dasar}/${nama}`);
   }
-  if (!aset) throw new Error(`release ${rilis.tag_name} tidak punya aset ${nama}`);
-  const b = await fetch(aset.browser_download_url);
   if (!b.ok) throw new Error(`HTTP ${b.status} saat unduh ${nama}`);
   const isi = Buffer.from(await b.arrayBuffer());
+  if (isi.length === 0) throw new Error(`aset ${nama} kosong`);
   mkdirSync(path.dirname(BIN), { recursive: true });
   writeFileSync(BIN, isi, { mode: 0o755 });
-  console.log(`[launcher] tersimpan ${BIN} (${isi.length} byte, ${rilis.tag_name})`);
+  console.log(`[launcher] tersimpan ${BIN} (${isi.length} byte)`);
 }
