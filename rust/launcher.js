@@ -5,6 +5,11 @@
 // Argumen diteruskan; tanpa argumen = mode `run`. Sinyal dan exit code
 // diteruskan ke/dari anak supaya panel bisa membedakan stop vs crash.
 //
+// Tanpa argumen launcher ikut urutan bot JS lama:
+//   1. creds.json ada dan sudah paired -> run
+//   2. Turso aktif dan punya sesi      -> pulihkan creds + sesi ratchet, run
+//   3. belum ada sesi                  -> pairing code / QR, lalu run
+//
 //   node launcher.js [argumen oktz...]
 //   OKTZ_BIN=/path/ke/oktz node launcher.js
 import { spawn } from "node:child_process";
@@ -14,6 +19,8 @@ import {
   constants,
   existsSync,
   mkdirSync,
+  readFileSync,
+  renameSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -34,16 +41,208 @@ const BIN = process.env.OKTZ_BIN
   ? path.resolve(process.env.OKTZ_BIN)
   : KANDIDAT.find((p) => existsSync(p)) || KANDIDAT[0];
 const ARGS = process.argv.slice(2);
-// Default binary `run` membaca `../storage/session/creds.json`, path layout
-// dev (cwd = rust/). Di panel cwd = folder launcher, jadi creds ada di
-// `storage/session/creds.json`. Kirim path eksplisit kalau ketemu, supaya
-// tidak bergantung pada layout.
 const KANDIDAT_CREDS = [
   path.join(AKAR, "storage/session/creds.json"),
   path.join(AKAR, "../storage/session/creds.json"),
 ];
-const CREDS = KANDIDAT_CREDS.find((p) => existsSync(p));
-const CHILD_ARGS = ARGS.length > 0 ? ARGS : CREDS ? ["run", CREDS] : ["run"];
+
+/** Lokasi creds yang dipakai binary: yang sudah ada, atau layout yang cocok. */
+function pathCreds() {
+  const ada = KANDIDAT_CREDS.find((p) => existsSync(p));
+  if (ada) return ada;
+  // Panel: storage/ di samping launcher. Dev (ourin-md): launcher di rust/,
+  // storage/ di akar repo.
+  return existsSync(path.join(AKAR, "../storage"))
+    ? KANDIDAT_CREDS[1]
+    : KANDIDAT_CREDS[0];
+}
+
+/** Sama dengan `looksPaired` di connection.js: registered atau punya account. */
+function credsSiap(p) {
+  if (!existsSync(p)) return false;
+  try {
+    const c = JSON.parse(readFileSync(p, "utf8"));
+    return c?.registered === true || Boolean(c?.account);
+  } catch {
+    return false;
+  }
+}
+
+/** config.js di akar repo (panel) atau satu tingkat di atas `rust/` (dev). */
+function pathKonfig() {
+  for (const p of [path.join(AKAR, "config.js"), path.join(AKAR, "../config.js")]) {
+    if (existsSync(p)) return p;
+  }
+  return path.join(AKAR, "config.js");
+}
+
+/** config.json (milik binary Rust) di akar repo atau satu tingkat di atas. */
+function pathKonfigJson() {
+  for (const p of [path.join(AKAR, "config.json"), path.join(AKAR, "../config.json")]) {
+    if (existsSync(p)) return p;
+  }
+  return path.join(AKAR, "config.json");
+}
+
+function bacaKonfigJson() {
+  const p = pathKonfigJson();
+  if (!existsSync(p)) return {};
+  try {
+    return JSON.parse(readFileSync(p, "utf8")) || {};
+  } catch (e) {
+    console.error(`[launcher] config.json tidak terbaca: ${e.message}`);
+    return {};
+  }
+}
+
+/** Baca nilai pairing dari config, tanpa meng-import config.js (ada efek samping). */
+function bacaKonfig() {
+  const j = bacaKonfigJson();
+  if (j.session) {
+    return {
+      pairingNumber: j.session.pairingNumber,
+      usePairingCode: j.session.usePairingCode,
+    };
+  }
+  const p = pathKonfig();
+  if (!existsSync(p)) return {};
+  const t = readFileSync(p, "utf8");
+  const nomor = /pairingNumber\s*:\s*["'`]([^"'`]*)["'`]/.exec(t)?.[1];
+  const kode = /usePairingCode\s*:\s*(true|false)/.exec(t)?.[1];
+  return {
+    pairingNumber: nomor,
+    usePairingCode: kode === undefined ? undefined : kode === "true",
+  };
+}
+
+/** Nilai Turso: env menang, lalu config.json, lalu literal config.js. */
+function bacaTurso() {
+  const j = bacaKonfigJson().turso || {};
+  const p = pathKonfig();
+  let blok = "";
+  if (existsSync(p)) {
+    const t = readFileSync(p, "utf8");
+    blok = /turso\s*:\s*\{([\s\S]*?)\n\s*\}/.exec(t)?.[1] || "";
+  }
+  const literal = (nama) => {
+    const m = new RegExp(
+      `${nama}\\s*:\\s*(?:process\\.env\\.[A-Z_]+\\s*\\|\\|\\s*)?["'\`]([^"'\`]*)["'\`]`
+    ).exec(blok);
+    return (m?.[1] || "").trim();
+  };
+  const url = (process.env.TURSO_URL || j.url || literal("url")).trim();
+  const token = (process.env.TURSO_AUTH_TOKEN || j.authToken || literal("authToken")).trim();
+  const mati = j.enabled === false || /enabled\s*:\s*false/.test(blok);
+  return { url, token, aktif: !mati && url !== "" };
+}
+
+function tursoEndpoint(url) {
+  let s = url.trim();
+  if (s.startsWith("libsql://")) s = `https://${s.slice("libsql://".length)}`;
+  else if (!/^https?:\/\//.test(s)) s = `https://${s}`;
+  return `${s.replace(/\/+$/, "")}/v2/pipeline`;
+}
+
+/** Satu query Hrana lewat HTTP Turso, tanpa dependensi libsql. */
+async function tursoQuery(endpoint, token, sql, args = []) {
+  const body = {
+    requests: [
+      {
+        type: "execute",
+        stmt: {
+          sql,
+          args: args.map((v) => ({ type: "text", value: String(v) })),
+        },
+      },
+      { type: "close" },
+    ],
+  };
+  const r = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const teks = await r.text().catch(() => "");
+    throw new Error(`HTTP ${r.status}${teks ? `: ${teks.slice(0, 200)}` : ""}`);
+  }
+  const j = await r.json();
+  const res = j.results?.[0];
+  if (res?.type === "error") {
+    throw new Error(res.error?.message || "pipeline Turso error");
+  }
+  if (res?.type !== "ok" || res.response?.type !== "execute") {
+    throw new Error("respons pipeline Turso tidak dikenal");
+  }
+  const hasil = res.response.result || {};
+  const cols = (hasil.cols || []).map((c) => c.name);
+  return (hasil.rows || []).map((row) => {
+    const o = {};
+    row.forEach((cell, i) => {
+      o[cols[i]] = cell?.type === "text" ? cell.value : null;
+    });
+    return o;
+  });
+}
+
+/**
+ * Pulihkan sesi dari Turso seperti useDurableAuthState di JS: creds hanya
+ * dipakai kalau sesi lokal belum paired, keys mengisi ratchet yang hilang.
+ *
+ * @returns {Promise<string|null>} path fixture sesi, atau null kalau tanpa keys.
+ */
+async function pulihkanTurso(creds, turso) {
+  const endpoint = tursoEndpoint(turso.url);
+  const credsRows = await tursoQuery(
+    endpoint,
+    turso.token,
+    "SELECT creds FROM session_creds WHERE scope = ?",
+    ["main"]
+  );
+  if (credsRows.length === 0) throw new Error("session_creds kosong (scope main)");
+
+  const raw = credsRows[0].creds;
+  let c;
+  try {
+    c = JSON.parse(raw);
+  } catch {
+    throw new Error("creds Turso bukan JSON");
+  }
+  if (!(c?.registered === true || Boolean(c?.account))) {
+    throw new Error("creds Turso belum paired");
+  }
+
+  mkdirSync(path.dirname(creds), { recursive: true });
+  writeFileSync(creds, raw, { mode: 0o600 });
+
+  const keys = await tursoQuery(
+    endpoint,
+    turso.token,
+    "SELECT category, id, data FROM session_keys WHERE scope = ? AND category = ?",
+    ["main", "session"]
+  ).catch((e) => {
+    // Creds sudah tersimpan; kegagalan keys jangan membatalkan restore —
+    // jalankan tanpa fixture lebih baik daripada pairing ulang.
+    console.error(`[launcher] query session_keys gagal: ${e.message}`);
+    return [];
+  });
+  if (keys.length === 0) return null;
+
+  const fixture = path.join(path.dirname(creds), "turso-session.json");
+  const dump = {
+    session: keys.map((r) => ({
+      scope: "main",
+      category: "session",
+      id: r.id,
+      data: r.data,
+    })),
+  };
+  writeFileSync(fixture, JSON.stringify(dump), { mode: 0o600 });
+  return fixture;
+}
 
 function siap_dipakai(p) {
   if (!existsSync(p)) return false;
@@ -97,13 +296,13 @@ const BIN_ABS = path.resolve(BIN);
 let anak = null;
 let sudahUnduhUlang = false;
 
-function jalankan() {
-  console.log(`[launcher] jalankan ${BIN_ABS} ${CHILD_ARGS.join(" ")}`);
+function jalankan(args, extraEnv = {}) {
+  console.log(`[launcher] jalankan ${BIN_ABS} ${args.join(" ")}`);
   // cwd = akar repo supaya config.json, database/, dan storage/ selalu relatif
   // ke sini, bukan ke direktori kerja panel.
-  anak = spawn(BIN_ABS, CHILD_ARGS, {
+  anak = spawn(BIN_ABS, args, {
     stdio: "inherit",
-    env: process.env,
+    env: { ...process.env, ...extraEnv },
     cwd: AKAR,
   });
 
@@ -117,7 +316,7 @@ function jalankan() {
       try {
         await unduh(ASET);
         chmodSync(BIN_ABS, 0o755);
-        jalankan();
+        jalankan(args, extraEnv);
         return;
       } catch (e2) {
         console.error(`[launcher] unduh ulang gagal: ${e2.message}`);
@@ -148,12 +347,106 @@ function jalankan() {
   });
 }
 
+/** Jalankan anak dan tunggu selesai (dipakai pairing, sebelum run). */
+function spawnTunggu(args) {
+  console.log(`[launcher] jalankan ${BIN_ABS} ${args.join(" ")}`);
+  return new Promise((resolve) => {
+    const c = spawn(BIN_ABS, args, {
+      stdio: "inherit",
+      env: process.env,
+      cwd: AKAR,
+    });
+    anak = c;
+    c.on("error", (e) => {
+      console.error(`[launcher] gagal menjalankan ${BIN_ABS}: ${e.message}`);
+      resolve(127);
+    });
+    c.on("exit", (code, signal) => resolve(signal ? 0 : (code ?? 1)));
+  });
+}
+
+/** Pairing code/QR, lalu jalankan bot dengan sesi yang baru dibuat. */
+async function pairing(creds) {
+  const konf = bacaKonfig();
+  const nomor = (process.env.PAIRING_NUMBER || konf.pairingNumber || "").replace(/\D/g, "");
+  const pakaiKode =
+    process.env.USE_PAIRING_CODE !== undefined
+      ? process.env.USE_PAIRING_CODE !== "false"
+      : konf.usePairingCode !== false;
+  const db = path.resolve(
+    AKAR,
+    process.env.OKTZ_DB_DIR || "database/wa",
+    "oktz-run.db"
+  );
+
+  const args = pakaiKode ? ["pair-code", nomor, db] : ["pair-qr", db];
+  if (pakaiKode && !nomor) {
+    console.error(
+      "[launcher] belum ada sesi dan pairingNumber kosong. Isi config.js " +
+        "session.pairingNumber atau env PAIRING_NUMBER."
+    );
+    process.exit(2);
+  }
+  console.log(
+    `[launcher] belum ada sesi; mulai pairing ${pakaiKode ? `code ${nomor}` : "QR"}`
+  );
+  const rc = await spawnTunggu(args);
+  if (rc !== 0) {
+    console.error(`[launcher] pairing gagal (exit ${rc})`);
+    process.exit(rc || 1);
+  }
+  if (!credsSiap(creds)) {
+    console.error("[launcher] pairing selesai tapi creds.json tidak terbentuk");
+    process.exit(1);
+  }
+  jalankan(["run", creds]);
+}
+
+async function boot() {
+  const creds = pathCreds();
+
+  if (credsSiap(creds)) {
+    jalankan(["run", creds]);
+    return;
+  }
+
+  const turso = bacaTurso();
+  if (turso.aktif) {
+    try {
+      const fixture = await pulihkanTurso(creds, turso);
+      console.log("[launcher] sesi dipulihkan dari Turso");
+      jalankan(["run", creds], fixture ? { OKTZ_SESSION_FIXTURE: fixture } : {});
+      return;
+    } catch (e) {
+      console.error(`[launcher] restore Turso gagal: ${e.message}`);
+    }
+  }
+
+  // Creds ada tapi tidak sah (rusak/belum paired): karantina seperti JS,
+  // supaya pairing tidak menimpa berkas yang mungkin masih bisa diselamatkan.
+  if (existsSync(creds) && !credsSiap(creds)) {
+    const tujuan = `${creds}.broken-${Date.now()}`;
+    try {
+      renameSync(creds, tujuan);
+      console.error(`[launcher] creds tidak sah dipindah ke ${tujuan}`);
+    } catch (e) {
+      console.error(`[launcher] gagal memindahkan creds rusak: ${e.message}`);
+    }
+  }
+
+  await pairing(creds);
+}
+
 // Panel mengirim SIGTERM saat stop; teruskan supaya bot menutup socket rapi.
 for (const sig of ["SIGINT", "SIGTERM"]) {
   process.on(sig, () => anak && anak.kill(sig));
 }
 
-jalankan();
+if (ARGS.length > 0) {
+  jalankan(ARGS);
+} else {
+  await boot();
+}
 
 async function unduh(nama = ASET) {
   console.log(`[launcher] binary belum ada, unduh ${nama} dari GitHub Release ${REPO}`);

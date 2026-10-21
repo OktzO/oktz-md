@@ -448,3 +448,22 @@ Pemicu utama test agent yang gagal: assertion memakai delimiter markdown yang be
   salam bot bergabung — semuanya dari `src/connection.js:1199-1328`.
 - Batas (kartu tipe 2..8, banner promote/demote, badge newsletter, TZ host)
   dicatat di `docs/rust-rewrite/BLOCKED.md` §30.
+## Pairing persisten + restore Turso di launcher (2026-10-21)
+
+- `oktz pair`/`pair-code`/`pair-qr` menulis `storage/session/creds.json` dari
+  `Device` sqlite (`creds::device_to_creds`) plus marker `<db>.ident`. Sebelumnya
+  pairing sukses tetapi `run` tetap gagal "creds.json tidak ada".
+- Launcher tanpa argumen: creds sah -> `run`; belum ada sesi + Turso aktif ->
+  pulihkan `session_creds`/`session_keys` scope `main` lewat HTTP
+  `/v2/pipeline` (Node `fetch`, tanpa dependensi baru), tulis fixture, `run`
+  dengan `OKTZ_SESSION_FIXTURE`; tanpa keduanya -> pairing code/QR.
+- Sumber setelan: `config.json` (camelCase) lalu `config.js`; env
+  `TURSO_URL`/`TURSO_AUTH_TOKEN` menang. Layout panel (`storage/`) dan dev
+  (`../storage/`) sama-sama dikenali.
+- `AccountJson` membaca `accountSignatureKey`/`accountSignature`/
+  `deviceSignature`; creds produksi camelCase sebelumnya terbuang.
+- Bukti: `cargo test --release` 6645 lulus / 0 gagal, clippy 0 warning;
+  `cek-raw-string`, `scan-nonlatin`, `bandingkan-nama-plugin` rc=0; launcher
+  diuji dengan mock Turso (env + config.json) dan fake binary di dua layout.
+- Batas: restore Turso baru dibaca saat boot (bot Rust belum menulis mirror);
+  QR pairing masih mencetak payload mentah, belum dirender jadi gambar.
