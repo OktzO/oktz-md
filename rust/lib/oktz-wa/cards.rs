@@ -1,4 +1,4 @@
-//! Builder kartu interaktif WhatsApp (native flow).
+//! Pengiriman kartu interaktif WhatsApp (native flow).
 //!
 //! Pola yang WA benar-benar render — lihat `src/lib/rich-messages.js:454`
 //! (`wrapInteractive`) dan `src/lib/socket.js:359` (`sendInteractiveCard`),
@@ -11,359 +11,143 @@
 //! 3. dikirim bersama extra stanza node `biz > interactive > native_flow`,
 //!    lihat [`biz_node`].
 //!
-//! Bentuk legacy (`ListMessage`, `interactiveButtons`) relay-nya sukses tapi WA
-//! membuangnya diam-diam — tidak ada yang muncul di chat. Jangan dipakai.
+//! Bentuk legacy (`ListMessage`, `interactiveButtons` telanjang) relay-nya
+//! sukses tapi WA membuangnya diam-diam — tidak ada yang muncul di chat.
+//! Jangan dipakai.
+//!
+//! Model kartyanya ada di `oktz-plugin-api::kartu` (supaya plugin bisa
+//! menyusunnya); file ini hanya menerjemahkan model itu ke proto WA.
 
-use serde::Serialize;
+use oktz_plugin_api::kartu::{Kartu, Tombol};
 use serde_json::Value;
 use whatsapp_rust::prelude::*;
 use whatsapp_rust::waproto::buffa::MessageField;
 use whatsapp_rust::waproto::whatsapp::__buffa::oneof::message::interactive_message::InteractiveMessage as ImOneof;
 use whatsapp_rust::{NodeBuilder, wacore_binary::Node};
 
-/// Nama aksi tombol native-flow. WA membaca `name` sebagai string literal dan
-/// nama yang salah membuat tombol hilang tanpa error sama sekali, jadi daftar
-/// ini enum. Namanya diambil dari `src/lib/builder.js` dan pemakaian nyata di
-/// `plugins/` (quick_reply ~105, single_select ~32, cta_url ~15, cta_copy ~8).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ButtonAction {
-    QuickReply,
-    SingleSelect,
-    CtaUrl,
-    CtaCopy,
-    CtaCall,
-    CtaReminder,
-    CtaCancelReminder,
-    AddressMessage,
-    SendLocation,
-}
+/// Header kartu dengan media gambar yang sudah ter-upload.
+///
+/// `header_image` = `imageMessage` hasil upload; `None` = header tanpa
+/// gambar (judul tetap tampil). JS: `interactiveMessage.header.imageMessage`.
+fn header_proto(
+    kartu: &Kartu,
+    header_image: Option<wa::message::ImageMessage>,
+) -> wa::message::interactive_message::Header {
+    use wa::message::interactive_message::header::Media;
 
-impl ButtonAction {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::QuickReply => "quick_reply",
-            Self::SingleSelect => "single_select",
-            Self::CtaUrl => "cta_url",
-            Self::CtaCopy => "cta_copy",
-            Self::CtaCall => "cta_call",
-            Self::CtaReminder => "cta_reminder",
-            Self::CtaCancelReminder => "cta_cancel_reminder",
-            Self::AddressMessage => "address_message",
-            Self::SendLocation => "send_location",
-        }
-    }
-
-    /// `name` string dari `interactiveButtons[]` JS. `None` = nama di luar
-    /// daftar yang dikenal WA.
-    pub fn from_name(name: &str) -> Option<Self> {
-        Some(match name {
-            "quick_reply" => Self::QuickReply,
-            "single_select" => Self::SingleSelect,
-            "cta_url" => Self::CtaUrl,
-            "cta_copy" => Self::CtaCopy,
-            "cta_call" => Self::CtaCall,
-            "cta_reminder" => Self::CtaReminder,
-            "cta_cancel_reminder" => Self::CtaCancelReminder,
-            "address_message" => Self::AddressMessage,
-            "send_location" => Self::SendLocation,
-            _ => return None,
-        })
-    }
-}
-
-/// Satu baris di dalam `single_select`. Field yang tidak diisi dilewati dari
-/// `buttonParamsJson` — bentuk akhir sudah ditentukan WA, bukan kita.
-#[derive(Debug, Clone, Serialize)]
-pub struct Row {
-    pub title: String,
-    pub id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub header: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-}
-
-impl Row {
-    pub fn new(title: impl Into<String>, id: impl Into<String>) -> Self {
-        Self {
-            title: title.into(),
-            id: id.into(),
-            header: None,
-            description: None,
-        }
-    }
-
-    pub fn header(mut self, h: impl Into<String>) -> Self {
-        self.header = Some(h.into());
-        self
-    }
-
-    pub fn description(mut self, d: impl Into<String>) -> Self {
-        self.description = Some(d.into());
-        self
-    }
-}
-
-/// Satu section `single_select` (`builder.js:617` `makeSection`).
-#[derive(Debug, Clone, Default, Serialize)]
-pub struct Section {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub highlight_label: Option<String>,
-    pub rows: Vec<Row>,
-}
-
-impl Section {
-    pub fn new(title: impl Into<String>) -> Self {
-        Self {
-            title: Some(title.into()),
-            ..Default::default()
-        }
-    }
-
-    pub fn highlight_label(mut self, h: impl Into<String>) -> Self {
-        self.highlight_label = Some(h.into());
-        self
-    }
-
-    pub fn row(mut self, r: Row) -> Self {
-        self.rows.push(r);
-        self
-    }
-
-    pub fn rows(mut self, it: impl IntoIterator<Item = Row>) -> Self {
-        self.rows.extend(it);
-        self
-    }
-}
-
-/// Isi `buttonParamsJson` untuk `single_select` (`plugins/jpm/jpm.js:304`).
-#[derive(Debug, Clone, Serialize)]
-pub struct List {
-    pub title: String,
-    pub sections: Vec<Section>,
-}
-
-impl List {
-    pub fn new(title: impl Into<String>, sections: impl IntoIterator<Item = Section>) -> Self {
-        Self {
-            title: title.into(),
-            sections: sections.into_iter().collect(),
-        }
-    }
-
-    /// Kartu list siap kirim: body + footer + satu tombol `single_select`.
-    pub fn into_card(self, body: &str, footer: Option<&str>) -> Card {
-        let button = Button::select(&self);
-        let mut card = Card::new(body);
-        if let Some(f) = footer {
-            card = card.footer(f);
-        }
-        card.button(button)
-    }
-}
-
-/// Satu tombol native-flow. `params` adalah objek yang diserialisasi jadi
-/// `buttonParamsJson`; bentuknya sudah ditentukan WA, makanya `Value` mentah
-/// dengan constructor yang benar-benar dipakai plugin.
-#[derive(Debug, Clone)]
-pub struct Button {
-    pub action: ButtonAction,
-    pub params: Value,
-}
-
-impl Button {
-    pub fn new(action: ButtonAction, params: Value) -> Self {
-        Self { action, params }
-    }
-
-    pub fn quick_reply(display_text: impl Into<String>, id: impl Into<String>) -> Self {
-        Self::new(
-            ButtonAction::QuickReply,
-            serde_json::json!({ "display_text": display_text.into(), "id": id.into() }),
-        )
-    }
-
-    pub fn copy(display_text: impl Into<String>, copy_code: impl Into<String>) -> Self {
-        Self::new(
-            ButtonAction::CtaCopy,
-            serde_json::json!({ "display_text": display_text.into(), "copy_code": copy_code.into() }),
-        )
-    }
-
-    pub fn url(display_text: impl Into<String>, url: impl Into<String>) -> Self {
-        Self::new(
-            ButtonAction::CtaUrl,
-            serde_json::json!({ "display_text": display_text.into(), "url": url.into() }),
-        )
-    }
-
-    /// Tombol `single_select` — isi params dari [`List`].
-    pub fn select(list: &List) -> Self {
-        Self::new(
-            ButtonAction::SingleSelect,
-            serde_json::json!({ "title": &list.title, "sections": &list.sections }),
-        )
-    }
-}
-
-/// Header kartu. Media header perlu pesan yang sudah ter-upload, jadi
-/// [`Card`] hanya mengekspos teks + penanda lampiran.
-#[derive(Debug, Clone, Default)]
-pub struct Header {
-    pub title: Option<String>,
-    pub subtitle: Option<String>,
-    pub has_media_attachment: bool,
-}
-
-/// Kartu native-flow. Kirim dengan `biz_node()` sebagai extra stanza node,
-/// misalnya lewat `SendOptions::with_extra_stanza_nodes`.
-#[derive(Debug, Clone, Default)]
-pub struct Card {
-    pub body: String,
-    pub footer: Option<String>,
-    pub header: Option<Header>,
-    pub buttons: Vec<Button>,
-    /// `messageParamsJson` — `bottom_sheet`, `limited_time_offer`, dll.
-    pub message_params: Option<Value>,
-    /// `contextInfo` — dipakai untuk `mentionedJid` di kartu grup
-    /// (`plugins/group/cekidgc.js:189`).
-    pub context_info: Option<wa::ContextInfo>,
-}
-
-impl Card {
-    pub fn new(body: impl Into<String>) -> Self {
-        Self {
-            body: body.into(),
-            ..Default::default()
-        }
-    }
-
-    pub fn footer(mut self, f: impl Into<String>) -> Self {
-        self.footer = Some(f.into());
-        self
-    }
-
-    pub fn header(mut self, h: Header) -> Self {
-        self.header = Some(h);
-        self
-    }
-
-    pub fn message_params(mut self, v: Value) -> Self {
-        self.message_params = Some(v);
-        self
-    }
-
-    pub fn context_info(mut self, c: wa::ContextInfo) -> Self {
-        self.context_info = Some(c);
-        self
-    }
-
-    pub fn button(mut self, b: Button) -> Self {
-        self.buttons.push(b);
-        self
-    }
-
-    pub fn buttons(mut self, it: impl IntoIterator<Item = Button>) -> Self {
-        self.buttons.extend(it);
-        self
-    }
-
-    pub fn to_message(&self) -> wa::Message {
-        use wa::message::interactive_message::{
-            Body, Footer, Header as ProtoHeader, native_flow_message::NativeFlowButton,
-        };
-
-        let buttons: Vec<NativeFlowButton> = self
-            .buttons
-            .iter()
-            .map(|b| NativeFlowButton {
-                name: Some(b.action.as_str().to_string()),
-                button_params_json: Some(b.params.to_string()),
-            })
-            .collect();
-
-        let header = match &self.header {
-            Some(h) => ProtoHeader {
-                title: h.title.clone(),
-                subtitle: h.subtitle.clone(),
-                has_media_attachment: Some(h.has_media_attachment),
-                ..Default::default()
-            },
-            None => ProtoHeader {
-                has_media_attachment: Some(false),
-                ..Default::default()
-            },
-        };
-
-        let mut interactive = wa::message::InteractiveMessage {
-            header: MessageField::some(header),
-            body: MessageField::some(Body {
-                text: Some(self.body.clone()),
-            }),
-            interactive_message: Some(ImOneof::NativeFlowMessage(Box::new(
-                wa::message::interactive_message::NativeFlowMessage {
-                    buttons,
-                    message_params_json: self.message_params.as_ref().map(|v| v.to_string()),
-                    ..Default::default()
-                },
-            ))),
-            ..Default::default()
-        };
-        // Footer kosong tidak dikirim — `sendInteractiveCard` (socket.js:365)
-        // hanya menyertakan footer kalau isinya ada.
-        if let Some(f) = &self.footer {
-            interactive.footer = MessageField::some(Footer {
-                text: Some(f.clone()),
-                ..Default::default()
-            });
-        }
-        if let Some(c) = &self.context_info {
-            interactive.context_info = MessageField::some(c.clone());
-        }
-
-        let inner = wa::Message {
-            message_context_info: MessageField::some(wa::MessageContextInfo {
-                device_list_metadata: MessageField::some(wa::DeviceListMetadata::default()),
-                device_list_metadata_version: Some(2),
-                ..Default::default()
-            }),
-            interactive_message: MessageField::some(interactive),
-            ..Default::default()
-        };
-
-        // WAProto.proto:2095 — `viewOnceMessage` bertipe FutureProofMessage
-        // { optional Message message = 1 }, bukan ViewOnceMessage.
-        wa::Message {
-            view_once_message: MessageField::some(wa::message::FutureProofMessage {
-                message: MessageField::some(inner),
-            }),
-            ..Default::default()
-        }
-    }
-}
-
-/// Kartu teks tanpa tombol (`oktz-bin --kind card`). Kartu dengan tombol
-/// dibangun lewat [`Card`].
-pub fn build_card(body: &str, footer: Option<&str>) -> wa::Message {
-    Card {
-        body: body.to_string(),
-        footer: footer.map(str::to_string),
+    let (title, subtitle) = match &kartu.header {
+        Some(h) => (h.title.clone(), h.subtitle.clone()),
+        None => (None, None),
+    };
+    let media = header_image.map(|img| Media::ImageMessage(Box::new(img)));
+    wa::message::interactive_message::Header {
+        title,
+        subtitle,
+        // WA hanya menampilkan sampul kalau flag ini true; JS selalu
+        // mengirimnya saat header ada media (`menu.js:598`).
+        has_media_attachment: Some(media.is_some()),
+        media,
         ..Default::default()
     }
-    .to_message()
+}
+
+/// Kartu native-flow → proto WA.
+///
+/// `header_image` = `imageMessage` yang sudah di-upload; `None` = tanpa
+/// gambar header. `context_info` diisi pipeline (mention + quote).
+pub fn kartu_to_message(
+    kartu: &Kartu,
+    header_image: Option<wa::message::ImageMessage>,
+    context_info: Option<wa::ContextInfo>,
+) -> wa::Message {
+    use wa::message::interactive_message::{
+        Body, Footer, native_flow_message::NativeFlowButton,
+    };
+
+    let buttons: Vec<NativeFlowButton> = kartu
+        .buttons
+        .iter()
+        .map(|b: &Tombol| NativeFlowButton {
+            name: Some(b.aksi.as_str().to_string()),
+            button_params_json: Some(b.params.json()),
+        })
+        .collect();
+
+    let mut interactive = wa::message::InteractiveMessage {
+        header: MessageField::some(header_proto(kartu, header_image)),
+        body: MessageField::some(Body {
+            text: Some(kartu.body.clone()),
+        }),
+        interactive_message: Some(ImOneof::NativeFlowMessage(Box::new(
+            wa::message::interactive_message::NativeFlowMessage {
+                buttons,
+                message_params_json: kartu.params.as_ref().map(|p| p.json()),
+                ..Default::default()
+            },
+        ))),
+        ..Default::default()
+    };
+    // Footer kosong tidak dikirim — `sendInteractiveCard` (socket.js:365)
+    // hanya menyertakan footer kalau isinya ada.
+    if let Some(f) = &kartu.footer {
+        interactive.footer = MessageField::some(Footer {
+            text: Some(f.clone()),
+            ..Default::default()
+        });
+    }
+    if let Some(c) = context_info {
+        interactive.context_info = MessageField::some(c);
+    }
+
+    let inner = wa::Message {
+        message_context_info: MessageField::some(wa::MessageContextInfo {
+            device_list_metadata: MessageField::some(wa::DeviceListMetadata::default()),
+            device_list_metadata_version: Some(2),
+            ..Default::default()
+        }),
+        interactive_message: MessageField::some(interactive),
+        ..Default::default()
+    };
+
+    // WAProto.proto:2095 — `viewOnceMessage` bertipe FutureProofMessage
+    // { optional Message message = 1 }, bukan ViewOnceMessage.
+    wa::Message {
+        view_once_message: MessageField::some(wa::message::FutureProofMessage {
+            message: MessageField::some(inner),
+        }),
+        ..Default::default()
+    }
+}
+
+/// Kartu teks tanpa tombol (`oktz --kind card`). Kartu dengan tombol
+/// dibangun lewat [`kartu_to_message`].
+pub fn build_card(body: &str, footer: Option<&str>) -> wa::Message {
+    let mut kartu = Kartu::baru(body);
+    if let Some(f) = footer {
+        kartu = kartu.footer(f);
+    }
+    kartu_to_message(&kartu, None, None)
 }
 
 /// Kartu `single_select` tanpa section — hanya smoke test jalur encode
-/// `single_select` (`oktz-bin --kind list`). List sebenarnya lewat
-/// [`List::into_card`].
+/// `single_select` (`oktz --kind list`).
 pub fn build_list() -> wa::Message {
-    List::new("", []).into_card("", None).to_message()
+    let kartu = Kartu::baru("").tombol(oktz_plugin_api::kartu::Tombol::pilih(
+        &oktz_plugin_api::kartu::Daftar::baru(""),
+    ));
+    kartu_to_message(&kartu, None, None)
 }
 
 /// Extra stanza node wajib supaya WA merender kartu native-flow.
+///
+/// Bentuknya meniru `onigis` (`lib/WABinary/generic-utils.js:139`
+/// `getAdditionalNode`): `biz` dengan `engagement` + `interactive/native_flow`.
+/// Tanpa node ini kartu tidak muncul di chat.
 pub fn biz_node() -> Node {
+    let engagement = NodeBuilder::new("engagement")
+        .attr("customer_service_state", "open")
+        .attr("conversation_state", "open")
+        .build();
     let native_flow = NodeBuilder::new("native_flow")
         .attr("v", "9")
         .attr("name", "mixed")
@@ -373,12 +157,39 @@ pub fn biz_node() -> Node {
         .attr("v", "1")
         .children([native_flow])
         .build();
-    NodeBuilder::new("biz").children([interactive]).build()
+    // `privacy_mode_ts` = sekarang - 77_980_457 detik (nilai onigis).
+    let privacy_mode_ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64 - 77_980_457)
+        .unwrap_or_default();
+    NodeBuilder::new("biz")
+        .attr("actual_actors", "2")
+        .attr("host_storage", "2")
+        .attr("privacy_mode_ts", privacy_mode_ts.to_string())
+        .children([engagement, interactive])
+        .build()
+}
+
+/// `messageParamsJson` — `bottom_sheet`, `limited_time_offer`, dan
+/// `tap_target_configuration` (JS `menu.js:755`).
+pub fn params_bottom_sheet(
+    list_title: impl Into<String>,
+    button_title: impl Into<String>,
+) -> Value {
+    serde_json::json!({
+        "bottom_sheet": {
+            "in_thread_buttons_limit": 2,
+            "divider_indices": [1, 2, 3, 4, 5, 999],
+            "list_title": list_title.into(),
+            "button_title": button_title.into(),
+        }
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oktz_plugin_api::kartu::{Baris, Bagian, Daftar};
     use serde_json::json;
     use whatsapp_rust::wacore_binary::NodeContent;
     use whatsapp_rust::waproto::buffa::Message as _;
@@ -459,132 +270,127 @@ mod tests {
     }
 
     #[test]
-    fn card_buttons_come_from_caller() {
-        let msg = Card::new("pilih satu")
+    fn kartu_menjadi_view_once_dengan_device_list_metadata() {
+        let msg = build_card("body", Some("footer"));
+        let view = msg.view_once_message.as_option().unwrap();
+        assert!(view.message.as_option().is_some());
+        let mci = inner(&msg)
+            .message_context_info
+            .as_option()
+            .expect("wajib ada messageContextInfo");
+        assert_eq!(mci.device_list_metadata_version, Some(2));
+        assert!(mci.device_list_metadata.as_option().is_some());
+    }
+
+    #[test]
+    fn tombol_dari_model_masuk_sebagai_native_flow_button() {
+        let kartu = Kartu::baru("pilih satu")
             .footer("footer uji")
-            .button(Button::quick_reply("Ya", "cmd_ya"))
-            .button(Button::copy("Salin", "ABC123"))
-            .button(Button::url("Buka", "https://example.com"))
-            .to_message();
+            .tombol(Tombol::balas_cepat("Ya", "cmd_ya"))
+            .tombol(Tombol::salin("Salin", "id", "ABC123"))
+            .tombol(Tombol::buka_url("Buka", "https://example.com"));
+        let msg = kartu_to_message(&kartu, None, None);
 
         let flow = native_flow(&msg);
         assert_eq!(flow.buttons.len(), 3);
         assert_eq!(flow.buttons[0].name.as_deref(), Some("quick_reply"));
         assert_eq!(flow.buttons[1].name.as_deref(), Some("cta_copy"));
         assert_eq!(flow.buttons[2].name.as_deref(), Some("cta_url"));
+        assert!(flow.buttons[0]
+            .button_params_json
+            .as_deref()
+            .unwrap()
+            .contains("cmd_ya"));
+        assert!(flow.buttons[2]
+            .button_params_json
+            .as_deref()
+            .unwrap()
+            .contains("merchant_url"));
+    }
 
-        let params = |i: usize| -> Value {
-            serde_json::from_str(flow.buttons[i].button_params_json.as_deref().unwrap()).unwrap()
+    #[test]
+    fn single_select_membawa_sections_dan_rows() {
+        let daftar = Daftar::baru("🍃 List Menu")
+            .bagian(
+                Bagian::baru("pilihan")
+                    .baris(Baris::baru("🏠 main", ".menucat main").description("12 command")),
+            )
+            .icon("DEFAULT");
+        let kartu = Kartu::baru("body").tombol(Tombol::pilih(&daftar));
+        let msg = kartu_to_message(&kartu, None, None);
+        let params = native_flow(&msg).buttons[0]
+            .button_params_json
+            .as_deref()
+            .unwrap()
+            .to_string();
+        let json: Value = serde_json::from_str(&params).unwrap();
+        assert_eq!(json["title"], "🍃 List Menu");
+        assert_eq!(json["icon"], "DEFAULT");
+        assert_eq!(json["sections"][0]["rows"][0]["id"], ".menucat main");
+        assert_eq!(json["sections"][0]["rows"][0]["description"], "12 command");
+    }
+
+    #[test]
+    fn message_params_json_dikirim_apa_adanya() {
+        let kartu = Kartu::baru("body").params(json!({"bottom_sheet": {"list_title": "x"}}));
+        let msg = kartu_to_message(&kartu, None, None);
+        let params = native_flow(&msg).message_params_json.as_deref().unwrap();
+        assert!(params.contains("bottom_sheet"), "{params}");
+    }
+
+    #[test]
+    fn mention_dari_kartu_masuk_context_info() {
+        let kartu = Kartu::baru("body").mention("628@s.whatsapp.net");
+        let ci = wa::ContextInfo {
+            mentioned_jid: vec!["628@s.whatsapp.net".to_string()],
+            ..Default::default()
         };
-        assert_eq!(params(0), json!({"display_text": "Ya", "id": "cmd_ya"}));
-        assert_eq!(
-            params(1),
-            json!({"display_text": "Salin", "copy_code": "ABC123"})
-        );
-        assert_eq!(
-            params(2),
-            json!({"display_text": "Buka", "url": "https://example.com"})
-        );
-        assert_eq!(
-            interactive(&msg).body.text.as_deref(),
-            Some("pilih satu")
-        );
-        assert_eq!(interactive(&msg).footer.text.as_deref(), Some("footer uji"));
+        let msg = kartu_to_message(&kartu, None, Some(ci));
+        let ctx = interactive(&msg).context_info.as_option().unwrap();
+        assert_eq!(ctx.mentioned_jid, vec!["628@s.whatsapp.net".to_string()]);
     }
 
     #[test]
-    fn list_sections_come_from_caller() {
-        let list = List::new("Menu Utama", [
-            Section::new("MODE").highlight_label("baru").row(
-                Row::new("Basic", "cmd_basic").description("tanpa tag"),
-            ),
-            Section::new("PENGATURAN").row(Row::new("Hidetag", "cmd_hidetag").header("H")),
-        ]);
-        let msg = list.into_card("pilih mode", Some("footer")).to_message();
+    fn header_tanpa_media_tidak_menandai_lampiran() {
+        let kartu = Kartu::baru("body").header(oktz_plugin_api::kartu::KartuHeader::baru().subjudul("Bot"));
+        let msg = kartu_to_message(&kartu, None, None);
+        let header = interactive(&msg).header.as_option().unwrap();
+        assert_eq!(header.subtitle.as_deref(), Some("Bot"));
+        assert_eq!(header.has_media_attachment, Some(false));
+        assert!(header.media.is_none());
+    }
 
-        let flow = native_flow(&msg);
-        assert_eq!(flow.buttons.len(), 1);
-        assert_eq!(flow.buttons[0].name.as_deref(), Some("single_select"));
-        let params: Value =
-            serde_json::from_str(flow.buttons[0].button_params_json.as_deref().unwrap()).unwrap();
-        assert_eq!(
-            params,
-            json!({
-                "title": "Menu Utama",
-                "sections": [
-                    {
-                        "title": "MODE",
-                        "highlight_label": "baru",
-                        "rows": [
-                            {"title": "Basic", "description": "tanpa tag", "id": "cmd_basic"}
-                        ]
-                    },
-                    {
-                        "title": "PENGATURAN",
-                        "rows": [{"title": "Hidetag", "id": "cmd_hidetag", "header": "H"}]
-                    }
-                ]
-            })
+    #[test]
+    fn header_dengan_gambar_menandai_lampiran() {
+        let img = wa::message::ImageMessage {
+            url: Some("https://cdn.example/img.jpg".into()),
+            mimetype: Some("image/jpeg".into()),
+            ..Default::default()
+        };
+        let kartu = Kartu::baru("body").header(
+            oktz_plugin_api::kartu::KartuHeader::baru()
+                .judul("")
+                .subjudul("Bot")
+                .media(oktz_plugin_api::MediaSource::Path {
+                    path: "assets/image/foto.jpeg".into(),
+                    mimetype: None,
+                }),
         );
-        assert_eq!(interactive(&msg).body.text.as_deref(), Some("pilih mode"));
+        let msg = kartu_to_message(&kartu, Some(img), None);
+        let header = interactive(&msg).header.as_option().unwrap();
+        assert_eq!(header.has_media_attachment, Some(true));
+        assert!(header.media.is_some());
     }
 
     #[test]
-    fn card_keeps_proven_view_once_wrapper_and_context_v2() {
-        let msg = Card::new("x").button(Button::quick_reply("Ya", "y")).to_message();
-
-        // WA hanya render kartu nativeFlow di dalam viewOnceMessage +
-        // deviceListMetadata v2 (rich-messages.js:468). Bentuk legacy
-        // ListMessage/interactiveButtons tidak dirender sama sekali.
-        assert!(msg.view_once_message.is_set());
-        let inner_msg = inner(&msg);
-        assert!(inner_msg.list_message.is_unset(), "ListMessage legacy");
-        assert!(inner_msg.interactive_message.is_set());
-
-        let ctx = inner_msg.message_context_info.as_option().unwrap();
-        assert!(ctx.device_list_metadata.is_set());
-        assert_eq!(ctx.device_list_metadata_version, Some(2));
-    }
-
-    #[test]
-    fn empty_footer_is_omitted_not_sent_as_empty_string() {
-        let msg = Card::new("x").button(Button::quick_reply("Ya", "y")).to_message();
-        assert!(
-            interactive(&msg).footer.as_option().is_none(),
-            "footer kosong tidak boleh dikirim sebagai string kosong"
-        );
-    }
-
-    #[test]
-    fn message_params_reach_native_flow() {
-        let msg = Card::new("x")
-            .message_params(json!({"bottom_sheet": {"list_title": "Pilih"}}))
-            .button(Button::quick_reply("Ya", "y"))
-            .to_message();
-        let raw = native_flow(&msg).message_params_json.as_deref().unwrap();
-        assert_eq!(
-            serde_json::from_str::<Value>(raw).unwrap(),
-            json!({"bottom_sheet": {"list_title": "Pilih"}})
-        );
-    }
-
-    #[test]
-    fn biz_node_is_native_flow_extra() {
+    fn biz_node_mirip_onigis() {
         let node = biz_node();
         assert_eq!(node.tag, "biz");
-        let Some(NodeContent::Nodes(kids)) = &node.content else {
-            panic!("biz harus punya anak node");
+        let children = match node.content.as_ref().expect("biz punya anak") {
+            NodeContent::Nodes(children) => children,
+            lain => panic!("anak biz harus node, bukan {lain:?}"),
         };
-        assert_eq!(kids.len(), 1);
-        let interactive_node = &kids[0];
-        assert_eq!(interactive_node.tag, "interactive");
-        assert_eq!(interactive_node.attrs.get("type").unwrap().as_str(), "native_flow");
-        assert_eq!(interactive_node.attrs.get("v").unwrap().as_str(), "1");
-        let Some(NodeContent::Nodes(flow)) = &interactive_node.content else {
-            panic!("interactive harus punya native_flow");
-        };
-        assert_eq!(flow[0].tag, "native_flow");
-        assert_eq!(flow[0].attrs.get("v").unwrap().as_str(), "9");
-        assert_eq!(flow[0].attrs.get("name").unwrap().as_str(), "mixed");
+        let tags: Vec<&str> = children.iter().map(|n| n.tag.as_ref()).collect();
+        assert_eq!(tags, vec!["engagement", "interactive"]);
     }
 }

@@ -4,6 +4,7 @@
 
 pub mod bot;
 pub mod cards;
+pub mod tabel;
 pub mod creds;
 pub mod grup_event;
 pub mod load;
@@ -37,4 +38,7 @@ pub use whatsapp_rust::types::message::MessageSource;
 pub use whatsapp_rust::wacore::proto_helpers::MessageBuilderExt;
 pub use whatsapp_rust::wacore_binary::Node;
 pub use whatsapp_rust::waproto::whatsapp::{Message, MessageKey};
+// Oneof `interactiveMessage` — dipakai consumer (test integrasi) untuk
+// memeriksa tombol native-flow yang benar-benar terkirim.
+pub use whatsapp_rust::waproto::whatsapp::__buffa::oneof::message::interactive_message::InteractiveMessage as ImOneof;
 pub use whatsapp_rust::{Jid, SendOptions};

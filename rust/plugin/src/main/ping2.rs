@@ -1,12 +1,14 @@
 //! `plugins/main/ping2.js` — performa dan status sistem bot real-time.
 //!
-//! `ponytail:` `sendTable` belum punya varian di `Reply`; header, tabel, dan
-//! footer dirangkai sebagai teks dengan isi serta urutan yang sama (pola
-//! `main/totalfitur.rs`).
+//! Balasan memakai tabel AI (`Reply::tabel`) — padanan `sock.sendTable` JS:
+//! judul tabel, baris heading, baris isi, teks sebelum tabel (`headerText`),
+//! dan teks setelah tabel (`footer`), isi serta urutannya sama dengan JS.
+//! `ponytail:` tabel versi 1 (`tableMetadata`), bukan versi 2 —
+//! `unifiedResponse` base64 dan `botMetadata` versi JS v2 belum di-port.
 //! `ponytail:` data sistem dibaca dari `/proc` + `std`; `df` tetap dipanggil
 //! lewat `std::process::Command` karena `statvfs` tidak ada di `std`.
 //! `ponytail:` `Ctx` hanya membawa data user/grup pengirim, bukan seluruh
-//! store; Users/Premium/Groups dihitung dari data itu, bukan total.
+//! store; Users/Premium/Groups dihitung dari data itu, bukan total store.
 //! `ponytail:` `process.memoryUsage()`, `process.version`, dan
 //! `m.messageTimestamp` tidak ada; Heap = VmRSS/VmSize, Node = `N/A`,
 //! WA Roundtrip = 1 ms (cabang `Date.now()` di JS).
@@ -237,7 +239,11 @@ fn hitung_db(ctx: &Ctx) -> (usize, usize, usize) {
     (users, premium, groups)
 }
 
-fn teks(ctx: &Ctx, mulai: Instant) -> String {
+/// Susun tabel AI — padanan `sock.sendTable` JS (`ping2.js:129-139`).
+///
+/// Urutan baris sama persis dengan `tableData` JS; tiap `.with_table_row`
+/// menambah satu baris.
+fn reply(ctx: &Ctx, mulai: Instant) -> Reply {
     let cfg = ctx.config();
     let nama_bot = if cfg.bot.name.is_empty() {
         "Foto-AI"
@@ -252,50 +258,57 @@ fn teks(ctx: &Ctx, mulai: Instant) -> String {
     let (users, premium, groups) = hitung_db(ctx);
     let total_exec = (mulai.elapsed().as_secs_f64() * 1000.0).round() as u64;
 
-    let mut out = format!(
-        "{nama_bot} *STATUS*\n\n\
-         - 🎄 Dibawah ini adalah statistik bot kita\n\n\
-         ⚡ System Performance\n\
-         Metric | Value\n"
-    );
-    out.push_str("WA Roundtrip | 1 ms\n");
-    out.push_str(&format!("Kecepatan Respon bot mu | {total_exec} ms\n"));
-    out.push_str("Status | Online\n");
-    out.push_str(&format!("Hostname | {}\n", baca_hostname()));
-    out.push_str(&format!("Platform | {}\n", platform()));
-    out.push_str("Node | N/A\n");
-    out.push_str(&format!("CPU | {}\n", potong_model(&model)));
-    out.push_str(&format!("Cores | {cores}\n"));
-    out.push_str(&format!(
-        "CPU Load | {}%\n",
-        cpu_persen(baca_load(), cores)
-    ));
-    out.push_str(&format!(
-        "RAM | {} / {}\n",
-        fmt_size(total_mem.saturating_sub(bebas_mem)),
-        fmt_size(total_mem)
-    ));
-    out.push_str(&format!(
-        "Heap | {} / {}\n",
-        fmt_size(heap_dipakai),
-        fmt_size(heap_total)
-    ));
-    out.push_str(&format!(
-        "Disk | {} / {}\n",
-        fmt_size(disk_dipakai),
-        fmt_size(disk_total)
-    ));
-    out.push_str(&format!("Network | {}\n", antarmuka_jaringan()));
-    out.push_str(&format!("Users | {users}\n"));
-    out.push_str(&format!("Premium | {premium}\n"));
-    out.push_str(&format!("Groups | {groups}\n"));
-    out.push_str(&format!(
-        "Uptime Bot | {}\n",
-        fmt_up(ctx.uptime_secs as f64)
-    ));
-    out.push_str(&format!("Uptime Server | {}\n", fmt_up(baca_uptime_server())));
-    out.push_str("\n🍃 Realtime Monitoring");
-    out
+    let mut t = Reply::tabel("⚡ System Performance")
+        .with_table_header(["Metric", "Value"])
+        .with_table_header_text(format!(
+            "{nama_bot} *STATUS*\n\n- 🎄 Dibawah ini adalah statistik bot kita"
+        ));
+
+    t = t.with_table_row(["WA Roundtrip", "1 ms"]);
+    t = t.with_table_row([
+        "Kecepatan Respon bot mu".to_string(),
+        format!("{total_exec} ms"),
+    ]);
+    t = t.with_table_row(["Status", "Online"]);
+    t = t.with_table_row(["Hostname".to_string(), baca_hostname()]);
+    t = t.with_table_row(["Platform".to_string(), platform()]);
+    t = t.with_table_row(["Node".to_string(), "N/A".to_string()]);
+    t = t.with_table_row(["CPU".to_string(), potong_model(&model)]);
+    t = t.with_table_row(["Cores".to_string(), cores.to_string()]);
+    t = t.with_table_row([
+        "CPU Load".to_string(),
+        format!("{}%", cpu_persen(baca_load(), cores)),
+    ]);
+    t = t.with_table_row([
+        "RAM".to_string(),
+        format!(
+            "{} / {}",
+            fmt_size(total_mem.saturating_sub(bebas_mem)),
+            fmt_size(total_mem)
+        ),
+    ]);
+    t = t.with_table_row([
+        "Heap".to_string(),
+        format!("{} / {}", fmt_size(heap_dipakai), fmt_size(heap_total)),
+    ]);
+    t = t.with_table_row([
+        "Disk".to_string(),
+        format!("{} / {}", fmt_size(disk_dipakai), fmt_size(disk_total)),
+    ]);
+    t = t.with_table_row(["Network".to_string(), antarmuka_jaringan()]);
+    t = t.with_table_row(["Users".to_string(), users.to_string()]);
+    t = t.with_table_row(["Premium".to_string(), premium.to_string()]);
+    t = t.with_table_row(["Groups".to_string(), groups.to_string()]);
+    t = t.with_table_row([
+        "Uptime Bot".to_string(),
+        fmt_up(ctx.uptime_secs as f64),
+    ]);
+    t = t.with_table_row([
+        "Uptime Server".to_string(),
+        fmt_up(baca_uptime_server()),
+    ]);
+
+    t.with_table_footer("🍃 Realtime Monitoring")
 }
 
 #[plugin(
@@ -319,12 +332,81 @@ pub fn ping2(ctx: Ctx) -> Reply {
     let mulai = Instant::now();
     // `ponytail:` reaksi pembuka `🕕` hilang; `Reply` hanya membawa satu
     // reaksi, jadi yang dikirim reaksi akhir `✅` seperti JS.
-    Reply::text(teks(&ctx, mulai)).with_reaction("✅")
+    reply(&ctx, mulai).with_reaction("✅")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Ambil tabel di balik reaksi/mutasi — `with_reaction` membungkus balas
+    /// jadi `Mutate` + `Reaction`, jadi keduanya harus ditembus dulu.
+    fn tabel_dari(reply: &Reply) -> &oktz_plugin_api::Tabel {
+        match reply.without_mutations().tanpa_reaksi() {
+            Reply::Tabel { tabel } => tabel,
+            other => panic!("harus Tabel, dapat {other:?}"),
+        }
+    }
+
+    #[test]
+    fn balasan_membentuk_tabel_dengan_isi_dan_urutan_js() {
+        let r = ping2(Ctx::default());
+        assert!(
+            matches!(r.without_mutations().tanpa_reaksi(), Reply::Tabel { .. }),
+            "harus Reply::Tabel"
+        );
+        let t = tabel_dari(&r);
+
+        assert_eq!(t.judul, "⚡ System Performance");
+        assert_eq!(t.header, vec!["Metric", "Value"]);
+        // `tableData` JS punya 18 baris, urutan sama.
+        assert_eq!(t.baris.len(), 18);
+        assert_eq!(t.baris[0], vec!["WA Roundtrip", "1 ms"]);
+        assert_eq!(t.baris[1][0], "Kecepatan Respon bot mu");
+        assert_eq!(t.baris[2], vec!["Status", "Online"]);
+        assert_eq!(t.baris[17][0], "Uptime Server");
+
+        let kunci: Vec<&str> = t.baris.iter().map(|b| b[0].as_str()).collect();
+        assert_eq!(
+            kunci,
+            vec![
+                "WA Roundtrip",
+                "Kecepatan Respon bot mu",
+                "Status",
+                "Hostname",
+                "Platform",
+                "Node",
+                "CPU",
+                "Cores",
+                "CPU Load",
+                "RAM",
+                "Heap",
+                "Disk",
+                "Network",
+                "Users",
+                "Premium",
+                "Groups",
+                "Uptime Bot",
+                "Uptime Server",
+            ]
+        );
+
+        assert_eq!(t.footer.as_deref(), Some("🍃 Realtime Monitoring"));
+        let header_teks = t.header_teks.as_deref().unwrap_or_default();
+        assert!(
+            header_teks.ends_with("*STATUS*\n\n- 🎄 Dibawah ini adalah statistik bot kita"),
+            "{header_teks}"
+        );
+    }
+
+    #[test]
+    fn reaksi_akhir_tetap_ada() {
+        let r = ping2(Ctx::default());
+        assert!(matches!(
+            r.without_mutations(),
+            Reply::Reaction { emoji, .. } if emoji == "✅"
+        ));
+    }
 
     #[test]
     fn fmt_size_satu_desimal_seperti_js() {

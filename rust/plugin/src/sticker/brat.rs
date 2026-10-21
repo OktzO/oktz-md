@@ -7,9 +7,10 @@
 //!
 //! `ponytail:` yang belum bisa, beserta alasannya:
 //! - Menu `brat`/`bratmenu` (`brat.js:65-119`) dikirim sebagai kartu
-//!   interaktif dengan `single_select` + footer persis JS; yang belum bisa
+//!   native-flow dengan `single_select` + footer persis JS; yang belum bisa
 //!   hanya header gambarnya (`getAssetBuffer("foto")` +
-//!   `prepareWAMessageMedia` — tidak ada uploader di `Reply`).
+//!   `prepareWAMessageMedia`) — kartu sudah bisa membawa header + media,
+//!   tapi port ini belum membaca aset `foto`.
 //! - Fallback `generateBrat` (canvas, `src/lib/brat.js:384-445`): tidak ada
 //!   renderer teks di Rust. Saat API gagal atau gambarnya blank, alurnya
 //!   berhenti di `error_template` + `☢` (`brat.js:154-157`), bukan render
@@ -19,8 +20,7 @@
 //! `NOTE (mod.rs):` tambahkan `pub mod brat;` ke `sticker/mod.rs` secara
 //! manual kalau berkas ini didaftarkan (mod.rs bukan milik tugas ini).
 
-use oktz_plugin_api::registry::InteractiveButton;
-use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
+use oktz_plugin_api::{Ctx, MediaSource, Reply, Tombol, plugin};
 
 /// Caption menu (`brat.js:66-67`).
 pub(crate) const CAPTION_MENU: &str =
@@ -63,16 +63,19 @@ fn menu_brat(prefix: &str, text: &str) -> Reply {
 
     Reply::interactive(CAPTION_MENU)
         .with_footer("Pilih variant brat favorit kamu")
-        .with_button(InteractiveButton::new(
-            "single_select",
-            serde_json::json!({
-                "title": "🌾 Pilih Variant Brat",
-                "sections": [{
-                    "title": "Variant Brat",
-                    "rows": rows,
-                }],
-            }),
-        ))
+        .with_button(
+            Tombol::dari_nama(
+                "single_select",
+                serde_json::json!({
+                    "title": "🌾 Pilih Variant Brat",
+                    "sections": [{
+                        "title": "Variant Brat",
+                        "rows": rows,
+                    }],
+                }),
+            )
+            .expect("nama tombol WA dikenal"),
+        )
 }
 
 /// Kartu pakai saat teks kosong (`brat.js:130-134`).
@@ -313,21 +316,21 @@ mod tests {
         for cmd in ["brat", "bratmenu"] {
             let http = Stub::offline();
             let r = run(http.clone(), cmd, "Hai semua");
-            let Reply::Interactive {
-                body,
-                footer,
-                buttons,
-            } = r.without_mutations()
-            else {
+            let Reply::Interactive { kartu } = r.without_mutations() else {
                 panic!("command {cmd}: harus kartu interaktif");
             };
-            assert_eq!(body, CAPTION_MENU, "command {cmd}");
-            assert_eq!(footer.as_deref(), Some("Pilih variant brat favorit kamu"));
-            assert_eq!(buttons.len(), 1);
-            assert_eq!(buttons[0].name, "single_select");
-            assert_eq!(buttons[0].params["title"], "🌾 Pilih Variant Brat");
-            assert_eq!(buttons[0].params["sections"][0]["title"], "Variant Brat");
-            let rows = buttons[0].params["sections"][0]["rows"].as_array().unwrap();
+            assert_eq!(kartu.body, CAPTION_MENU, "command {cmd}");
+            assert_eq!(
+                kartu.footer.as_deref(),
+                Some("Pilih variant brat favorit kamu")
+            );
+            assert_eq!(kartu.buttons.len(), 1);
+            assert_eq!(kartu.buttons[0].aksi.as_str(), "single_select");
+            assert_eq!(kartu.buttons[0].params["title"], "🌾 Pilih Variant Brat");
+            assert_eq!(kartu.buttons[0].params["sections"][0]["title"], "Variant Brat");
+            let rows = kartu.buttons[0].params["sections"][0]["rows"]
+                .as_array()
+                .unwrap();
             assert_eq!(rows.len(), 6);
             assert_eq!(rows[0]["title"], "Brat Default");
             assert_eq!(rows[0]["id"], ".bratimg Hai semua");

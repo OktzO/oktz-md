@@ -211,13 +211,13 @@ Laporan agent B13-B15, diacukan ke file JS masing-masing.
 
 | Plugin | Kapabilitas yang hilang |
 |---|---|
-| `main/menu` | `sock.relayMessage` (7 titik, case 7 mengirim **dua** pesan berurutan), `sock.waUploadToServer`, `prepareWAMessageMedia`/`generateWAMessageFromContent`/`wrapInteractive`, `getAssetBuffer`, `fs.readFileSync`, `sharp`, `getCasesByCategory`, `config.saluran`. Default `menuVariant = 2` = kartu interaktif, bukan teks |
-| `main/menucat` | `sock.relayMessage` (5 titik), `prepareWAMessageMedia` + `wrapInteractive`, `getAssetBuffer`, `fs.readFileSync(config.assets["mp4"])`, `getCasesByCategory`. Default `menucatVariant = 2` |
+| `main/menu` | Varian 2 (kartu native-flow + header gambar) sudah ada. Sisa: varian lain (3, 4, 6, 7, 8) yang butuh `sharp`/cuaca/`config.saluran`, `getCasesByCategory`, dan case 7 yang mengirim **dua** pesan berurutan |
+| `main/menucat` | Varian 2 (kartu native-flow + header gambar) sudah ada. Sisa: varian 5/6 (`sharp`, audio, cuaca), `fs.readFileSync(config.assets["mp4"])`, `getCasesByCategory` |
 | `main/ping` | `@napi-rs/canvas` `createCanvas` + seluruh `ctx.createLinearGradient/arc/fillText/measureText`, `sock.sendMessage`, modul `os` |
-| `main/ping2` | `sock.sendTable` — butuh varian `Reply` tabel yang belum ada; `execSync` (`wmic`/`df -k`), modul `os`, akses `getDatabase().data.users/groups` mentah |
-| `main/sc` | `sock.relayMessage` + `wrapInteractive` dengan `nativeFlowMessage.buttons` `cta_url`. `Reply::Interactive` merender `Card::new(body)` tanpa header/footer/tombol |
-| `main/stats` | `sock.sendTableV2` — varian `Reply` tabel belum ada |
-| `main/totalfitur` | `sock.sendTable` — sama seperti `stats` |
+| `main/ping2` | Tabel AI (v1) sudah ada. Sisa: `execSync` (`wmic`/`df -k`), modul `os`, akses `getDatabase().data.users/groups` mentah |
+| `main/sc` | Kartu `cta_url` + footer + kutip pemicu sudah ada (`Reply::Interactive` -> `Kartu`) |
+| `main/stats` | Tabel AI (v1) sudah ada; versi JS v2 (`unifiedResponse`, `botMetadata`) belum |
+| `main/totalfitur` | Tabel AI (v1) sudah ada |
 | `main/stopjadibot` | `src/lib/jadibot-manager.js`: `isJadibotActive`/`getJadibotStatus` membaca `Map` in-process, `stopJadibot` menutup socket + `clearInterval` |
 | `main/system` | modul `os` (`totalmem/freemem/cpus/hostname/platform/arch/uptime`) dan `child_process.exec` untuk `df -h /` + `wmic` |
 | `owner/addowner` | `fs`/`path` menulis balik `config.js` (`savePanelConfig`), `config.pterodactyl.*`, `src/lib/lid.js`, `src/lib/jadibot-database.js`, `getGroupMode` |
@@ -236,9 +236,9 @@ Laporan agent B13-B15, diacukan ke file JS masing-masing.
 | `owner/disableplugin`, `owner/enableplugin` | `fs.readdirSync/readFileSync/writeFileSync` + `await import()` dinamis; tujuannya menulis ulang `isEnabled` di sumber plugin |
 | `owner/eval`, `owner/exec` | `eval("(async () => { ... })()")`. `eval` juga memakai `customTrigger: body.startsWith('=>')` + `noPrefix` — `PluginMeta::custom_trigger` ada tapi macro selalu `None` dan router belum mendukung trigger tanpa prefix |
 
-Pola yang berulang dan murah dibuka: **`sock.sendTable`/`sendTableV2`** (3 file)
-dan **`Reply::Interactive` yang bisa membawa header/footer/buttons** (1 file).
-Menutup salah satunya langsung membuka `stats`, `ping2`, `totalfitur`, `sc`.
+Pola ini sudah dibuka: **`sock.sendTable`** (tabel AI, `Reply::Tabel`) dan
+**`Reply::Interactive` yang membawa header/footer/tombol/params**
+(`Reply::Kartu`). Lihat `docs/rust-rewrite/INTERACTIVE.md`.
 
 ## 17c. Terblokir dari batch B12-B15 (gelombang ketiga)
 
@@ -578,18 +578,14 @@ lalu `sock.relayMessage`. `AIRich` ada di `src/lib/builder.js:993`.
 
 Yang hilang di Rust:
 
-1. `Reply` (`rust/lib/oktz-plugin-api/registry.rs`) hanya punya
-   teks, kutipan, media, reaksi, dan mutasi — belum ada varian tabel atau
-   pesan interaktif.
-2. `oktz-wa` belum mengekspos pengiriman pesan proto mentah
-   (`relayMessage`) untuk tabel/interactive message; pipeline masih
-   menutup jalur itu.
+1. `Reply` punya varian `Interactive` (kartu native-flow) dan `Tabel`
+   (tabel AI) sejak 2026-10-21 — lihat `docs/rust-rewrite/INTERACTIVE.md`.
+2. `oktz-wa` merakit proto-nya sendiri (`cards.rs`, `tabel.rs`); jalur
+   `relayMessage` mentah belum ada, tapi tidak dibutuhkan untuk kartu dan
+   tabel.
 
-Jalan naik: tambah `Reply::Tabel { judul, header, baris }`, port
-`generateTableContent*` ke pembangun proto di `oktz-wa`, lalu kirim lewat
-jalur `relayMessage` yang setara. Untuk `AIRich`, port `src/lib/builder.js`
-bagian `AIRich` (kira-kira 900 baris) ke modul Rust dan pakai renderer yang
-sama. Setelah keduanya ada, kelima plugin di atas bisa di-port.
+Sisa pekerjaan: `AIRich` versi JS v2 (`unifiedResponse` base64 + `botMetadata`
++ `verificationMetadata`) dan `carouselMessage`/`templateMessage`.
 
 ## 22. `random/anime` (`plugins/random/anime.js`)
 
@@ -857,8 +853,8 @@ Catatan lintas-berkas yang perlu dibaca kalau kapabilitas ditambah:
   `nama_kontak` (`sock.getName`) tetap tidak bisa karena klien tidak menyimpan
   toko kontak.
 - `ctx.berkas` masih `BerkasPalsu` (memori), jadi efek tulis berkas hilang.
-- `Reply::Interactive` cuma `body`; `cards.rs` punya tombol penuh tapi belum
-  dijembatani.
+- `Reply::Interactive` sekarang membawa kartu penuh (body, footer, header +
+  media, tombol, `messageParamsJson`, mention); lihat `INTERACTIVE.md`.
 - `Ctx` tidak punya `is_premium`, `pushName`, `messageTimestamp`.
 
 ## 29. Config file, launcher Node, dan sock produksi

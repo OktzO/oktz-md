@@ -1,7 +1,6 @@
 //! `plugins/main/sc.js` — link script bot (kartu tombol `cta_url`).
 
-use oktz_plugin_api::registry::InteractiveButton;
-use oktz_plugin_api::{Ctx, Reply, plugin};
+use oktz_plugin_api::{Ctx, Reply, Tombol, plugin};
 
 /// `sc.js:24` — satu-satunya URL.
 pub(crate) const REPO_URL: &str = "https://github.com/OktzO/oktz-md";
@@ -41,14 +40,8 @@ pub fn sc(ctx: Ctx) -> Reply {
     let bot = &ctx.config().bot;
     Reply::interactive(body(&ctx.push_name, bot))
         .with_footer(format!("{} — Oktz-MD", bot.name))
-        .with_button(InteractiveButton::new(
-            "cta_url",
-            serde_json::json!({
-                "display_text": "🥐 Kunjungi GitHub OktzO",
-                "url": REPO_URL,
-                "merchant_url": REPO_URL,
-            }),
-        ))
+        .with_button(Tombol::buka_url("🥐 Kunjungi GitHub OktzO", REPO_URL))
+        .with_quote()
 }
 
 #[cfg(test)]
@@ -90,20 +83,16 @@ mod tests {
         };
 
         let r = sc(ctx);
-        let Reply::Interactive {
-            body: isi,
-            footer,
-            buttons,
-        } = r.without_mutations()
-        else {
+        let Reply::Interactive { kartu } = r.without_mutations() else {
             panic!("harus kartu interaktif");
         };
-        assert!(isi.starts_with("🌾 Halo kak *Zann*"));
-        assert_eq!(footer.as_deref(), Some("Oktz Bot — Oktz-MD"));
-        assert_eq!(buttons[0].name, "cta_url");
-        assert_eq!(buttons[0].params["display_text"], "🥐 Kunjungi GitHub OktzO");
-        assert_eq!(buttons[0].params["url"], REPO_URL);
-        assert_eq!(buttons[0].params["merchant_url"], REPO_URL);
+        assert!(kartu.body.starts_with("🌾 Halo kak *Zann*"));
+        assert_eq!(kartu.footer.as_deref(), Some("Oktz Bot — Oktz-MD"));
+        assert_eq!(kartu.buttons[0].aksi.as_str(), "cta_url");
+        assert_eq!(kartu.buttons[0].params["display_text"], "🥐 Kunjungi GitHub OktzO");
+        assert_eq!(kartu.buttons[0].params["url"], REPO_URL);
+        assert_eq!(kartu.buttons[0].params["merchant_url"], REPO_URL);
+        assert!(kartu.quote, "kartu sc mengutip pemicu seperti JS");
     }
 
     #[test]

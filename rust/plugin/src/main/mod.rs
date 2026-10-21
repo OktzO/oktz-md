@@ -24,3 +24,4 @@ pub mod totalfitur;
 
 // Ditambahkan scripts/pasang-modul.mjs.
 pub mod sc;
+pub mod allmenu;

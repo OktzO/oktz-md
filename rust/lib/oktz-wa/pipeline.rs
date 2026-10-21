@@ -67,7 +67,7 @@ use whatsapp_rust::waproto::whatsapp::__buffa::oneof::message::interactive_respo
 use whatsapp_rust::wacore::download::MediaType;
 use whatsapp_rust::wacore_binary::Node;
 
-use crate::cards::{Button, ButtonAction, Card, biz_node};
+use crate::cards::biz_node;
 use crate::pipeline_gate::{self, GateState};
 
 // =============================================================================
@@ -990,6 +990,28 @@ pub trait MessageSender: Send + Sync {
         })
     }
 
+    /// Kirim kartu native-flow (`interactiveMessage` + node `biz`).
+    ///
+    /// Default-nya merakit kartu tanpa media header lalu mengirimnya — cukup
+    /// untuk pengirim stub (test) dan untuk kartu tanpa gambar. Pengirim
+    /// sungguhan meng-override supaya media header ter-upload dulu.
+    fn send_card(
+        &self,
+        to: &str,
+        kartu: oktz_plugin_api::kartu::Kartu,
+        header_media: Option<PendingMedia>,
+        quote: Option<QuoteSource>,
+        extra_nodes: Vec<Node>,
+    ) -> SendBox<'_> {
+        let to = to.to_string();
+        Box::pin(async move {
+            let _ = header_media;
+            let ci = kartu_context_info(&kartu, quote.as_ref());
+            let message = crate::cards::kartu_to_message(&kartu, None, ci);
+            self.send(&to, message, extra_nodes).await
+        })
+    }
+
     /// Hapus pesan untuk semua orang di chat (`sock.sendMessage(chat, {delete:
     /// m.key})`, dipakai rantai group-protection di
     /// `handler.js:811, 823, 848`).
@@ -1080,6 +1102,60 @@ impl MessageSender for ClientSender {
             let message = build_media_message(media.kind, upload, &media);
             client
                 .send_message_with_options(jid, message, SendOptions::default())
+                .await
+                .map(|_| ())
+                .map_err(|e| e.to_string())
+        })
+    }
+
+    /// Kartu native-flow dengan header gambar.
+    ///
+    /// Urutannya meniru JS (`menu.js:594`): upload gambar header dulu
+    /// (`prepareWAMessageMedia`), lalu rakit `interactiveMessage`-nya, lalu
+    /// kirim bersama node `biz`.
+    fn send_card(
+        &self,
+        to: &str,
+        kartu: oktz_plugin_api::kartu::Kartu,
+        header_media: Option<PendingMedia>,
+        quote: Option<QuoteSource>,
+        extra_nodes: Vec<Node>,
+    ) -> SendBox<'_> {
+        let client = self.client.clone();
+        let to = to.to_string();
+        Box::pin(async move {
+            let jid: Jid = to
+                .parse()
+                .map_err(|e| format!("JID tidak valid {to}: {e}"))?;
+            let header_image = match header_media {
+                Some(media) => {
+                    let data = load_media(&media.source).await.map_err(|e| e.to_string())?;
+                    let upload = client
+                        .upload(data, MediaType::Image, UploadOptions::default())
+                        .await
+                        .map_err(|e| format!("upload header kartu gagal: {e}"))?;
+                    let msg = image_message(
+                        upload,
+                        ImageOptions {
+                            caption: None,
+                            mimetype: media.source.mimetype().map(str::to_string),
+                            jpeg_thumbnail: None,
+                            context_info: None,
+                        },
+                    );
+                    msg.image_message.as_option().cloned()
+                }
+                None => None,
+            };
+            let ci = kartu_context_info(&kartu, quote.as_ref());
+            let message = crate::cards::kartu_to_message(&kartu, header_image, ci);
+            let opts = if extra_nodes.is_empty() {
+                SendOptions::default()
+            } else {
+                SendOptions::default().with_extra_stanza_nodes(extra_nodes)
+            };
+            client
+                .send_message_with_options(jid, message, opts)
                 .await
                 .map(|_| ())
                 .map_err(|e| e.to_string())
@@ -1279,6 +1355,14 @@ pub struct Rendered {
     /// Media yang belum di-upload. `Some` = kirim lewat
     /// [`MessageSender::send_media`], bukan [`MessageSender::send`].
     pub media: Option<PendingMedia>,
+    /// Kartu native-flow yang belum dirakit jadi proto. `Some` = kirim lewat
+    /// [`MessageSender::send_card`].
+    pub card: Option<oktz_plugin_api::kartu::Kartu>,
+    /// Media header kartu yang belum di-upload. Some = kartu harus lewat
+    /// [`MessageSender::send_card`] supaya header gambarnya terpasang.
+    pub card_header_media: Option<PendingMedia>,
+    /// Pesan yang perlu di-quote di dalam kartu (JS `quoted: m`).
+    pub card_quote: Option<QuoteSource>,
 }
 
 impl Rendered {
@@ -1287,13 +1371,16 @@ impl Rendered {
             message,
             extra_nodes,
             media: None,
+            card: None,
+            card_header_media: None,
+            card_quote: None,
         }
     }
 
     /// `false` kalau yang perlu dikirim media. Kalau `false`, `message`
     /// guaranteed terisi.
     pub fn needs_media(&self) -> bool {
-        self.media.is_some()
+        self.media.is_some() || self.card_header_media.is_some()
     }
 }
 
@@ -1468,8 +1555,7 @@ fn document_options(
     }
 }
 
-pub(crate) fn context_info(mentions: &[String], quote: Option<&QuoteSource>) -> wa::ContextInfo {
-    wa::ContextInfo {
+pub(crate) fn context_info(mentions: &[String], quote: Option<&QuoteSource>) -> wa::ContextInfo {    wa::ContextInfo {
         mentioned_jid: mentions.to_vec(),
         quoted_message: quote
             .map(|q| MessageField::some(*q.message.clone()))
@@ -1477,6 +1563,43 @@ pub(crate) fn context_info(mentions: &[String], quote: Option<&QuoteSource>) -> 
         stanza_id: quote.map(|q| q.stanza_id.clone()),
         participant: quote.and_then(|q| q.participant.clone()),
         ..Default::default()
+    }
+}
+
+/// `contextInfo` untuk kartu native-flow.
+///
+/// Bentuk JS: `menucat.js:283` (mention + `isForwarded` + `forwardingScore` +
+/// `participant` + `quotedMessage`), `menu.js:598` (mention saja). Kartu
+/// hanya mengutip pemicu kalau plugin minta (`Kartu::with_quote`), dan
+/// `quote_teks` menimpa quote pemicu dengan teks tetap.
+fn kartu_context_info(
+    kartu: &oktz_plugin_api::kartu::Kartu,
+    quote: Option<&QuoteSource>,
+) -> Option<wa::ContextInfo> {
+    let trigger = if kartu.quote { quote } else { None };
+    let mut ci = context_info(&kartu.mentions, trigger);
+    if let Some(teks) = &kartu.quote_teks {
+        ci.quoted_message = MessageField::some(wa::Message::text(teks));
+        ci.stanza_id = None;
+        ci.participant = None;
+    }
+    if kartu.forwarded {
+        ci.is_forwarded = Some(true);
+    }
+    if let Some(skor) = kartu.forwarding_score {
+        ci.forwarding_score = Some(skor);
+    }
+    if let Some(participant) = &kartu.participant {
+        ci.participant = Some(participant.clone());
+    }
+    if ci.mentioned_jid.is_empty()
+        && ci.quoted_message.as_option().is_none()
+        && ci.is_forwarded.is_none()
+        && ci.participant.is_none()
+    {
+        None
+    } else {
+        Some(ci)
     }
 }
 
@@ -1572,6 +1695,9 @@ pub fn render_reply(
             message: wa::Message::default(),
             extra_nodes: Vec::new(),
             media: Some(pending(MediaKind::Sticker, "Sticker", src, "", &[])?),
+            card: None,
+            card_header_media: None,
+            card_quote: None,
         })),
         Reply::Image {
             media: src,
@@ -1581,6 +1707,9 @@ pub fn render_reply(
             message: wa::Message::default(),
             extra_nodes: Vec::new(),
             media: Some(pending(MediaKind::Image, "Image", src, caption, mentions)?),
+            card: None,
+            card_header_media: None,
+            card_quote: None,
         })),
         Reply::Video {
             media: src,
@@ -1594,6 +1723,9 @@ pub fn render_reply(
                 message: wa::Message::default(),
                 extra_nodes: Vec::new(),
                 media: Some(media),
+                card: None,
+                card_header_media: None,
+                card_quote: None,
             }))
         }
         Reply::Audio { media: src, ptt } => {
@@ -1603,6 +1735,9 @@ pub fn render_reply(
                 message: wa::Message::default(),
                 extra_nodes: Vec::new(),
                 media: Some(media),
+                card: None,
+                card_header_media: None,
+                card_quote: None,
             }))
         }
         Reply::Document {
@@ -1617,6 +1752,9 @@ pub fn render_reply(
                 message: wa::Message::default(),
                 extra_nodes: Vec::new(),
                 media: Some(media),
+                card: None,
+                card_header_media: None,
+                card_quote: None,
             }))
         }
         // `quotedMsg = options.quoted !== false ? msg : undefined` — jadi
@@ -1637,21 +1775,43 @@ pub fn render_reply(
             text_message(text, &[], quote),
             Vec::new(),
         ))),
-        Reply::Interactive { body, footer, buttons } => {
-            let mut card = Card::new(body);
-            if let Some(f) = footer {
-                card = card.footer(f);
-            }
-            for b in buttons {
-                let action = ButtonAction::from_name(&b.name).ok_or_else(|| {
-                    PipelineError::Unsupported(format!(
-                        "tombol native-flow `{}` tidak dikenal WA",
-                        b.name
-                    ))
-                })?;
-                card = card.button(Button::new(action, b.params.clone()));
-            }
-            Ok(Some(Rendered::wire(card.to_message(), vec![biz_node()])))
+        Reply::Interactive { kartu } => {
+            // Header kartu boleh punya gambar, dan gambarnya harus di-upload
+            // lebih dulu (JS `prepareWAMessageMedia`). Jadi kartu tidak
+            // dirakit di sini: `send_card` yang meng-upload lalu menyusun
+            // proto-nya, persis urutan JS.
+            let header_media = kartu
+                .header
+                .as_ref()
+                .and_then(|h| h.media.clone())
+                .map(|source| PendingMedia {
+                    kind: MediaKind::Image,
+                    source,
+                    caption: String::new(),
+                    mentions: Vec::new(),
+                    quote: None,
+                    gif_playback: false,
+                    ptt: false,
+                    file_name: None,
+                });
+            Ok(Some(Rendered {
+                message: wa::Message::default(),
+                extra_nodes: vec![biz_node()],
+                media: None,
+                card: Some((**kartu).clone()),
+                card_header_media: header_media,
+                card_quote: if kartu.quote { quote.cloned() } else { None },
+            }))
+        }
+        Reply::Tabel { tabel } => {
+            // `sendTable` JS: `relayMessage` tanpa node `biz`, dan
+            // `contextInfo` menandai pesan ter-forward (asal META_AI) lalu
+            // mengutip pemicu.
+            let ci = crate::tabel::tabel_context_info(&[], quote);
+            Ok(Some(Rendered::wire(
+                crate::tabel::tabel_to_message(tabel, Some(ci)),
+                Vec::new(),
+            )))
         }
         // Reaksi bukan message; dikirim lewat `send_reaction`, bukan render.
         Reply::Reaction { .. } => Err(PipelineError::Unsupported(
@@ -2710,6 +2870,38 @@ impl Pipeline {
     async fn deliver(&self, chat: &str, rendered: Rendered) -> Result<(), PipelineError> {
         // `Rendered` untuk media sengaja punya `message` kosong, jadi TIDAK
         // mungkin terkirim apa adanya — harus lewat `send_media`.
+        // Kartu ikut pola yang sama: proto-nya baru ada setelah media header
+        // di-upload.
+        if let Some(kartu) = rendered.card {
+            let sent = self
+                .sender
+                .send_card(
+                    chat,
+                    kartu.clone(),
+                    rendered.card_header_media,
+                    rendered.card_quote,
+                    rendered.extra_nodes,
+                )
+                .await;
+            if let Err(e) = sent {
+                // JS `menu.js:1379` — kalau kartu gagal, tetap balas teks
+                // cadangan supaya user tidak kehilangan menu.
+                match kartu.fallback_teks.clone() {
+                    Some(teks) => {
+                        tracing::warn!(error = %e, "kartu gagal dikirim, kirim teks cadangan");
+                        let msg = text_message(&teks, &[], None);
+                        self.sender.send(chat, msg, Vec::new()).await.map_err(|e2| {
+                            PipelineError::Other(format!("gagal kirim cadangan: {e2}"))
+                        })?;
+                        return Ok(());
+                    }
+                    None => {
+                        return Err(PipelineError::Other(format!("gagal kirim: {e}")));
+                    }
+                }
+            }
+            return Ok(());
+        }
         let sent = match rendered.media {
             Some(pending) => self.sender.send_media(chat, pending).await,
             None => self
@@ -3622,7 +3814,7 @@ impl EventHandler for PipelineHandler {
 mod tests {
     use super::*;
     use crate::grup_event::PesertaGrup;
-    use oktz_plugin_api::registry::InteractiveButton;
+    use oktz_plugin_api::Tombol;
     use serde_json::json;
     use whatsapp_rust::{GroupParticipant, ParticipantType};
     use whatsapp_rust::types::message::MessageSource;
@@ -4169,8 +4361,10 @@ fn group_number_and_long_number_are_rejected() {
             .unwrap()
             .unwrap();
         assert_eq!(r.extra_nodes.len(), 1, "node biz wajib untuk native-flow");
-        let inner = r
-            .message
+        let kartu = r.card.as_ref().expect("kartu harus ada");
+        assert_eq!(kartu.body, "pilih");
+        let msg = crate::cards::kartu_to_message(kartu, None, None);
+        let inner = msg
             .view_once_message
             .as_option()
             .and_then(|v| v.message.as_option())
@@ -4184,19 +4378,17 @@ fn group_number_and_long_number_are_rejected() {
     }
 
     #[test]
-    fn interactive_meneruskan_tombol_dari_interactivebuttons_js() {
+    fn interactive_meneruskan_tombol_dari_model() {
         let r = render_reply(
-            &Reply::interactive("hasil").with_button(InteractiveButton::copy(
-                "📋 Copy Hasil Teks",
-                "copy",
-                "hasil",
-            )),
+            &Reply::interactive("hasil")
+                .with_button(Tombol::salin("📋 Copy Hasil Teks", "copy", "hasil")),
             &ReplyTarget::default(),
         )
         .unwrap()
         .unwrap();
-        let inner = r
-            .message
+        let kartu = r.card.as_ref().expect("kartu harus ada");
+        let msg = crate::cards::kartu_to_message(kartu, None, None);
+        let inner = msg
             .view_once_message
             .as_option()
             .and_then(|v| v.message.as_option())
@@ -4212,14 +4404,46 @@ fn group_number_and_long_number_are_rejected() {
             serde_json::from_str(b.button_params_json.as_deref().unwrap()).unwrap();
         assert_eq!(params["copy_code"], "hasil");
         assert_eq!(params["id"], "copy");
+    }
 
-        // Nama aksi di luar daftar WA ditolak, bukan dikirim buta.
-        let err = render_reply(
-            &Reply::interactive("x").with_button(InteractiveButton::new("cta_misterius", serde_json::json!({}))),
-            &ReplyTarget::default(),
-        )
-        .unwrap_err();
-        assert!(matches!(err, PipelineError::Unsupported(_)));
+    #[test]
+    fn header_kartu_dengan_media_menunggu_upload() {
+        let reply = Reply::interactive("pilih").with_header(
+            oktz_plugin_api::kartu::KartuHeader::baru().media(
+                oktz_plugin_api::MediaSource::bytes(vec![1, 2, 3]),
+            ),
+        );
+        let r = render_reply(&reply, &ReplyTarget::default()).unwrap().unwrap();
+        assert!(r.card.is_some(), "kartu harus ada");
+        let pending = r
+            .card_header_media
+            .as_ref()
+            .expect("media header harus nunggu upload");
+        assert_eq!(pending.kind, MediaKind::Image);
+        assert!(r.needs_media(), "kartu dengan header media butuh upload dulu");
+    }
+
+    #[test]
+    fn tabel_dirender_sebagai_bot_forwarded_rich_response() {
+        let reply = Reply::tabel("Judul Tabel")
+            .with_table_header(["A", "B"])
+            .with_table_row(["1", "2"])
+            .with_table_footer("kaki");
+        let r = render_reply(&reply, &ReplyTarget::default()).unwrap().unwrap();
+        assert!(r.extra_nodes.is_empty(), "tabel tidak pakai node biz");
+        let rich = r
+            .message
+            .bot_forwarded_message
+            .as_option()
+            .and_then(|b| b.message.as_option())
+            .and_then(|m| m.rich_response_message.as_option())
+            .expect("richResponseMessage");
+        assert_eq!(rich.submessages.len(), 2, "tabel + footer");
+        let table = rich.submessages[0].table_metadata.as_option().expect("tableMetadata");
+        assert_eq!(table.title.as_deref(), Some("Judul Tabel"));
+        assert_eq!(table.rows.len(), 2);
+        assert_eq!(table.rows[0].is_heading, Some(true));
+        assert_eq!(rich.submessages[1].message_text.as_deref(), Some("kaki"));
     }
 
     #[test]
@@ -4536,6 +4760,7 @@ fn group_number_and_long_number_are_rejected() {
                 mentions: vec![],
             },
             Reply::interactive("b"),
+            Reply::tabel("t").with_table_row(["a", "b"]),
             Reply::image(MediaSource::bytes(vec![1]), "c"),
             Reply::Sticker {
                 media: Some(MediaSource::bytes(vec![1])),
@@ -4548,6 +4773,12 @@ fn group_number_and_long_number_are_rejected() {
             let Some(r) = render_reply(&c, &ReplyTarget::default()).unwrap() else {
                 continue;
             };
+            if r.card.is_some() {
+                // Kartu native-flow dirakit saat kirim (`send_card`), jadi
+                // belum ada pesan wire di tahap ini — sama seperti media.
+                assert!(r.card_header_media.is_none() || r.needs_media());
+                continue;
+            }
             if r.needs_media() {
                 assert_eq!(
                     r.message,

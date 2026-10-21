@@ -1,10 +1,14 @@
 //! `plugins/main/totalfitur.js` — distribusi jumlah plugin per kategori.
 //!
-//! `ponytail:` `sock.sendTable` (`src/lib/socket.js:1300`) mengirim rich message
-//! `botForwardedMessage.richResponseMessage` (`src/lib/rich-messages.js:609`)
-//! yang protonya tidak ada di `wacore-0.7.0`; header, tabel, dan footer
-//! dirangkai sebagai teks dengan isi serta urutan yang sama. Ganti ke
-//! `Reply::Interactive` begitu proto rich message tersedia.
+//! Balasan memakai tabel AI (`Reply::tabel`) — padanan `sock.sendTable` JS
+//! (`totalfitur.js:62-72`): judul tabel, baris heading, baris isi per
+//! kategori, teks sebelum tabel (`headerText`), dan teks setelah tabel
+//! (`footer`), isi serta urutannya sama dengan JS.
+//! `ponytail:` tabel versi 1 (`tableMetadata`), bukan versi 2 —
+//! `unifiedResponse` base64 dan `botMetadata` versi JS v2 belum di-port.
+//! `ponytail:` `Ctx` tidak dipakai di plugin ini; jumlah plugin per kategori
+//! diambil dari registry plugin (`all_plugins()`), sama seperti
+//! `getAllPlugins()` di JS.
 
 use oktz_plugin_api::{Ctx, Reply, all_plugins, plugin};
 
@@ -111,28 +115,26 @@ fn persen(bagian: usize, total: usize) -> String {
     format!("{}.{}", sepuluh / 10, sepuluh % 10)
 }
 
-fn teks() -> String {
+/// Susun tabel AI — padanan `sock.sendTable` JS (`totalfitur.js:62-72`).
+fn reply() -> Reply {
     let (daftar, total, aktif) = rekap();
 
-    let mut out = format!(
-        "Total: {total} | Aktif: {aktif} | Kategori: {}\n\n\
-         Distribusi Fitur\n\n\
-         Kategori | Jumlah | Persen\n",
-        daftar.len()
-    );
+    let mut t = Reply::tabel("Distribusi Fitur")
+        .with_table_header(["Kategori", "Jumlah", "Persen"])
+        .with_table_header_text(format!(
+            "Total: {total} | Aktif: {aktif} | Kategori: {}",
+            daftar.len()
+        ));
 
     for r in &daftar {
-        out.push_str(&format!(
-            "{} {} | {} | {}%\n",
-            ikon(&r.kategori),
-            r.kategori.to_uppercase(),
-            r.total,
-            persen(r.total, total)
-        ));
+        t = t.with_table_row([
+            format!("{} {}", ikon(&r.kategori), r.kategori.to_uppercase()),
+            r.total.to_string(),
+            format!("{}%", persen(r.total, total)),
+        ]);
     }
 
-    out.push_str(&format!("\nTotal {total} fitur tersedia"));
-    out
+    t.with_table_footer(format!("Total {total} fitur tersedia"))
 }
 
 #[plugin(
@@ -153,12 +155,21 @@ fn teks() -> String {
     is_bot_admin = false
 )]
 pub fn totalfitur(_ctx: Ctx) -> Reply {
-    Reply::text(teks()).with_reaction("📊")
+    reply().with_reaction("📊")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Ambil tabel di balik reaksi/mutasi — `with_reaction` membungkus balas
+    /// jadi `Mutate` + `Reaction`, jadi keduanya harus ditembus dulu.
+    fn tabel_dari(reply: &Reply) -> &oktz_plugin_api::Tabel {
+        match reply.without_mutations().tanpa_reaksi() {
+            Reply::Tabel { tabel } => tabel,
+            other => panic!("harus Tabel, dapat {other:?}"),
+        }
+    }
 
     #[test]
     fn meta_sama_dengan_js() {
@@ -189,18 +200,39 @@ mod tests {
     }
 
     #[test]
-    fn keluaran_memuat_total_dan_kategori_main() {
-        let (_, total, aktif) = rekap();
+    fn keluaran_membentuk_tabel_dengan_isi_dan_urutan_js() {
+        let (daftar, total, aktif) = rekap();
         let r = totalfitur(Ctx::default());
-        let t = r.without_mutations().text_body().unwrap();
+        assert!(
+            matches!(r.without_mutations().tanpa_reaksi(), Reply::Tabel { .. }),
+            "harus Reply::Tabel"
+        );
+        let t = tabel_dari(&r);
 
-        assert!(t.contains(&format!(
-            "Total: {total} | Aktif: {aktif} | Kategori: "
-        )));
-        assert!(t.contains("Distribusi Fitur"));
-        assert!(t.contains("Kategori | Jumlah | Persen"));
-        assert!(t.contains("🏠 MAIN"));
-        assert!(t.ends_with(&format!("Total {total} fitur tersedia")));
+        assert_eq!(t.judul, "Distribusi Fitur");
+        assert_eq!(t.header, vec!["Kategori", "Jumlah", "Persen"]);
+
+        let header_teks = format!("Total: {total} | Aktif: {aktif} | Kategori: {}", daftar.len());
+        assert_eq!(t.header_teks.as_deref(), Some(header_teks.as_str()));
+        let footer = format!("Total {total} fitur tersedia");
+        assert_eq!(t.footer.as_deref(), Some(footer.as_str()));
+
+        // Satu baris per kategori, isi: ikon + kategori.upper, jumlah, persen.
+        assert_eq!(t.baris.len(), daftar.len());
+        assert!(t.baris.iter().any(|b| b[0] == "🏠 MAIN"));
+        assert!(
+            t.baris.iter().all(|b| b.len() == 3 && b[2].ends_with('%')),
+            "tiap baris punya 3 sel dan persen di akhir: {:?}",
+            t.baris
+        );
+        // Urutan jumlah menurun (persis seperti `sort` JS).
+        let jumlah: Vec<u32> = t.baris.iter().map(|b| b[1].parse().unwrap()).collect();
+        assert!(jumlah.windows(2).all(|w| w[0] >= w[1]), "{jumlah:?}");
+    }
+
+    #[test]
+    fn reaksi_tetap_ada() {
+        let r = totalfitur(Ctx::default());
         assert!(matches!(
             r.without_mutations(),
             Reply::Reaction { emoji, .. } if emoji == "📊"

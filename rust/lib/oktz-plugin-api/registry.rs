@@ -98,39 +98,6 @@ impl MediaSource {
     }
 }
 
-/// Satu tombol native-flow — `interactiveButtons[]` JS apa adanya.
-///
-/// `name` adalah nama aksi WA (`cta_copy`, `quick_reply`, `single_select`,
-/// `cta_url`, ...) dan `params` objek yang jadi `buttonParamsJson`. Bentuk
-/// params sudah ditentukan WA, jadi plugin yang mengirimkannya mentah —
-/// pipeline hanya memetakan `name`, bukan menafsir isi params.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InteractiveButton {
-    pub name: String,
-    pub params: Value,
-}
-
-impl InteractiveButton {
-    pub fn new(name: impl Into<String>, params: Value) -> Self {
-        Self {
-            name: name.into(),
-            params,
-        }
-    }
-
-    /// `{ name: "cta_copy", buttonParamsJson: JSON.stringify({display_text, id, copy_code}) }`.
-    pub fn copy(display_text: impl Into<String>, id: impl Into<String>, copy_code: impl Into<String>) -> Self {
-        Self::new(
-            "cta_copy",
-            serde_json::json!({
-                "display_text": display_text.into(),
-                "id": id.into(),
-                "copy_code": copy_code.into(),
-            }),
-        )
-    }
-}
-
 /// Satu perubahan state yang diminta plugin.
 ///
 /// Setara salah satu dari pemanggilan tulis di `src/lib/database.js`:
@@ -164,6 +131,8 @@ pub enum Mutation {
 /// `sock.sendMessage`, dan sebagian besar mengirim `text` + `mentions`.
 /// Media ada karena ~22 plugin mengirim image/sticker/document — variant
 /// `Image` dipakai class C (media), `Interactive` untuk card WA.
+// `Eq` bisa: kartu native-flow memakai `kartu::Params`, wrapper JSON yang
+// `Eq` (lihat `kartu.rs`).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum Reply {
     /// Tidak membalas (JS: handler yang hanya efek samping atau `return`).
@@ -237,17 +206,15 @@ pub enum Reply {
         caption: String,
         mentions: Vec<String>,
     },
-    /// Card/button list interaktif (WA native flow).
+    /// Kartu native-flow (WA `interactiveMessage`).
     ///
-    /// `buttons` adalah `interactiveButtons` JS apa adanya: `name` aksi
-    /// (`cta_copy`, `quick_reply`, ...) + objek `buttonParamsJson`. Pipeline
-    /// yang memetakan ke proto; nama tak dikenal ditolak, bukan dibuang.
-    /// `footer` = `footer` JS; `None` berarti footer tidak dikirim.
-    Interactive {
-        body: String,
-        footer: Option<String>,
-        buttons: Vec<InteractiveButton>,
-    },
+    /// Isinya [`crate::kartu::Kartu`]: body, footer, header (judul + media),
+    /// tombol native-flow, `messageParamsJson`, dan mention. Pipeline yang
+    /// memetakan ke proto dan mengirim; plugin cukup menyusun modelnya.
+    Interactive { kartu: Box<crate::kartu::Kartu> },
+    /// Tabel AI (WA `richResponseMessage`) — padanan `sock.sendTable` JS
+    /// (`src/lib/socket.js:1298`).
+    Tabel { tabel: crate::tabel::Tabel },
     /// Reaksi emoji pada pesan yang memicu (JS `m.react`).
     ///
     /// 502 plugin JS memakainya, jadi absen di enum berarti setiap plugin itu
@@ -329,30 +296,146 @@ impl Reply {
         }
     }
 
-    /// Card/button list interaktif tanpa tombol. Tambah tombol lewat
+    /// Kartu native-flow tanpa tombol. Tambah tombol lewat
     /// [`Reply::with_button`] dan footer lewat [`Reply::with_footer`].
     pub fn interactive(body: impl Into<String>) -> Self {
         Self::Interactive {
-            body: body.into(),
-            footer: None,
-            buttons: Vec::new(),
+            kartu: Box::new(crate::kartu::Kartu::baru(body)),
         }
     }
 
     /// `footer` pada kartu interaktif (JS `sendMessage({ footer })`).
     pub fn with_footer(mut self, footer: impl Into<String>) -> Self {
-        if let Self::Interactive { footer: f, .. } = &mut self {
-            *f = Some(footer.into());
+        if let Self::Interactive { kartu } = &mut self {
+            kartu.footer = Some(footer.into());
         }
         self
     }
 
-    /// Tambah satu `interactiveButtons[]` JS ke [`Self::Interactive`].
+    /// Tambah satu tombol native-flow ke [`Self::Interactive`].
     /// `Reply` non-interaktif dikembalikan apa adanya supaya pemanggil tidak
     /// perlu memeriksa varian.
-    pub fn with_button(mut self, button: InteractiveButton) -> Self {
-        if let Self::Interactive { buttons, .. } = &mut self {
-            buttons.push(button);
+    pub fn with_button(mut self, button: crate::kartu::Tombol) -> Self {
+        if let Self::Interactive { kartu } = &mut self {
+            kartu.buttons.push(button);
+        }
+        self
+    }
+
+    /// Header kartu (judul, subjudul, media) — JS `interactiveMessage.header`.
+    pub fn with_header(mut self, header: crate::kartu::KartuHeader) -> Self {
+        if let Self::Interactive { kartu } = &mut self {
+            kartu.header = Some(header);
+        }
+        self
+    }
+
+    /// `nativeFlowMessage.messageParamsJson` — `bottom_sheet`,
+    /// `limited_time_offer`, `tap_target_configuration` (JS `menu.js:755`).
+    pub fn with_params(mut self, params: Value) -> Self {
+        if let Self::Interactive { kartu } = &mut self {
+            kartu.params = Some(crate::kartu::Params::baru(params));
+        }
+        self
+    }
+
+    /// `contextInfo.mentionedJid` di dalam kartu.
+    pub fn with_mentions(mut self, mentions: Vec<String>) -> Self {
+        if let Self::Interactive { kartu } = &mut self {
+            kartu.mentions = mentions;
+        }
+        self
+    }
+
+    /// Kartu mengutip pesan pemicu (JS `quoted: m`).
+    pub fn with_quote(mut self) -> Self {
+        if let Self::Interactive { kartu } = &mut self {
+            kartu.quote = true;
+        }
+        self
+    }
+
+    /// Kartu ditandai pesan ter-forward (JS `isForwarded: true`).
+    pub fn with_forwarded(mut self) -> Self {
+        if let Self::Interactive { kartu } = &mut self {
+            kartu.forwarded = true;
+        }
+        self
+    }
+
+    /// `contextInfo.forwardingScore` (JS `menucat.js:283`).
+    pub fn with_forwarding_score(mut self, skor: u32) -> Self {
+        if let Self::Interactive { kartu } = &mut self {
+            kartu.forwarding_score = Some(skor);
+        }
+        self
+    }
+
+    /// `contextInfo.participant` (JS: `"0@s.whatsapp.net"`).
+    pub fn with_participant(mut self, participant: impl Into<String>) -> Self {
+        if let Self::Interactive { kartu } = &mut self {
+            kartu.participant = Some(participant.into());
+        }
+        self
+    }
+
+    /// Kartu mengutip teks tetap (JS `quotedMessage: { conversation }`).
+    pub fn with_quote_teks(mut self, teks: impl Into<String>) -> Self {
+        if let Self::Interactive { kartu } = &mut self {
+            kartu.quote_teks = Some(teks.into());
+        }
+        self
+    }
+
+    /// Teks cadangan kalau kartu gagal terkirim (JS `catch` → `m.reply`).
+    pub fn with_fallback_teks(mut self, teks: impl Into<String>) -> Self {
+        if let Self::Interactive { kartu } = &mut self {
+            kartu.fallback_teks = Some(teks.into());
+        }
+        self
+    }
+
+    /// Tabel AI baru (JS `sock.sendTable`).
+    pub fn tabel(judul: impl Into<String>) -> Self {
+        Self::Tabel {
+            tabel: crate::tabel::Tabel::baru(judul),
+        }
+    }
+
+    /// Baris heading tabel.
+    pub fn with_table_header(
+        mut self,
+        header: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        if let Self::Tabel { tabel } = &mut self {
+            tabel.header = header.into_iter().map(Into::into).collect();
+        }
+        self
+    }
+
+    /// Tambah baris isi tabel.
+    pub fn with_table_row(
+        mut self,
+        baris: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        if let Self::Tabel { tabel } = &mut self {
+            tabel.baris.push(baris.into_iter().map(Into::into).collect());
+        }
+        self
+    }
+
+    /// Teks sebelum tabel (JS `options.headerText`).
+    pub fn with_table_header_text(mut self, teks: impl Into<String>) -> Self {
+        if let Self::Tabel { tabel } = &mut self {
+            tabel.header_teks = Some(teks.into());
+        }
+        self
+    }
+
+    /// Teks setelah tabel (JS `options.footer`).
+    pub fn with_table_footer(mut self, teks: impl Into<String>) -> Self {
+        if let Self::Tabel { tabel } = &mut self {
+            tabel.footer = Some(teks.into());
         }
         self
     }
@@ -544,6 +627,7 @@ impl Reply {
             | Self::Audio { .. }
             | Self::Document { .. }
             | Self::Interactive { .. }
+            | Self::Tabel { .. }
             | Self::Reaction { .. }
             | Self::Mutate { .. } => false,
         }
@@ -607,7 +691,9 @@ impl Reply {
             Self::Image { caption, .. } => Some(caption),
             Self::Video { caption, .. } => Some(caption),
             Self::Document { caption, .. } => Some(caption),
-            Self::Interactive { body, .. } => Some(body),
+            Self::Interactive { kartu } => Some(kartu.body.as_str()),
+            // Tabel AI tidak punya teks polos — isinya cuma baris tabel.
+            Self::Tabel { .. } => None,
             Self::Reaction { reply, .. } => reply.text_body(),
             // `Sticker`/`Audio` tidak punya teks — router tidak boleh reply
             // teks kosong. Cabang `Mutate` mustahil (`without_mutations` sudah

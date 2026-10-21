@@ -6,6 +6,16 @@ pub use meta::PluginMeta;
 pub use ureq_http::UreqHttp;
 pub use oktz_plugin_macros::{answer_handler, plugin};
 
+// Model kartu interaktif (native flow). Ada di plugin-api, bukan di
+// `oktz-wa`, supaya plugin bisa menyusun kartu tanpa dependensi ke crate
+// yang memegang protokol WA.
+pub mod kartu;
+pub use kartu::{AksiTombol, Baris, Bagian, Daftar, Kartu, KartuHeader, Tombol};
+
+// Tabel AI (WA `richResponseMessage`) — padanan `sock.sendTable` JS.
+pub mod tabel;
+pub use tabel::Tabel;
+
 // `sock` JS (cek nomor, foto profil, operasi grup). Kontraknya di sini,
 // implementasinya di crate `oktz-wa`.
 pub mod sock;

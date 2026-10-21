@@ -483,6 +483,13 @@ async fn send(
                         oktz_wa::build_card("Kartu dari produksi Rust", Some("footer produksi"))
                     }
                     "list" => oktz_wa::build_list(),
+                    // Tabel AI (`richResponseMessage`) — padanan `sock.sendTable`.
+                    "tabel" => oktz_wa::tabel::tabel_to_message(
+                        &oktz_plugin_api::Tabel::baru("Judul Tabel")
+                            .header(["Metric", "Value"])
+                            .baris(["Status", "Online"]),
+                        None,
+                    ),
                     // replyVariant 9 — bentuk balasan yang aktif di produksi.
                     // Tanpa pemicu, jadi tidak ada kutipan/mention; yang
                     // diuji di sini adalah bubble orderMessage-nya.

@@ -1,12 +1,14 @@
 //! `plugins/tools/styleteks.js` — ubah teks biasa jadi berbagai gaya font.
 //!
-//! `ponytail:` tombol `cta_copy` tidak punya padanan di `Reply` (hanya teks
-//! yang bisa dikirim), jadi hasil dikirim sebagai balasan teks biasa — kutipan
-//! `quoted: m` tetap ikut karena itu bawaan `Reply::Text`.
+//! Hasil dikirim sebagai kartu native-flow: body berisi teks hasil gaya, dan
+//! tombol `cta_copy` dibangun dengan `Tombol::salin` (params `display_text`,
+//! `id`, `copy_code` — persis bentuk yang dibaca WA). Kartu tidak mengutip
+//! pesan pemicu (`Kartu::quote` bawaan `false`), jadi `quoted: m` di JS belum
+//! ikut.
 //! Satu `Reply` juga hanya membawa satu reaksi; reaksi penutup `✅`/`❌` yang
 //! dipertahankan, reaksi pembuka `🕕` dilewatkan.
 
-use oktz_plugin_api::{Ctx, Reply, plugin};
+use oktz_plugin_api::{Ctx, Reply, Tombol, plugin};
 
 const CONTOH: &str = "Zann";
 const GAYA_EKSTRA: [&str; 3] = ["Strike Through", "Underline", "Slash Through"];
@@ -897,11 +899,7 @@ pub fn styleteks(ctx: Ctx) -> Reply {
     // `sock.sendMessage(m.chat, { text: hasil, interactiveButtons: [{cta_copy}] })`
     // — teks masuk body kartu, tombol salin ikut.
     Reply::interactive(hasil.clone())
-        .with_button(oktz_plugin_api::registry::InteractiveButton::copy(
-            "📋 Copy Hasil Teks",
-            "copy",
-            hasil,
-        ))
+        .with_button(Tombol::salin("📋 Copy Hasil Teks", "copy", hasil))
         .with_reaction("✅")
 }
 
@@ -1098,21 +1096,16 @@ mod tests {
     fn hasil_sukses_membawa_tombol_salin_cta_copy() {
         let tanpa = jalankan("Cursive | Halo");
         let tanpa = tanpa.without_mutations();
-        let Reply::Interactive {
-            body,
-            footer,
-            buttons,
-        } = tanpa.tanpa_reaksi()
-        else {
+        let Reply::Interactive { kartu } = tanpa.tanpa_reaksi() else {
             panic!("harus kartu interaktif");
         };
-        assert_eq!(body, "𝓗𝓪𝓵𝓸");
-        assert_eq!(footer, &None);
-        assert_eq!(buttons.len(), 1);
-        assert_eq!(buttons[0].name, "cta_copy");
-        assert_eq!(buttons[0].params["display_text"], "📋 Copy Hasil Teks");
-        assert_eq!(buttons[0].params["id"], "copy");
-        assert_eq!(buttons[0].params["copy_code"], "𝓗𝓪𝓵𝓸");
+        assert_eq!(kartu.body, "𝓗𝓪𝓵𝓸");
+        assert_eq!(kartu.footer, None::<String>);
+        assert_eq!(kartu.buttons.len(), 1);
+        assert_eq!(kartu.buttons[0].aksi.as_str(), "cta_copy");
+        assert_eq!(kartu.buttons[0].params["display_text"], "📋 Copy Hasil Teks");
+        assert_eq!(kartu.buttons[0].params["id"], "copy");
+        assert_eq!(kartu.buttons[0].params["copy_code"], "𝓗𝓪𝓵𝓸");
     }
 
     #[test]

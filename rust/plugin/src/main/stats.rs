@@ -1,10 +1,12 @@
 //! `plugins/main/stats.js` — statistik bot.
 //!
-//! `ponytail:` `sendTableV2` (tabel AI) belum punya varian di `Reply`; header,
-//! baris, dan footer dirangkai sebagai teks dengan isi serta urutan yang sama
-//! (pola `main/totalfitur.rs`).
+//! Balasan memakai tabel AI (`Reply::tabel`): judul tabel, baris heading
+//! `Key | Value`, baris isi, dan footer — isi serta urutannya sama dengan JS.
+//! `ponytail:` tabel versi 1 (`tableMetadata`), bukan versi 2 —
+//! `unifiedResponse` base64 dan `botMetadata` versi JS v2 belum di-port, jadi
+//! tabel digabung manual dari pemisah `;;`.
 //! `ponytail:` `Ctx` hanya membawa data user/grup pengirim, bukan seluruh
-//! store; Users/Premium/Groups dihitung dari data itu, bukan total.
+//! store; Users/Premium/Groups dihitung dari data itu, bukan total store.
 //! `ponytail:` `process.memoryUsage()` tidak ada; Heap memakai VmRSS/VmSize
 //! dari `/proc/self/status` — padanan terdekat.
 //! `ponytail:` `process.version` tidak punya padanan di Rust; kolom Node
@@ -161,7 +163,12 @@ fn jam_jakarta() -> String {
     format!("{jam:02}.{menit:02}.{detik:02}")
 }
 
-fn teks(ctx: &Ctx) -> String {
+/// Susun tabel AI — padanan `sock.sendTableV2` JS (`stats.js:88-91`).
+///
+/// JS v2 mengirim `unifiedResponse` base64; tabel v1 yang dipakai di sini
+/// butuh isi yang sama, jadi tiap pasangan `Key | Value` dari string
+/// ber-pemisah `;;` (`stats.js:79-86`) dipecah jadi satu baris tabel.
+fn reply(ctx: &Ctx) -> Reply {
     let cfg = ctx.config();
     let nama_bot = cfg.bot.name.as_str();
     let bot = if nama_bot.is_empty() { "Bot" } else { nama_bot };
@@ -175,35 +182,57 @@ fn teks(ctx: &Ctx) -> String {
     let (total_mem, bebas_mem) = baca_memori();
     let (heap_dipakai, heap_total) = baca_heap();
 
-    let mut out =
-        String::from("📊 Berikut ini adalah statistik dari bot kami\n\nKey | Value\n");
-    out.push_str(&format!("Bot | {bot}\n"));
-    out.push_str(&format!("Version | v{versi}\n"));
-    out.push_str(&format!(
-        "Uptime | {}\n",
-        format_uptime(ctx.uptime_secs.saturating_mul(1000))
-    ));
-    out.push_str(&format!("Users | {users}\n"));
-    out.push_str(&format!("Premium | {premium}\n"));
-    out.push_str(&format!("Groups | {groups}\n"));
-    out.push_str(&format!("Platform | {}\n", platform()));
-    out.push_str("Node | N/A\n");
-    out.push_str(&format!("CPU Load | {}%\n", fixed2(baca_load())));
-    out.push_str(&format!(
-        "RAM | {} / {}\n",
-        format_bytes(total_mem.saturating_sub(bebas_mem)),
-        format_bytes(total_mem)
-    ));
-    out.push_str(&format!(
-        "Heap | {} / {}\n",
-        format_bytes(heap_dipakai),
-        format_bytes(heap_total)
-    ));
-    out.push_str(&format!("Updated | {}", jam_jakarta()));
-    if !nama_bot.is_empty() {
-        out.push_str(&format!("\n\n{nama_bot}"));
+    let mut t = Reply::tabel("📊 Berikut ini adalah statistik dari bot kami")
+        .with_table_header(["Key", "Value"])
+        // "📊 Bot Statistics" ada di `table[0]` JS, yang oleh
+        // `toTableMetadataV2` (`rich-messages.js:948`) dibaca sebagai judul
+        // tabel (`tableMetadata.title`). V2 tidak pernah mengirim judul itu ke
+        // wire — hanya `unified_rows` plus `options.title`/`options.footer` —
+        // dan di tabel v1 slot `judul` sudah dipakai `options.title`. Jadi
+        // teks paling mirip yang tersisa adalah teks sebelum tabel
+        // (`header_teks`): baris pertama tabel akan jadi sel `Key` tanpa
+        // pasangan `Value`, jadi grid dua kolom rusak.
+        .with_table_header_text("📊 Bot Statistics");
+
+    t = t.with_table_row(["Bot".to_string(), bot.to_string()]);
+    t = t.with_table_row(["Version".to_string(), format!("v{versi}")]);
+    t = t.with_table_row([
+        "Uptime".to_string(),
+        format_uptime(ctx.uptime_secs.saturating_mul(1000)),
+    ]);
+    t = t.with_table_row(["Users".to_string(), users.to_string()]);
+    t = t.with_table_row(["Premium".to_string(), premium.to_string()]);
+    t = t.with_table_row(["Groups".to_string(), groups.to_string()]);
+    t = t.with_table_row(["Platform".to_string(), platform()]);
+    t = t.with_table_row(["Node".to_string(), "N/A".to_string()]);
+    t = t.with_table_row([
+        "CPU Load".to_string(),
+        format!("{}%", fixed2(baca_load())),
+    ]);
+    t = t.with_table_row([
+        "RAM".to_string(),
+        format!(
+            "{} / {}",
+            format_bytes(total_mem.saturating_sub(bebas_mem)),
+            format_bytes(total_mem)
+        ),
+    ]);
+    t = t.with_table_row([
+        "Heap".to_string(),
+        format!(
+            "{} / {}",
+            format_bytes(heap_dipakai),
+            format_bytes(heap_total)
+        ),
+    ]);
+    t = t.with_table_row(["Updated".to_string(), jam_jakarta()]);
+
+    // JS `footer: botConfig?.bot?.name` — string kosong berarti tanpa footer.
+    if nama_bot.is_empty() {
+        t
+    } else {
+        t.with_table_footer(nama_bot)
     }
-    out
 }
 
 #[plugin(
@@ -224,12 +253,83 @@ fn teks(ctx: &Ctx) -> String {
     is_bot_admin = false
 )]
 pub fn stats(ctx: Ctx) -> Reply {
-    Reply::text(teks(&ctx))
+    reply(&ctx)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Ambil tabel dari balasan — `stats` tidak pakai reaksi, jadi cukup
+    /// menembus `Mutate` kalau ada.
+    fn tabel_dari(reply: &Reply) -> &oktz_plugin_api::Tabel {
+        match reply.without_mutations().tanpa_reaksi() {
+            Reply::Tabel { tabel } => tabel,
+            other => panic!("harus Tabel, dapat {other:?}"),
+        }
+    }
+
+    #[test]
+    fn balasan_membentuk_tabel_dengan_isi_dan_urutan_js() {
+        let r = stats(Ctx::default());
+        assert!(
+            matches!(r.without_mutations().tanpa_reaksi(), Reply::Tabel { .. }),
+            "harus Reply::Tabel"
+        );
+        let t = tabel_dari(&r);
+
+        assert_eq!(t.judul, "📊 Berikut ini adalah statistik dari bot kami");
+        assert_eq!(t.header, vec!["Key", "Value"]);
+        assert_eq!(t.header_teks.as_deref(), Some("📊 Bot Statistics"));
+
+        let kunci: Vec<&str> = t.baris.iter().map(|b| b[0].as_str()).collect();
+        assert_eq!(
+            kunci,
+            vec![
+                "Bot",
+                "Version",
+                "Uptime",
+                "Users",
+                "Premium",
+                "Groups",
+                "Platform",
+                "Node",
+                "CPU Load",
+                "RAM",
+                "Heap",
+                "Updated",
+            ]
+        );
+        assert_eq!(t.baris.len(), 12);
+
+        // Config bawaan kosong, jadi nama bot jatuh ke "Bot" dan versi ke
+        // "1.0.0" (`stats.js:59-60`).
+        assert_eq!(t.baris[0], vec!["Bot", "Bot"]);
+        assert_eq!(t.baris[1], vec!["Version", "v1.0.0"]);
+        assert_eq!(t.baris[8][0], "CPU Load");
+        assert!(t.baris[8][1].ends_with('%'));
+        // Waktu Asia/Jakarta `HH.MM.SS`.
+        assert_eq!(t.baris[11][1].len(), 8, "jam-menit-detik: {}", t.baris[11][1]);
+    }
+
+    #[test]
+    fn footer_ikut_nama_bot_dan_hilang_kala_kosong() {
+        // Nama bot kosong -> tanpa footer (JS `if (footer)`).
+        let r = stats(Ctx::default());
+        assert_eq!(tabel_dari(&r).footer, None);
+
+        // Nama bot terisi -> footer = nama bot.
+        let mut cfg = oktz_plugin_api::config::Runtime::default();
+        cfg.bot.name = "Foto-AI".to_string();
+        let ctx = Ctx {
+            config: std::sync::Arc::new(cfg),
+            ..Default::default()
+        };
+        let r = stats(ctx);
+        let t = tabel_dari(&r);
+        assert_eq!(t.footer.as_deref(), Some("Foto-AI"));
+        assert_eq!(t.baris[0], vec!["Bot", "Foto-AI"]);
+    }
 
     #[test]
     fn format_bytes_sama_dengan_js() {

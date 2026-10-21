@@ -12,10 +12,9 @@
 //!    gagal. `parse_fonts` mengembalikan `Err` untuk itu, persis `throw`.
 //! 2. `sock.sendMessage` dengan `interactiveButtons` + `buttonParamsJson`
 //!    diteruskan apa adanya: `single_select` + `sections[0].rows` jadi
-//!    `InteractiveButton`.
+//!    `Tombol` native-flow.
 
-use oktz_plugin_api::registry::InteractiveButton;
-use oktz_plugin_api::{Ctx, Reply, plugin};
+use oktz_plugin_api::{Ctx, Reply, Tombol, plugin};
 use serde_json::json;
 
 
@@ -241,7 +240,9 @@ pub(crate) fn kartu(fonts: &[Font], prefix: &str) -> Reply {
 
     Reply::interactive("Silahkan pilih font yang ingin kamu download")
         .with_footer("Click tombol di bawah ini")
-        .with_button(InteractiveButton::new("single_select", params))
+        .with_button(
+            Tombol::dari_nama("single_select", params).expect("nama tombol WA dikenal"),
+        )
 }
 
 #[plugin(
@@ -528,11 +529,13 @@ Info: Y</div>
         assert_eq!(fonts.len(), 500);
         let r = kartu(&fonts, ".");
         assert_eq!(text_of(&r), "Silahkan pilih font yang ingin kamu download");
-        let Reply::Interactive { buttons, .. } = r.without_mutations() else {
+        let Reply::Interactive { kartu } = r.without_mutations() else {
             panic!("harus kartu interaktif");
         };
-        assert_eq!(buttons.len(), 1);
-        let rows = buttons[0].params["sections"][0]["rows"].as_array().unwrap();
+        assert_eq!(kartu.buttons.len(), 1);
+        let rows = kartu.buttons[0].params["sections"][0]["rows"]
+            .as_array()
+            .unwrap();
         assert_eq!(rows.len(), 500);
         assert_eq!(rows[499]["id"], ".nerdfont-ambil Coolvetica");
     }
@@ -541,24 +544,19 @@ Info: Y</div>
     fn the_card_carries_the_button_rows_in_order() {
         let fonts = parse_fonts(SEBUAH_ITEM).unwrap();
         let r = kartu(&fonts, "!");
-        let Reply::Interactive {
-            body,
-            footer,
-            buttons,
-        } = r.without_mutations()
-        else {
+        let Reply::Interactive { kartu } = r.without_mutations() else {
             panic!("harus kartu interaktif");
         };
-        assert_eq!(body, "Silahkan pilih font yang ingin kamu download");
-        assert_eq!(footer.as_deref(), Some("Click tombol di bawah ini"));
-        assert_eq!(buttons[0].name, "single_select");
-        assert_eq!(buttons[0].params["title"], "Pilih Font Disini");
+        assert_eq!(kartu.body, "Silahkan pilih font yang ingin kamu download");
+        assert_eq!(kartu.footer.as_deref(), Some("Click tombol di bawah ini"));
+        assert_eq!(kartu.buttons[0].aksi.as_str(), "single_select");
+        assert_eq!(kartu.buttons[0].params["title"], "Pilih Font Disini");
         assert_eq!(
-            buttons[0].params["sections"][0]["highlight_label"],
+            kartu.buttons[0].params["sections"][0]["highlight_label"],
             "Font Pilihan"
         );
         assert_eq!(
-            buttons[0].params["sections"][0]["rows"],
+            kartu.buttons[0].params["sections"][0]["rows"],
             json!([{
                 "header": "Font Coolvetica",
                 "title": "A Font based on Font-A-Ware",

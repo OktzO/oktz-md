@@ -492,3 +492,46 @@ Pemicu utama test agent yang gagal: assertion memakai delimiter markdown yang be
   yang tertinggal.
 - Batas: kartu interactive/gambar/riwayat command tidak dikirim (lihat
   komentar `ponytail:` di `menu.rs`).
+
+## Sistem pesan kaya: kartu native-flow + tabel AI (2026-10-21)
+
+- `lib/oktz-plugin-api/kartu.rs` (baru): model kartu native-flow —
+  `Kartu` (body, footer, header, tombol, `messageParamsJson`, mention,
+  quote, forwarded, teks cadangan), `Tombol` + `AksiTombol` (9 aksi WA),
+  `Baris`/`Bagian`/`Daftar` untuk `single_select`, `KartuHeader` (judul +
+  subjudul + media). `Params` membungkus `serde_json::Value` supaya
+  `Reply` tetap bisa `Eq`.
+- `lib/oktz-plugin-api/tabel.rs` (baru): model tabel AI (`Tabel`).
+- `Reply::Interactive { kartu }` menggantikan bentuk lama
+  (`body`/`footer`/`buttons` polos) dan `Reply::Tabel { tabel }` baru —
+  `Reply::InteractiveButton` dihapus, digantikan `Tombol`.
+- `lib/oktz-wa/cards.rs`: kartu → proto `interactiveMessage` dibungkus
+  `viewOnceMessage` + `deviceListMetadata` v2; header bisa memakai
+  `imageMessage` hasil upload; `biz_node()` sekarang meniru `onigis`
+  (`biz` + `engagement` + `interactive/native_flow` + `privacy_mode_ts`).
+- `lib/oktz-wa/tabel.rs` (baru): tabel → `botForwardedMessage` →
+  `richResponseMessage` dengan submessages (teks/tableMetadata/teks) dan
+  `contextInfo` ter-forward asal `META_AI` — padanan `sock.sendTable` JS.
+- `lib/oktz-wa/pipeline.rs`: `Rendered` punya `card` + `card_header_media`;
+  `MessageSender::send_card` (default + `ClientSender`) meng-upload media
+  header lalu mengirim kartu. Kalau kirim gagal dan kartu punya
+  `fallback_teks`, teks cadangan dikirim (pola `menu.js:1379`).
+- Dokumen: `docs/rust-rewrite/INTERACTIVE.md`.
+
+### Plugin yang sekarang memakai sistem baru
+
+- `main/menu` — kartu native-flow varian 2 (default produksi, dipilih lewat
+  setting `menuVariant`; 3 = kartu `single_select`), header gambar `foto`,
+  body `Hello Brother` + info bot/user + daftar command per kategori,
+  tombol `cta_url` Owner Kami + `quick_reply` Dapatkan Script, dan teks
+  cadangan kalau kartu gagal.
+- `main/menucat` — kartu per kategori (header `foto2`, `limited_time_offer`,
+  tombol kembali ke menu/daftar kategori).
+- `main/allmenu` (baru) — kartu semua command per kategori.
+- `main/ping2`, `main/stats`, `main/totalfitur` — tabel AI
+  (`botForwardedMessage` → `richResponseMessage` → `tableMetadata`).
+- `main/sc`, `sticker/brat`, `search/nerdfont`, `tools/styleteks` — kartu
+  native-flow memakai model `Kartu`/`Tombol` yang baru.
+- `owner/setmenu` — bukan lagi stub: menyimpan setting `menuVariant` (v2/v3)
+  lewat `Mutation::SetSetting`, jadi owner bisa ganti tampilan menu tanpa
+  sentuh database.
