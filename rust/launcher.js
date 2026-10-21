@@ -34,7 +34,16 @@ const BIN = process.env.OKTZ_BIN
   ? path.resolve(process.env.OKTZ_BIN)
   : KANDIDAT.find((p) => existsSync(p)) || KANDIDAT[0];
 const ARGS = process.argv.slice(2);
-const CHILD_ARGS = ARGS.length > 0 ? ARGS : ["run"];
+// Default binary `run` membaca `../storage/session/creds.json`, path layout
+// dev (cwd = rust/). Di panel cwd = folder launcher, jadi creds ada di
+// `storage/session/creds.json`. Kirim path eksplisit kalau ketemu, supaya
+// tidak bergantung pada layout.
+const KANDIDAT_CREDS = [
+  path.join(AKAR, "storage/session/creds.json"),
+  path.join(AKAR, "../storage/session/creds.json"),
+];
+const CREDS = KANDIDAT_CREDS.find((p) => existsSync(p));
+const CHILD_ARGS = ARGS.length > 0 ? ARGS : CREDS ? ["run", CREDS] : ["run"];
 
 function siap_dipakai(p) {
   if (!existsSync(p)) return false;
