@@ -84,6 +84,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     let mode = args.get(1).map(|s| s.as_str()).unwrap_or("boot");
 
+    // `oktz plugins` — inventaris registry tanpa membuka store/sesi. Dipakai
+    // launcher sebagai preflight: kalau crate plugin tidak ter-link, count 0
+    // dan bot akan diam untuk semua command.
+    if mode == "plugins" {
+        use_plugin_crates();
+        let plugins = oktz_plugin_api::all_plugins();
+        let daftar: Vec<serde_json::Value> = plugins
+            .iter()
+            .map(|p| {
+                serde_json::json!({
+                    "name": p.meta.name,
+                    "alias": p.meta.alias,
+                    "category": p.meta.category,
+                })
+            })
+            .collect();
+        println!(
+            "{}",
+            serde_json::json!({"plugins": plugins.len(), "list": daftar})
+        );
+        return Ok(());
+    }
+
     let cfg = Config::load()?;
     let db_dir_env = oktz_core::env::Env::get(DB_DIR_ENV);
 

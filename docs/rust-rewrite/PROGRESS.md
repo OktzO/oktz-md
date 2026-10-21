@@ -467,3 +467,28 @@ Pemicu utama test agent yang gagal: assertion memakai delimiter markdown yang be
   diuji dengan mock Turso (env + config.json) dan fake binary di dua layout.
 - Batas: restore Turso baru dibaca saat boot (bot Rust belum menulis mirror);
   QR pairing masih mencetak payload mentah, belum dirender jadi gambar.
+
+## Menu teks + preflight registry (2026-10-21)
+
+- `plugin/src/main/menu.rs`: `.menu` (alias `help`, `bantuan`, `commands`,
+  `m`) mengirim teks `buildMenuText` JS — sapaan WIB, info user/bot, uptime,
+  dan tautan `.menucat <kategori>`. Kategori panel/pushkontak/store
+  disembunyikan seperti mode `md`; kategori `owner` hanya untuk owner.
+- `plugin/src/main/menucat.rs`: `.menucat <kategori>` menggantikan stub;
+  daftar nama plugin per kategori dari `all_plugins()`.
+- `src/main.rs`: mode `oktz plugins` mencetak JSON
+  `{"plugins":N,"list":[...]}` tanpa membuka store/sesi.
+- `launcher.js`: preflight menjalankan `oktz plugins`; count 0 atau output
+  bukan JSON -> keluar rc=3. Binari lama tetap lolos karena mode tak dikenal
+  jatuh ke JSON boot yang juga punya kunci `plugins`.
+- `plugin/src/lib.rs`: test registry memastikan count > 500, nama unik, dan
+  setiap nama bisa ditemukan lewat `find`; test kedua memastikan `menu` dan
+  `menucat` terdaftar. Ini menangkap gejala `.menu` -> `NotACommand` kalau
+  `pub mod` lupa ditambahkan.
+- Audit `node scripts/pasang-modul.mjs`: 33 kategori, 19 stub terlewat, dan
+  7 kandidat. Dari 7 itu 4 sengaja belum didaftarkan (`owner/addprem`,
+  `owner/arsip`, `owner/bcgc`, `stalker/stalkdc`) dan 3 sticker butuh
+  rasterizer teks (`bratcewek`, `bratvid`, `ttp`). Tidak ada plugin selesai
+  yang tertinggal.
+- Batas: kartu interactive/gambar/riwayat command tidak dikirim (lihat
+  komentar `ponytail:` di `menu.rs`).

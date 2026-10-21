@@ -31,3 +31,45 @@ pub mod store;
 pub mod tools;
 pub mod user;
 pub mod utility;
+
+#[cfg(test)]
+mod registry_test {
+    use std::collections::HashSet;
+
+    use oktz_plugin_api::{all_plugins, find};
+
+    /// Registry penuh: nama unik, dan setiap nama/alias harus menunjuk plugin
+    /// yang sama lewat jalur yang dipakai router. Test ini menangkap plugin
+    /// yang lupa didaftarkan (`pub mod`) sekaligus alias mati/tabrakan.
+    #[test]
+    fn nama_unik_dan_bisa_ditemukan() {
+        let plugins = all_plugins();
+        assert!(
+            plugins.len() > 500,
+            "registry hanya {} plugin; crate plugin mungkin tidak ter-link",
+            plugins.len()
+        );
+
+        let mut nama = HashSet::new();
+        for p in plugins {
+            assert!(!p.meta.name.is_empty(), "plugin tanpa nama");
+            assert!(!p.meta.category.is_empty(), "{} tanpa kategori", p.meta.name);
+            assert!(nama.insert(p.meta.name.as_str()), "nama {} dipakai dua plugin", p.meta.name);
+        }
+
+        for p in plugins {
+            let ketemu = find(p.meta.name.as_str())
+                .unwrap_or_else(|| panic!("{} tidak ditemukan", p.meta.name));
+            assert_eq!(ketemu.meta.name, p.meta.name);
+        }
+    }
+
+    /// Command menu wajib ada: tanpa ini `.menu` jatuh ke NoPlugin dan pipeline
+    /// hanya mencatat NotACommand (gejala "menu tidak muncul").
+    #[test]
+    fn menu_dan_menucat_terdaftar() {
+        for nama in ["menu", "menucat"] {
+            assert!(find(nama).is_some(), "{nama} tidak terdaftar");
+        }
+    }
+}

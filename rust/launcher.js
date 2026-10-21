@@ -12,7 +12,7 @@
 //
 //   node launcher.js [argumen oktz...]
 //   OKTZ_BIN=/path/ke/oktz node launcher.js
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import {
   accessSync,
   chmodSync,
@@ -290,9 +290,37 @@ try {
   }
 }
 
+// Preflight registry: binari lama menjawab mode tak dikenal dengan JSON boot
+// yang sama-sama punya kunci `plugins`, jadi cek ini aman untuk rilis lama.
+function cekRegistry() {
+  try {
+    const out = execFileSync(path.resolve(BIN), ["plugins"], {
+      cwd: AKAR,
+      encoding: "utf8",
+      timeout: 60_000,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const baris = out
+      .trim()
+      .split("\n")
+      .filter((l) => l.trim().startsWith("{"))
+      .pop();
+    const j = JSON.parse(baris);
+    if (!Number.isInteger(j.plugins) || j.plugins <= 0) {
+      console.error("[launcher] registry plugin kosong; bot tidak akan merespons command");
+      process.exit(3);
+    }
+    console.log(`[launcher] plugin terdaftar: ${j.plugins}`);
+  } catch (e) {
+    console.error(`[launcher] gagal cek registry plugin: ${e.message}`);
+    process.exit(3);
+  }
+}
+
 // Path absolut: spawn dengan path relatif bisa ENOENT kalau cwd panel beda
 // dari folder launcher.
 const BIN_ABS = path.resolve(BIN);
+cekRegistry();
 let anak = null;
 let sudahUnduhUlang = false;
 

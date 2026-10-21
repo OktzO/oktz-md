@@ -1,5 +1,7 @@
 pub mod benefitowner;
 pub mod benefitpremium;
+pub mod menu;
+pub mod menucat;
 pub mod gacha;
 pub mod owner;
 pub mod rules;
