@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Launcher Node.js untuk binary Rust `oktz` (panel egg Node.js).
 // Kalau bin/oktz belum ada, binary diunduh dari GitHub Release repo ini.
+// Versi target diambil dari tag rilis terbaru, jadi rilis baru terambil
+// otomatis tanpa perlu menanda versi manual.
 // Path dihitung dari lokasi berkas ini, bukan cwd panel.
 // Argumen diteruskan; tanpa argumen = mode `run`. Sinyal dan exit code
 // diteruskan ke/dari anak supaya panel bisa membedakan stop vs crash.
@@ -20,6 +22,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   statSync,
   writeFileSync,
@@ -27,8 +30,20 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const AKAR = path.dirname(fileURLToPath(import.meta.url));
+const FILE_INI = fileURLToPath(import.meta.url);
+const AKAR = path.dirname(FILE_INI);
 const REPO = "OktzO/oktz-rs";
+// Modul ini juga diimpor test; efek samping (unduh binary, spawn bot)
+// hanya boleh jalan kalau file ini yang jadi entry point.
+const UTAMA = (() => {
+  const p = process.argv[1];
+  if (!p) return true;
+  try {
+    return realpathSync(p) === realpathSync(FILE_INI);
+  } catch {
+    return true;
+  }
+})();
 // Statis dipilih lebih dulu: binary dinamis butuh loader glibc, dan panel
 // Alpine/musl tidak punya loader itu sehingga exec gagal ENOENT walau
 // berkasnya ada. Kalau rilis belum punya aset statis, pakai aset dinamis.
@@ -36,9 +51,97 @@ const REPO = "OktzO/oktz-rs";
 const ASET_STATIS = "oktz-linux-x64-static";
 const ASET_GLIBC = "oktz-linux-x64";
 const ASET = process.env.OKTZ_ASET || ASET_STATIS;
-// Naikkan tiap rilis: panel menyimpan bin/oktz lama, jadi tanpa penanda ini
-// binary baru tidak pernah diunduh dan command baru (mis. menu) tetap hilang.
-const VERSI_BIN = "v0.1.4";
+// Versi binary yang dipasang panel. Target sebenarnya diambil dari tag
+// rilis terbaru (lihat `ambilVersiTerbaru`), jadi rilis baru terambil
+// otomatis tanpa menanda manual di sini. `VERSI_BIN` cuma cadangan saat
+// GitHub tidak bisa dihubungi.
+//
+// v0.1.5 — kartu native-flow (menu/tabel/tombol) + 11 replyVariant.
+// v0.1.6 — binary baca fixture sesi dari env (perbaiki "Bad Mac"/decrypt gagal).
+// v0.1.7 — paritas plugin (749/793) + seluruh test hijau.
+// v0.1.8 — paritas JS penuh: proteksi grup, downloader, command lookup.
+const VERSI_BIN = "v0.1.8";
+
+/**
+ * Tag rilis dari URL GitHub: `.../releases/tag/<tag>` atau
+ * `.../releases/download/<tag>/<aset>`.
+ *
+ * @param {string} url
+ * @returns {string|null} tag (mis. `v0.1.8`), atau null.
+ */
+export function tagDariUrl(url) {
+  const m = /\/releases\/(?:tag|download)\/([^/?#]+)/.exec(url || "");
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+/**
+ * URL unduh aset. Tag diisi → URL per-tag (deterministik, cocok dengan
+ * penanda versi); tag kosong → URL "terbaru".
+ *
+ * @param {string|null} tag
+ * @param {string} nama
+ * @returns {string}
+ */
+export function urlAset(tag, nama) {
+  const dasar = tag
+    ? `https://github.com/${REPO}/releases/download/${tag}`
+    : `https://github.com/${REPO}/releases/latest/download`;
+  return `${dasar}/${nama}`;
+}
+
+/**
+ * Tag rilis terbaru dari redirect `releases/latest`.
+ *
+ * Pakai redirect, bukan API: API sering kena rate limit 403 dari IP panel,
+ * sedangkan `releases/latest` cuma redirect ke halaman `/tag/<tag>`.
+ *
+ * @param {typeof fetch} fetchImpl
+ * @returns {Promise<string|null>} tag, atau null kalau gagal/tidak ada rilis.
+ */
+export async function ambilVersiTerbaru(fetchImpl = fetch) {
+  try {
+    const r = await fetchImpl(`https://github.com/${REPO}/releases/latest`, {
+      redirect: "follow",
+      headers: { "user-agent": "oktz-launcher" },
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!r.ok) return null;
+    return tagDariUrl(r.url || "");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ambil isi aset dari GitHub Release. Rilis lama belum punya aset statis,
+ * jadi aset statis yang hilang otomatis fallback ke aset glibc.
+ *
+ * @param {string} nama nama aset.
+ * @param {string|null} tag tag rilis; null → rilis "terbaru".
+ * @param {typeof fetch} fetchImpl
+ * @returns {Promise<{ok: boolean, tag: string|null, nama: string, data: Buffer|null, status: number}>}
+ */
+export async function ambilAset(nama, tag = null, fetchImpl = fetch) {
+  let r = await fetchImpl(urlAset(tag, nama));
+  if (!r.ok && nama === ASET_STATIS) {
+    nama = ASET_GLIBC;
+    r = await fetchImpl(urlAset(tag, nama));
+  }
+  if (!r.ok) return { ok: false, tag: null, nama, data: null, status: r.status };
+  // URL akhir aset bisa CDN tanpa tag; pakai tag yang diminta.
+  return {
+    ok: true,
+    tag: tag || tagDariUrl(r.url || ""),
+    nama,
+    data: Buffer.from(await r.arrayBuffer()),
+    status: r.status,
+  };
+}
+
+/** Penanda versi di disk sama dengan target? Spasi/newline diabaikan. */
+export function versiCocok(penanda, versi) {
+  return String(penanda ?? "").trim() === String(versi ?? "").trim();
+}
 const KANDIDAT = ["bin/oktz", "target/release/oktz"].map((p) => path.join(AKAR, p));
 const BIN = process.env.OKTZ_BIN
   ? path.resolve(process.env.OKTZ_BIN)
@@ -261,15 +364,42 @@ function siap_dipakai(p) {
 // target/release dan OKTZ_BIN tidak boleh dipaksa unduh.
 const BIN_UNDUHAN = BIN === KANDIDAT[0] && !process.env.OKTZ_BIN;
 const PENANDA = path.join(path.dirname(BIN), ".oktz-versi");
-function versiCocok() {
+// Tag rilis terbaru yang dipakai; dipakai lagi saat unduh ulang karena
+// loader binary hilang.
+let TAG_TERBARU = null;
+
+function bacaPenanda() {
   try {
-    return readFileSync(PENANDA, "utf8").trim() === VERSI_BIN;
+    return readFileSync(PENANDA, "utf8").trim();
   } catch {
-    return false;
+    return "";
   }
 }
 
-if (!siap_dipakai(BIN) || (BIN_UNDUHAN && !versiCocok())) {
+function simpanBinary(data) {
+  mkdirSync(path.dirname(BIN), { recursive: true });
+  writeFileSync(BIN, data, { mode: 0o755 });
+  console.log(`[launcher] tersimpan ${BIN} (${data.length} byte)`);
+}
+
+/**
+ * Pasang binary versi terbaru.
+ *
+ * Target = tag rilis terbaru. Kalau tag itu belum punya aset (build CI belum
+ * selesai), pakai rilis cadangan lalu rilis "terbaru". Penanda versi ditulis
+ * hanya kalau tag aset yang terpasang diketahui — kalau tidak, launcher
+ * mencoba unduh lagi saat tag target sudah siap.
+ */
+async function siapkanBinary() {
+  // Binary dev (target/release, OKTZ_BIN) tidak diunduh ulang, jadi tidak
+  // perlu cek versi GitHub sama sekali.
+  if (siap_dipakai(BIN) && !BIN_UNDUHAN) return;
+  TAG_TERBARU = await ambilVersiTerbaru();
+  const perlu =
+    !siap_dipakai(BIN) ||
+    (BIN_UNDUHAN && TAG_TERBARU && !versiCocok(bacaPenanda(), TAG_TERBARU));
+  if (!perlu) return;
+
   if (process.env.OKTZ_BIN && !siap_dipakai(BIN)) {
     console.error(`binary ${BIN} tidak ada/kosong (dari OKTZ_BIN)`);
     process.exit(127);
@@ -278,8 +408,23 @@ if (!siap_dipakai(BIN) || (BIN_UNDUHAN && !versiCocok())) {
     console.error(`[launcher] ${BIN} kosong atau versi lama, unduh ulang`);
   }
   try {
-    await unduh();
-    if (BIN_UNDUHAN) writeFileSync(PENANDA, `${VERSI_BIN}\n`);
+    const kandidat = [];
+    if (TAG_TERBARU) kandidat.push(TAG_TERBARU);
+    if (!kandidat.includes(VERSI_BIN)) kandidat.push(VERSI_BIN);
+    kandidat.push(null); // rilis "terbaru" sebagai jaring pengaman
+    for (const tag of kandidat) {
+      const hasil = await ambilAset(ASET, tag);
+      if (!hasil.ok || !hasil.data || hasil.data.length === 0) {
+        console.error(
+          `[launcher] aset ${hasil.nama} ${tag ?? "terbaru"} tidak tersedia (HTTP ${hasil.status})`
+        );
+        continue;
+      }
+      simpanBinary(hasil.data);
+      if (BIN_UNDUHAN && hasil.tag) writeFileSync(PENANDA, `${hasil.tag}\n`);
+      return;
+    }
+    throw new Error("tidak ada aset binary di GitHub Release");
   } catch (e) {
     console.error(`[launcher] gagal unduh binary: ${e.message}`);
     if (!siap_dipakai(BIN)) {
@@ -297,15 +442,19 @@ if (!siap_dipakai(BIN) || (BIN_UNDUHAN && !versiCocok())) {
   }
 }
 
+if (UTAMA) await siapkanBinary();
+
 // Panel kadang menyimpan berkas tanpa bit eksekusi.
-try {
-  accessSync(BIN, constants.X_OK);
-} catch {
+if (UTAMA) {
   try {
-    chmodSync(BIN, 0o755);
-  } catch (e) {
-    console.error(`[launcher] tidak bisa chmod +x ${BIN}: ${e.message}`);
-    process.exit(126);
+    accessSync(BIN, constants.X_OK);
+  } catch {
+    try {
+      chmodSync(BIN, 0o755);
+    } catch (e) {
+      console.error(`[launcher] tidak bisa chmod +x ${BIN}: ${e.message}`);
+      process.exit(126);
+    }
   }
 }
 
@@ -339,7 +488,7 @@ function cekRegistry() {
 // Path absolut: spawn dengan path relatif bisa ENOENT kalau cwd panel beda
 // dari folder launcher.
 const BIN_ABS = path.resolve(BIN);
-cekRegistry();
+if (UTAMA) cekRegistry();
 let anak = null;
 let sudahUnduhUlang = false;
 
@@ -361,7 +510,11 @@ function jalankan(args, extraEnv = {}) {
       sudahUnduhUlang = true;
       console.error(`[launcher] unduh ulang aset ${ASET} lalu coba lagi`);
       try {
-        await unduh(ASET);
+        const hasil = await ambilAset(ASET, TAG_TERBARU || VERSI_BIN);
+        if (!hasil.ok || !hasil.data || hasil.data.length === 0) {
+          throw new Error(`HTTP ${hasil.status} saat unduh ${hasil.nama}`);
+        }
+        simpanBinary(hasil.data);
         chmodSync(BIN_ABS, 0o755);
         jalankan(args, extraEnv);
         return;
@@ -489,28 +642,11 @@ for (const sig of ["SIGINT", "SIGTERM"]) {
   process.on(sig, () => anak && anak.kill(sig));
 }
 
-if (ARGS.length > 0) {
-  jalankan(ARGS);
-} else {
-  await boot();
+if (UTAMA) {
+  if (ARGS.length > 0) {
+    jalankan(ARGS);
+  } else {
+    await boot();
+  }
 }
 
-async function unduh(nama = ASET) {
-  console.log(`[launcher] binary belum ada, unduh ${nama} dari GitHub Release ${REPO}`);
-  // URL unduh langsung, bukan API: IP panel sering kena rate limit 403.
-  const dasar = `https://github.com/${REPO}/releases/latest/download`;
-  let b = await fetch(`${dasar}/${nama}`);
-  if (!b.ok && nama === ASET_STATIS) {
-    console.error(
-      `[launcher] rilis terbaru belum punya ${ASET_STATIS} (HTTP ${b.status}), pakai ${ASET_GLIBC}`
-    );
-    nama = ASET_GLIBC;
-    b = await fetch(`${dasar}/${nama}`);
-  }
-  if (!b.ok) throw new Error(`HTTP ${b.status} saat unduh ${nama}`);
-  const isi = Buffer.from(await b.arrayBuffer());
-  if (isi.length === 0) throw new Error(`aset ${nama} kosong`);
-  mkdirSync(path.dirname(BIN), { recursive: true });
-  writeFileSync(BIN, isi, { mode: 0o755 });
-  console.log(`[launcher] tersimpan ${BIN} (${isi.length} byte)`);
-}
