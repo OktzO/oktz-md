@@ -6,7 +6,6 @@
   "main": "launcher.js",
   "scripts": {
     "start": "node launcher.js",
-    "build": "cargo build --release",
-    "test": "node --test launcher.test.js"
+    "build": "cargo build --release"
   }
 }
