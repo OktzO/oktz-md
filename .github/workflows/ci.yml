@@ -138,6 +138,9 @@ jobs:
       # the flag and the mock-based tests would fail for the wrong reason.
       - name: Run the test suite
         run: npm test
+      - name: Run launcher contract tests
+        working-directory: rust
+        run: npm test
       - name: Run the linter
         # `npm run lint` is eslint over plugins/ only — that is the declared
         # scope, not an oversight, and this step is named accordingly.
