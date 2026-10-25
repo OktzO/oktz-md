@@ -215,6 +215,20 @@ pub enum Reply {
     /// Tabel AI (WA `richResponseMessage`) — padanan `sock.sendTable` JS
     /// (`src/lib/socket.js:1298`).
     Tabel { tabel: crate::tabel::Tabel },
+    /// Tabel V2 (`generateTableContentV2`, `rich-messages.js:978`) —
+    /// `unifiedResponse` + outer `messageContextInfo`. JANGAN diratakan jadi
+    /// `Tabel`: wire-nya beda (context score 2, bot JID
+    /// `259786046210223@bot`), dan meratakan berarti tabel V1 ikut berubah.
+    TabelV2(Box<crate::rich::RichV2>),
+    /// Daftar V1 (`generateListContent`, `rich-messages.js:638`) — tanpa
+    /// baris heading, context score 1, bot JID `867051314767696@bot`.
+    TabelList(Box<crate::rich::RichList>),
+    /// AIRich (`builder.js` `AIRich` — `deviceListMetadata` kosong,
+    /// `botMetadata` disclaimer tanpa proof, bot JID `0@bot`).
+    TabelAi(Box<crate::rich::RichAi>),
+    /// `prepareRichResponseMessage` (`rich-messages.js:1502`) — proof acak +
+    /// `botResponseId`, bot JID `867051314767696@bot`.
+    PreparedRich(Box<crate::rich::PreparedRich>),
     /// Reaksi emoji pada pesan yang memicu (JS `m.react`).
     ///
     /// 502 plugin JS memakainya, jadi absen di enum berarti setiap plugin itu
@@ -402,40 +416,88 @@ impl Reply {
         }
     }
 
+    /// Tabel V2 baru (`generateTableContentV2`, `rich-messages.js:978`).
+    ///
+    /// Wire-nya BEDA dari [`Self::tabel`] (score 2 + bot JID lain +
+    /// `unifiedResponse`), jadi constructor terpisah — bukan varian builder
+    /// di atas model yang sama.
+    pub fn tabel_v2(judul: impl Into<String>) -> Self {
+        Self::TabelV2(Box::new(crate::rich::RichV2::baru(judul)))
+    }
+
+    /// Daftar V1 baru (`generateListContent`, `rich-messages.js:638`) —
+    /// tanpa baris heading.
+    pub fn tabel_list(judul: impl Into<String>) -> Self {
+        Self::TabelList(Box::new(crate::rich::RichList::baru(judul)))
+    }
+
+    /// AIRich baru (`builder.js` `AIRich`) — section + submessages mentah.
+    pub fn tabel_ai() -> Self {
+        Self::TabelAi(Box::new(crate::rich::RichAi::default()))
+    }
+
+    /// Prepared rich baru (`prepareRichResponseMessage`,
+    /// `rich-messages.js:1502`) — section + submessages mentah, plus proof.
+    pub fn prepared_rich() -> Self {
+        Self::PreparedRich(Box::new(crate::rich::PreparedRich::default()))
+    }
+
     /// Baris heading tabel.
+    ///
+    /// Berlaku untuk `Tabel` (V1) dan `TabelV2` — keduanya punya baris
+    /// heading, dan hanya wire-nya yang berbeda.
     pub fn with_table_header(
         mut self,
         header: impl IntoIterator<Item = impl Into<String>>,
     ) -> Self {
-        if let Self::Tabel { tabel } = &mut self {
-            tabel.header = header.into_iter().map(Into::into).collect();
+        let header: Vec<String> = header.into_iter().map(Into::into).collect();
+        match &mut self {
+            Self::Tabel { tabel } => tabel.header = header,
+            Self::TabelV2(v2) => v2.header = header,
+            _ => {}
         }
         self
     }
 
     /// Tambah baris isi tabel.
+    ///
+    /// Untuk list V1, "baris" = satu item daftar (JS `generateListContent`
+    /// memetakan tiap item jadi satu baris tabel).
     pub fn with_table_row(
         mut self,
         baris: impl IntoIterator<Item = impl Into<String>>,
     ) -> Self {
-        if let Self::Tabel { tabel } = &mut self {
-            tabel.baris.push(baris.into_iter().map(Into::into).collect());
+        let row: Vec<String> = baris.into_iter().map(Into::into).collect();
+        match &mut self {
+            Self::Tabel { tabel } => tabel.baris.push(row),
+            Self::TabelV2(v2) => v2.baris.push(row),
+            Self::TabelList(list) => list.items.push(row),
+            _ => {}
         }
         self
     }
 
     /// Teks sebelum tabel (JS `options.headerText`).
+    ///
+    /// V2 memetakannya ke section heading; V1 ke submessage teks.
     pub fn with_table_header_text(mut self, teks: impl Into<String>) -> Self {
-        if let Self::Tabel { tabel } = &mut self {
-            tabel.header_teks = Some(teks.into());
+        let teks = teks.into();
+        match &mut self {
+            Self::Tabel { tabel } => tabel.header_teks = Some(teks),
+            Self::TabelV2(v2) => v2.heading = Some(teks),
+            _ => {}
         }
         self
     }
 
     /// Teks setelah tabel (JS `options.footer`).
     pub fn with_table_footer(mut self, teks: impl Into<String>) -> Self {
-        if let Self::Tabel { tabel } = &mut self {
-            tabel.footer = Some(teks.into());
+        let teks = teks.into();
+        match &mut self {
+            Self::Tabel { tabel } => tabel.footer = Some(teks),
+            Self::TabelV2(v2) => v2.footer = Some(teks),
+            Self::TabelList(list) => list.footer = Some(teks),
+            _ => {}
         }
         self
     }
@@ -628,6 +690,10 @@ impl Reply {
             | Self::Document { .. }
             | Self::Interactive { .. }
             | Self::Tabel { .. }
+            | Self::TabelV2 { .. }
+            | Self::TabelList { .. }
+            | Self::TabelAi { .. }
+            | Self::PreparedRich { .. }
             | Self::Reaction { .. }
             | Self::Mutate { .. } => false,
         }
@@ -694,6 +760,12 @@ impl Reply {
             Self::Interactive { kartu } => Some(kartu.body.as_str()),
             // Tabel AI tidak punya teks polos — isinya cuma baris tabel.
             Self::Tabel { .. } => None,
+            // Rich replies juga tidak punya teks polos: judulnya ada di
+            // section/section JSON, bukan di `conversation`.
+            Self::TabelV2 { .. }
+            | Self::TabelList { .. }
+            | Self::TabelAi { .. }
+            | Self::PreparedRich { .. } => None,
             Self::Reaction { reply, .. } => reply.text_body(),
             // `Sticker`/`Audio` tidak punya teks — router tidak boleh reply
             // teks kosong. Cabang `Mutate` mustahil (`without_mutations` sudah

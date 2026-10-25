@@ -1813,6 +1813,26 @@ pub fn render_reply(
                 Vec::new(),
             )))
         }
+        // Empat balasan rich punya wire contract masing-masing dan TIDAK
+        // boleh diratakan satu sama lain (lihat `crate::rich`). V2 dan list
+        // menerima kutipan pemicu; AIRich/prepared rich memakai contextInfo
+        // tetap ala JS-nya.
+        Reply::TabelV2(v2) => Ok(Some(Rendered::wire(
+            crate::rich::rich_v2_to_message(v2, quote),
+            Vec::new(),
+        ))),
+        Reply::TabelList(list) => Ok(Some(Rendered::wire(
+            crate::rich::rich_list_to_message(list, quote),
+            Vec::new(),
+        ))),
+        Reply::TabelAi(ai) => Ok(Some(Rendered::wire(
+            crate::rich::rich_ai_to_message(ai),
+            Vec::new(),
+        ))),
+        Reply::PreparedRich(p) => Ok(Some(Rendered::wire(
+            crate::rich::prepared_rich_to_message(p),
+            Vec::new(),
+        ))),
         // Reaksi bukan message; dikirim lewat `send_reaction`, bukan render.
         Reply::Reaction { .. } => Err(PipelineError::Unsupported(
             "Reaction harus lewat send_reaction, bukan render".into(),
@@ -4444,6 +4464,155 @@ fn group_number_and_long_number_are_rejected() {
         assert_eq!(table.rows.len(), 2);
         assert_eq!(table.rows[0].is_heading, Some(true));
         assert_eq!(rich.submessages[1].message_text.as_deref(), Some("kaki"));
+    }
+
+    /// Wire contract empat balasan rich TIDAK boleh diratakan jadi satu:
+    /// masing-masing punya bot JID dan outer sendiri. Lihat `crate::rich`.
+    #[test]
+    fn setiap_balasan_rich_memakai_jalur_wirenya_sendiri() {
+        use oktz_plugin_api::rich::{AiSubMessage, RichAi, RichList, RichV2};
+
+        let v2 = Reply::tabel_v2("J").with_table_header(["A"]).with_table_row(["b"]);
+        let r2 = render_reply(&v2, &ReplyTarget::default()).unwrap().unwrap();
+        // V2 mengisi outer `messageContextInfo` + `unifiedResponse`.
+        let rich2 = r2
+            .message
+            .bot_forwarded_message
+            .as_option()
+            .and_then(|b| b.message.as_option())
+            .and_then(|m| m.rich_response_message.as_option())
+            .expect("richResponseMessage V2");
+        assert!(rich2.unified_response.as_option().is_some());
+        assert!(r2.message.message_context_info.as_option().is_some());
+        let jid2 = rich2
+            .context_info
+            .as_option()
+            .unwrap()
+            .forwarded_ai_bot_message_info
+            .as_option()
+            .and_then(|i| i.bot_jid.clone());
+        assert_eq!(jid2.as_deref(), Some("259786046210223@bot"));
+
+        let ai = Reply::TabelAi(Box::new(RichAi {
+            submessages: vec![AiSubMessage { text: Some("t".into()), tabel: None }],
+            ..Default::default()
+        }));
+        let rai = render_reply(&ai, &ReplyTarget::default()).unwrap().unwrap();
+        let rich_ai = rai
+            .message
+            .bot_forwarded_message
+            .as_option()
+            .and_then(|b| b.message.as_option())
+            .and_then(|m| m.rich_response_message.as_option())
+            .expect("richResponseMessage AIRich");
+        let jid_ai = rich_ai
+            .context_info
+            .as_option()
+            .unwrap()
+            .forwarded_ai_bot_message_info
+            .as_option()
+            .and_then(|i| i.bot_jid.clone());
+        assert_eq!(jid_ai.as_deref(), Some("0@bot"));
+
+        let prepared = Reply::prepared_rich();
+        let rp = render_reply(&prepared, &ReplyTarget::default()).unwrap().unwrap();
+        let bot_meta = rp
+            .message
+            .message_context_info
+            .as_option()
+            .expect("prepared rich wajib outer")
+            .bot_metadata
+            .as_option()
+            .expect("botMetadata");
+        assert!(
+            bot_meta.verification_metadata.as_option().is_some(),
+            "hanya prepared rich yang membawa proof"
+        );
+
+        let list = Reply::tabel_list("L").with_table_row(["x"]);
+        let rl = render_reply(&list, &ReplyTarget::default()).unwrap().unwrap();
+        let rich_list = rl
+            .message
+            .bot_forwarded_message
+            .as_option()
+            .and_then(|b| b.message.as_option())
+            .and_then(|m| m.rich_response_message.as_option())
+            .expect("richResponseMessage list");
+        let table = rich_list.submessages[0].table_metadata.as_option().expect("tableMetadata");
+        assert_eq!(table.rows.len(), 1, "list V1 tidak punya baris heading");
+        assert_eq!(table.rows[0].is_heading, None);
+    }
+
+    /// Tabel V1 (`Reply::tabel`) tetap jalur lama: tanpa `unifiedResponse`
+    /// dan baris isi tanpa `isHeading`.
+    #[test]
+    fn tabel_v1_tetap_tanpa_unified_response_dan_body_row_heading() {
+        let v2 = Reply::tabel_v2("J");
+        let r = render_reply(&v2, &ReplyTarget::default()).unwrap().unwrap();
+        assert!(
+            r.message
+                .bot_forwarded_message
+                .as_option()
+                .and_then(|b| b.message.as_option())
+                .and_then(|m| m.rich_response_message.as_option())
+                .unwrap()
+                .unified_response
+                .as_option()
+                .is_some(),
+            "V2 memakai unifiedResponse"
+        );
+
+        let tabel = Reply::tabel("J").with_table_header(["A"]).with_table_row(["b"]);
+        let rt = render_reply(&tabel, &ReplyTarget::default()).unwrap().unwrap();
+        let rich = rt
+            .message
+            .bot_forwarded_message
+            .as_option()
+            .and_then(|b| b.message.as_option())
+            .and_then(|m| m.rich_response_message.as_option())
+            .expect("richResponseMessage");
+        assert!(
+            rich.unified_response.as_option().is_none(),
+            "tabel V1 tidak boleh punya unifiedResponse"
+        );
+        let table = rich.submessages[0].table_metadata.as_option().unwrap();
+        assert_eq!(table.rows.len(), 2, "heading + 1 baris isi");
+        assert_eq!(table.rows[0].is_heading, Some(true));
+        assert_eq!(
+            table.rows[1].is_heading, None,
+            "baris isi tabel V1 tidak boleh membawa isHeading"
+        );
+    }
+
+    /// `Reply::tabel_v2` menerima builder chaining seperti `Reply::tabel`.
+    #[test]
+    fn tabel_v2_builder_menerima_chaining_yang_sama() {
+        let reply = Reply::tabel_v2("J")
+            .with_table_header(["A", "B"])
+            .with_table_row(["1", "2"])
+            .with_table_footer("kaki");
+        let r = render_reply(&reply, &target()).unwrap().unwrap();
+        let rich = r
+            .message
+            .bot_forwarded_message
+            .as_option()
+            .and_then(|b| b.message.as_option())
+            .and_then(|m| m.rich_response_message.as_option())
+            .expect("richResponseMessage");
+        // V2 mengisi `sections` lewat unifiedResponse; submessages kosong.
+        assert!(rich.submessages.is_empty());
+        let data = rich.unified_response.as_option().unwrap().data.clone().unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&data).expect("JSON mentah");
+        let sections = json["sections"].as_array().unwrap();
+        let footer = sections
+            .last()
+            .expect("wajib ada section footer");
+        assert_eq!(
+            footer["view_model"]["primitive"]["text"].as_str(),
+            Some("kaki")
+        );
+        // V2: heading (judul) + tabel + footer; tanpa `teks`, jadi 3.
+        assert_eq!(sections.len(), 3);
     }
 
     #[test]

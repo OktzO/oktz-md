@@ -16,6 +16,11 @@ pub use kartu::{AksiTombol, Baris, Bagian, Daftar, Kartu, KartuHeader, Tombol};
 pub mod tabel;
 pub use tabel::Tabel;
 
+// Balasan rich: V2, list, AI rich, prepared rich. Empat wire contract yang
+// BERBEDA di JS, jadi empat model yang berdiri sendiri di sini.
+pub mod rich;
+pub use rich::{AiSubMessage, PreparedRich, RichAi, RichList, RichV2};
+
 // `sock` JS (cek nomor, foto profil, operasi grup). Kontraknya di sini,
 // implementasinya di crate `oktz-wa`.
 pub mod sock;

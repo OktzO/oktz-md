@@ -1,15 +1,31 @@
 //! Model tabel AI (WA `richResponseMessage`) untuk plugin.
 //!
-//! Padanan JS: `src/lib/rich-messages.js:608` (`generateTableContent`) dan
+//! Padanan JS: `src/lib/rich-messages.js:609` (`generateTableContent`) dan
 //! `src/lib/socket.js:1298` (`sock.sendTable`).
 //!
 //! Bentuknya: `botForwardedMessage` → `richResponseMessage` dengan
 //! submessages: teks opsional (judul), `tableMetadata` (judul + baris), teks
-//! opsional (footer). Baris pertama adalah heading (`isHeading: true`).
+//! opsional (footer).
 //!
-//! `ponytail:` `unifiedResponse` (base64 JSON) dan `botMetadata` belum
-//! dibuat — JS `generateTableContent` (v1) juga tidak memakainya, jadi
-//! tabel v1 sudah sama persis dengan produksi.
+//! # Kontrak baris (`rich-messages.js:617-620`)
+//!
+//! ```js
+//! { items: headers, isHeading: true },
+//! ...rows.map((row) => ({ items: row.map(String) })),
+//! ```
+//!
+//! Baris heading ADA WALAU `headers` kosong. Baris isi TIDAK punya field
+//! `isHeading` sama sekali — JS hanya menulis `isHeading: true` untuk baris
+//! pertama; baris isi tidak membawa field itu, apalagi `isHeading: false`.
+//! Bedanya nyata di wire: `Some(false)` mengirim field `isHeading = false`,
+//! `None` tidak mengirim apa pun. Pemetaan byte-nya di `oktz-wa::tabel`.
+//!
+//! `sendTable` JS memakai `relayMessage` tanpa node `biz` — jadi tabel ini
+//! juga dikirim tanpa node itu.
+//!
+//! `ponytail:` `unifiedResponse` (base64 JSON) dan `botMetadata` tidak ada
+//! di jalur ini — `generateTableContent` v1 tidak memakainya. Jalur yang
+//! butuhnya `TabelV2` (`crate::rich`), bukan model ini.
 
 /// Tabel AI: judul tabel, baris heading, dan isi baris.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -17,6 +33,10 @@ pub struct Tabel {
     /// `tableMetadata.title`.
     pub judul: String,
     /// Baris heading (diletakkan pertama, `isHeading: true`).
+    ///
+    /// Kosong BUKAN "tanpa baris heading": builder tetap menaruh satu baris
+    /// heading berisi sel kosong — persis JS yang SELALU memetakan
+    /// `{ items: headers, isHeading: true }`, apa pun isi `headers`.
     pub header: Vec<String>,
     /// Isi tabel. Tiap baris = sel per kolom.
     pub baris: Vec<Vec<String>>,
