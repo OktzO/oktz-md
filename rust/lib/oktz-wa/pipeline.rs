@@ -1084,6 +1084,12 @@ impl MessageSender for ClientSender {
 
     /// Alur media nyata: `Client::upload` (`src/upload.rs:409`) → bangun
     /// `wa::Message` dari `UploadResponse` → `send_message_with_options`.
+    ///
+    /// `preview` (`sendPreview`) lewat jalur TERPISAH: byte-nya di-upload
+    /// sebagai `thumbnail-link` (`mediaTypeOverride`, `socket.js:1224-1239`),
+    /// bukan sebagai gambar — WA menaruh link preview di endpoint lain, dan
+    /// kirim sebagai `MediaType::Image` menghasilkan bubble gambar, bukan
+    /// preview link.
     fn send_media(&self, to: &str, media: PendingMedia) -> SendBox<'_> {
         let client = self.client.clone();
         let to = to.to_string();
@@ -1091,15 +1097,26 @@ impl MessageSender for ClientSender {
             let jid: Jid = to
                 .parse()
                 .map_err(|e| format!("JID tidak valid {to}: {e}"))?;
-            let data = load_media(&media.source).await.map_err(|e| e.to_string())?;
-            // `MediaType::Sticker` dan `MediaType::Image` sama-sama mendarat
-            // di `/mms/image` (`wacore-0.7.0/src/download.rs:91`) — persis
-            // seperti WA Web, tapi tetap pakai tipe yang jujur per jenis.
-            let upload = client
-                .upload(data, media.kind.upload_type(), UploadOptions::default())
-                .await
-                .map_err(|e| format!("upload media gagal: {e}"))?;
-            let message = build_media_message(media.kind, upload, &media);
+            let message = if let Some(preview) = media.preview {
+                let data = preview.bytes.clone();
+                // `MediaType::LinkThumbnail` = `thumbnail-link`
+                // (`wacore-0.7.0/src/download.rs:83,99`).
+                let upload = client
+                    .upload(data, MediaType::LinkThumbnail, UploadOptions::default())
+                    .await
+                    .map_err(|e| format!("upload thumbnail-link gagal: {e}"))?;
+                patch_preview(preview, &upload)
+            } else {
+                let data = load_media(&media.source).await.map_err(|e| e.to_string())?;
+                // `MediaType::Sticker` dan `MediaType::Image` sama-sama mendarat
+                // di `/mms/image` (`wacore-0.7.0/src/download.rs:91`) — persis
+                // seperti WA Web, tapi tetap pakai tipe yang jujur per jenis.
+                let upload = client
+                    .upload(data, media.kind.upload_type(), UploadOptions::default())
+                    .await
+                    .map_err(|e| format!("upload media gagal: {e}"))?;
+                build_media_message(media.kind, upload, &media)
+            };
             client
                 .send_message_with_options(jid, message, SendOptions::default())
                 .await
@@ -1343,6 +1360,85 @@ impl QuoteSource {
     }
 }
 
+/// `m` versi pipeline: pemicu (untuk kutipan) + pengirim (untuk mention
+/// default) + data mentah yang dibutuhkan builder `replyVariant`.
+///
+/// Field di luar `quote`/`sender` ada khusus untuk varian kustom
+/// (`serialize.js:1052-1343`), yang menulis `m.chat`, `m.body`, `m.text`,
+/// `m.pushName`, dan `m.message` langsung ke wire. Tanpa field-field itu,
+/// varian 8 akan mengutip teks balasan, bukan teks pemicu — beda yang terlihat
+/// user.
+#[derive(Debug, Clone, Default)]
+pub struct ReplyTarget {
+    pub quote: Option<QuoteSource>,
+    pub sender: String,
+    /// `m.chat` — varian 8 menulisnya sebagai `contextInfo.remoteJid`.
+    pub chat: String,
+    /// `m.pushName` — varian 11 memakainya di `description`.
+    pub push_name: String,
+    /// `m.body` — teks MENTAH pemicu (varian 8 `message: m?.body`).
+    pub body: String,
+    /// `m.text` — teks terparsing (cadangan kutipan varian 9/10).
+    pub text: String,
+    /// `m.message` — pesan pemicu APA ADANYA, bukan teksnya saja.
+    pub trigger_message: Option<Box<wa::Message>>,
+}
+
+/// `m` versi pipeline. Satu-satunya cara membuat target supaya tidak ada
+/// tempat yang lupa mengirim `sender`.
+/// `options?.mentions || [m?.sender] || []` (`serialize.js:987`).
+///
+/// Array kosong TRUTHY di JS, jadi `Reply::TextNoMention` (JS
+/// `mentions: []` eksplisit) tidak boleh jatuh ke default pengirim; varian
+/// lain dengan daftar kosong boleh. Yang tahu bedanya adalah pemanggil,
+/// karena varian `Reply`-nya hanya terlihat di sana.
+fn mentions_of_reply(reply: &Reply, target: &ReplyTarget) -> Vec<String> {
+    let list = match reply.without_mutations() {
+        Reply::Text { mentions, .. }
+        | Reply::TextQuoted { mentions, .. }
+        | Reply::NoQuote { mentions, .. } => mentions.as_slice(),
+        Reply::TextNoMention { .. } => &[],
+        _ => &[],
+    };
+    if list.is_empty() {
+        if target.sender.is_empty() {
+            Vec::new()
+        } else {
+            vec![target.sender.clone()]
+        }
+    } else {
+        list.to_vec()
+    }
+}
+
+/// `true` kalau balasan ini berbentuk teks murni — satu-satunya bentuk yang
+/// ikut `replyVariant` (`serialize.js:995-1356` cuma punya `text`).
+///
+/// Kartu, tabel, dan media punya wire contract sendiri (`render_reply`), jadi
+/// varian kustom tidak boleh menimpanya.
+fn reply_is_text_like(reply: &Reply) -> bool {
+    matches!(
+        reply.without_mutations(),
+        Reply::Text { .. }
+            | Reply::TextQuoted { .. }
+            | Reply::NoQuote { .. }
+            | Reply::TextNoMention { .. }
+    )
+}
+
+pub fn reply_target(m: &InboundMessage, sender: &str) -> ReplyTarget {
+    let body = extract_body(&m.message).unwrap_or_default();
+    ReplyTarget {
+        quote: QuoteSource::from_inbound(m),
+        sender: sender.to_string(),
+        chat: m.info.source.chat.to_string(),
+        push_name: m.info.push_name.clone(),
+        body: body.clone(),
+        text: parse_command(&body, &ParseOptions::default()).text,
+        trigger_message: Some(Box::new(m.message.as_ref().clone())),
+    }
+}
+
 /// Satu pesan siap kirim.
 #[derive(Debug)]
 pub struct Rendered {
@@ -1422,6 +1518,30 @@ pub struct PendingMedia {
     pub ptt: bool,
     /// `fileName` dokumen. `None` → `"file"` seperti `socket.js:775`.
     pub file_name: Option<String>,
+    /// `jpegThumbnail` untuk dokumen/video (`serialize.js:1022-1024`,
+    /// `:1126-1128` — varian 2 dan 6 `replyVariant`).
+    pub jpeg_thumbnail: Option<Vec<u8>>,
+    /// `fileLength` — nilai PALSU yang ditulis varian 2/6
+    /// (`serialize.js:1019`, `:1123`) dan harus terkirim apa adanya karena
+    /// user melihatnya di judul dokumen.
+    pub file_length: Option<u64>,
+    /// Link preview yang menunggu upload `thumbnail-link`
+    /// (`mediaTypeOverride`, `socket.js:1224-1239`).
+    pub preview: Option<PendingPreview>,
+}
+
+/// `sendPreview` (`socket.js:1206-1274`): `extendedTextMessage` yang sudah
+/// lengkap KECUALI field CDN, plus byte thumbnail yang harus di-upload
+/// sebagai `thumbnail-link`.
+#[derive(Debug, Clone)]
+pub struct PendingPreview {
+    /// `extendedTextMessage` variasi 4 — sudah lengkap, tinggal field CDN.
+    pub message: wa::Message,
+    /// Byte yang di-upload sebagai `thumbnail-link`.
+    pub bytes: Vec<u8>,
+    /// `true` = varian 11: hasil upload mengisi `faviconMMSMetadata`,
+    /// bukan field thumbnail `extendedTextMessage` (`serialize.js:1294-1316`).
+    pub favicon: bool,
 }
 
 /// `UploadResponse` → `wa::Message` siap kirim.
@@ -1441,7 +1561,15 @@ fn build_media_message(kind: MediaKind, up: UploadResponse, media: &PendingMedia
     };
     // WA menolak caption kosong; `Some("")` dikirim apa adanya.
     let caption = (!media.caption.is_empty()).then(|| media.caption.clone());
-    match kind {
+    // `fileLength` PALSU varian 2/6 (`serialize.js:1019`, `:1123`) ditulis di
+    // ATAS nilai asli upload: builder library selalu memakai
+    // `UploadResponse::file_length`, tidak ada opsi untuk menimpanya.
+    let override_length = |m: &mut wa::Message| {
+        if let (Some(len), Some(dok)) = (media.file_length, m.document_message.as_option_mut()) {
+            dok.file_length = Some(len);
+        }
+    };
+    let mut pesan = match kind {
         MediaKind::Image => image_message(up, image_options(media, caption, ci)),
         MediaKind::Video => video_message(up, video_options(media, caption, ci)),
         MediaKind::Audio => audio_message(up, audio_options(media, ci)),
@@ -1471,7 +1599,45 @@ fn build_media_message(kind: MediaKind, up: UploadResponse, media: &PendingMedia
             }),
             ..Default::default()
         },
+    };
+    override_length(&mut pesan);
+    pesan
+}
+
+/// `sendPreview` (`socket.js:1226-1239`) dan `faviconMMSMetadata`
+/// (`serialize.js:1294-1316`) — field CDN dari upload `thumbnail-link`
+/// ditulis ke `extendedTextMessage` yang sudah dirakit builder varian.
+///
+/// Dua pesan yang beda cabang, bukan satu nilai yang di-share: varian 4
+/// mengisi field thumbnail pesan (WA menampilkannya sebagai gambar preview
+/// link), varian 11 mengisi `faviconMMSMetadata` (ikon kecil di daftar chat).
+/// Menukar keduanya berarti preview link kehilangan gambarnya.
+fn patch_preview(preview: PendingPreview, up: &UploadResponse) -> wa::Message {
+    let mut message = preview.message;
+    let Some(ext) = message.extended_text_message.as_option_mut() else {
+        return message;
+    };
+    if preview.favicon {
+        ext.favicon_mms_metadata = MessageField::some(wa::message::MMSThumbnailMetadata {
+            thumbnail_direct_path: Some(up.direct_path.clone()),
+            thumbnail_sha256: Some(up.file_sha256.to_vec()),
+            thumbnail_enc_sha256: Some(up.file_enc_sha256.to_vec()),
+            media_key: Some(up.media_key.to_vec()),
+            media_key_timestamp: Some(up.media_key_timestamp),
+            // JS: `uploadFav.imageMessage.height || 512`
+            // (`serialize.js:1314-1316`) — upload tidak melaporkan dimensi,
+            // jadi nilai fallback-nya yang dipakai.
+            thumbnail_height: Some(512),
+            thumbnail_width: Some(512),
+        });
+    } else {
+        ext.thumbnail_direct_path = Some(up.direct_path.clone());
+        ext.thumbnail_sha256 = Some(up.file_sha256.to_vec());
+        ext.thumbnail_enc_sha256 = Some(up.file_enc_sha256.to_vec());
+        ext.media_key = Some(up.media_key.to_vec());
+        ext.media_key_timestamp = Some(up.media_key_timestamp);
     }
+    message
 }
 
 /// Opsi per jenis media, dipisah dari `build_media_message` supaya bisa diuji
@@ -1485,7 +1651,7 @@ fn image_options(
     ImageOptions {
         caption,
         mimetype: media.source.mimetype().map(str::to_string),
-        jpeg_thumbnail: None,
+        jpeg_thumbnail: media.jpeg_thumbnail.clone(),
         context_info: ci,
     }
 }
@@ -1500,7 +1666,7 @@ fn video_options(
     VideoOptions {
         caption,
         mimetype: media.source.mimetype().map(str::to_string),
-        jpeg_thumbnail: None,
+        jpeg_thumbnail: media.jpeg_thumbnail.clone(),
         duration_seconds: None,
         gif_playback: Some(media.gif_playback),
         context_info: ci,
@@ -1550,7 +1716,7 @@ fn document_options(
         title: None,
         caption,
         page_count: None,
-        jpeg_thumbnail: None,
+        jpeg_thumbnail: media.jpeg_thumbnail.clone(),
         context_info: ci,
     }
 }
@@ -1560,7 +1726,12 @@ pub(crate) fn context_info(mentions: &[String], quote: Option<&QuoteSource>) -> 
         quoted_message: quote
             .map(|q| MessageField::some(*q.message.clone()))
             .unwrap_or_default(),
-        stanza_id: quote.map(|q| q.stanza_id.clone()),
+        // `stanzaId` kosong TIDAK dikirim: kutipan palsu (varian 2/5/11) tidak
+        // punya `key.id`, dan JS menulis `undefined` yang hilang saat
+        // serialize — `Some("")` akan terkirim sebagai field kosong.
+        stanza_id: quote
+            .map(|q| q.stanza_id.clone())
+            .filter(|s| !s.is_empty()),
         participant: quote.and_then(|q| q.participant.clone()),
         ..Default::default()
     }
@@ -1631,22 +1802,6 @@ fn kartu_context_info(
 ///   pesan yang bisa dikirim. `media: None` → `Err(MediaSourceMissing)`, bukan
 ///   `Ok(None)` — drop senyap akan membuat plugin terlihat sukses padahal tidak
 ///   mengirim apa pun.
-#[derive(Debug, Clone, Default)]
-pub struct ReplyTarget {
-    pub quote: Option<QuoteSource>,
-    pub sender: String,
-}
-
-/// `m` versi pipeline: pemicu (untuk kutipan) + pengirim (untuk mention
-/// default). Satu-satunya cara membuat target supaya tidak ada tempat yang
-/// lupa mengirim `sender`.
-pub fn reply_target(m: &InboundMessage, sender: &str) -> ReplyTarget {
-    ReplyTarget {
-        quote: QuoteSource::from_inbound(m),
-        sender: sender.to_string(),
-    }
-}
-
 pub fn render_reply(
     reply: &Reply,
     target: &ReplyTarget,
@@ -1687,6 +1842,9 @@ pub fn render_reply(
             gif_playback: false,
             ptt: false,
             file_name: None,
+            jpeg_thumbnail: None,
+            file_length: None,
+            preview: None,
         })
     };
     match reply {
@@ -1793,6 +1951,9 @@ pub fn render_reply(
                     gif_playback: false,
                     ptt: false,
                     file_name: None,
+                    jpeg_thumbnail: None,
+                    file_length: None,
+                    preview: None,
                 });
             Ok(Some(Rendered {
                 message: wa::Message::default(),
@@ -1851,7 +2012,13 @@ pub fn render_reply(
     }
 }
 
-fn text_message(text: &str, mentions: &[String], quote: Option<&QuoteSource>) -> wa::Message {
+/// Teks polos vs `extendedTextMessage` — dipakai `render_reply`, kartu
+/// cadangan, DAN builder varian (`reply_variant.rs`).
+pub(crate) fn text_message(
+    text: &str,
+    mentions: &[String],
+    quote: Option<&QuoteSource>,
+) -> wa::Message {
     if mentions.is_empty() && quote.is_none() {
         // `MessageBuilderExt::text` (wacore-0.7.0/src/proto_helpers.rs:105) —
         // `conversation` polos, paling kecil di wire.
@@ -2859,31 +3026,57 @@ impl Pipeline {
     ///
     /// Akar aset diambil dari direktori kerja, sama seperti 
     /// di JS.
+    /// Render balasan sesuai `db.setting("replyVariant")`
+    /// (`serialize.js:976-1356`).
+    ///
+    /// Yang ikut varian: balasan berbentuk TEKS saja (`Reply::Text` dan
+    /// saudaranya) — di JS `m.reply` cuma menerima `text`, dan kartu/tabel/media
+    /// sudah punya wire contract sendiri. Varian `Basic` (0, 1, string, pecahan,
+    /// di luar 2..11) langsung jatuh ke [`render_reply`].
+    ///
+    /// Teks kosong TIDAK dikirim: `if (!text && text !== 0) return null`
+    /// (`serialize.js:966`). Akar aset & srt image diambil dari direktori
+    /// kerja, sama seperti `getAssetBuffer`/`getCachedSrtImage` di JS.
     fn render_with_reply_variant(
         &self,
         reply: &Reply,
         target: &ReplyTarget,
     ) -> Result<Option<Rendered>, PipelineError> {
         let settings = self.ctx.settings_entry();
-        let variant = reply_variant::variant_from(Some(&settings));
-        if !reply_variant::needs_custom_render(variant) || reply.has_media() {
+        let variant = reply_variant::variant_from(&settings);
+        if !reply_variant::needs_custom_render(variant) || !reply_is_text_like(reply) {
             return render_reply(reply, target);
         }
         let Some(text) = reply.text_body() else {
             return render_reply(reply, target);
         };
-        // `if (!text && text !== 0) return null` (`serialize.js:966`) — teks
-        // kosong tidak dikirim sama sekali.
         if text.is_empty() {
             return Ok(None);
         }
         let root = std::env::current_dir().unwrap_or_default();
-        let thumbnail = reply_variant::thumbnail_bytes(&root, flag(Some(&settings), "srtEnabled"));
-        Ok(Some(reply_variant::render_variant_9(
+        let srt_enabled = flag(Some(&settings), "srtEnabled");
+        let srt_image = reply_variant::thumbnail_bytes(&root, srt_enabled);
+        let mentions = mentions_of_reply(reply, target);
+        let input = reply_variant::VariantInput {
             text,
+            mentions: &mentions,
             target,
-            thumbnail.as_deref(),
-        )))
+            config: &self.plugin_src.config,
+            srt_enabled: srt_image.is_some(),
+            srt_image: srt_image.as_deref(),
+        };
+        Ok(match reply_variant::render(variant, &input) {
+            None => None,
+            Some(reply_variant::VariantRender::Wire(m)) => Some(Rendered::wire(m, Vec::new())),
+            Some(reply_variant::VariantRender::Media(p)) => Some(Rendered {
+                message: wa::Message::default(),
+                extra_nodes: Vec::new(),
+                media: Some(p),
+                card: None,
+                card_header_media: None,
+                card_quote: None,
+            }),
+        })
     }
 
     /// Kirim hasil render: media lewat jalur upload, teks lewat `send`.
@@ -3148,7 +3341,7 @@ impl Pipeline {
             let router = Router::new(&*self.ctx, self.parse_opts.clone(), now_ms);
             if let Some(reply) = router.answer(&caller, &body) {
                 let target = reply_target(m, &caller.sender);
-                if let Some(rendered) = render_reply(&reply, &target)? {
+                if let Some(rendered) = self.render_with_reply_variant(&reply, &target)? {
                     self.deliver(&caller.chat, rendered).await?;
                 }
                 return Ok(Outcome::Sent);
@@ -3212,7 +3405,7 @@ impl Pipeline {
             if !energy.allowed {
                 let reply = Reply::text(ENERGI_EXCEEDED);
                 let target = reply_target(m, &caller.sender);
-                if let Some(rendered) = render_reply(&reply, &target)? {
+                if let Some(rendered) = self.render_with_reply_variant(&reply, &target)? {
                     self.deliver(&caller.chat, rendered).await?;
                 }
                 return Ok(Outcome::EnergiDenied);
@@ -3267,7 +3460,7 @@ impl Pipeline {
                     tracing::warn!(error = %e, emoji = %emoji, "gagal bereaksi");
                 }
                 // Teks balasan (kalau ada) tetap dikirim setelah reaksi.
-                if let Some(rendered) = render_reply(inner, &target)? {
+                if let Some(rendered) = self.render_with_reply_variant(inner, &target)? {
                     self.deliver(&caller.chat, rendered).await?;
                 }
                 return Ok(Outcome::Sent);
@@ -3438,6 +3631,7 @@ impl Pipeline {
         let target = ReplyTarget {
             quote: None,
             sender: mention.unwrap_or("").to_string(),
+            ..Default::default()
         };
         let rendered = render_reply(&Reply::text(teks), &target)?;
         if let Some(r) = rendered {
@@ -3754,6 +3948,7 @@ impl Pipeline {
             let target = ReplyTarget {
                 quote: None,
                 sender: jid.clone(),
+                ..Default::default()
             };
             let rendered = render_reply(&Reply::text(teks), &target)?;
             if let Some(r) = rendered {
@@ -4294,7 +4489,16 @@ fn group_number_and_long_number_are_rejected() {
             text: "tanggapan".into(),
             mentions: vec!["6282@s.whatsapp.net".into()],
         };
-        let r = render_reply(&reply, &ReplyTarget { quote: Some(quote.clone()), sender: String::new() }).unwrap().unwrap();
+        let r = render_reply(
+            &reply,
+            &ReplyTarget {
+                quote: Some(quote.clone()),
+                sender: String::new(),
+                ..Default::default()
+            },
+        )
+        .unwrap()
+        .unwrap();
         let c = ctx_of(&r.message).expect("context_info");
         assert_eq!(c.stanza_id.as_deref(), Some("STANZA1"));
         assert_eq!(c.participant.as_deref(), Some("6281@s.whatsapp.net"));
@@ -4330,6 +4534,7 @@ fn group_number_and_long_number_are_rejected() {
         ReplyTarget {
             quote: Some(pemicu()),
             sender: "6289@s.whatsapp.net".into(),
+            ..Default::default()
         }
     }
 
@@ -4470,7 +4675,7 @@ fn group_number_and_long_number_are_rejected() {
     /// masing-masing punya bot JID dan outer sendiri. Lihat `crate::rich`.
     #[test]
     fn setiap_balasan_rich_memakai_jalur_wirenya_sendiri() {
-        use oktz_plugin_api::rich::{AiSubMessage, RichAi, RichList, RichV2};
+        use oktz_plugin_api::rich::{AiSubMessage, RichAi};
 
         let v2 = Reply::tabel_v2("J").with_table_header(["A"]).with_table_row(["b"]);
         let r2 = render_reply(&v2, &ReplyTarget::default()).unwrap().unwrap();
@@ -4792,6 +4997,9 @@ fn group_number_and_long_number_are_rejected() {
             gif_playback: false,
             ptt: false,
             file_name: None,
+            jpeg_thumbnail: None,
+            file_length: None,
+            preview: None,
         }
     }
 
@@ -7463,5 +7671,191 @@ fn a_null_access_field_keeps_the_existing_grant() {
             "balasan terkirim setelah kick: {:?}",
             sender.texts()
         );
+    }
+
+    // =====================================================================
+    // `replyVariant` — dispatcher untuk balasan berbentuk teks saja
+    // =====================================================================
+
+    /// Balasan tetap dari plugin — cukup untuk membuktikan bentuk mana yang
+    /// ikut varian dan mana yang tidak.
+    fn balasan_tetap(reply: Reply) -> PluginLookup {
+        entry_named("varian", move |_c: Ctx| reply.clone())
+    }
+
+    /// Store dengan `replyVariant` aktif; `users` kosong supaya permission
+    /// tidak menolak sebelum balasan sempat dirender.
+    fn store_varian(angka: u64) -> String {
+        serde_json::json!({
+            "users": {},
+            "groups": {},
+            "settings": {"replyVariant": angka},
+        })
+        .to_string()
+    }
+
+    #[tokio::test]
+    async fn interactive_tables_and_media_bypass_variant_render() {
+        // Kartu, tabel, dan media punya wire contract sendiri
+        // (`render_reply`), jadi varian kustom TIDAK boleh menimpa mereka —
+        // `serialize.js` cuma punya `text`/`caption` untuk jalur varian.
+        let yang_bukan_teks: [(&str, Reply); 3] = [
+            (
+                "kartu",
+                Reply::Interactive {
+                    kartu: Box::new(oktz_plugin_api::kartu::Kartu::baru("kartu dari plugin")),
+                },
+            ),
+            (
+                "tabel",
+                Reply::Tabel {
+                    tabel: oktz_plugin_api::Tabel::baru("Judul")
+                        .header(["Metric"])
+                        .baris(["Online"]),
+                },
+            ),
+            (
+                "gambar",
+                Reply::Image {
+                    media: Some(oktz_plugin_api::MediaSource::path("assets/image/foto.jpeg")),
+                    caption: "caption".into(),
+                    mentions: Vec::new(),
+                },
+            ),
+        ];
+        for (nama, reply) in yang_bukan_teks {
+            let (p, sender) = pipeline_for(&store_varian(9), balasan_tetap(reply));
+            let m = inbound_n(".varian", MEMBER, MEMBER, false);
+            assert_eq!(p.process(&m, 1_000).await.unwrap(), Outcome::Sent, "{nama}");
+            if nama == "gambar" {
+                assert_eq!(
+                    sender.media.lock().unwrap().len(),
+                    1,
+                    "{nama}: harus lewat send_media, bukan orderMessage"
+                );
+                continue;
+            }
+            let terkirim = sender.sent.lock().unwrap();
+            assert_eq!(terkirim.len(), 1, "{nama}");
+            // Wire contract masing-masing: kartu = `viewOnceMessage` +
+            // `interactiveMessage` (`cards.rs`), tabel = `botForwardedMessage`
+            // (`tabel.rs:90`). Yang DILARANG hanya satu: jadi `orderMessage`
+            // varian 9, alias teks balasan diubah jadi bubble pesanan.
+            assert!(
+                terkirim[0].1.order_message.as_option().is_none()
+                    && terkirim[0].1.conversation.as_deref() != Some("kartu dari plugin"),
+                "{nama} tidak boleh jalan varian 9: {:?}",
+                terkirim[0].1
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn answer_energy_and_reaction_paths_use_variant_dispatcher() {
+        // Balasan polos di SETIAP jalur ikut varian: jawaban game
+        // (`answerHandler`), penolakan energi, dan teks di dalam reaksi.
+        // Rantai group-protection sengaja TIDAK diuji di sini — ia mengirim
+        // teks peringatan tetap, bukan balasan plugin.
+        let (p, sender) = pipeline_for(
+            &store_varian(9),
+            entry_named("varian", |_c: Ctx| Reply::text("jawaban plugin")),
+        );
+
+        // --- balasan biasa: pembanding --------------------------------
+        // Balasan teks lewat varian 9 = `orderMessage`, jadi `texts()` hanya
+        // menampilkan "<non-teks>"; yang dikunci adalah ISI order-nya.
+        let m = inbound_n(".varian", MEMBER, MEMBER, false);
+        assert_eq!(p.process(&m, 1_000).await.unwrap(), Outcome::Sent);
+        let terkirim = sender.sent.lock().unwrap();
+        assert_eq!(terkirim.len(), 1, "balasan biasa harus terkirim");
+        let order = terkirim[0]
+            .1
+            .order_message
+            .as_option()
+            .expect("balasan biasa harus lewat varian 9");
+        assert_eq!(order.message.as_deref(), Some("jawaban plugin"));
+        // `options?.mentions || [m?.sender]` (`serialize.js:987`).
+        assert_eq!(
+            order.context_info.as_option().unwrap().mentioned_jid,
+            vec![MEMBER.to_string()]
+        );
+        drop(terkirim);
+
+        // --- penolakan energi ------------------------------------------
+        let plug = TestPlugin::new(0, 0, false);
+        let (p2, s2) = dm(
+            &plug,
+            r#"{"settings": {"replyVariant": 9, "capenergi": {"gatetest": 5}}}"#,
+            poor(),
+        );
+        // Energi 1 < biaya 5 → ditolak, balasannya tetap lewat dispatcher.
+        let m2 = inbound_n(".gatetest halo", MEMBER, MEMBER, false);
+        assert_eq!(p2.process(&m2, 2_000).await.unwrap(), Outcome::EnergiDenied);
+        let terkirim = s2.sent.lock().unwrap();
+        assert_eq!(terkirim.len(), 1, "penolakan energi harus balas");
+        let order = terkirim[0]
+            .1
+            .order_message
+            .as_option()
+            .expect("penolakan energi harus lewat varian 9");
+        assert!(
+            order
+                .message
+                .as_deref()
+                .unwrap_or_default()
+                .contains("Energi"),
+            "isi tetap teks energi: {:?}",
+            order.message
+        );
+
+        // --- teks di dalam reaksi --------------------------------------
+        let (p3, s3) = pipeline_for(
+            &store_varian(9),
+            entry_named("varian", |_c: Ctx| {
+                Reply::text("balasan setelah reaksi").with_reaction("✅")
+            }),
+        );
+        let m3 = inbound_n(".varian", MEMBER, MEMBER, false);
+        assert_eq!(p3.process(&m3, 3_000).await.unwrap(), Outcome::Sent);
+        assert_eq!(s3.reacted(), vec![(MEMBER.to_string(), "✅".to_string())]);
+        let terkirim = s3.sent.lock().unwrap();
+        assert_eq!(terkirim.len(), 1);
+        assert!(
+            terkirim[0].1.order_message.as_option().is_some(),
+            "teks dalam reaksi juga harus lewat varian: {:?}",
+            terkirim[0].1
+        );
+    }
+
+    #[tokio::test]
+    async fn jawaban_game_ikut_dispatcher_varian() {
+        // `answerHandler` memakai `m.reply` yang sama, jadi jawaban game juga
+        // harus jadi varian. Registry answer handler kosong di test binary ini
+        // (`oktz-wa` tidak ter-link ke `oktz-plugins`), jadi jalur ini diuji
+        // lewat helper yang dipakai `process` untuk answer: `reply_target` →
+        // render → `deliver`. Tanpa tiga potong itu cabang ini tidak bisa
+        // dijangkau sama sekali.
+        let (p, sender) = pipeline_for(
+            &store_varian(9),
+            entry_named("varian", |_c: Ctx| Reply::text("jawaban game")),
+        );
+        let m = inbound_n(".varian", MEMBER, MEMBER, false);
+        let caller = p.caller_of(&m);
+        let target = reply_target(&m, &caller.sender);
+        let reply = Reply::text("jawaban game");
+        let rendered = p
+            .render_with_reply_variant(&reply, &target)
+            .unwrap()
+            .expect("balasan teks harus dirender");
+        p.deliver(&caller.chat, rendered).await.unwrap();
+        let terkirim = sender.sent.lock().unwrap();
+        assert_eq!(terkirim.len(), 1);
+        let order = terkirim[0]
+            .1
+            .order_message
+            .as_option()
+            .expect("jawaban game harus lewat varian 9");
+        assert_eq!(order.message.as_deref(), Some("jawaban game"));
+        assert_eq!(order.order_id.as_deref(), Some("WXX"));
     }
 }
