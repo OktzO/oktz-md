@@ -161,6 +161,30 @@ pub enum Reply {
     TextNoMention {
         text: String,
     },
+    /// Kartu kontak (WA `contactMessage` / `contactsArrayMessage`) — padanan
+    /// `sock.sendMessage(chat, { contacts: { displayName, contacts } })`
+    /// (`plugins/main/owner.js:63-68`).
+    ///
+    /// `contacts` memuat vCard APA ADANYA: merakitnya tugas plugin karena
+    /// bentuknya persis milik JS (`FN:`/`TEL;type=CELL;type=VOICE;waid=`)
+    /// dan menurunkan nomor sendiri berarti menaruh aturan telepon di API.
+    /// Satu vCard → `contactMessage`; lebih dari satu → `contactsArrayMessage`
+    /// (`socket.js` mengirim keduanya, WA yang memilih tampilannya).
+    Contacts {
+        display_name: String,
+        contacts: Vec<String>,
+    },
+    /// Balasan teks yang mengutip pesan yang BARU dikirim bot di balasan
+    /// sebelumnya — padanan `{ quoted: zanne }` di mana `zanne` adalah hasil
+    /// `sendMessage` (`plugins/main/owner.js:48-50`).
+    ///
+    /// Bukan [`Self::TextQuoted`]: yang dikutip kiriman BOT sendiri, bukan
+    /// pesan pemicu. Tanpa ID kiriman itu balasan ini GAGAL eksplisit —
+    /// jatuh ke kutipan pemicu berarti mengutip pesan yang salah dan user
+    /// melihat thread yang bukan miliknya.
+    TextQuotedPrevious {
+        text: String,
+    },
     /// Image dengan caption, dari sumber media nyata.
     ///
     /// `media: None` = plugin tidak punya sumber yang bisa dikirim. Itu
@@ -307,6 +331,20 @@ impl Reply {
     pub fn text_no_mention(text: impl Into<String>) -> Self {
         Self::TextNoMention {
             text: text.into(),
+        }
+    }
+
+    /// Reaksi yang berdiri sendiri, tanpa balasan lain — `m.react('✅')`
+    /// sebagai pernyataan terakhir handler
+    /// (`plugins/main/ping2.js:141`).
+    ///
+    /// Dipisah dari [`Self::with_reaction`] karena yang ini mengirim reaksi
+    /// SESUDAH balasan lain, bukan mendahuluinya; keduanya jalan di satu
+    /// handler yang menunggu (`await`) di antara keduanya.
+    pub fn reaction(emoji: impl Into<String>) -> Self {
+        Self::Reaction {
+            emoji: emoji.into(),
+            reply: Box::new(Self::None),
         }
     }
 
@@ -683,6 +721,8 @@ impl Reply {
             | Self::TextQuoted { .. }
             | Self::NoQuote { .. }
             | Self::TextNoMention { .. }
+            | Self::Contacts { .. }
+            | Self::TextQuotedPrevious { .. }
             | Self::Image { .. }
             | Self::Sticker { .. }
             | Self::Video { .. }
@@ -754,6 +794,7 @@ impl Reply {
             | Self::TextQuoted { text, .. }
             | Self::NoQuote { text, .. }
             | Self::TextNoMention { text } => Some(text),
+            Self::TextQuotedPrevious { text } => Some(text),
             Self::Image { caption, .. } => Some(caption),
             Self::Video { caption, .. } => Some(caption),
             Self::Document { caption, .. } => Some(caption),
@@ -766,6 +807,8 @@ impl Reply {
             | Self::TabelList { .. }
             | Self::TabelAi { .. }
             | Self::PreparedRich { .. } => None,
+            // Kartu kontak: isinya vCard, bukan teks polos.
+            Self::Contacts { .. } => None,
             Self::Reaction { reply, .. } => reply.text_body(),
             // `Sticker`/`Audio` tidak punya teks — router tidak boleh reply
             // teks kosong. Cabang `Mutate` mustahil (`without_mutations` sudah
@@ -1006,6 +1049,18 @@ pub struct Ctx {
     /// (di memori) supaya test tidak menyentuh berkas nyata; jalur produksi
     /// memasang [`BerkasNyata`](crate::berkas::BerkasNyata) berakar ke folder aset.
     pub berkas: Arc<dyn crate::berkas::Berkas>,
+    /// `Object.keys(db.db.data.users).length` (`stats.js:54`, `ping2.js:100`).
+    ///
+    /// SELURUH store, bukan entri pengirim: `user_data` hanya berisi objek
+    /// milik `sender`, jadi menghitung dari sana akan melaporkan "1 user"
+    /// untuk database berisi ribuan. Pipeline yang merangkum dari snapshot
+    /// store yang SAMA dengan yang dibaca gate permission.
+    pub store_users: usize,
+    /// `Object.values(db.data.users).filter(u => u.isPremium).length`
+    /// (`ping2.js:102`).
+    pub store_premium: usize,
+    /// `Object.keys(db.db.data.groups).length` (`stats.js:55`, `ping2.js:101`).
+    pub store_groups: usize,
 }
 
 impl Ctx {
@@ -1697,6 +1752,9 @@ impl Default for Ctx {
             config: Arc::new(oktz_core::config::Runtime::default()),
             sock: Arc::new(crate::sock::SockMati),
             berkas: Arc::new(crate::berkas::BerkasPalsu::baru()),
+            store_users: 0,
+            store_premium: 0,
+            store_groups: 0,
         }
     }
 }
@@ -2148,5 +2206,80 @@ mod tests {
         assert_eq!(r.text_body(), Some("a"));
         let isi = Reply::sequence(vec![Reply::None]).with_reaction("OK");
         assert_eq!(isi.mutations().len(), 0);
+    }
+
+    #[test]
+    fn reaction_sendiri_tanpa_balasan_ikut_sequence() {
+        // `Reply::reaction` berdiri sendiri dan tidak membawa balasan lain,
+        // jadi urutan reaksi → isi → reaksi bisa disusun dari satu sequence.
+        let r = Reply::reaction("✅");
+        assert!(matches!(&r, Reply::Reaction { reply, .. } if reply.is_none()));
+        assert!(!r.is_none(), "reaksi tetap sesuatu yang perlu dikirim");
+        assert_eq!(r.text_body(), None, "reaksi tanpa balasan tidak punya teks");
+
+        // Reaksi pembuka dan penutup bisa hidup di satu sequence.
+        let seq = Reply::sequence(vec![
+            Reply::reaction("🕕"),
+            Reply::text("isi"),
+            Reply::reaction("✅"),
+        ]);
+        let Reply::Sequence(list) = &seq else {
+            panic!("harus Sequence");
+        };
+        assert_eq!(list.len(), 3);
+        assert_eq!(seq.text_body(), Some("isi"));
+    }
+
+    #[test]
+    fn contacts_membawa_nama_dan_vcard_apa_adanya() {
+        // Satu vCard = satu kontak; nama tampilan diteruskan ke wire.
+        let satu = Reply::Contacts {
+            display_name: "Oktz".into(),
+            contacts: vec!["BEGIN:VCARD\nVERSION:3.0\nFN:Oktz\nEND:VCARD".into()],
+        };
+        assert_eq!(
+            satu.text_body(),
+            None,
+            "kartu kontak tidak punya teks polos untuk router"
+        );
+        let banyak = Reply::Contacts {
+            display_name: "Ini adalah owner kami".into(),
+            contacts: vec!["BEGIN:VCARD".into(), "BEGIN:VCARD".into()],
+        };
+        let Reply::Contacts {
+            display_name,
+            contacts,
+        } = &banyak
+        else {
+            panic!("harus Contacts");
+        };
+        assert_eq!(display_name, "Ini adalah owner kami");
+        assert_eq!(contacts.len(), 2);
+        // VCard tidak diturunkan di sini — plugin yang merakit bentuk JS-nya.
+        assert!(contacts.iter().all(|v| v.starts_with("BEGIN:VCARD")));
+    }
+
+    #[test]
+    fn previous_quote_membedakan_kiriman_bot_dari_pemicu() {
+        let prev = Reply::TextQuotedPrevious {
+            text: "terima kasih".into(),
+        };
+        assert_eq!(prev.text_body(), Some("terima kasih"));
+        assert!(!prev.is_none());
+        // Bukan kutipan pemicu: `TextQuoted` mengutip `m`, ini mengutip
+        // kiriman bot sendiri.
+        assert_ne!(prev, Reply::TextQuoted {
+            text: "terima kasih".into(),
+            mentions: Vec::new(),
+        });
+    }
+
+    #[test]
+    fn store_counts_default_nol_bukan_tebakan() {
+        // Tanpa pipeline (test plugin langsung), jumlah store harus 0 —
+        // bukan `user_data.is_object() as usize` yang melaporkan 1.
+        assert_eq!(Ctx::default().store_users, 0);
+        assert_eq!(Ctx::default().store_premium, 0);
+        assert_eq!(Ctx::default().store_groups, 0);
     }
 }

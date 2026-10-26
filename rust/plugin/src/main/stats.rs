@@ -1,12 +1,15 @@
 //! `plugins/main/stats.js` — statistik bot.
 //!
-//! Balasan memakai tabel AI (`Reply::tabel`): judul tabel, baris heading
-//! `Key | Value`, baris isi, dan footer — isi serta urutannya sama dengan JS.
-//! `ponytail:` tabel versi 1 (`tableMetadata`), bukan versi 2 —
-//! `unifiedResponse` base64 dan `botMetadata` versi JS v2 belum di-port, jadi
-//! tabel digabung manual dari pemisah `;;`.
-//! `ponytail:` `Ctx` hanya membawa data user/grup pengirim, bukan seluruh
-//! store; Users/Premium/Groups dihitung dari data itu, bukan total store.
+//! Balasan memakai tabel V2 (`Reply::tabel_v2`) — padanan `sock.sendTableV2`
+//! JS (`stats.js:88-91`): baris heading, baris isi, dan footer, isi serta
+//! urutannya sama dengan JS.
+//!
+//! Judul input `📊 Bot Statistics` (`table[0]`) sengaja TIDAK dikirim ke wire:
+//! `generateTableContentV2` (`rich-messages.js:978-993`) hanya memakainya
+//! sebagai `tableMetadata.title` dan menulis section heading dari
+//! `options.headerText || options.title`. Tidak ada `headerText` di `.stats`,
+//! jadi yang mendarat di wire adalah `title` (`📊 Berikut ini adalah statistik
+//! dari bot kami`) dan `table[0]` hilang — persis seperti produksi.
 //! `ponytail:` `process.memoryUsage()` tidak ada; Heap memakai VmRSS/VmSize
 //! dari `/proc/self/status` — padanan terdekat.
 //! `ponytail:` `process.version` tidak punya padanan di Rust; kolom Node
@@ -149,12 +152,10 @@ fn baca_heap() -> (u64, u64) {
 }
 
 /// `Object.keys(db.db.data.users/groups)` dan `u.premium` tidak ada di `Ctx`;
-/// yang tersedia hanya data pengirim, jadi itulah yang dihitung.
+/// `ctx.store_users`/`store_premium`/`store_groups` dirangkum pipeline dari
+/// snapshot store yang sama dengan yang dipakai gate permission.
 fn hitung_db(ctx: &Ctx) -> (usize, usize, usize) {
-    let users = ctx.user_data.is_object() as usize;
-    let groups = ctx.group_data.is_object() as usize;
-    let premium = crate::common::js_truthy(ctx.user_data.get("premium")) as usize;
-    (users, premium, groups)
+    (ctx.store_users, ctx.store_premium, ctx.store_groups)
 }
 
 /// `new Date().toLocaleTimeString("id-ID", { timeZone: "Asia/Jakarta" })`.
@@ -163,11 +164,13 @@ fn jam_jakarta() -> String {
     format!("{jam:02}.{menit:02}.{detik:02}")
 }
 
-/// Susun tabel AI — padanan `sock.sendTableV2` JS (`stats.js:88-91`).
+/// Susun tabel V2 — padanan `sock.sendTableV2` JS (`stats.js:88-91`).
 ///
-/// JS v2 mengirim `unifiedResponse` base64; tabel v1 yang dipakai di sini
-/// butuh isi yang sama, jadi tiap pasangan `Key | Value` dari string
-/// ber-pemisah `;;` (`stats.js:79-86`) dipecah jadi satu baris tabel.
+/// `toTableMetadataV2` (`rich-messages.js:944-977`) membaca `table[0]` sebagai
+/// `title`, tapi `generateTableContentV2` hanya mengirim `unified_rows` plus
+/// section heading `headerText || title` dan section `footer`. Karena itu
+/// judul di sini (`table[0]` JS) tidak pernah mendarat di wire, dan heading
+/// yang terkirim adalah `options.title`.
 fn reply(ctx: &Ctx) -> Reply {
     let cfg = ctx.config();
     let nama_bot = cfg.bot.name.as_str();
@@ -182,17 +185,11 @@ fn reply(ctx: &Ctx) -> Reply {
     let (total_mem, bebas_mem) = baca_memori();
     let (heap_dipakai, heap_total) = baca_heap();
 
-    let mut t = Reply::tabel("📊 Berikut ini adalah statistik dari bot kami")
+    let mut t = Reply::tabel_v2("📊 Bot Statistics")
         .with_table_header(["Key", "Value"])
-        // "📊 Bot Statistics" ada di `table[0]` JS, yang oleh
-        // `toTableMetadataV2` (`rich-messages.js:948`) dibaca sebagai judul
-        // tabel (`tableMetadata.title`). V2 tidak pernah mengirim judul itu ke
-        // wire — hanya `unified_rows` plus `options.title`/`options.footer` —
-        // dan di tabel v1 slot `judul` sudah dipakai `options.title`. Jadi
-        // teks paling mirip yang tersisa adalah teks sebelum tabel
-        // (`header_teks`): baris pertama tabel akan jadi sel `Key` tanpa
-        // pasangan `Value`, jadi grid dua kolom rusak.
-        .with_table_header_text("📊 Bot Statistics");
+        // `options.title` JS — satu-satunya teks yang mendarat di wire sebagai
+        // section heading (`rich-messages.js:982-983`: `headerText || title`).
+        .with_table_header_text("📊 Berikut ini adalah statistik dari bot kami");
 
     t = t.with_table_row(["Bot".to_string(), bot.to_string()]);
     t = t.with_table_row(["Version".to_string(), format!("v{versi}")]);
@@ -260,28 +257,37 @@ pub fn stats(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
 
-    /// Ambil tabel dari balasan — `stats` tidak pakai reaksi, jadi cukup
+    /// Ambil tabel V2 dari balasan — `stats` tidak pakai reaksi, jadi cukup
     /// menembus `Mutate` kalau ada.
-    fn tabel_dari(reply: &Reply) -> &oktz_plugin_api::Tabel {
+    fn tabel_dari(reply: &Reply) -> &oktz_plugin_api::RichV2 {
         match reply.without_mutations().tanpa_reaksi() {
-            Reply::Tabel { tabel } => tabel,
-            other => panic!("harus Tabel, dapat {other:?}"),
+            Reply::TabelV2(v2) => v2,
+            other => panic!("harus TabelV2, dapat {other:?}"),
         }
     }
 
     #[test]
-    fn balasan_membentuk_tabel_dengan_isi_dan_urutan_js() {
+    fn stats_uses_table_v2_exact_heading_footer() {
+        // `sock.sendTableV2(m.chat, table, m, { title, footer })`
+        // (`stats.js:88-91`) — judul input `📊 Bot Statistics` (`table[0]`)
+        // hanya jadi `tableMetadata.title` dan TIDAK dikirim ke wire; yang
+        // mendarat sebagai section heading adalah `title`.
         let r = stats(Ctx::default());
         assert!(
-            matches!(r.without_mutations().tanpa_reaksi(), Reply::Tabel { .. }),
-            "harus Reply::Tabel"
+            matches!(r.without_mutations().tanpa_reaksi(), Reply::TabelV2 { .. }),
+            "harus Reply::TabelV2"
         );
         let t = tabel_dari(&r);
 
-        assert_eq!(t.judul, "📊 Berikut ini adalah statistik dari bot kami");
-        assert_eq!(t.header, vec!["Key", "Value"]);
-        assert_eq!(t.header_teks.as_deref(), Some("📊 Bot Statistics"));
+        assert_eq!(t.judul, "📊 Bot Statistics");
+        assert_eq!(
+            t.heading.as_deref(),
+            Some("📊 Berikut ini adalah statistik dari bot kami")
+        );
+        // Config bawaan kosong, jadi footer hilang (`if (footer)`).
+        assert_eq!(t.footer, None);
 
+        assert_eq!(t.header, vec!["Key", "Value"]);
         let kunci: Vec<&str> = t.baris.iter().map(|b| b[0].as_str()).collect();
         assert_eq!(
             kunci,
@@ -329,6 +335,32 @@ mod tests {
         let t = tabel_dari(&r);
         assert_eq!(t.footer.as_deref(), Some("Foto-AI"));
         assert_eq!(t.baris[0], vec!["Bot", "Foto-AI"]);
+    }
+
+    #[test]
+    fn jumlah_users_premium_groups_dari_seluruh_store_bukan_pengirim() {
+        // `Object.keys(db.data.users)` — SELURUH store. Data pengirim saja
+        // tidak boleh dihitung sebagai jumlah user.
+        let ctx = Ctx {
+            user_data: serde_json::json!({"isPremium": true}),
+            group_data: serde_json::json!({"name": "Grup"}),
+            store_users: 12,
+            store_premium: 4,
+            store_groups: 7,
+            ..Default::default()
+        };
+        let balasan = stats(ctx);
+        let t = tabel_dari(&balasan);
+        let baris = |kunci: &str| {
+            t.baris
+                .iter()
+                .find(|b| b[0] == kunci)
+                .unwrap_or_else(|| panic!("baris {kunci} hilang"))
+                .clone()
+        };
+        assert_eq!(baris("Users"), vec!["Users", "12"]);
+        assert_eq!(baris("Premium"), vec!["Premium", "4"]);
+        assert_eq!(baris("Groups"), vec!["Groups", "7"]);
     }
 
     #[test]

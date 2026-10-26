@@ -852,6 +852,9 @@ mod tests {
             body: "body mentah pemicu".into(),
             text: "teks terparsing".into(),
             trigger_message: Some(Box::new(wa::Message::text("pesan asal"))),
+            // Tanpa sequence: belum ada kiriman bot sebelumnya di balasan ini.
+            previous_sent: None,
+            bot_participant: None,
         }
     }
 

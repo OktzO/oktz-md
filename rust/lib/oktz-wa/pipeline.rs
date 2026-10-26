@@ -65,6 +65,7 @@ use whatsapp_rust::upload::{UploadOptions, UploadResponse};
 use whatsapp_rust::waproto::buffa::MessageField;
 use whatsapp_rust::waproto::whatsapp::__buffa::oneof::message::interactive_response_message::InteractiveResponseMessage as IrOneof;
 use whatsapp_rust::wacore::download::MediaType;
+use whatsapp_rust::wacore::proto_helpers::MessageExt;
 use whatsapp_rust::wacore_binary::Node;
 
 use crate::cards::biz_node;
@@ -904,6 +905,39 @@ impl StoreContext {
             .and_then(|s| s.get("energi"))
             .and_then(Value::as_bool)
     }
+
+    /// Jumlah (users, premium, groups) dari SELURUH store.
+    ///
+    /// `Object.keys(db.data.users).length` / `Object.keys(db.data.groups).length`
+    /// (`stats.js:54-55`, `ping2.js:100-101`) dan
+    /// `Object.values(db.data.users).filter(u => u.isPremium).length`
+    /// (`ping2.js:102`).
+    ///
+    /// Dipisah dari [`StoreContext::user_entry`] yang hanya membaca satu entri:
+    /// kalau plugin menghitung sendiri dari `user_data`, ia akan melaporkan
+    /// "1 user" untuk database berisi ribuan.
+    ///
+    /// `ponytail:` `stats.js:56` menyaring field `u.premium` yang TIDAK ADA di
+    /// skema store, jadi `.stats` produksi selalu menampilkan Premium `0`; di
+    /// sini dipakai `isPremium` yang benar-benar tersimpan, supaya angka di dua
+    /// command sama-sama jujur.
+    pub fn store_totals(&self) -> (usize, usize, usize) {
+        let store = self.read();
+        let users = top(&store, "users").and_then(Value::as_object);
+        let groups = top(&store, "groups").and_then(Value::as_object);
+        let total_users = users.map_or(0, serde_json::Map::len);
+        let total_groups = groups.map_or(0, serde_json::Map::len);
+        let premium = users.map_or(0, |u| {
+            u.values()
+                .filter(|v| {
+                    v.get("isPremium")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false)
+                })
+                .count()
+        });
+        (total_users, premium, total_groups)
+    }
 }
 
 // =============================================================================
@@ -958,6 +992,25 @@ impl Dedup {
 
 pub type SendBox<'a> = Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
 
+/// Hasil kirim yang tahu ID pesannya — sumber kutipan
+/// [`oktz_plugin_api::Reply::TextQuotedPrevious`].
+///
+/// `message_id` Boleh kosong: tidak setiap implementasi tahu ID-nya (stub,
+/// pengirim tanpa `Client`). Yang tidak boleh adalah mengarangnya — kutipan
+/// dengan ID palsu menunjuk pesan yang tidak ada.
+#[derive(Debug, Clone)]
+pub struct SentMessage {
+    pub message_id: String,
+    pub message: wa::Message,
+}
+
+/// Kotak balik [`MessageSender::send_with_result`].
+pub type SendMessageBox<'a> =
+    Pin<Box<dyn Future<Output = Result<SentMessage, String>> + Send + 'a>>;
+
+/// Kotak balik [`MessageSender::bot_addressing_jid`].
+pub type AddressingBox<'a> = Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>>;
+
 /// Tituhubung yang mengabstraksi `Client::send_message_with_options`
 /// (`whatsapp-rust-0.7.0/src/send/mod.rs:901`).
 pub trait MessageSender: Send + Sync {
@@ -967,6 +1020,47 @@ pub trait MessageSender: Send + Sync {
         message: wa::Message,
         extra_nodes: Vec<Node>,
     ) -> SendBox<'_>;
+
+    /// Kirim lalu laporkan ID pesan yang terbit.
+    ///
+    /// Dipakai untuk merantai balasan: `Reply::TextQuotedPrevious` mengutip
+    /// pesan yang BARU dikirim bot sendiri, dan itu butuh ID-nya. Default-nya
+    /// memanggil [`Self::send`] dan membawa ID KOSONG — bukan ID karangan,
+    /// supaya implementasi lama tetap compile DAN kutipan berikutnya gagal
+    /// eksplisit alih-alih menunjuk pesan asing.
+    ///
+    /// `ClientSender` meng-override-nya supaya ID dari WA sungguhan terpakai.
+    fn send_with_result(
+        &self,
+        to: &str,
+        message: wa::Message,
+        extra_nodes: Vec<Node>,
+    ) -> SendMessageBox<'_> {
+        let to = to.to_string();
+        Box::pin(async move {
+            self.send(&to, message.clone(), extra_nodes).await?;
+            Ok(SentMessage {
+                message_id: String::new(),
+                message,
+            })
+        })
+    }
+
+    /// JID yang dipakai bot untuk MENGALAMATKAN DIRINYA SENDIRI di `chat` —
+    /// `contextInfo.participant` saat yang dikutip adalah kiriman bot.
+    ///
+    /// Grup `addressing_mode = lid` menyimpan `key.participant` sebagai LID
+    /// (`group-protection.js:263-283`), jadi di grup bot memakai JID LID-nya
+    /// sendiri; di private chat tidak ada LID, jadi nomor telepon. TIDAK
+    /// PERNAH jid pengirim pemicu maupun jid grup: keduanya bukan alamat bot,
+    /// dan memakainya membuat WA mengira kutipan/reaksi milik orang lain.
+    ///
+    /// Default `Ok("")` = "tidak diketahui", persis `botJidOf(sock)` yang
+    /// mengembalikan string kosong saat identitasnya belum ada. Pemanggil
+    /// WAJIB memperlakukan itu sebagai tidak diketahui, bukan sebagai JID.
+    fn bot_addressing_jid(&self, _chat: &str) -> AddressingBox<'_> {
+        Box::pin(async { Ok(String::new()) })
+    }
 
     /// Klien WA sungguhan, kalau pengirim ini memegangnya.
     ///
@@ -1079,6 +1173,61 @@ impl MessageSender for ClientSender {
                 .await
                 .map(|_| ())
                 .map_err(|e| e.to_string())
+        })
+    }
+
+    /// `Client::send_message_with_options` mengembalikan pesan yang sudah
+    /// punya ID dari server (`whatsapp-rust-0.7.0/src/send/mod.rs`), jadi
+    /// ID-nya dibawa apa adanya untuk kutipan balasan berikutnya.
+    fn send_with_result(
+        &self,
+        to: &str,
+        message: wa::Message,
+        extra_nodes: Vec<Node>,
+    ) -> SendMessageBox<'_> {
+        let client = self.client.clone();
+        let to = to.to_string();
+        let message_for_result = message.clone();
+        Box::pin(async move {
+            let jid: Jid = to
+                .parse()
+                .map_err(|e| format!("JID tidak valid {to}: {e}"))?;
+            let opts = if extra_nodes.is_empty() {
+                SendOptions::default()
+            } else {
+                SendOptions::default().with_extra_stanza_nodes(extra_nodes)
+            };
+            let sent = client
+                .send_message_with_options(jid, message, opts)
+                .await
+                .map_err(|e| e.to_string())?;
+            // `SendResult::message_id` (`send/mod.rs:425-429`) — ID stanza
+            // yang benar-benar terbit. Kalau kosong, jangan dikarang:
+            // `TextQuotedPrevious` akan gagal eksplisit.
+            Ok(SentMessage {
+                message_id: sent.message_id,
+                message: message_for_result,
+            })
+        })
+    }
+
+    /// `client.pn()` / `client.lid()`
+    /// (`whatsapp-rust-0.7.0/src/client/accessors.rs:356,361`).
+    fn bot_addressing_jid(&self, chat: &str) -> AddressingBox<'_> {
+        let client = self.client.clone();
+        let chat = chat.to_string();
+        Box::pin(async move {
+            let pn = client.pn().map(|j| j.to_string());
+            let lid = client.lid().map(|j| j.to_string());
+            // Grup addressing LID menyimpan participant sebagai LID, jadi bot
+            // memakai LID-nya sendiri di grup (`group-protection.js:1402-1408`
+            // membandingkan ke PN DAN LID); private chat tidak punya LID.
+            let jid = if chat.ends_with("@g.us") {
+                lid.or(pn)
+            } else {
+                pn.or(lid)
+            };
+            jid.ok_or_else(|| "client belum punya JID bot (pairing belum selesai)".to_string())
         })
     }
 
@@ -1388,6 +1537,19 @@ pub struct ReplyTarget {
     pub text: String,
     /// `m.message` — pesan pemicu APA ADANYA, bukan teksnya saja.
     pub trigger_message: Option<Box<wa::Message>>,
+    /// Pesan TERAKHIR yang berhasil dikirim di balasan ini — sumber kutipan
+    /// [`oktz_plugin_api::Reply::TextQuotedPrevious`] (JS `{quoted: zanne}`,
+    /// `plugins/main/owner.js:50`).
+    ///
+    /// Diisi pipeline saat mengirim [`oktz_plugin_api::Reply::Sequence`], lalu
+    /// dibaca render untuk balasan berikutnya. `None` di awal; TIDAK diisi dari
+    /// pemicu — mengutip pemicu saat datanya tidak ada akan menunjuk pesan
+    /// yang salah.
+    pub previous_sent: Option<SentMessage>,
+    /// JID bot sendiri ([`MessageSender::bot_addressing_jid`]) — dipakai
+    /// sebagai `contextInfo.participant` untuk kutipan kiriman bot, bukan
+    /// `participant` pemicu. Di grup addressing LID keduanya berbeda.
+    pub bot_participant: Option<String>,
 }
 
 /// `m` versi pipeline. Satu-satunya cara membuat target supaya tidak ada
@@ -1447,6 +1609,8 @@ pub fn reply_target(m: &InboundMessage, sender: &str) -> ReplyTarget {
         body: body.clone(),
         text: parse_command(&body, &ParseOptions::default()).text,
         trigger_message: Some(Box::new(m.message.as_ref().clone())),
+        previous_sent: None,
+        bot_participant: None,
     }
 }
 
@@ -1786,6 +1950,21 @@ fn kartu_context_info(
     }
 }
 
+/// `true` untuk balasan yang perjalanannya SELALU lewat jalur terurut
+/// ([`Pipeline::deliver_reply`]) — `Sequence` dan `Reaction`. Untuk bentuk ini
+/// tidak ada cabang "tidak dirender": sampai di sini berarti ada urutan yang
+/// harus dijalankan, walau isinya ternyata `None` semua.
+///
+/// Dipakai `Outcome` supaya tetap sama seperti jalur lama, di mana
+/// `Reply::Sequence`/`Reply::Reaction` mengembalikan `Sent`/`Denied` sementara
+/// balasan tunggal yang tidak dirender jatuh ke `NotACommand`.
+fn is_ordered(reply: &Reply) -> bool {
+    matches!(
+        reply.without_mutations(),
+        Reply::Sequence(_) | Reply::Reaction { .. }
+    )
+}
+
 /// Ubah `Reply` menjadi pesan yang bisa dikirim.
 ///
 /// `Ok(None)` = jangan kirim apa pun (`Reply::None`).
@@ -1945,6 +2124,84 @@ pub fn render_reply(
             text_message(text, &[], quote),
             Vec::new(),
         ))),
+        // Kartu kontak JS (`owner.js:63-68`): satu vCard →
+        // `contactMessage`, lebih dari satu → `contactsArrayMessage`.
+        // Baileys mengirim keduanya lewat `sock.sendMessage` yang sama, WA
+        // yang memilih cara menampilkannya.
+        Reply::Contacts {
+            display_name,
+            contacts,
+        } => {
+            let ci = context_info(&mentions_of(&[]), quote);
+            let message = if let [vcard] = contacts.as_slice() {
+                wa::Message {
+                    contact_message: MessageField::some(wa::message::ContactMessage {
+                        display_name: Some(display_name.clone()),
+                        vcard: Some(vcard.clone()),
+                        context_info: MessageField::some(ci),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }
+            } else {
+                wa::Message {
+                    contacts_array_message: MessageField::some(
+                        wa::message::ContactsArrayMessage {
+                            display_name: Some(display_name.clone()),
+                            contacts: contacts
+                                .iter()
+                                .map(|vcard| wa::message::ContactMessage {
+                                    display_name: Some(display_name.clone()),
+                                    vcard: Some(vcard.clone()),
+                                    ..Default::default()
+                                })
+                                .collect(),
+                            context_info: MessageField::some(ci),
+                            ..Default::default()
+                        },
+                    ),
+                    ..Default::default()
+                }
+            };
+            Ok(Some(Rendered::wire(message, Vec::new())))
+        }
+        // Mengutip pesan yang BARU dikirim bot sendiri. Tanpa ID kiriman itu
+        // balasan ini GAGAL — bukan jatuh ke kutipan pemicu: pemicu adalah
+        // pesan orang lain, dan mengutipnya membuat user melihat thread yang
+        // bukan milik balasan ini.
+        Reply::TextQuotedPrevious { text } => {
+            let previous = target.previous_sent.as_ref().ok_or_else(|| {
+                PipelineError::Other(
+                    "Reply::TextQuotedPrevious butuh pesan yang baru dikirim di balasan ini; \
+                     tidak ada (bukan Reply::Sequence, atau elemen sebelumnya gagal). \
+                     Pesan TIDAK dikirim — mengutip pesan pemicu akan menunjuk pesan yang salah."
+                        .to_string(),
+                )
+            })?;
+            if previous.message_id.is_empty() {
+                return Err(PipelineError::Other(format!(
+                    "Reply::TextQuotedPrevious butuh ID pesan yang baru dikirim; \
+                     send_with_result melaporkan ID kosong. Pesan TIDAK dikirim — \
+                     kutipan dengan ID kosong menunjuk pesan yang tidak ada."
+                )));
+            }
+            let quote_prev = QuoteSource {
+                stanza_id: previous.message_id.clone(),
+                // `participant` = JID bot, bukan pengirim pemicu: yang dikutip
+                // kiriman bot sendiri (JS `{quoted: zanne}`). Tanpa
+                // `bot_participant` field-nya dibiarkan kosong — jid pemicu
+                // BUKAN alamat bot, dan memakainya membuat WA mengira kutipan
+                // milik orang lain.
+                participant: target.bot_participant.clone(),
+                // Payload kutipan tidak boleh membawa `contextInfo` sarang —
+                // `prepare_for_quote` (`proto_helpers.rs:366`) yang membuangnya.
+                message: previous.message.clone().prepare_for_quote(),
+            };
+            Ok(Some(Rendered::wire(
+                text_message(text, &mentions_of(&[]), Some(&quote_prev)),
+                Vec::new(),
+            )))
+        }
         Reply::Interactive { kartu } => {
             // Header kartu boleh punya gambar, dan gambarnya harus di-upload
             // lebih dulu (JS `prepareWAMessageMedia`). Jadi kartu tidak
@@ -2549,6 +2806,13 @@ impl PluginCtxSource {
         c.config = self.config.clone();
         c.sock = self.sock.clone();
         c.berkas = self.berkas.clone();
+        // Jumlah SELURUH store, bukan entri pengirim — `stats.js:54-56` dan
+        // `ping2.js:100-102` membaca `db.data.users`/`groups` utuh, dan plugin
+        // tidak punya akses store sendiri.
+        let (users, premium, groups) = self.store.store_totals();
+        c.store_users = users;
+        c.store_premium = premium;
+        c.store_groups = groups;
     }
 }
 
@@ -3083,8 +3347,14 @@ impl Pipeline {
         })
     }
 
-    /// Kirim hasil render: media lewat jalur upload, teks lewat `send`.
-    async fn deliver(&self, chat: &str, rendered: Rendered) -> Result<(), PipelineError> {
+    /// Kirim hasil render: media lewat jalur upload, teks lewat
+    /// `send_with_result`.
+    ///
+    /// Mengembalikan [`SentMessage`] supaya pemanggil bisa memeta ID kiriman
+    /// terakhir ([`ReplyTarget::previous_sent`]). Jalur media dan kartu TIDAK
+    /// tahu ID-nya — byte-nya dirakit di dalam pengirim — jadi keduanya
+    /// membawa ID KOSONG, bukan karangan.
+    async fn deliver(&self, chat: &str, rendered: Rendered) -> Result<SentMessage, PipelineError> {
         // `Rendered` untuk media sengaja punya `message` kosong, jadi TIDAK
         // mungkin terkirim apa adanya — harus lewat `send_media`.
         // Kartu ikut pola yang sama: proto-nya baru ada setelah media header
@@ -3107,26 +3377,96 @@ impl Pipeline {
                     Some(teks) => {
                         tracing::warn!(error = %e, "kartu gagal dikirim, kirim teks cadangan");
                         let msg = text_message(&teks, &[], None);
+                        let message = msg.clone();
                         self.sender.send(chat, msg, Vec::new()).await.map_err(|e2| {
                             PipelineError::Other(format!("gagal kirim cadangan: {e2}"))
                         })?;
-                        return Ok(());
+                        return Ok(SentMessage {
+                            message_id: String::new(),
+                            message,
+                        });
                     }
                     None => {
                         return Err(PipelineError::Other(format!("gagal kirim: {e}")));
                     }
                 }
             }
-            return Ok(());
+            return Ok(SentMessage {
+                message_id: String::new(),
+                message: wa::Message::default(),
+            });
         }
-        let sent = match rendered.media {
-            Some(pending) => self.sender.send_media(chat, pending).await,
-            None => self
-                .sender
-                .send(chat, rendered.message, rendered.extra_nodes)
-                .await,
-        };
-        sent.map_err(|e| PipelineError::Other(format!("gagal kirim: {e}")))
+        match rendered.media {
+            Some(pending) => {
+                self.sender
+                    .send_media(chat, pending)
+                    .await
+                    .map_err(|e| PipelineError::Other(format!("gagal kirim: {e}")))?;
+                Ok(SentMessage {
+                    message_id: String::new(),
+                    message: wa::Message::default(),
+                })
+            }
+            None => {
+                let message = rendered.message.clone();
+                self.sender
+                    .send_with_result(chat, rendered.message, rendered.extra_nodes)
+                    .await
+                    .map(|mut sent| {
+                        sent.message = message;
+                        sent
+                    })
+                    .map_err(|e| PipelineError::Other(format!("gagal kirim: {e}")))
+            }
+        }
+    }
+
+    /// Kirim satu balasan APA ADANYA, termasuk sarangnya.
+    ///
+    /// Rekursif karena handler JS menunggu (`await`) di antara kirimannya, dan
+    /// `Reply::Sequence` adalah bentuk tunggal yang meniru itu:
+    /// - `Sequence` → tiap elemen dikirim BERURUTAN; kegagalan di tengah
+    ///   menghentikan sisanya (`?`), sama seperti `await` yang melempar di JS.
+    /// - `Reaction` → reaksi dulu (kegagalannya hanya di-log, seperti JS
+    ///   `.catch(() => {})`), lalu balasan di dalamnya kalau ada.    /// - sisanya → satu render + satu kirim, dan hasilnya dicatat ke
+    ///   `target.previous_sent` supaya `Reply::TextQuotedPrevious` sesudahnya
+    ///   punya sumber kutipan.
+    ///
+    /// Mengembalikan `true` kalau ada yang benar-benar dikirim, supaya
+    /// `Outcome` tetap sama seperti jalur lama.
+    fn deliver_reply<'a>(
+        &'a self,
+        chat: &'a str,
+        reply: &'a Reply,
+        target: &'a mut ReplyTarget,
+        key: &'a wa::MessageKey,
+    ) -> Pin<Box<dyn Future<Output = Result<bool, PipelineError>> + Send + 'a>> {
+        Box::pin(async move {
+            match reply {
+                Reply::None => Ok(false),
+                Reply::Sequence(list) => {
+                    for item in list {
+                        self.deliver_reply(chat, item, target, key).await?;
+                    }
+                    // Sequence selalu punya sesuatu untuk dikirim — kalau tidak,
+                    // `Reply::sequence` sudah meratakannya jadi `None`.
+                    Ok(true)
+                }
+                Reply::Reaction { emoji, reply: inner } => {
+                    if let Err(e) = self.sender.react(chat, key, emoji).await {
+                        tracing::warn!(error = %e, emoji = %emoji, "gagal bereaksi");
+                    }
+                    self.deliver_reply(chat, inner, target, key).await
+                }
+                other => {
+                    let Some(rendered) = self.render_with_reply_variant(other, target)? else {
+                        return Ok(false);
+                    };
+                    target.previous_sent = Some(self.deliver(chat, rendered).await?);
+                    Ok(true)
+                }
+            }
+        })
     }
 
     /// `db.setting("capenergi") || {}` (`handler.js:1856`) — override biaya
@@ -3455,72 +3795,28 @@ impl Pipeline {
                 }
             }
 
-            let target = reply_target(m, &caller.sender);
-            // `Reply::Reaction` (JS `m.react('✅')`) bukan message — dikirim
-            // lewat jalur reaksi. Seperti cooldown, kegagalan bereaksi tidak
-            // boleh menggagalkan sisa pipeline.
-            if let Reply::Reaction { emoji, reply: inner } = &reply {
-                if let Err(e) = self.sender.react(&caller.chat, &message_key_of(m), emoji).await {
-                    tracing::warn!(error = %e, emoji = %emoji, "gagal bereaksi");
-                }
-                // Teks balasan (kalau ada) tetap dikirim setelah reaksi.
-                if let Some(rendered) = self.render_with_reply_variant(inner, &target)? {
-                    self.deliver(&caller.chat, rendered).await?;
-                }
-                return Ok(Outcome::Sent);
-            }
-
-            // `replyVariant` (setting produksi aktif = 9, `orderMessage`)
-            // dipilih per balasan oleh `render_with_reply_variant`: varian
-            // 2..11 punya builder sendiri, sisanya teks biasa seperti
-            // `serialize.js:976-1356`. Balasan BUKAN teks (kartu, tabel,
-            // media) lewat `render_reply` apa adanya.
+            let mut target = reply_target(m, &caller.sender);
+            let key = message_key_of(m);
+            // `Reply::Sequence`/`Reply::Reaction` bersarang dikirim berurutan
+            // oleh satu jalur rekursif; balasan lain tetap satu render + satu
+            // kirim. Mutasi SUDAH ditulis di atas, jadi tiap elemen boleh langsung
+            // dikirim. Kegagalan di tengah menghentikan sisa elemen — persis
+            // `await` berurutan di JS yang melempar dan tidak mengirim pesan
+            // berikutnya.
             //
-            // `ponytail:` reply BERMEDIA tidak ikut varian — di JS `serialize`
-            // menerima teks terpisah dari media, jadi perlu Arcade
-            // `src/lib/socket.js` untuk memastikan apa yang terjadi pada
-            // `m.reply({image}, {text})`. Sampai itu dicek, jalur lama
-            // dipertahankan: user tetap dapat gambar, cuma bukan bubble pesanan.
-            // `Reply::Sequence` — beberapa pesan berurutan dari satu handler.
-            // Mutasi SUDAH ditulis di atas, jadi setiap elemen cukup dirender
-            // dan dikirim; error di tengah menghentikan sisa, meniru `await`
-            // berurutan di JS yang melempar dan tidak mengirim pesan berikutnya.
-            if let Reply::Sequence(list) = reply.without_mutations() {
-                for item in list {
-                    match self.render_with_reply_variant(item, &target)? {
-                        Some(r) => self.deliver(&caller.chat, r).await?,
-                        None => continue,
-                    }
-                }
-                if matches!(decision, Decision::Handled(_))
-                    && let Some((name, secs)) = cooldown_key
-                {
-                    self.gates.start_cooldown(&caller, &name, secs, now_ms);
-                }
-                return Ok(if matches!(decision, Decision::Handled(_)) {
-                    Outcome::Sent
-                } else {
-                    Outcome::Denied
-                });
-            }
+            // `bot_addressing_jid` di-resolve SEKALI di sini: yang dikutip oleh
+            // `Reply::TextQuotedPrevious` adalah kiriman bot sendiri, jadi
+            // `participant` kutipannya harus jid bot, bukan pengirim pemicu.
+            target.bot_participant = self
+                .sender
+                .bot_addressing_jid(&caller.chat)
+                .await
+                .ok()
+                .filter(|j| !j.is_empty());
 
-            let Some(rendered) = self.render_with_reply_variant(&reply, &target)? else {
-                // `Reply::None`: `DeniedMode::Silent`, `SelfGroup`, `NoPlugin`,
-                // `NotACommand`, atau `Reply::None` dari plugin — semua sengaja diam.
-                return Ok(if matches!(decision, Decision::Handled(_)) {
-                    Outcome::Sent
-                } else {
-                    Outcome::NotACommand
-                });
-            };
-
-            let outcome = if matches!(decision, Decision::Handled(_)) {
-                Outcome::Sent
-            } else {
-                Outcome::Denied
-            };
-
-            self.deliver(&caller.chat, rendered).await?;
+            let terkirim = self
+                .deliver_reply(&caller.chat, &reply, &mut target, &key)
+                .await?;
 
             // Cooldown baru mulai SETELAH handler selesai
             // (`handler.js:1922-1924`), jadi command yang gagal di tengah tidak
@@ -3530,7 +3826,21 @@ impl Pipeline {
             {
                 self.gates.start_cooldown(&caller, &name, secs, now_ms);
             }
-            Ok(outcome)
+
+            if !terkirim && !is_ordered(&reply) {
+                // `Reply::None`: `DeniedMode::Silent`, `SelfGroup`, `NoPlugin`,
+                // `NotACommand`, atau `Reply::None` dari plugin — semua sengaja diam.
+                return Ok(if matches!(decision, Decision::Handled(_)) {
+                    Outcome::Sent
+                } else {
+                    Outcome::NotACommand
+                });
+            }
+            Ok(if matches!(decision, Decision::Handled(_)) {
+                Outcome::Sent
+            } else {
+                Outcome::Denied
+            })
         }
     }
 
@@ -4068,9 +4378,22 @@ mod tests {
         deleted: Arc<Mutex<Vec<(String, String, String)>>>,
         /// `(chat, emoji)` per panggilan reaksi.
         reacted: Arc<Mutex<Vec<(String, String)>>>,
+        /// Log terpadu SEMUA kiriman urut apa adanya — vektor terpisah di atas
+        /// tidak bisa menjawab "apa yang terjadi lebih dulu".
+        log: Arc<Mutex<Vec<String>>>,
+        /// Kiriman ke-N (1-based) yang harus gagal; `0` = tidak pernah.
+        fail_at: usize,
+        attempts: Arc<std::sync::atomic::AtomicUsize>,
     }
 
     impl RecordingSender {
+        /// Gagalkan kiriman ke-`n` (1-based) — untuk membuktikan sequence
+        /// berhenti setelah kegagalan pertama.
+        fn with_failure_at(mut self, n: usize) -> Self {
+            self.fail_at = n;
+            self
+        }
+
         fn deleted(&self) -> Vec<(String, String, String)> {
             self.deleted.lock().unwrap().clone()
         }
@@ -4085,23 +4408,56 @@ mod tests {
                 .map(|(to, m, _)| format!("{to}: {}", body_of(m).unwrap_or("<non-teks>")))
                 .collect()
         }
+        fn log(&self) -> Vec<String> {
+            self.log.lock().unwrap().clone()
+        }
+        fn attempts(&self) -> usize {
+            self.attempts.load(std::sync::atomic::Ordering::SeqCst)
+        }
+        /// `Err` untuk kiriman ke-`fail_at`, `Ok` untuk sisanya. Dihitung
+        /// sebelum push supaya urutan log tetap urutan percobaan.
+        fn gate(&self) -> Result<(), String> {
+            let n = self.attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+            if self.fail_at != 0 && n == self.fail_at {
+                Err(format!("pengirim uji menolak kiriman ke-{n}"))
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    /// Label jenis media untuk log terpadu — nama wire, bukan `Debug`.
+    fn media_label(kind: MediaKind) -> &'static str {
+        match kind {
+            MediaKind::Image => "image",
+            MediaKind::Sticker => "sticker",
+            MediaKind::Video => "video",
+            MediaKind::Audio => "audio",
+            MediaKind::Document => "document",
+        }
     }
 
     impl MessageSender for RecordingSender {
         fn send(&self, to: &str, message: wa::Message, extra: Vec<Node>) -> SendBox<'_> {
-            self.sent
-                .lock()
-                .unwrap()
-                .push((to.to_string(), message, extra.len()));
-            Box::pin(async move { Ok(()) })
+            let gate = self.gate();
+            // Yang GAGAL tidak dicatat: `texts()` harus membaca apa yang
+            // benar-benar terkirim, bukan apa yang dicoba.
+            if gate.is_ok() {
+                self.sent
+                    .lock()
+                    .unwrap()
+                    .push((to.to_string(), message, extra.len()));
+            }
+            Box::pin(async move { gate })
         }
 
         fn send_media(&self, to: &str, media: PendingMedia) -> SendBox<'_> {
-            self.media
-                .lock()
-                .unwrap()
-                .push((to.to_string(), media));
-            Box::pin(async move { Ok(()) })
+            let gate = self.gate();
+            if gate.is_ok() {
+                self.log.lock().unwrap().push(media_label(media.kind).to_string());
+                self.media.lock().unwrap().push((to.to_string(), media));
+            }
+            Box::pin(async move { gate })
         }
 
         fn delete_message(
@@ -4110,20 +4466,27 @@ mod tests {
             message_id: &str,
             original_sender: &str,
         ) -> SendBox<'_> {
-            self.deleted.lock().unwrap().push((
-                chat.to_string(),
-                message_id.to_string(),
-                original_sender.to_string(),
-            ));
-            Box::pin(async move { Ok(()) })
+            let gate = self.gate();
+            if gate.is_ok() {
+                self.deleted.lock().unwrap().push((
+                    chat.to_string(),
+                    message_id.to_string(),
+                    original_sender.to_string(),
+                ));
+            }
+            Box::pin(async move { gate })
         }
 
         fn react(&self, chat: &str, _target: &wa::MessageKey, emoji: &str) -> SendBox<'_> {
-            self.reacted
-                .lock()
-                .unwrap()
-                .push((chat.to_string(), emoji.to_string()));
-            Box::pin(async move { Ok(()) })
+            let gate = self.gate();
+            if gate.is_ok() {
+                self.log.lock().unwrap().push(format!("reaction {emoji}"));
+                self.reacted
+                    .lock()
+                    .unwrap()
+                    .push((chat.to_string(), emoji.to_string()));
+            }
+            Box::pin(async move { gate })
         }
     }
 
@@ -4200,6 +4563,20 @@ mod tests {
 
     fn ctx_of(m: &wa::Message) -> Option<&wa::ContextInfo> {
         m.extended_text_message.as_option()?.context_info.as_option()
+    }
+
+    /// `contextInfo` yang masih menempel pada PAYLOAD KUTIPAN harus kosong
+    /// isinya: tanpa mention (tidak boleh menandai orang lain) dan tanpa
+    /// rantai kutipan. `prepare_for_quote` (`proto_helpers.rs:563-589`) yang
+    /// membuang keduanya; field-nya sendiri boleh tetap ada karena WA
+    /// menerima `contextInfo` kosong.
+    fn nested_context_is_blank(m: &wa::Message) -> bool {
+        context_info_of(m).is_none_or(|c| {
+            c.mentioned_jid.is_empty()
+                && c.group_mentions.is_empty()
+                && c.quoted_message.as_option().is_none()
+                && c.stanza_id.is_none()
+        })
     }
 
     const OK_STORE: &str = r#"{
@@ -6171,6 +6548,31 @@ impl TestPlugin {
         self.calls.load(std::sync::atomic::Ordering::Relaxed)
     }
 
+    /// Plugin uji dengan BALASAN BEBAS — untuk sequence, kutipan pesan
+    /// sebelumnya, dan bentuk balasan yang butuh lebih dari satu kiriman.
+    fn with_reply(reply: Reply) -> Self {
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = Arc::clone(&calls);
+        let entry: &'static PluginEntry = Box::leak(Box::new(PluginEntry {
+            meta: oktz_plugin_api::meta::PluginMeta {
+                name: "seqtest".into(),
+                category: "fun".into(),
+                // Cooldown 0 supaya jalur reaksi cooldown (`⏱️`) tidak ikut
+                // tercatat di log urutan.
+                cooldown: 0,
+                energi: 0,
+                is_premium: false,
+                is_private: false,
+                ..Default::default()
+            },
+            handler: Arc::new(move |_c: Ctx| {
+                counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                reply.clone()
+            }),
+        }));
+        Self { entry, calls }
+    }
+
     /// Lookup yang menjawab command apa pun ke plugin ini — cukup untuk
     /// membuktikan gate, tanpa perlu mendaftarkan 30 plugin sungguhan.
     fn lookup(&self) -> PluginLookup {
@@ -7921,5 +8323,234 @@ fn a_null_access_field_keeps_the_existing_grant() {
             .expect("jawaban game harus lewat varian 9");
         assert_eq!(order.message.as_deref(), Some("jawaban game"));
         assert_eq!(order.order_id.as_deref(), Some("WXX"));
+    }
+
+    // =====================================================================
+    // Ordered sequence — `Reply::Sequence` / `Reply::Reaction` bersarang
+    //
+    // Plugin JS menunggu (`await`) di antara kirimannya, jadi urutan itu
+    // bagian dari kontrak: `ping2.js:60` reaksi → `:129` tabel →
+    // `:141` reaksi.
+    // =====================================================================
+
+    #[tokio::test]
+    async fn sequence_sends_reaction_media_then_reaction_in_order() {
+        // Bentuk yang dipakai `ping2` (`plugins/main/ping2.js`): reaksi pembuka,
+        // satu media, reaksi penutup. Semuanya dari SATU handler, jadi satu
+        // vektor log harus membaca persis urutan itu.
+        let plugin = TestPlugin::with_reply(Reply::sequence(vec![
+            Reply::reaction("🕕"),
+            Reply::sticker(MediaSource::bytes(vec![1, 2, 3])),
+            Reply::reaction("✅"),
+        ]));
+        let (p, s) = dm(&plugin, "{}", EnergiSettings::default());
+        let m = inbound_n(".seq", MEMBER, MEMBER, false);
+        assert_eq!(p.process(&m, 1_000).await.unwrap(), Outcome::Sent);
+        assert_eq!(s.log(), ["reaction 🕕", "sticker", "reaction ✅"]);
+        // Reaksi memang lewat jalur reaksi, bukan pesan.
+        assert_eq!(s.reacted(), vec![(MEMBER.to_string(), "🕕".to_string()), (MEMBER.to_string(), "✅".to_string())]);
+        assert_eq!(s.media.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn nested_sequence_reactions_are_rendered_not_unsupported() {
+        // Sequence di dalam Sequence: `Reply::sequence` meratakan satu level,
+        // tapi handler boleh menyusun sendiri sarang dua lapis. Reaksi di
+        // lapis dalam juga harus lewat jalur reaksi — sebelum ini
+        // `render_reply` menolaknya sebagai `Unsupported` dan seluruh balasan
+        // gagal, jadi tidak ada yang terkirim sama sekali.
+        let plugin = TestPlugin::with_reply(Reply::sequence(vec![
+            Reply::reaction("🕕"),
+            Reply::sequence(vec![
+                Reply::text("tabelnya"),
+                Reply::sticker(MediaSource::bytes(vec![7])),
+                Reply::reaction("✅"),
+            ]),
+        ]));
+        let (p, s) = dm(&plugin, "{}", EnergiSettings::default());
+        let m = inbound_n(".seq", MEMBER, MEMBER, false);
+        p.process(&m, 1_000).await.unwrap();
+        assert_eq!(
+            s.log(),
+            ["reaction 🕕", "sticker", "reaction ✅"],
+            "reaksi di level manapun harus lewat jalur reaksi, urut apa adanya"
+        );
+        assert_eq!(s.texts(), vec![format!("{MEMBER}: tabelnya")]);
+    }
+
+    #[tokio::test]
+    async fn failed_first_sequence_send_stops_next_message() {
+        // JS menunggu tiap kiriman (`await`): kalau yang kedua melempar, yang
+        // ketiga tidak pernah dijalankan. Pipeline harus berhenti di error
+        // pertama, bukan mengirim setengah dan melaporkan sukses.
+        let plugin = TestPlugin::with_reply(Reply::sequence(vec![
+            Reply::text("satu"),
+            Reply::text("dua"),
+            Reply::text("tiga"),
+        ]));
+        let sender = Arc::new(RecordingSender::default().with_failure_at(2));
+        let ctx = StoreContext::new(store_with(&format!("seqfail-{}", n()), "{}"));
+        let p = Arc::new(plugin.pipeline_with_sender(ctx, sender.clone(), EnergiSettings::default()));
+        let m = inbound_n(".seq", MEMBER, MEMBER, false);
+        let err = p.process(&m, 1_000).await.unwrap_err();
+        assert!(err.to_string().contains("gagal kirim"), "{err}");
+        assert_eq!(sender.texts(), vec![format!("{MEMBER}: satu")]);
+        assert_eq!(sender.attempts(), 2, "kiriman ketiga tidak boleh dicoba");
+    }
+
+    #[test]
+    fn previous_text_quote_requires_sent_message_id() {
+        let reply = Reply::TextQuotedPrevious {
+            text: "lalu".into(),
+        };
+        // Tanpa kiriman sebelumnya sama sekali.
+        let err = render_reply(&reply, &ReplyTarget::default()).unwrap_err();
+        assert!(
+            err.to_string().contains("TextQuotedPrevious"),
+            "harus error eksplisit, dapat {err}"
+        );
+
+        // Pengirim tidak melaporkan ID (`send_with_result` default). Error
+        // yang sama — bukan jatuh ke kutipan pemicu: pemicu adalah pesan orang
+        // lain, dan mengutipnya berarti thread palsu.
+        let mut target = ReplyTarget::default();
+        target.quote = Some(pemicu());
+        target.previous_sent = Some(SentMessage {
+            message_id: String::new(),
+            message: wa::Message::text("kiriman bot"),
+        });
+        let err = render_reply(&reply, &target).unwrap_err();
+        assert!(
+            err.to_string().contains("TextQuotedPrevious"),
+            "ID kosong harus error eksplisit, dapat {err}"
+        );
+    }
+
+    #[test]
+    fn previous_quote_drops_nested_context() {
+        // Pesan sebelumnya membawa `contextInfo` sendiri (mention + kutipan
+        // pemicunya). Mengutipnya apa adanya akan membuat WA menampilkan
+        // rantai kutipan bersarang, dan `participant` di dalamnya milik orang
+        // lain — bukan bot.
+        let bersarang = wa::Message::text_with_context(
+            "kiriman bot",
+            context_info(&["6289@s.whatsapp.net".to_string()], Some(&pemicu())),
+        );
+        let target = ReplyTarget {
+            previous_sent: Some(SentMessage {
+                message_id: "ID-BOT-1".into(),
+                message: bersarang,
+            }),
+            bot_participant: Some("628999@s.whatsapp.net".into()),
+            ..Default::default()
+        };
+        let rendered = render_reply(
+            &Reply::TextQuotedPrevious {
+                text: "terima kasih".into(),
+            },
+            &target,
+        )
+        .unwrap()
+        .expect("harus dirender");
+        let ci = ctx_of(&rendered.message).expect("balasan harus punya contextInfo");
+        assert_eq!(ci.stanza_id.as_deref(), Some("ID-BOT-1"));
+        // `participant` = jid bot, bukan pengirim pemicu.
+        assert_eq!(ci.participant.as_deref(), Some("628999@s.whatsapp.net"));
+        let quoted = ci.quoted_message.as_option().expect("harus mengutip bot");
+        assert!(
+            nested_context_is_blank(quoted),
+            "kutipan tidak boleh membawa contextInfo sarang: {:?}",
+            context_info_of(quoted)
+        );
+        // Isi teks kirilan bot tetap ada — yang dibuang hanya konteksnya.
+        assert_eq!(body_of(quoted), Some("kiriman bot"));
+    }
+
+    #[tokio::test]
+    async fn previous_quote_uses_the_message_actually_sent_in_the_sequence() {
+        // Ujung-ke-ujung: kontak dikirim, lalu teks mengutip kontak itu. Tanpa
+        // `send_with_result` yang membawa ID, kutipan tidak punya sumber.
+        struct IdSender {
+            inner: Arc<RecordingSender>,
+        }
+        impl std::ops::Deref for IdSender {
+            type Target = RecordingSender;
+            fn deref(&self) -> &Self::Target {
+                &self.inner
+            }
+        }
+        impl MessageSender for IdSender {
+            fn send(&self, to: &str, message: wa::Message, extra: Vec<Node>) -> SendBox<'_> {
+                self.inner.send(to, message, extra)
+            }
+            fn send_with_result(
+                &self,
+                to: &str,
+                message: wa::Message,
+                extra_nodes: Vec<Node>,
+            ) -> SendMessageBox<'_> {
+                let me = Arc::clone(&self.inner);
+                let to = to.to_string();
+                let message = message.clone();
+                Box::pin(async move {
+                    me.send(&to, message.clone(), extra_nodes).await?;
+                    // ID stanza seperti yang dilaporkan server WA.
+                    Ok(SentMessage {
+                        message_id: "BAILEYS-ID-42".into(),
+                        message,
+                    })
+                })
+            }
+            fn bot_addressing_jid(&self, chat: &str) -> AddressingBox<'_> {
+                let chat = chat.to_string();
+                Box::pin(async move { Ok(format!("628999@s.whatsapp.net[{chat}]")) })
+            }
+        }
+
+        let plugin = TestPlugin::with_reply(Reply::sequence(vec![
+            Reply::Contacts {
+                display_name: "Oktz".into(),
+                contacts: vec!["BEGIN:VCARD\nFN:Oktz\nEND:VCARD".into()],
+            },
+            Reply::TextQuotedPrevious {
+                text: "terima kasih".into(),
+            },
+        ]));
+        let inner = Arc::new(RecordingSender::default());
+        let sender: Arc<dyn MessageSender> = Arc::new(IdSender {
+            inner: Arc::clone(&inner),
+        });
+        let ctx = StoreContext::new(store_with(&format!("prevquote-{}", n()), "{}"));
+        let p = Pipeline::new(ctx, sender, BOT, ParseOptions::default())
+            .with_identity(Identity::default())
+            .with_plugin_lookup(plugin.lookup());
+        let p = Arc::new(p);
+        let m = inbound_n(".seq", MEMBER, MEMBER, false);
+        p.process(&m, 1_000).await.unwrap();
+
+        let terkirim = inner.sent.lock().unwrap().clone();
+        assert_eq!(terkirim.len(), 2, "kontak lalu teks kutipan");
+        // Kontak dikirim lebih dulu; teks sesudahnya harus mengutip ID-nya.
+        assert!(
+            terkirim[0].1.contact_message.as_option().is_some(),
+            "elemen 1 kontak"
+        );
+        let ci = ctx_of(&terkirim[1].1).expect("teks kutipan harus punya contextInfo");
+        assert_eq!(ci.stanza_id.as_deref(), Some("BAILEYS-ID-42"));
+        // `participant` dari `bot_addressing_jid`, bukan pemicu.
+        assert_eq!(
+            ci.participant.as_deref(),
+            Some("628999@s.whatsapp.net[628111@s.whatsapp.net]")
+        );
+        let quoted = ci.quoted_message.as_option().expect("mengutip kontak");
+        assert!(
+            nested_context_is_blank(quoted),
+            "kutipan tidak boleh membawa contextInfo sarang: {:?}",
+            context_info_of(quoted)
+        );
+        assert!(
+            quoted.contact_message.as_option().is_some(),
+            "yang dikutip kontak"
+        );
     }
 }

@@ -7,11 +7,13 @@
 //! `unifiedResponse` base64 dan `botMetadata` versi JS v2 belum di-port.
 //! `ponytail:` data sistem dibaca dari `/proc` + `std`; `df` tetap dipanggil
 //! lewat `std::process::Command` karena `statvfs` tidak ada di `std`.
-//! `ponytail:` `Ctx` hanya membawa data user/grup pengirim, bukan seluruh
-//! store; Users/Premium/Groups dihitung dari data itu, bukan total store.
 //! `ponytail:` `process.memoryUsage()`, `process.version`, dan
 //! `m.messageTimestamp` tidak ada; Heap = VmRSS/VmSize, Node = `N/A`,
 //! WA Roundtrip = 1 ms (cabang `Date.now()` di JS).
+//!
+//! Urutan kirim meniru handler JS: tabel dulu, BARU reaksi `✅`
+//! (`ping2.js:129-141`). Reaksi pembuka `🕕` (`ping2.js:60`) dikirim sebelum
+//! tabel dan dibawa `Reply::Sequence`.
 
 use std::fs;
 use std::process::Command;
@@ -231,12 +233,10 @@ fn antarmuka_jaringan() -> String {
 }
 
 /// `Object.keys(db.data.users/groups)` dan `u.isPremium` tidak ada di `Ctx`;
-/// yang tersedia hanya data pengirim, jadi itulah yang dihitung.
+/// `ctx.store_users`/`store_premium`/`store_groups` dirangkum pipeline dari
+/// snapshot store yang sama dengan yang dipakai gate permission.
 fn hitung_db(ctx: &Ctx) -> (usize, usize, usize) {
-    let users = ctx.user_data.is_object() as usize;
-    let groups = ctx.group_data.is_object() as usize;
-    let premium = crate::common::js_truthy(ctx.user_data.get("isPremium")) as usize;
-    (users, premium, groups)
+    (ctx.store_users, ctx.store_premium, ctx.store_groups)
 }
 
 /// Susun tabel AI — padanan `sock.sendTable` JS (`ping2.js:129-139`).
@@ -330,31 +330,89 @@ fn reply(ctx: &Ctx, mulai: Instant) -> Reply {
 )]
 pub fn ping2(ctx: Ctx) -> Reply {
     let mulai = Instant::now();
-    // `ponytail:` reaksi pembuka `🕕` hilang; `Reply` hanya membawa satu
-    // reaksi, jadi yang dikirim reaksi akhir `✅` seperti JS.
-    reply(&ctx, mulai).with_reaction("✅")
+    // `await m.react('🕕')` (`ping2.js:60`) lalu tabel lalu `await m.react('✅')`
+    // (`:141`). Urutan itu bisa disusun karena `Reply::Sequence` dikirim
+    // berurutan: reaksi → tabel → reaksi.
+    Reply::sequence(vec![
+        Reply::reaction("🕕"),
+        reply(&ctx, mulai),
+        Reply::reaction("✅"),
+    ])
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Ambil tabel di balik reaksi/mutasi — `with_reaction` membungkus balas
-    /// jadi `Mutate` + `Reaction`, jadi keduanya harus ditembus dulu.
+    /// Balasan `ping2`: satu `Sequence` [reaksi, tabel, reaksi].
+    fn isi_sequence(reply: &Reply) -> &[Reply] {
+        match reply.without_mutations() {
+            Reply::Sequence(list) => list,
+            other => panic!("harus Sequence, dapat {other:?}"),
+        }
+    }
+
+    /// Ambil tabel di dalam sequence.
     fn tabel_dari(reply: &Reply) -> &oktz_plugin_api::Tabel {
-        match reply.without_mutations().tanpa_reaksi() {
+        let [_, tabel, _] = isi_sequence(reply) else {
+            panic!("harus tiga elemen: reaksi, tabel, reaksi");
+        };
+        match tabel.tanpa_reaksi() {
             Reply::Tabel { tabel } => tabel,
             other => panic!("harus Tabel, dapat {other:?}"),
         }
     }
 
     #[test]
+    fn ping2_uses_stable_global_counts_and_reaction_after_table() {
+        let r = ping2(Ctx::default());
+        let list = isi_sequence(&r);
+
+        // Urutan event JS: reaksi pembuka → tabel → reaksi `✅`. Bukan
+        // `✅` lebih dulu (`with_reaction` mengirim reaksi SEBELUM balasan).
+        assert!(
+            matches!(&list[0], Reply::Reaction { emoji, .. } if emoji == "🕕"),
+            "elemen pertama harus reaksi 🕕, dapat {:?}",
+            list[0]
+        );
+        assert!(
+            matches!(list[1].tanpa_reaksi(), Reply::Tabel { .. }),
+            "tabel harus dikirim SETELAH reaksi pembuka, dapat {:?}",
+            list[1]
+        );
+        assert!(
+            matches!(&list[2], Reply::Reaction { emoji, .. } if emoji == "✅"),
+            "reaksi ✅ harus SESUDAH tabel, dapat {:?}",
+            list[2]
+        );
+
+        // Angka Users/Premium/Groups dari SELURUH store (`ping2.js:100-102`),
+        // jadi tetap stabil walau `user_data`/`group_data` pengirim terisi.
+        let ctx = Ctx {
+            user_data: serde_json::json!({"isPremium": true}),
+            group_data: serde_json::json!({"name": "Grup"}),
+            store_users: 12,
+            store_premium: 4,
+            store_groups: 7,
+            ..Default::default()
+        };
+        let balasan = ping2(ctx);
+        let t = tabel_dari(&balasan);
+        let baris = |kunci: &str| {
+            t.baris
+                .iter()
+                .find(|b| b[0] == kunci)
+                .unwrap_or_else(|| panic!("baris {kunci} hilang"))
+                .clone()
+        };
+        assert_eq!(baris("Users"), vec!["Users", "12"]);
+        assert_eq!(baris("Premium"), vec!["Premium", "4"]);
+        assert_eq!(baris("Groups"), vec!["Groups", "7"]);
+    }
+
+    #[test]
     fn balasan_membentuk_tabel_dengan_isi_dan_urutan_js() {
         let r = ping2(Ctx::default());
-        assert!(
-            matches!(r.without_mutations().tanpa_reaksi(), Reply::Tabel { .. }),
-            "harus Reply::Tabel"
-        );
         let t = tabel_dari(&r);
 
         assert_eq!(t.judul, "⚡ System Performance");
@@ -400,12 +458,18 @@ mod tests {
     }
 
     #[test]
-    fn reaksi_akhir_tetap_ada() {
-        let r = ping2(Ctx::default());
-        assert!(matches!(
-            r.without_mutations(),
-            Reply::Reaction { emoji, .. } if emoji == "✅"
-        ));
+    fn tanpa_store_jumlahnya_nol_bukan_satu() {
+        // `Ctx::default()` (test plugin langsung) belum lewat pipeline, jadi
+        // jumlah store 0 — bukan `user_data.is_object() as usize` yang melapor 1.
+        let balasan = ping2(Ctx::default());
+        let t = tabel_dari(&balasan);
+        for kunci in ["Users", "Premium", "Groups"] {
+            assert_eq!(
+                t.baris.iter().find(|b| b[0] == kunci).map(|b| b[1].as_str()),
+                Some("0"),
+                "{kunci}"
+            );
+        }
     }
 
     #[test]
