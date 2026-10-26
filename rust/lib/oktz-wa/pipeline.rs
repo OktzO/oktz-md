@@ -1090,6 +1090,12 @@ impl MessageSender for ClientSender {
     /// bukan sebagai gambar — WA menaruh link preview di endpoint lain, dan
     /// kirim sebagai `MediaType::Image` menghasilkan bubble gambar, bukan
     /// preview link.
+    ///
+    /// `ponytail:` endpoint upload preview masih `/mms/thumbnail-link`
+    /// (`MediaType::LinkThumbnail`), sedangkan callback upload onigis JS
+    /// mengirim byte gambar lewat path media image dengan label enkripsi
+    /// `thumbnail-link`. Perbedaannya belum diverifikasi live; butuh override
+    /// upstream atau percobaan ke server nyata — TIDAK diubah di sini.
     fn send_media(&self, to: &str, media: PendingMedia) -> SendBox<'_> {
         let client = self.client.clone();
         let to = to.to_string();
@@ -1393,11 +1399,16 @@ pub struct ReplyTarget {
 /// lain dengan daftar kosong boleh. Yang tahu bedanya adalah pemanggil,
 /// karena varian `Reply`-nya hanya terlihat di sana.
 fn mentions_of_reply(reply: &Reply, target: &ReplyTarget) -> Vec<String> {
+    // `TextNoMention` = `mentions: []` EKSPLISIT: array kosong adalah TRUTHY di
+    // JS (`[] || [m.sender]` = `[]`), jadi daftar ini tetap kosong dan TIDAK
+    // boleh jatuh ke default pemicu di bawah.
+    if let Reply::TextNoMention { .. } = reply.without_mutations() {
+        return Vec::new();
+    }
     let list = match reply.without_mutations() {
         Reply::Text { mentions, .. }
         | Reply::TextQuoted { mentions, .. }
         | Reply::NoQuote { mentions, .. } => mentions.as_slice(),
-        Reply::TextNoMention { .. } => &[],
         _ => &[],
     };
     if list.is_empty() {
@@ -1721,7 +1732,8 @@ fn document_options(
     }
 }
 
-pub(crate) fn context_info(mentions: &[String], quote: Option<&QuoteSource>) -> wa::ContextInfo {    wa::ContextInfo {
+pub(crate) fn context_info(mentions: &[String], quote: Option<&QuoteSource>) -> wa::ContextInfo {
+    wa::ContextInfo {
         mentioned_jid: mentions.to_vec(),
         quoted_message: quote
             .map(|q| MessageField::some(*q.message.clone()))
@@ -3018,14 +3030,6 @@ impl Pipeline {
         Some(entry)
     }
 
-    /// Render balasan sesuai `db.setting("replyVariant")`.
-    ///
-    /// Varian yang sudah ada ([]) selalu menang kalau reply-nya teks; kalau
-    /// tidak ada varian yang cocok, jatuh ke [`render_reply`] persis seperti
-    /// sebelumnya. Varian aktif di produksi = 9 (`orderMessage`).
-    ///
-    /// Akar aset diambil dari direktori kerja, sama seperti 
-    /// di JS.
     /// Render balasan sesuai `db.setting("replyVariant")`
     /// (`serialize.js:976-1356`).
     ///
@@ -3466,9 +3470,11 @@ impl Pipeline {
                 return Ok(Outcome::Sent);
             }
 
-            // `replyVariant` = 9 (setting produksi aktif) mengirim
-            // `orderMessage`, bukan teks biasa (`serialize.js:1231-1259`).
-            // Varian lain belum diimplementasikan dan tetap teks.
+            // `replyVariant` (setting produksi aktif = 9, `orderMessage`)
+            // dipilih per balasan oleh `render_with_reply_variant`: varian
+            // 2..11 punya builder sendiri, sisanya teks biasa seperti
+            // `serialize.js:976-1356`. Balasan BUKAN teks (kartu, tabel,
+            // media) lewat `render_reply` apa adanya.
             //
             // `ponytail:` reply BERMEDIA tidak ikut varian — di JS `serialize`
             // menerima teks terpisah dari media, jadi perlu Arcade
@@ -7825,6 +7831,64 @@ fn a_null_access_field_keeps_the_existing_grant() {
             "teks dalam reaksi juga harus lewat varian: {:?}",
             terkirim[0].1
         );
+    }
+
+    #[test]
+    fn mentions_of_reply_text_no_mention_never_falls_back_to_sender() {
+        // `options?.mentions || [m?.sender] || []` (`serialize.js:987`): array
+        // kosong TRUTHY di JS, jadi `TextNoMention` (`mentions: []` eksplisit)
+        // harus tetap kosong — bukan diisi pemicu.
+        let t = target();
+        assert!(
+            mentions_of_reply(&Reply::text_no_mention("diam"), &t).is_empty(),
+            "TextNoMention tidak boleh jatuh ke sender"
+        );
+        // Daftar eksplisit menang atas default pemicu.
+        assert_eq!(
+            mentions_of_reply(&Reply::text_mention("hai", "6287@s.whatsapp.net"), &t),
+            vec!["6287@s.whatsapp.net".to_string()]
+        );
+        // Tanpa daftar eksplisit dan `TextNoMention` di luar itu: default.
+        assert_eq!(
+            mentions_of_reply(&Reply::text("hai"), &t),
+            vec!["6289@s.whatsapp.net".to_string()]
+        );
+        // Sender kosong = daftar kosong, bukan daftar berisi `""`.
+        let tanpa = ReplyTarget {
+            sender: String::new(),
+            ..target()
+        };
+        assert!(mentions_of_reply(&Reply::text("hai"), &tanpa).is_empty());
+    }
+
+    #[test]
+    fn reply_is_text_like_covers_exactly_the_four_text_shapes() {
+        // Hanya balasan berbentuk teks ikut `replyVariant`
+        // (`serialize.js:995-1356` cuma punya `text`).
+        for reply in [
+            Reply::text("hai"),
+            Reply::text_mention("hai", "6287@s.whatsapp.net"),
+            Reply::text_quoted("hai"),
+            Reply::text_no_mention("hai"),
+        ] {
+            assert!(reply_is_text_like(&reply), "{reply:?} harus ikut varian");
+        }
+        for reply in [
+            Reply::None,
+            Reply::Interactive {
+                kartu: Box::new(oktz_plugin_api::kartu::Kartu::baru("kartu")),
+            },
+            Reply::Tabel {
+                tabel: oktz_plugin_api::Tabel::baru("Judul").header(["M"]).baris(["1"]),
+            },
+            Reply::Image {
+                media: None,
+                caption: "caption".into(),
+                mentions: Vec::new(),
+            },
+        ] {
+            assert!(!reply_is_text_like(&reply), "{reply:?} punya wire sendiri");
+        }
     }
 
     #[tokio::test]

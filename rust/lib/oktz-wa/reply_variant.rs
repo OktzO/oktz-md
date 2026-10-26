@@ -307,6 +307,12 @@ fn dokumen(input: &VariantInput<'_>, quote: Option<QuoteSource>) -> PendingMedia
 
 /// `getAssetBuffer("mp4")` + `gifPlayback: true`, memetik pemicu
 /// (`serialize.js:1033-1049`).
+///
+/// `ponytail:` `jpegThumbnail` TIDAK dikirim — JS varian 3 juga tidak
+/// menuliskannya; yang membuat thumbnail video (kalau ada) sisi
+/// WA/Baileys saat merakit `videoMessage`. Rust tidak menambah dependency
+/// ffmpeg/image untuk menirunya, jadi bubble GIF ini tanpa thumbnail sampai
+/// perilaku aslinya dicek terhadap server nyata.
 fn video(input: &VariantInput<'_>) -> PendingMedia {
     PendingMedia {
         kind: MediaKind::Video,
@@ -343,7 +349,7 @@ fn link_preview(input: &VariantInput<'_>) -> PendingMedia {
     ci.is_forwarded = Some(true);
     ci.forwarding_score = Some(SKOR_LINK);
     ci.forwarded_newsletter_message_info =
-        MessageField::some(newsletter_info(input, nama_saluran_atau_bot(input.config)));
+        MessageField::some(newsletter_info(input, nama_saluran_atau_bot(input.config), true));
 
     let ext = wa::message::ExtendedTextMessage {
         text: Some(format!("{website}\n\n{}", input.text)),
@@ -430,6 +436,9 @@ fn order_palsu_teks(input: &VariantInput<'_>) -> wa::Message {
 /// `messageContextInfo: {}` di sini KOSONG — tanpa `deviceListMetadata` dan
 /// tanpa `messageSecret` seperti kartu native-flow (`cards.rs`), dan itu
 /// perbedaan yang dikunci test.
+///
+/// `jpegThumbnail` = `sharp(thumbnailBuf).resize(300, 300).toBuffer()` (`:1152`)
+/// — byte aset apa adanya, lihat catatan modul.
 fn kartu_lokasi(input: &VariantInput<'_>) -> wa::Message {
     let mut ci = context_kutipan(input);
     ci.is_forwarded = Some(true);
@@ -444,6 +453,7 @@ fn kartu_lokasi(input: &VariantInput<'_>) -> wa::Message {
         degrees_longitude: Some(0.0),
         name: Some(nama_bot(input.config)),
         address: Some(ALAMAT_BOT.to_string()),
+        jpeg_thumbnail: Some(thumbnail(input, "foto", FOTO)),
         ..Default::default()
     };
     let inner = wa::Message {
@@ -663,7 +673,7 @@ fn favicon(input: &VariantInput<'_>) -> PendingMedia {
     ci.is_forwarded = Some(true);
     ci.forwarding_score = Some(SKOR_KARTU);
     ci.forwarded_newsletter_message_info =
-        MessageField::some(newsletter_info(input, config.saluran.name.clone()));
+        MessageField::some(newsletter_info(input, config.saluran.name.clone(), false));
     let kontak = wa::Message {
         contact_message: MessageField::some(wa::message::ContactMessage {
             display_name: Some(bot.clone()),
@@ -677,6 +687,12 @@ fn favicon(input: &VariantInput<'_>) -> PendingMedia {
     };
     ci.participant = Some("0@s.whatsapp.net".into());
     ci.quoted_message = MessageField::some(kontak);
+    // Kutipan kontak palsu tidak punya `key.id` — `quoted.key` JS varian 11
+    // (`serialize.js:1329-1333`) hanya `fromMe`/`participant`/`remoteJid`, dan
+    // `undefined` hilang saat serialize. `context_kutipan` membawa stanzaId
+    // pemicu nyata, jadi harus dikosongkan di sini: kalau tidak, quote palsu
+    // menunjuk stanza pesan asli.
+    ci.stanza_id = None;
 
     let ext = wa::message::ExtendedTextMessage {
         text: Some(format!("{}\n{}", config.info.website, input.text)),
@@ -720,7 +736,10 @@ fn favicon(input: &VariantInput<'_>) -> PendingMedia {
 }
 
 /// `forwardedNewsletterMessageInfo` — varian 4 (`:1070-1074`) dan 11
-/// (`:1321-1324`). `serverMessageId` = `Math.floor(Math.random() * 1000000)`.
+/// (`:1321-1324`), dengan ISI yang beda: hanya varian 4 menulis
+/// `serverMessageId` = `Math.floor(Math.random() * 1000000)`. Varian 11 cuma
+/// `newsletterJid`/`newsletterName`; menambah `serverMessageId` di sana
+/// berarti mengirim field yang tidak pernah ada di JS.
 ///
 /// `nama` beda per varian: varian 4 memakai
 /// `config.saluran?.name || config.bot?.name || "Bot"`, varian 11 memakai
@@ -728,11 +747,12 @@ fn favicon(input: &VariantInput<'_>) -> PendingMedia {
 fn newsletter_info(
     input: &VariantInput<'_>,
     nama: String,
+    server_message_id: bool,
 ) -> ForwardedNewsletterMessageInfo {
     ForwardedNewsletterMessageInfo {
         newsletter_jid: jid_atau_kosong(&input.config.saluran.id),
         newsletter_name: jid_atau_kosong(&nama),
-        server_message_id: Some(pseudo_random_index(1_000_000) as i32),
+        server_message_id: server_message_id.then(|| pseudo_random_index(1_000_000) as i32),
         ..Default::default()
     }
 }
@@ -1110,6 +1130,9 @@ mod tests {
                 assert_eq!(loc.degrees_longitude, Some(0.0));
                 assert_eq!(loc.name.as_deref(), Some("Oktz Bot"));
                 assert_eq!(loc.address.as_deref(), Some("Bot Wa Multi Device"));
+                // `jpegThumbnail: sharp(thumbnailBuf).resize(300,300).toBuffer()`
+                // (`serialize.js:1152`) — byte aset apa adanya.
+                assert_eq!(loc.jpeg_thumbnail.as_deref(), Some(&b"srt-image"[..]));
             }
             lain => panic!("header media varian 7 harus locationMessage, dapat {lain:?}"),
         }
@@ -1329,6 +1352,14 @@ mod tests {
             Some("120363411617217441@newsletter")
         );
         assert_eq!(info.newsletter_name.as_deref(), Some("Join saluran resmi Oktz"));
+        assert!(
+            info.server_message_id.is_none(),
+            "varian 11 cuma newsletterJid/newsletterName (`serialize.js:1321-1324`)"
+        );
+        assert!(
+            ci.stanza_id.is_none(),
+            "kutipan kontak palsu varian 11 tidak punya key.id (`serialize.js:1329-1333`)"
+        );
         assert_eq!(ci.participant.as_deref(), Some("0@s.whatsapp.net"));
         let kontak = ci
             .quoted_message
