@@ -152,10 +152,14 @@ fn baca_heap() -> (u64, u64) {
 }
 
 /// `Object.keys(db.db.data.users/groups)` dan `u.premium` tidak ada di `Ctx`;
-/// `ctx.store_users`/`store_premium`/`store_groups` dirangkum pipeline dari
-/// snapshot store yang sama dengan yang dipakai gate permission.
+/// `ctx.store_users`/`store_groups` dirangkum pipeline dari snapshot store yang
+/// sama dengan yang dipakai gate permission.
+///
+/// Quirk produksi yang disalin apa adanya: `.stats` memfilter `u.premium`
+/// (`stats.js:56`) padahal skema store memakai `isPremium`, jadi hasilnya
+/// SELALU `0` — beda dengan `.ping2` yang memang membaca `isPremium`.
 fn hitung_db(ctx: &Ctx) -> (usize, usize, usize) {
-    (ctx.store_users, ctx.store_premium, ctx.store_groups)
+    (ctx.store_users, 0, ctx.store_groups)
 }
 
 /// `new Date().toLocaleTimeString("id-ID", { timeZone: "Asia/Jakarta" })`.
@@ -339,8 +343,12 @@ mod tests {
 
     #[test]
     fn jumlah_users_premium_groups_dari_seluruh_store_bukan_pengirim() {
-        // `Object.keys(db.data.users)` — SELURUH store. Data pengirim saja
-        // tidak boleh dihitung sebagai jumlah user.
+        // `Object.keys(db.data.users/groups)` — SELURUH store. Data pengirim
+        // saja tidak boleh dihitung sebagai jumlah user.
+        //
+        // Quirk `.stats`: `Object.values(users).filter((u) => u.premium)`
+        // membaca field `premium` yang tidak ada di store (`isPremium` yang
+        // ada), jadi produksi selalu menulis `0` — diuji apa adanya.
         let ctx = Ctx {
             user_data: serde_json::json!({"isPremium": true}),
             group_data: serde_json::json!({"name": "Grup"}),
@@ -359,7 +367,7 @@ mod tests {
                 .clone()
         };
         assert_eq!(baris("Users"), vec!["Users", "12"]);
-        assert_eq!(baris("Premium"), vec!["Premium", "4"]);
+        assert_eq!(baris("Premium"), vec!["Premium", "0"]);
         assert_eq!(baris("Groups"), vec!["Groups", "7"]);
     }
 
