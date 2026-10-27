@@ -1061,6 +1061,14 @@ pub struct Ctx {
     pub store_premium: usize,
     /// `Object.keys(db.db.data.groups).length` (`stats.js:55`, `ping2.js:101`).
     pub store_groups: usize,
+    /// `db.data.owner` — array owner yang ditulis plugin `owner/*`.
+    ///
+    /// Terpisah dari [`Ctx::config`] dan dari daftar otorisasi [`Ctx::is_owner`]:
+    /// JS `.owner` menyatukan `botConfig.owner.number` + `db.data.owner`
+    /// (`plugins/main/owner.js:22-24`), sedangkan izin owner hanya butuh daftar
+    /// yang dikonfigurasi. Menggabungkannya akan membuat DB bisa menambah owner
+    /// tanpa izin owner benar-benar berubah.
+    pub db_owners: Vec<String>,
 }
 
 impl Ctx {
@@ -1102,6 +1110,13 @@ impl Ctx {
     /// Padanan `fs` Node, berakar ke folder aset.
     pub fn berkas(&self) -> &dyn crate::berkas::Berkas {
         self.berkas.as_ref()
+    }
+
+    /// `db.data.owner` — daftar owner dari store, BUKAN daftar config dan BUKAN
+    /// daftar otorisasi. Urutan apa adanya; plugin `.owner` yang menyatukannya
+    /// dengan `config().owner.number` seperti `[...new Set([...])]` JS.
+    pub fn db_owners(&self) -> &[String] {
+        &self.db_owners
     }
 }
 
@@ -1755,6 +1770,7 @@ impl Default for Ctx {
             store_users: 0,
             store_premium: 0,
             store_groups: 0,
+            db_owners: Vec::new(),
         }
     }
 }

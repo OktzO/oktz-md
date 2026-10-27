@@ -2132,6 +2132,13 @@ pub fn render_reply(
             display_name,
             contacts,
         } => {
+            if contacts.is_empty() {
+                return Err(PipelineError::Other(
+                    "Reply::Contacts tanpa vCard; JS akan mengirim kontak kosong lalu \
+                     TextQuotedPrevious mengutip kiriman yang tidak bisa dilihat. Pesan TIDAK dikirim."
+                        .to_string(),
+                ));
+            }
             let ci = context_info(&mentions_of(&[]), quote);
             let message = if let [vcard] = contacts.as_slice() {
                 wa::Message {
@@ -2775,6 +2782,9 @@ struct PluginCtxSource {
     /// `fs` untuk plugin. Default [`BerkasPalsu`]; produksi memasang
     /// [`BerkasNyata`] berakar ke direktori kerja.
     berkas: Arc<dyn Berkas>,
+    /// `db.data.owner` (`owner.json`) untuk `.owner`. Bukan daftar config dan
+    /// bukan daftar otorisasi — keduanya punya sumber berbeda di JS.
+    db_owners: Vec<String>,
 }
 
 impl PluginCtxSource {
@@ -2806,6 +2816,7 @@ impl PluginCtxSource {
         c.config = self.config.clone();
         c.sock = self.sock.clone();
         c.berkas = self.berkas.clone();
+        c.db_owners = self.db_owners.clone();
         // Jumlah SELURUH store, bukan entri pengirim — `stats.js:54-56` dan
         // `ping2.js:100-102` membaca `db.data.users`/`groups` utuh, dan plugin
         // tidak punya akses store sendiri.
@@ -3003,6 +3014,7 @@ impl Pipeline {
                 config: Arc::new(oktz_core::config::Runtime::default()),
                 sock: Arc::new(SockMati),
                 berkas: Arc::new(oktz_plugin_api::berkas::BerkasPalsu::baru()),
+                db_owners: Vec::new(),
             },
             ctx,
             sender,
@@ -3046,6 +3058,12 @@ impl Pipeline {
     /// Pasang `config.js` runtime untuk `ctx.config()`.
     pub fn with_config(mut self, config: oktz_core::config::Runtime) -> Self {
         self.plugin_src.config = Arc::new(config);
+        self
+    }
+
+    /// Pasang `db.data.owner` untuk plugin `.owner`.
+    pub fn with_owner_store(mut self, owners: Vec<String>) -> Self {
+        self.plugin_src.db_owners = owners;
         self
     }
 
@@ -6237,7 +6255,19 @@ fn group_number_and_long_number_are_rejected() {
             config: Arc::new(oktz_core::config::Runtime::default()),
             sock: Arc::new(SockMati),
             berkas: Arc::new(oktz_plugin_api::berkas::BerkasPalsu::baru()),
+            db_owners: Vec::new(),
         }
+    }
+
+    #[test]
+    fn plugin_ctx_source_fills_db_owners_without_touching_config_owners() {
+        let src = PluginCtxSource {
+            db_owners: vec!["628111".into()],
+            ..plugin_src_with("{}")
+        };
+        let mut c = Ctx::default();
+        src.fill(&mut c);
+        assert_eq!(c.db_owners(), ["628111".to_string()]);
     }
 
     #[test]
@@ -8551,6 +8581,152 @@ fn a_null_access_field_keeps_the_existing_grant() {
         assert!(
             quoted.contact_message.as_option().is_some(),
             "yang dikutip kontak"
+        );
+    }
+
+    #[tokio::test]
+    async fn contacts_zero_stops_trailing_text() {
+        let plugin = TestPlugin::with_reply(Reply::sequence(vec![
+            Reply::Contacts {
+                display_name: "Ini adalah owner kami".into(),
+                contacts: Vec::new(),
+            },
+            Reply::TextQuotedPrevious {
+                text: "💬 Jika kamu memiliki pertanyaan, jangan ragu untuk bertanya, owner ramah kok"
+                    .into(),
+            },
+        ]));
+        let sender = Arc::new(RecordingSender::default());
+        let ctx = StoreContext::new(store_with(
+            &format!("ownerzero-{}", n()),
+            r#"{"settings": {"replyVariant": 9, "ownerType": 2}}"#,
+        ));
+        let p = Arc::new(plugin.pipeline_with_sender(ctx, sender.clone(), EnergiSettings::default()));
+        let m = inbound_n(".owner", MEMBER, MEMBER, false);
+        let err = p.process(&m, 1_000).await.unwrap_err();
+        assert!(err.to_string().contains("Reply::Contacts"), "{err}");
+        assert!(sender.sent.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn contact_card_single_and_multi_wire_cardinality() {
+        let satu = render_reply(
+            &Reply::Contacts {
+                display_name: "Oktz".into(),
+                contacts: vec!["BEGIN:VCARD\nFN:Oktz\nEND:VCARD".into()],
+            },
+            &ReplyTarget::default(),
+        )
+        .unwrap()
+        .expect("harus render");
+        assert!(satu.message.contact_message.as_option().is_some());
+
+        let banyak = render_reply(
+            &Reply::Contacts {
+                display_name: "Ini adalah owner kami".into(),
+                contacts: vec!["BEGIN:VCARD\nFN:Oktz\nEND:VCARD".into(), "BEGIN:VCARD\nFN:Lyoraaa\nEND:VCARD".into()],
+            },
+            &ReplyTarget::default(),
+        )
+        .unwrap()
+        .expect("harus render");
+        let arr = banyak
+            .message
+            .contacts_array_message
+            .as_option()
+            .expect("multi kontak wajib contactsArrayMessage");
+        assert_eq!(            arr.display_name.as_deref(),
+            Some("Ini adalah owner kami")
+        );
+        assert_eq!(arr.contacts.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn type_two_previous_text_uses_sent_contact_and_not_variant_nine() {
+        struct IdSender {
+            inner: Arc<RecordingSender>,
+        }
+        impl std::ops::Deref for IdSender {
+            type Target = RecordingSender;
+            fn deref(&self) -> &Self::Target {
+                &self.inner
+            }
+        }
+        impl MessageSender for IdSender {
+            fn send(&self, to: &str, message: wa::Message, extra: Vec<Node>) -> SendBox<'_> {
+                self.inner.send(to, message, extra)
+            }
+            fn send_with_result(
+                &self,
+                to: &str,
+                message: wa::Message,
+                extra_nodes: Vec<Node>,
+            ) -> SendMessageBox<'_> {
+                let me = Arc::clone(&self.inner);
+                let to = to.to_string();
+                let message = message.clone();
+                Box::pin(async move {
+                    me.send(&to, message.clone(), extra_nodes).await?;
+                    Ok(SentMessage {
+                        message_id: "OWNER-ID-42".into(),
+                        message,
+                    })
+                })
+            }
+            fn bot_addressing_jid(&self, chat: &str) -> AddressingBox<'_> {
+                let chat = chat.to_string();
+                Box::pin(async move { Ok(format!("628999@s.whatsapp.net[{chat}]")) })
+            }
+        }
+
+        let plugin = TestPlugin::with_reply(Reply::sequence(vec![
+            Reply::Contacts {
+                display_name: "Ini adalah owner kami".into(),
+                contacts: vec![
+                    "BEGIN:VCARD\nFN:Oktz\nEND:VCARD".into(),
+                    "BEGIN:VCARD\nFN:Lyoraaa\nEND:VCARD".into(),
+                ],
+            },
+            Reply::TextQuotedPrevious {
+                text: "💬 Jika kamu memiliki pertanyaan, jangan ragu untuk bertanya, owner ramah kok"
+                    .into(),
+            },
+        ]));
+        let inner = Arc::new(RecordingSender::default());
+        let sender: Arc<dyn MessageSender> = Arc::new(IdSender {
+            inner: Arc::clone(&inner),
+        });
+        let ctx = StoreContext::new(store_with(
+            &format!("ownertype2-{}", n()),
+            r#"{"settings": {"replyVariant": 9, "ownerType": 2}}"#,
+        ));
+        let p = Pipeline::new(ctx, sender, BOT, ParseOptions::default())
+            .with_identity(Identity::default())
+            .with_plugin_lookup(plugin.lookup());
+        let p = Arc::new(p);
+        let m = inbound_n(".owner", MEMBER, MEMBER, false);
+        p.process(&m, 1_000).await.unwrap();
+
+        let terkirim = inner.sent.lock().unwrap().clone();
+        assert_eq!(terkirim.len(), 2);
+        assert!(
+            terkirim[0].1.contacts_array_message.as_option().is_some(),
+            "owner type 2 pakai satu kontak gabungan"
+        );
+        let trailing = &terkirim[1].1;
+        assert!(
+            trailing.extended_text_message.as_option().is_some(),
+            "teks langsung bukan orderMessage varian 9"
+        );
+        assert!(
+            trailing.order_message.as_option().is_none(),
+            "teks setelah kontak tidak boleh jadi varian 9"
+        );
+        let ci = ctx_of(trailing).expect("kutipan kontak");
+        assert_eq!(ci.stanza_id.as_deref(), Some("OWNER-ID-42"));
+        assert_eq!(
+            ci.participant.as_deref(),
+            Some("628999@s.whatsapp.net[628111@s.whatsapp.net]")
         );
     }
 }

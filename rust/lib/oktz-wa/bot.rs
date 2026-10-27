@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
@@ -43,6 +43,40 @@ pub fn settings_path(db_dir: &str, env: Option<&str>) -> PathBuf {
     }
 }
 
+/// Lokasi store `owner` yang dibaca `.owner`: `<database.path>/owner.json`.
+///
+/// Sengaja TERPISAH dari [`settings_path`] — JS menyimpan daftar owner di
+/// `db.data.owner`, bukan di `settings.owner` (`plugins/main/owner.js:24`,
+/// `src/lib/database.js:173-181`). Menaruhnya di settings akan membuat plugin
+/// `owner/*` dan `.owner` membaca sumber yang berbeda.
+pub fn owner_path(db_dir: &str) -> PathBuf {
+    PathBuf::from(db_dir).join("owner.json")
+}
+
+/// Baca `db.data.owner` (`owner.json`) untuk `.owner`.
+///
+/// Berkas hilang atau rusak berarti daftar kosong, bukan bot gagal boot: daftar
+/// owner hanyalah salah satu sumber `.owner`, sumber utamanya tetap `config`.
+/// Bentuknya array string — sama seperti `database.js:127-153`.
+pub fn owner_entries(path: &std::path::Path) -> Vec<String> {
+    match JsonStore::open(path) {
+        Ok(store) => store
+            .all()
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default(),
+        Err(e) => {
+            tracing::warn!(path = %path.display(), error = %e, "owner.json tidak bisa dibaca; daftar DB kosong");
+            Vec::new()
+        }
+    }
+}
+
 /// `OWNER_NUMBERS` → [`Identity`].
 ///
 /// `oktz_core::Config` hanya punya `owner_numbers`; premium/partner/admin tidak
@@ -84,6 +118,8 @@ pub struct PipelineWiring {
     bot_id: String,
     /// `config.js` runtime untuk `ctx.config()`.
     config: oktz_core::config::Runtime,
+    /// `db.data.owner` untuk `.owner`.
+    db_owners: Vec<String>,
     /// Pipeline yang sudah menempel ke bus. Disimpan supaya reconnect
     /// memakai instance yang sama — membangun yang baru akan meninggalkan
     /// loop lama hidup dan membalas dua kali.
@@ -124,6 +160,7 @@ pub fn wiring_from_with_config(
         identity: identity_from_owners(owners),
         bot_id: bot_id.into(),
         config,
+        db_owners: owner_entries(settings.parent().map(|p| p.join("owner.json")).as_deref().unwrap_or(Path::new("owner.json"))),
         live: Mutex::new(None),
     })
 }
@@ -145,6 +182,7 @@ impl PipelineWiring {
                     )
                     .with_identity(self.identity.clone())
                     .with_http(Arc::new(UreqHttp::new()))
+                    .with_owner_store(self.db_owners.clone())
                     .with_config(self.config.clone())
                     // `Ctx.sock` + roster nyata dari klien yang sama.
                     .with_sock(crate::sock_client::SockKlien::baru(client.clone()))
@@ -636,6 +674,24 @@ mod tests {
                 "{blank:?} harus berarti tidak di-override, bukan path path-butuh-dibuat"
             );
         }
+    }
+
+    #[test]
+    fn owner_path_defaults_under_database_dir_and_owner_entries_read_array() {
+        assert_eq!(
+            owner_path("./database/main"),
+            PathBuf::from("./database/main/owner.json")
+        );
+
+        let p = tmpfile("owner-entries");
+        std::fs::write(&p, r#"["6281","6282"]"#).unwrap();
+        assert_eq!(
+            owner_entries(&p),
+            vec!["6281".to_string(), "6282".to_string()]
+        );
+
+        let missing = std::env::temp_dir().join(format!("oktz-bot-missing-owner-{}", std::process::id()));
+        assert!(owner_entries(&missing).is_empty());
     }
 
     #[test]
