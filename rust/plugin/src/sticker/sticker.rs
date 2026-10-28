@@ -1,6 +1,7 @@
 //! `plugins/sticker/sticker.js` — command `.s`.
 
 
+use std::sync::Arc;
 use oktz_plugin_api::{Ctx, IncomingKind, MediaError, MediaFetch, MediaOrigin, MediaSource, OpsiS, Reply, StickerOpsi, plugin};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -278,8 +279,7 @@ mod tests {
     use super::*;
     use oktz_plugin_api::config::Runtime;
     use oktz_plugin_api::IncomingMedia;
-    use std::sync::Arc;
-    use std::fs;
+        use std::fs;
     use std::os::unix::fs::PermissionsExt;
     use std::sync::Mutex;
 
