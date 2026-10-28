@@ -52,4 +52,4 @@ pub use registry::{
 };
 
 pub mod brat;
-pub use brat::{BratTema, is_blank, render_brat};
+pub use brat::{BratTema, is_blank, render_brat, render_frame_raw};

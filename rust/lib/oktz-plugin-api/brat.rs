@@ -97,6 +97,25 @@ pub fn render_brat(teks: &str, tema: BratTema, _blur: u8) -> Result<Vec<u8>, Str
     Ok(buf)
 }
 
+
+pub fn render_frame_raw(teks: &str, width: u32, height: u32) -> Vec<u8> {
+    let Ok(png) = render_brat(teks, BratTema::Putih, 0) else {
+        return Vec::new();
+    };
+    let Ok(img) = image::load_from_memory(&png) else {
+        return Vec::new();
+    };
+    let rgba = img.to_rgba8();
+    if rgba.dimensions() == (width, height) {
+        return rgba.into_raw();
+    }
+    DynamicImage::ImageRgba8(rgba)
+        .resize_exact(width, height, image::imageops::FilterType::Triangle)
+        .to_rgba8()
+        .into_raw()
+}
+
+
 pub fn is_blank(buf: &[u8]) -> bool {
     if buf.len() < 100 {
         return true;

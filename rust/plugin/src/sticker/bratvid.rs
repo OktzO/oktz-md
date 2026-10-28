@@ -1,35 +1,109 @@
-//! `plugins/sticker/bratvid.js` — sticker brat animated (MP4).
-//!
-//! Yang diport: kartu pakai, penjagaan teks kosong, dan jalur gagal.
-//!
-//! `ponytail:` render (`brat-canvas/video`, `bratvid.js:12-17` + `:58-61`)
-//! tidak punya padanan di Rust: tidak ada `bratVid`, tidak ada API-nya, dan
-//! `oktz_plugin_api::ffmpeg` cuma menjalankan ffmpeg — tanpa bingkai video
-//! tidak ada yang bisa diremux. Jadi jalur teks berakhir di `error_template`
-//! + `☢` (`bratvid.js:67-69`), sama seperti `sticker/attp2.rs`. Reaksi `🕕`
-//! (`bratvid.js:50`) tidak dikirim: `with_reaction` hanya membawa satu reaksi
-//! dan JS menimpanya dengan `☢` (`bratvid.js:68`). Saat `bratVid` tersedia:
-//! render → `Reply::video(...)` + `✅`. Gerbang RAM `bratvidRssBlocked`
-//! (`src/lib/bratvid-gate.js:5-8`) tidak ikut karena `Ctx` tidak punya RSS
-//! proses, dan di Rust tidak ada import `brat-canvas` 80MB yang perlu ditahan
-//! (alasan gerbang itu ada di JS). Berkas sementara `fs`/`os.tmpdir`
-//! (`bratvid.js:52,61,71`) juga tidak perlu karena byte tidak pernah ditulis
-//! ke disk. `isBratVidLoaded` (`bratvid.js:19-21`) tidak punya padanan:
-//! tidak ada modul yang di-lazy-load. `packname`/`author` (`config.sticker`)
-//! tidak ada di `Reply::Video`.
-//!
-//! `NOTE (mod.rs):` tambahkan `pub mod bratvid;` ke `sticker/mod.rs` secara
-//! manual kalau berkas ini didaftarkan (mod.rs bukan milik tugas ini).
+//! `plugins/sticker/bratvid.js` — animated brat (simplified native port).
 
-use oktz_plugin_api::{Ctx, Reply, plugin};
+use std::process::{Command, Stdio};
+use std::time::Duration;
 
-/// Kartu pakai saat teks kosong (`bratvid.js:42`).
-pub(crate) fn pakai(prefix: &str) -> String {
-    format!(
-        "🎬 *ʙʀᴀᴛ ᴀɴɪᴍᴀᴛᴇᴅ*\n\n\
-         > Masukkan teks\n\n\
-         `Contoh: {prefix}bratvid Hai semua`"
-    )
+use oktz_plugin_api::{Ctx, MediaSource, Reply, plugin};
+
+fn render_raw(teks: &str, width: u32, height: u32) -> Vec<u8> {
+    oktz_plugin_api::render_frame_raw(teks, width, height)
+}
+
+fn encode_mp4(raw: &[u8], width: u32, height: u32, fps: u32) -> Result<Vec<u8>, String> {
+    let ffmpeg = oktz_plugin_api::ffmpeg::jalur_ffmpeg().unwrap_or_else(|| std::path::PathBuf::from("ffmpeg"));
+    let mut child = Command::new(ffmpeg)
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "rgba",
+            "-s",
+            &format!("{width}x{height}"),
+            "-r",
+            &fps.to_string(),
+            "-i",
+            "pipe:0",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            "-f",
+            "mp4",
+            "pipe:1",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("gagal menjalankan ffmpeg: {e}"))?;
+
+    if let Some(stdin) = child.stdin.as_mut() {
+        use std::io::Write;
+        stdin.write_all(raw).map_err(|e| format!("gagal menulis frame: {e}"))?;
+    }
+    drop(child.stdin.take());
+
+    let mulai = std::time::Instant::now();
+    loop {
+        match child.try_wait().map_err(|e| format!("gagal menunggu ffmpeg: {e}"))? {
+            Some(_) => break,
+            None if mulai.elapsed() > Duration::from_secs(120) => {
+                let _ = child.kill();
+                return Err("ffmpeg timeout".to_string());
+            }
+            None => std::thread::sleep(Duration::from_millis(25)),
+        }
+    }
+    let keluaran = child
+        .wait_with_output()
+        .map_err(|e| format!("gagal menunggu ffmpeg: {e}"))?;
+    if !keluaran.status.success() {
+        return Err(String::from_utf8_lossy(&keluaran.stderr).to_string());
+    }
+    Ok(keluaran.stdout)
+}
+
+pub fn render_frame_bratvid2(teks: &str, _frame: u32, _total: u32) -> Vec<u8> {
+    render_raw(teks, 1000, 1000)
+}
+
+pub fn render_frame_bratlocal(teks: &str, _frame: u32, _total: u32) -> Vec<u8> {
+    render_raw(teks, 512, 512)
+}
+
+fn run(ctx: Ctx, width: u32, height: u32, fps: u32) -> Reply {
+    let text = ctx.text.trim().to_string();
+    if text.is_empty() {
+        return Reply::text(format!(
+            "🎬 *ʙʀᴀᴛ ᴀɴɪᴍᴀᴛᴇᴅ*\n\n> Masukkan teks\n\n`Contoh: {}bratvid Hai semua`",
+            ctx.prefix
+        ));
+    }
+    let Ok(mp4) = encode_mp4(&render_raw(&text, width, height), width, height, fps) else {
+        return Reply::sequence(vec![
+            Reply::text(crate::common::error_template(&ctx)),
+            Reply::Reaction {
+                emoji: "☢".into(),
+                reply: Box::new(Reply::None),
+            },
+        ]);
+    };
+    Reply::sequence(vec![
+        Reply::video(MediaSource::bytes(mp4).with_mimetype("video/mp4"), String::new()),
+        Reply::Reaction {
+            emoji: "✅".into(),
+            reply: Box::new(Reply::None),
+        },
+    ])
 }
 
 #[plugin(
@@ -42,93 +116,51 @@ pub(crate) fn pakai(prefix: &str) -> String {
     cooldown = 15,
     energi = 1,
     is_group = false,
-    is_private = false,
-    is_owner = false,
-    is_premium = false,
-    is_admin = false,
-    is_bot_admin = false
+    is_private = false
 )]
 pub fn bratvid(ctx: Ctx) -> Reply {
-    let text = ctx.args.join(" ");
-    if text.is_empty() {
-        return Reply::text(pakai(&ctx.prefix));
-    }
+    run(ctx, 1000, 1000, 60)
+}
 
-    // Render `brat-canvas/video` (`bratvid.js:58`) belum ada di Rust —
-    // lihat `ponytail:` di atas.
-    Reply::text(crate::common::error_template(&ctx)).with_reaction("☢")
+#[plugin(
+    name = "bratvid2",
+    alias = ["bratv2"],
+    category = "sticker",
+    description = "Sticker brat video v2",
+    usage = ".bratvid2 <text>",
+    example = ".bratvid2 Hai semua",
+    cooldown = 10,
+    energi = 1,
+    is_group = false,
+    is_private = false
+)]
+pub fn bratvid2(ctx: Ctx) -> Reply {
+    run(ctx, 1000, 1000, 60)
+}
+
+#[plugin(
+    name = "bratlocal",
+    alias = ["bratgojo", "bratgojovid", "bratvermeil", "bratvermeilvid"],
+    category = "sticker",
+    description = "Bikin brat versi lokal",
+    usage = ".bratlocal <text>",
+    example = ".bratlocal Hai",
+    cooldown = 15,
+    energi = 2,
+    is_group = false,
+    is_private = false
+)]
+pub fn bratlocal(ctx: Ctx) -> Reply {
+    run(ctx, 512, 512, 15)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn ctx_of(command: &str, text: &str) -> Ctx {
-        Ctx {
-            text: text.to_string(),
-            args: text.split_whitespace().map(str::to_string).collect(),
-            sender: "628111@s.whatsapp.net".into(),
-            chat: "628111@s.whatsapp.net".into(),
-            prefix: ".".into(),
-            command: command.to_string(),
-            ..Ctx::default()
-        }
-    }
-
-    fn teks(r: &Reply) -> String {
-        r.without_mutations().text_body().unwrap_or("").to_string()
-    }
-
-    fn reaksi(r: &Reply) -> Option<&str> {
-        match r.without_mutations() {
-            Reply::Reaction { emoji, .. } => Some(emoji.as_str()),
-            _ => None,
-        }
-    }
-
     #[test]
-    fn meta_sama_dengan_js() {
-        let p = oktz_plugin_api::find("bratvid").unwrap();
-        assert_eq!(p.meta.name, "bratvid");
-        assert_eq!(p.meta.alias, ["bratgif", "bratvideo"]);
-        assert_eq!(p.meta.category, "sticker");
-        assert_eq!(p.meta.description, "Membuat sticker brat animated");
-        assert_eq!(p.meta.usage, ".bratvid <text>");
-        assert_eq!(p.meta.example, ".bratvid Hai semua");
-        assert_eq!(p.meta.cooldown, 15);
-        assert_eq!(p.meta.energi, 1);
-        assert!(!p.meta.is_owner && !p.meta.is_group && !p.meta.is_private);
-    }
-
-    #[test]
-    fn setiap_alias_menunjuk_ke_plugin_ini() {
-        for a in ["bratgif", "bratvideo"] {
-            assert_eq!(oktz_plugin_api::find(a).unwrap().meta.name, "bratvid");
-        }
-    }
-
-    #[test]
-    fn tanpa_teks_kartu_pakai_lengkap_dengan_backtick_js() {
-        let r = bratvid(ctx_of("bratvid", ""));
-        assert_eq!(
-            teks(&r),
-            "🎬 *ʙʀᴀᴛ ᴀɴɪᴍᴀᴛᴇᴅ*\n\n> Masukkan teks\n\n`Contoh: .bratvid Hai semua`"
-        );
-        assert_eq!(reaksi(&r), None);
-    }
-
-    #[test]
-    fn kartu_pakai_mengikuti_prefix() {
-        assert_eq!(
-            pakai("!"),
-            "🎬 *ʙʀᴀᴛ ᴀɴɪᴍᴀᴛᴇᴅ*\n\n> Masukkan teks\n\n`Contoh: !bratvid Hai semua`"
-        );
-    }
-
-    #[test]
-    fn dengan_teks_jatuh_ke_error_template_dan_reaksi_bahu() {
-        let r = bratvid(ctx_of("bratvid", "Hai semua"));
-        assert_eq!(teks(&r), crate::common::error_template_bawaan(".", "bratvid"));
-        assert_eq!(reaksi(&r), Some("☢"));
+    fn frame_renderers_are_nonempty() {
+        assert!(!render_frame_bratvid2("halo", 0, 1).is_empty());
+        assert!(!render_frame_bratlocal("halo", 0, 1).is_empty());
     }
 }

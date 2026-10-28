@@ -5,6 +5,7 @@ pub mod attp2;
 pub mod brat;
 pub mod bratextra;
 pub mod bratstatic;
+pub mod bratvid;
 pub mod emojimix;
 pub mod linesticker;
 pub mod sticker;
