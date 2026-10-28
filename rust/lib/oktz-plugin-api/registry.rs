@@ -1545,6 +1545,8 @@ pub struct HttpCall {
     /// jadi error, isi bodinya tetap dibaca scraper. Bawaannya `false` — axios
     /// melempar untuk 4xx/5xx, dan itu perilaku yang harus disalin.
     pub terima_semua_status: bool,
+    /// Timeout per request dalam ms. `None` = timeout global `UreqHttp`.
+    pub timeout_ms: Option<u64>,
 }
 
 impl HttpCall {
@@ -1555,12 +1557,18 @@ impl HttpCall {
             headers: Vec::new(),
             body: None,
             terima_semua_status: false,
+            timeout_ms: None,
         }
     }
 
     /// `validateStatus: () => true` — lihat catatan di `terima_semua_status`.
     pub fn terima_semua_status(mut self) -> Self {
         self.terima_semua_status = true;
+        self
+    }
+
+    pub fn with_timeout(mut self, ms: u64) -> Self {
+        self.timeout_ms = Some(ms);
         self
     }
 

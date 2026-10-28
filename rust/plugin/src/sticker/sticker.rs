@@ -1,35 +1,12 @@
 //! `plugins/sticker/sticker.js` — command `.s`.
 
 
-use oktz_plugin_api::{
-    Ctx, IncomingKind, MediaError, MediaFetch, MediaOrigin, MediaSource, OpsiS, Reply, StickerOpsi,
-    plugin,
-};
+use oktz_plugin_api::{Ctx, IncomingKind, MediaSource, OpsiS, Reply, StickerOpsi, plugin};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Jenis {
     Gambar,
     Video,
-}
-
-#[cfg(test)]
-#[cfg(test)]
-#[derive(Debug, Default)]
-struct Unduhan {
-    pemicu: Vec<u8>,
-    kutipan: Vec<u8>,
-}
-
-impl MediaFetch for Unduhan {
-    fn download(&self, origin: MediaOrigin) -> Result<Vec<u8>, MediaError> {
-        match origin {
-            MediaOrigin::Trigger => Ok(self.pemicu.clone()),
-            MediaOrigin::Quoted => Ok(self.kutipan.clone()),
-            MediaOrigin::Indexed(_) => Err(MediaError {
-                message: "tidak ada media di pesan yang di-reply".to_string(),
-            }),
-        }
-    }
 }
 
 fn is_gambar(ctx: &Ctx) -> bool {
@@ -306,7 +283,7 @@ mod tests {
         b"RIFF0000WEBP".to_vec()
     }
 
-    fn ctx_media(kind: IncomingKind, pemicu: Vec<u8>, kutipan: Vec<u8>) -> Ctx {
+    fn ctx_media(kind: IncomingKind, _pemicu: Vec<u8>, _kutipan: Vec<u8>) -> Ctx {
         Ctx {
             prefix: ".".into(),
             command: "s".into(),
@@ -320,7 +297,7 @@ mod tests {
                 file_name: None,
                 caption: String::new(),
             }),
-            media_fetch: Arc::new(Unduhan { pemicu, kutipan }),
+            media_fetch: Arc::new(oktz_plugin_api::NoMediaFetch),
             ..Ctx::default()
         }
     }
