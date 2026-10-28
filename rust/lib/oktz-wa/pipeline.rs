@@ -2028,7 +2028,7 @@ pub fn render_reply(
                 .clone()
                 .ok_or(PipelineError::MediaSourceMissing { variant })?,
             caption: caption.to_string(),
-            mentions: mentions_of(mentions),
+            mentions: mentions.to_vec(),
             quote: quote.cloned(),
             gif_playback: false,
             ptt: false,
@@ -5276,6 +5276,20 @@ fn group_number_and_long_number_are_rejected() {
         assert_eq!(p.caption, "capt");
         assert_eq!(p.mentions, vec!["6281@s.whatsapp.net".to_string()]);
         assert_eq!(p.source.mimetype(), None);
+    }
+
+    #[test]
+    fn image_reply_with_empty_mentions_does_not_default_to_sender() {
+        let reply = Reply::Image {
+            media: Some(MediaSource::bytes(vec![1, 2, 3])),
+            caption: "ping".into(),
+            mentions: Vec::new(),
+        };
+        let mut target = ReplyTarget::default();
+        target.sender = "628111@s.whatsapp.net".into();
+        let p = render_reply(&reply, &target).unwrap().unwrap().media.unwrap();
+        assert!(p.mentions.is_empty(), "media eksplisit tanpa mention: {:?}", p.mentions);
+        assert!(p.quote.is_none());
     }
 
     #[test]

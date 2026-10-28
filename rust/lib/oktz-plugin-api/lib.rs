@@ -31,6 +31,8 @@ pub use sock::{AksiPeserta, AdaWhatsapp, Sock, SockError, SockMati};
 pub mod berkas;
 pub mod ffmpeg;
 pub mod gambar;
+pub mod kanvas;
+pub use kanvas::Kanvas;
 
 // Plugin butuh menyusun `Runtime` sendiri di test (untuk menguji jalur
 // config terisi), jadi tipe yang dibaca `Ctx::config()` harus bisa diakses
