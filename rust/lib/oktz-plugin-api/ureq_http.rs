@@ -121,7 +121,16 @@ impl UreqHttp {
         let permintaan = permintaan.body(body).map_err(|e| HttpError {
             message: format!("permintaan HTTP tidak valid: {e}"),
         })?;
-        let res = self.agent.run(permintaan).map_err(to_err)?;
+        let agent = if let Some(ms) = req.timeout_ms {
+            let cfg = ureq::Agent::config_builder()
+                .timeout_global(Some(std::time::Duration::from_millis(ms)))
+                .http_status_as_error(false)
+                .build();
+            cfg.into()
+        } else {
+            self.agent.clone()
+        };
+        let res = agent.run(permintaan).map_err(to_err)?;
         Self::collect(res)
     }
 }
@@ -134,8 +143,7 @@ fn to_err(e: ureq::Error) -> HttpError {
 
 impl HttpGet for UreqHttp {
     fn get(&self, url: &str) -> Result<HttpResponse, HttpError> {
-        let res = self.agent.get(url).header("user-agent", UA).call();
-        Self::guard(Self::collect(res.map_err(to_err)?)?)
+        Self::guard(self.call(&HttpCall::get(url))?)
     }
 
     fn post_json(&self, url: &str, body: &Value) -> Result<HttpResponse, HttpError> {

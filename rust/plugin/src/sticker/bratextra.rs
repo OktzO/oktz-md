@@ -14,7 +14,7 @@ pub(crate) fn help(prefix: &str, cmd: &str) -> String {
 }
 
 #[plugin(
-    name = "bratanime",
+    name = "bratextra",
     alias = ["bratanime", "bratbahlil", "brathd", "bratpatrick", "bratsquidward", "bratwhite",
              "bratchika", "bratkobato", "bratmenhera", "bratnezuko", "bratqiqi", "bratruromiya",
              "bratumaru"],
