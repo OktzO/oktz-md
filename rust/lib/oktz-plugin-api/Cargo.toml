@@ -17,7 +17,7 @@ tracing.workspace = true
 linkme = "0.3"
 async-trait = "0.1"
 ureq = { version = "3.4", features = ["multipart"] }
-image = { version = "0.24", default-features = false, features = ["jpeg", "png", "webp", "gif"] }
+image = { version = "0.24", default-features = false, features = ["jpeg", "png", "webp", "gif", "webp-encoder"] }
 ab_glyph = "0.2"
 
 

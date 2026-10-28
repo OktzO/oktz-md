@@ -298,6 +298,7 @@ fn dokumen(input: &VariantInput<'_>, quote: Option<QuoteSource>) -> PendingMedia
         jpeg_thumbnail: Some(thumbnail(input, "foto2", FOTO2)),
         file_length: Some(FILE_LENGTH_DOKUMEN),
         preview: None,
+        sticker: None,
     }
 }
 
@@ -327,6 +328,7 @@ fn video(input: &VariantInput<'_>) -> PendingMedia {
         jpeg_thumbnail: None,
         file_length: None,
         preview: None,
+        sticker: None,
     }
 }
 
@@ -390,6 +392,7 @@ fn link_preview(input: &VariantInput<'_>) -> PendingMedia {
             bytes,
             favicon: false,
         }),
+        sticker: None,
     }
 }
 
@@ -732,6 +735,7 @@ fn favicon(input: &VariantInput<'_>) -> PendingMedia {
             bytes,
             favicon: true,
         }),
+        sticker: None,
     }
 }
 

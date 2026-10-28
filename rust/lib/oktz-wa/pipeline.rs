@@ -1703,6 +1703,8 @@ pub struct PendingMedia {
     /// Link preview yang menunggu upload `thumbnail-link`
     /// (`mediaTypeOverride`, `socket.js:1224-1239`).
     pub preview: Option<PendingPreview>,
+    /// Opsi sticker: wire metadata + EXIF input. `None` untuk media non-sticker.
+    pub sticker: Option<oktz_plugin_api::StickerOpsi>,
 }
 
 /// `sendPreview` (`socket.js:1206-1274`): `extendedTextMessage` yang sudah
@@ -1729,11 +1731,22 @@ pub struct PendingPreview {
 /// `UploadResponse` dengan field yang sama seperti builder image
 /// (`waproto-0.7.0/src/whatsapp.proto:1584-1609`).
 fn build_media_message(kind: MediaKind, up: UploadResponse, media: &PendingMedia) -> wa::Message {
-    let ci = if media.mentions.is_empty() && media.quote.is_none() {
+    let mut ci = if media.mentions.is_empty() && media.quote.is_none() {
         None
     } else {
         Some(Box::new(context_info(&media.mentions, media.quote.as_ref())))
     };
+    if let Some(opsi) = &media.sticker {
+        if opsi.forwarded {
+            let ci = ci.get_or_insert_with(|| Box::new(context_info(&[], None)));
+            ci.is_forwarded = Some(true);
+            ci.forwarding_score = Some(opsi.forwarding_score.unwrap_or(1));
+        }
+        if let Some(skor) = opsi.forwarding_score {
+            let ci = ci.get_or_insert_with(|| Box::new(context_info(&[], None)));
+            ci.forwarding_score = Some(skor);
+        }
+    }
     // WA menolak caption kosong; `Some("")` dikirim apa adanya.
     let caption = (!media.caption.is_empty()).then(|| media.caption.clone());
     // `fileLength` PALSU varian 2/6 (`serialize.js:1019`, `:1123`) ditulis di
@@ -1758,8 +1771,6 @@ fn build_media_message(kind: MediaKind, up: UploadResponse, media: &PendingMedia
                 file_enc_sha256: Some(up.file_enc_sha256.to_vec()),
                 file_length: Some(up.file_length),
                 media_key_timestamp: Some(up.media_key_timestamp),
-                // Sticker WA Web memang webp; `image/webp` hanya label, byte
-                // yang di-upload adalah apa adanya dari `MediaSource`.
                 mimetype: Some(
                     media
                         .source
@@ -1767,9 +1778,17 @@ fn build_media_message(kind: MediaKind, up: UploadResponse, media: &PendingMedia
                         .unwrap_or("image/webp")
                         .to_string(),
                 ),
-                context_info: ci.map_or_else(MessageField::none, |c| {
-                    MessageField::some(*c)
+                is_animated: media
+                    .sticker
+                    .as_ref()
+                    .and_then(|o| o.animated.then_some(true)),
+                premium: media.sticker.as_ref().and_then(|o| {
+                    o.premium.then_some(1)
                 }),
+                emojis: media.sticker.as_ref().and_then(|o| {
+                    (!o.emojis.is_empty()).then(|| o.emojis.join(","))
+                }),
+                context_info: ci.map_or_else(MessageField::none, |c| MessageField::some(*c)),
                 ..Default::default()
             }),
             ..Default::default()
@@ -2036,18 +2055,45 @@ pub fn render_reply(
             jpeg_thumbnail: None,
             file_length: None,
             preview: None,
+            sticker: None,
         })
     };
     match reply {
         Reply::None => Ok(None),
-        Reply::Sticker { media: src } => Ok(Some(Rendered {
+        Reply::Sticker { media: src, opsi } => Ok(Some(Rendered {
             message: wa::Message::default(),
             extra_nodes: Vec::new(),
-            media: Some(pending(MediaKind::Sticker, "Sticker", src, "", &[])?),
+            media: Some(PendingMedia {
+                kind: MediaKind::Sticker,
+                source: src
+                    .clone()
+                    .ok_or(PipelineError::MediaSourceMissing { variant: "Sticker" })?,
+                caption: String::new(),
+                mentions: Vec::new(),
+                quote: quote.cloned(),
+                gif_playback: false,
+                ptt: false,
+                file_name: None,
+                jpeg_thumbnail: None,
+                file_length: None,
+                preview: None,
+                sticker: Some(opsi.clone()),
+            }),
             card: None,
             card_header_media: None,
             card_quote: None,
         })),
+        Reply::StickerPack { stickers, name, publisher, description, emojis } => {
+            if stickers.iter().all(Option::is_none) {
+                return Err(PipelineError::MediaSourceMissing {
+                    variant: "StickerPack",
+                });
+            }
+            let _ = (name, publisher, description, emojis);
+            Err(PipelineError::Unsupported(
+                "Reply::StickerPack belum punya transport pack di Task 6".into(),
+            ))
+        }
         Reply::Image {
             media: src,
             caption,
@@ -2230,6 +2276,7 @@ pub fn render_reply(
                     jpeg_thumbnail: None,
                     file_length: None,
                     preview: None,
+                    sticker: None,
                 });
             Ok(Some(Rendered {
                 message: wa::Message::default(),
@@ -5240,7 +5287,7 @@ fn group_number_and_long_number_are_rejected() {
 
     #[test]
     fn sticker_reply_without_a_source_is_a_typed_error() {
-        let err = render_reply(&Reply::Sticker { media: None }, &ReplyTarget::default()).unwrap_err();
+        let err = render_reply(&Reply::Sticker { media: None, opsi: Default::default() }, &ReplyTarget::default()).unwrap_err();
         assert_eq!(
             err,
             PipelineError::MediaSourceMissing {
@@ -5415,6 +5462,7 @@ fn group_number_and_long_number_are_rejected() {
             jpeg_thumbnail: None,
             file_length: None,
             preview: None,
+            sticker: None,
         }
     }
 
@@ -5555,6 +5603,7 @@ fn group_number_and_long_number_are_rejected() {
             Reply::tabel("t").with_table_row(["a", "b"]),
             Reply::image(MediaSource::bytes(vec![1]), "c"),
             Reply::Sticker {
+                opsi: Default::default(),
                 media: Some(MediaSource::bytes(vec![1])),
             },
             Reply::video(MediaSource::bytes(vec![1]), "c"),
@@ -6130,7 +6179,7 @@ fn group_number_and_long_number_are_rejected() {
                 caption: "c".into(),
                 mentions: vec![],
             },
-            Reply::Sticker { media: None },
+            Reply::Sticker { media: None, opsi: Default::default() },
         ] {
             let err = render_reply(&reply, &ReplyTarget::default()).unwrap_err();
             assert!(matches!(err, PipelineError::MediaSourceMissing { .. }));

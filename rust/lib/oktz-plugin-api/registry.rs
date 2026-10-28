@@ -4,6 +4,7 @@ use std::sync::{Arc, OnceLock};
 use serde_json::Value;
 
 use crate::meta::PluginMeta;
+use crate::sticker::StickerOpsi;
 
 pub type HandlerFn = Arc<dyn Fn(Ctx) -> Reply + Send + Sync>;
 
@@ -199,7 +200,22 @@ pub enum Reply {
     /// Sticker (WA `stickerMessage`), dari sumber media nyata.
     ///
     /// Sama seperti `Image`: `None` = error eksplisit, bukan drop senyap.
-    Sticker { media: Option<MediaSource> },
+    /// `opsi` membawa metadata wire/EXIF; bukan byte WebP-nya.
+    Sticker {
+        media: Option<MediaSource>,
+        opsi: StickerOpsi,
+    },
+    /// Sticker pack (`stickerPackMessage`).
+    ///
+    /// Stiker pertama yang berhasil disiapkan jadi cover. Album tidak dipakai
+    /// di Task 6; transport pack datang pada Task 7.
+    StickerPack {
+        stickers: Vec<Option<MediaSource>>,
+        name: String,
+        publisher: String,
+        description: String,
+        emojis: Vec<String>,
+    },
     /// Video (WA `videoMessage`) — `sock.sendMedia(..., { type: 'video' })`
     /// (`src/lib/socket.js:786-793`).
     ///
@@ -553,6 +569,30 @@ impl Reply {
     pub fn sticker(source: MediaSource) -> Self {
         Self::Sticker {
             media: Some(source),
+            opsi: StickerOpsi::default(),
+        }
+    }
+
+    pub fn sticker_opsi(source: MediaSource, opsi: StickerOpsi) -> Self {
+        Self::Sticker {
+            media: Some(source),
+            opsi,
+        }
+    }
+
+    pub fn sticker_pack(
+        stickers: Vec<MediaSource>,
+        name: impl Into<String>,
+        publisher: impl Into<String>,
+        description: impl Into<String>,
+        emojis: Vec<String>,
+    ) -> Self {
+        Self::StickerPack {
+            stickers: stickers.into_iter().map(Some).collect(),
+            name: name.into(),
+            publisher: publisher.into(),
+            description: description.into(),
+            emojis,
         }
     }
 
@@ -725,6 +765,7 @@ impl Reply {
             | Self::TextQuotedPrevious { .. }
             | Self::Image { .. }
             | Self::Sticker { .. }
+            | Self::StickerPack { .. }
             | Self::Video { .. }
             | Self::Audio { .. }
             | Self::Document { .. }
@@ -760,6 +801,9 @@ impl Reply {
         if let Self::Sequence(list) = self.payload() {
             return list.iter().any(Self::has_media);
         }
+        if let Self::StickerPack { stickers, .. } = self.payload() {
+            return stickers.iter().any(Option::is_some);
+        }
         matches!(
             self.payload(),
             Self::Image { .. }
@@ -779,7 +823,7 @@ impl Reply {
     pub fn media_source(&self) -> Option<&MediaSource> {
         match self.payload() {
             Self::Image { media, .. }
-            | Self::Sticker { media }
+            | Self::Sticker { media, .. }
             | Self::Video { media, .. }
             | Self::Audio { media, .. }
             | Self::Document { media, .. } => media.as_ref(),
@@ -818,7 +862,7 @@ impl Reply {
             // cuma butuh satu baris untuk log/permission. `None` kalau
             // tidak ada isinya.
             Self::Sequence(list) => list.iter().find_map(Self::text_body),
-            Self::None | Self::Sticker { .. } | Self::Audio { .. } | Self::Mutate { .. } => None,
+            Self::None | Self::Sticker { .. } | Self::StickerPack { .. } | Self::Audio { .. } | Self::Mutate { .. } => None,
         }
     }
 }
@@ -1955,7 +1999,7 @@ mod tests {
             Some("c")
         );
         // Sticker tidak punya teks — router tidak boleh reply teks kosong.
-        assert_eq!(Reply::Sticker { media: None }.text_body(), None);
+        assert_eq!(Reply::Sticker { media: None, opsi: Default::default() }.text_body(), None);
     }
 
     #[test]
@@ -1980,8 +2024,8 @@ mod tests {
         assert_eq!(Reply::None.media_source(), None);
         // `media: None` tetap variant media — sumbernya yang hilang, dan itu
         // yang harus jadi error di pipeline, bukan `has_media() == false`.
-        assert!(Reply::Sticker { media: None }.has_media());
-        assert_eq!(Reply::Sticker { media: None }.media_source(), None);
+        assert!(Reply::Sticker { media: None, opsi: Default::default() }.has_media());
+        assert_eq!(Reply::Sticker { media: None, opsi: Default::default() }.media_source(), None);
     }
 
     #[test]

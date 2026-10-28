@@ -256,7 +256,7 @@ mod tests {
             other => panic!("harus Reaction, dapat {other:?}"),
         };
         match isi {
-            Reply::Sticker { media } => {
+            Reply::Sticker { media, .. } => {
                 assert_eq!(
                     media,
                     Some(MediaSource::Bytes {

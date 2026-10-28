@@ -26,6 +26,52 @@ pub fn jalur_ffmpeg() -> Option<PathBuf> {
     cari_di_path("ffmpeg")
 }
 
+/// Jalur biner ffprobe.
+/// Urutan: env `OTKZ_FFPROBE_PATH`, lalu `ffprobe` di `PATH`.
+pub fn jalur_ffprobe() -> Option<PathBuf> {
+    if let Some(nama) = std::env::var_os("OTKZ_FFPROBE_PATH") {
+        let calon = PathBuf::from(nama);
+        if calon.is_file() {
+            return Some(calon);
+        }
+    }
+    cari_di_path("ffprobe")
+}
+
+/// Durasi media dalam detik dari stdin (`pipe:0`).
+///
+/// `None` kalau ffprobe tidak tersedia atau keluarannya bukan angka — sama
+/// seperti cabang `catch {}` JS yang melanjutkan tanpa menolak video.
+pub fn durasi_dari_masukan(masukan: &[u8]) -> Option<f64> {
+    let biner = jalur_ffprobe()?;
+    let args = [
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        "pipe:0",
+    ];
+    let keluaran = Command::new(&biner)
+        .args(args)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .ok()?;
+    let mut keluaran = keluaran;
+    if let Some(stdin) = keluaran.stdin.as_mut() {
+        stdin.write_all(masukan).ok()?;
+    }
+    let hasil = keluaran.wait_with_output().ok()?;
+    if !hasil.status.success() {
+        return None;
+    }
+    let teks = String::from_utf8_lossy(&hasil.stdout);
+    teks.trim().parse::<f64>().ok()
+}
+
 /// Jalankan ffmpeg dengan argumen mentah, kembalikan stdout biner.
 /// `Err` memuat stderr supaya bisa ditampilkan seperti JS.
 pub fn jalankan(argumen: &[&str]) -> Result<Vec<u8>, String> {

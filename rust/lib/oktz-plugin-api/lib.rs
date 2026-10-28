@@ -33,6 +33,11 @@ pub mod ffmpeg;
 pub mod gambar;
 pub mod kanvas;
 pub use kanvas::Kanvas;
+pub mod sticker;
+pub use sticker::{
+    OpsiS, StickerOpsi, STICKER_WEBP_VF, gambar_ke_stiker_webp, opsi_s, tempel_metadata_stiker,
+    video_ke_stiker_webp,
+};
 
 // Plugin butuh menyusun `Runtime` sendiri di test (untuk menguji jalur
 // config terisi), jadi tipe yang dibaca `Ctx::config()` harus bisa diakses

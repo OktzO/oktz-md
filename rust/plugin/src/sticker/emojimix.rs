@@ -250,7 +250,7 @@ mod tests {
             panic!("harus dibungkus reaksi");
         };
         match isi.as_ref() {
-            Reply::Sticker { media } => {
+            Reply::Sticker { media, .. } => {
                 assert_eq!(
                     media,
                     &Some(MediaSource::Url {

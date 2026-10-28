@@ -13,4 +13,5 @@ pub mod emojimix;
 
 // Ditambahkan scripts/pasang-modul.mjs.
 pub mod brat;
+pub mod sticker;
 pub mod stickerly;

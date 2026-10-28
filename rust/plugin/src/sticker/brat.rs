@@ -431,7 +431,7 @@ mod tests {
             lain => panic!("harus dibungkus reaksi, dapat {lain:?}"),
         };
         match isi {
-            Reply::Sticker { media } => assert_eq!(
+            Reply::Sticker { media, .. } => assert_eq!(
                 media,
                 Some(MediaSource::Bytes {
                     data: Arc::from(png),
