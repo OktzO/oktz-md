@@ -1,10 +1,9 @@
 //! `plugins/sticker/sticker.js` — command `.s`.
 
-use std::sync::Arc;
 
 use oktz_plugin_api::{
-    Ctx, IncomingKind, IncomingMedia, MediaError, MediaFetch, MediaOrigin, MediaSource, OpsiS,
-    Reply, StickerOpsi, plugin,
+    Ctx, IncomingKind, MediaError, MediaFetch, MediaOrigin, MediaSource, OpsiS, Reply, StickerOpsi,
+    plugin,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13,6 +12,8 @@ enum Jenis {
     Video,
 }
 
+#[cfg(test)]
+#[cfg(test)]
 #[derive(Debug, Default)]
 struct Unduhan {
     pemicu: Vec<u8>,
@@ -24,6 +25,9 @@ impl MediaFetch for Unduhan {
         match origin {
             MediaOrigin::Trigger => Ok(self.pemicu.clone()),
             MediaOrigin::Quoted => Ok(self.kutipan.clone()),
+            MediaOrigin::Indexed(_) => Err(MediaError {
+                message: "tidak ada media di pesan yang di-reply".to_string(),
+            }),
         }
     }
 }
@@ -151,6 +155,61 @@ pub fn sticker(ctx: Ctx) -> Reply {
     let (opsi, packname, author) = oktz_plugin_api::opsi_s(&ctx.text);
     let jenis = if gambar { Jenis::Gambar } else { Jenis::Video };
 
+    if !opsi.iter().any(|o| {
+        matches!(
+            o,
+            OpsiS::Crop | OpsiS::Resize(_, _) | OpsiS::Circle | OpsiS::Rounded
+        )
+    }) && ctx
+        .quoted()
+        .is_some_and(|q| q.kind.is_image() || q.kind.is_video())
+    {
+        let (packname, author) = metadata(&ctx, packname.clone(), author.clone());
+        let anchor_ts = ctx
+            .album_media()
+            .iter()
+            .find(|m| ctx.quoted().map(|q| q.id.as_str()) == Some(m.id.as_str()))
+            .map(|m| m.timestamp)
+            .unwrap_or(0);
+        let (selected, skipped) =
+            oktz_plugin_api::pilih_album_media(ctx.album_media(), ctx.quoted().unwrap().id.as_str(), anchor_ts);
+        if selected.len() >= 2 {
+            let mut buffers = Vec::new();
+            for item in selected {
+                if let Ok(bytes) = ctx.download_album_media(&item.id) {
+                    if let Ok(webp) = oktz_plugin_api::gambar_ke_stiker_webp(&bytes, &[]) {
+                        buffers.push(webp);
+                    }
+                }
+            }
+            if buffers.len() >= 2 {
+                let mut urutan = vec![
+                    reaksi("🕕"),
+                    Reply::sticker_pack(
+                        buffers
+                            .clone()
+                            .into_iter()
+                            .map(MediaSource::bytes)
+                            .collect(),
+                        packname.clone(),
+                        author.clone(),
+                        String::new(),
+                        vec!["🎨".to_string()],
+                    ),
+                ];
+                if skipped > 0 {
+                    urutan.push(Reply::text(format!(
+                        "Sticker album selesai ({}). {} media lainnya dilewati (maks 10).",
+                        buffers.len(),
+                        skipped
+                    )));
+                }
+                urutan.push(reaksi("✅"));
+                return Reply::sequence(urutan);
+            }
+        }
+    }
+
     let Ok(data) = unduh(&ctx) else {
         return Reply::sequence(vec![Reply::text(gagal_kirim()), reaksi("❌")]);
     };
@@ -220,6 +279,8 @@ pub fn sticker(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::config::Runtime;
+    use oktz_plugin_api::IncomingMedia;
+    use std::sync::Arc;
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
     use std::sync::Mutex;
@@ -279,6 +340,7 @@ mod tests {
             mimetype: None,
             file_name: None,
             from_me: false,
+            timestamp: 0,
         };
         Ctx {
             quoted: Some(q),

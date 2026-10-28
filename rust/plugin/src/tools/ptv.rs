@@ -58,6 +58,7 @@ mod tests {
             mimetype: Some("video/mp4".into()),
             file_name: None,
             from_me: false,
+            timestamp: 0,
         }
     }
 

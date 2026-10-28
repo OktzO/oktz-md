@@ -1007,6 +1007,8 @@ pub struct QuotedMessage {
     pub mimetype: Option<String>,
     pub file_name: Option<String>,
     pub from_me: bool,
+    /// `messageTimestamp` untuk album window.
+    pub timestamp: i64,
 }
 
 impl QuotedMessage {
@@ -1113,6 +1115,8 @@ pub struct Ctx {
     /// yang dikonfigurasi. Menggabungkannya akan membuat DB bisa menambah owner
     /// tanpa izin owner benar-benar berubah.
     pub db_owners: Vec<String>,
+    /// Media masuk per chat untuk album `.s`.
+    pub album_media: Vec<AlbumMedia>,
 }
 
 impl Ctx {
@@ -1156,11 +1160,18 @@ impl Ctx {
         self.berkas.as_ref()
     }
 
-    /// `db.data.owner` — daftar owner dari store, BUKAN daftar config dan BUKAN
-    /// daftar otorisasi. Urutan apa adanya; plugin `.owner` yang menyatukannya
-    /// dengan `config().owner.number` seperti `[...new Set([...])]` JS.
     pub fn db_owners(&self) -> &[String] {
         &self.db_owners
+    }
+
+    /// Media masuk per chat untuk album `.s`.
+    pub fn album_media(&self) -> &[AlbumMedia] {
+        &self.album_media
+    }
+
+    /// Unduh media yang diindeks pipeline (album `.s`).
+    pub fn download_album_media(&self, id: &str) -> Result<Vec<u8>, MediaError> {
+        self.media_fetch.download(MediaOrigin::Indexed(id.to_string()))
     }
 }
 
@@ -1729,22 +1740,57 @@ pub struct IncomingMedia {
     pub caption: String,
 }
 
+/// Media masuk per chat yang bisa dipakai album `.s`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AlbumMedia {
+    pub id: String,
+    pub timestamp: i64,
+    pub from_me: bool,
+    pub media: Option<MediaSource>,
+}
+
+pub fn pilih_album_media(
+    all: &[AlbumMedia],
+    anchor_id: &str,
+    anchor_ts: i64,
+) -> (Vec<AlbumMedia>, usize) {
+    let must = all.iter().any(|m| m.id == anchor_id);
+    if !must {
+        return (Vec::new(), 0);
+    }
+    let mut in_window: Vec<AlbumMedia> = all
+        .iter()
+        .filter(|m| !m.from_me && m.media.is_some())
+        .filter(|m| {
+            m.id == anchor_id || (m.timestamp - anchor_ts).abs() <= 5
+        })
+        .cloned()
+        .collect();
+    in_window.sort_by_key(|m| m.timestamp);
+    let skipped = in_window.len().saturating_sub(10);
+    in_window.truncate(10);
+    (in_window, skipped)
+}
+
 /// Asal media yang diunduh — `m.download()` atau `m.quoted.download()`
 /// (`serialize.js:1669` dan `:543`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MediaOrigin {
     /// Pesan yang memicu command (`m.download()`).
     Trigger,
     /// Pesan yang di-reply (`m.quoted.download()`).
     Quoted,
+    /// Pesan yang diindeks pipeline (`album `.s`).
+    Indexed(String),
 }
 
 impl MediaOrigin {
     /// Nama yang dipakai pesan galat, biar pembaca tahu jalur mana yang gagal.
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         match self {
-            Self::Trigger => "pesan pemicu",
-            Self::Quoted => "pesan yang di-reply",
+            Self::Trigger => "pesan pemicu".to_string(),
+            Self::Quoted => "pesan yang di-reply".to_string(),
+            Self::Indexed(id) => id,
         }
     }
 }
@@ -1815,6 +1861,7 @@ impl Default for Ctx {
             store_premium: 0,
             store_groups: 0,
             db_owners: Vec::new(),
+            album_media: Vec::new(),
         }
     }
 }

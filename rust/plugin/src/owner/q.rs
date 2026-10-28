@@ -85,6 +85,7 @@ mod tests {
             mimetype: Some("image/jpeg".into()),
             file_name: Some("pic.jpg".into()),
             from_me: false,
+            timestamp: 0,
         }
     }
 
@@ -134,6 +135,7 @@ mod tests {
             kind: QuotedKind::Text,
             mimetype: None,
             file_name: None,
+            timestamp: 0,
             ..image_quote()
         };
         let v: Value = serde_json::from_str(&text_of(Some(q))).unwrap();

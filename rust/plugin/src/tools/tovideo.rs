@@ -59,6 +59,9 @@ pub fn tovideo(ctx: Ctx) -> Reply {
     let Ok(buffer) = (match origin {
         oktz_plugin_api::MediaOrigin::Trigger => ctx.download_media(),
         oktz_plugin_api::MediaOrigin::Quoted => ctx.download_quoted_media(),
+        oktz_plugin_api::MediaOrigin::Indexed(_) => Err(oktz_plugin_api::MediaError {
+            message: "tidak ada media di pesan yang di-reply".to_string(),
+        }),
     }) else {
         return Reply::text("❌ *ɢᴀɢᴀʟ*\n\n> Tidak dapat mengunduh sticker.");
     };

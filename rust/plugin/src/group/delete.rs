@@ -155,7 +155,8 @@ mod tests {
                 mimetype: None,
                 file_name: None,
                 from_me: o.from_me,
-            }),
+            timestamp: 0,
+        }),
             ..Default::default()
         }
     }

@@ -218,6 +218,7 @@ mod tests {
             mimetype: None,
             file_name: None,
             from_me: false,
+            timestamp: 0,
         });
         ctx.mentioned = vec!["628999@s.whatsapp.net".into()];
         ctx.args = vec!["628333".into()];

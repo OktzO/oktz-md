@@ -134,7 +134,8 @@ mod tests {
                 mimetype: None,
                 file_name: None,
                 from_me: false,
-            }),
+            timestamp: 0,
+        }),
         ));
         assert!(matches!(t, Target::Jid(j) if j == "628999@s.whatsapp.net"));
     }

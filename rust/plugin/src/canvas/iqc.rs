@@ -95,7 +95,8 @@ mod tests {
                 mimetype: None,
                 file_name: None,
                 from_me: false,
-            }),
+            timestamp: 0,
+        }),
             ..Default::default()
         };
         (oktz_plugin_api::find("iqc").unwrap().handler)(ctx)

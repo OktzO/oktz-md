@@ -224,7 +224,8 @@ mod tests {
                 mimetype: None,
                 file_name: None,
                 from_me: false,
-            }),
+            timestamp: 0,
+        }),
             mentioned: vec!["628777@s.whatsapp.net".into()],
             ..ctx_with(Some("628777@s.whatsapp.net"), false)
         };

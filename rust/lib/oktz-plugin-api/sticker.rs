@@ -381,6 +381,10 @@ pub fn tempel_metadata_stiker(
     Ok(out)
 }
 
+pub fn buat_kunci_media() -> [u8; 32] {
+    rand::random()
+}
+
 pub fn nama_unik(prefix: &str, ext: &str) -> std::path::PathBuf {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -402,6 +406,8 @@ pub fn tulis_berkas_sementara(prefix: &str, ext: &str, data: &[u8]) -> Result<st
 #[cfg(test)]
 mod tests {
     use super::*;
+    use image::GenericImageView;
+    use image::Rgba;
 
     fn vp8l_riff() -> Vec<u8> {
         let payload = [0x2f, 0x01, 0x02, 0x03, 0x04];

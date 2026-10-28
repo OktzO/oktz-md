@@ -1281,6 +1281,7 @@ dependencies = [
  "linkme",
  "oktz-core",
  "oktz-plugin-macros",
+ "rand 0.9.5",
  "serde",
  "serde_json",
  "tokio",

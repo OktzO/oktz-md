@@ -194,6 +194,7 @@ mod tests {
             mimetype: None,
             file_name: None,
             from_me: false,
+            timestamp: 0,
         });
         let r = run(ctx);
         assert!(r.is_none(), "quoted yang dipakai, jadi lolos gerbang admin");

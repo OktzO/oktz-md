@@ -25,7 +25,7 @@
 //! (`whatsapp-rust-0.7.0/src/upload.rs:409`) hanya menerima `Vec<u8>`, jadi
 //! `Url`/`Path` di-resolve ke byte dulu ([`load_media`]) sebelum upload.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::future::Future;
 use std::path::PathBuf;
@@ -36,7 +36,7 @@ use std::time::Instant;
 use oktz_plugin_api::berkas::Berkas;
 use oktz_plugin_api::registry::{GroupRoster, HttpGet, MediaSource, Mutation, Participant};
 use oktz_plugin_api::{NoHttp, QuotedKind, QuotedMessage, SessionStore, new_session_store};
-use oktz_plugin_api::{Ctx, PluginEntry, Reply};
+use oktz_plugin_api::{AlbumMedia, Ctx, PluginEntry, Reply};
 use oktz_plugin_api::{Sock, SockMati};
 use oktz_router::gates::{
     AutoWorkDecision, AutoWorkGuard, AutoWorkSettings, EnergiSettings, resolve_energi_enabled,
@@ -1084,6 +1084,13 @@ pub trait MessageSender: Send + Sync {
         })
     }
 
+    /// Sticker pack (`stickerPackMessage`) — upload ZIP + thumbnail.
+    fn send_sticker_pack(&self, _to: &str, _pack: PendingStickerPack) -> SendBox<'_> {
+        Box::pin(async move {
+            Err("pengirim ini tidak mendukung kirim sticker pack ( butuh Client )".to_string())
+        })
+    }
+
     /// Kirim kartu native-flow (`interactiveMessage` + node `biz`).
     ///
     /// Default-nya merakit kartu tanpa media header lalu mengirimnya — cukup
@@ -1272,6 +1279,82 @@ impl MessageSender for ClientSender {
                     .map_err(|e| format!("upload media gagal: {e}"))?;
                 build_media_message(media.kind, upload, &media)
             };
+            client
+                .send_message_with_options(jid, message, SendOptions::default())
+                .await
+                .map(|_| ())
+                .map_err(|e| e.to_string())
+        })
+    }
+
+    /// Sticker pack (`stickerPackMessage`) — upload ZIP + thumbnail.
+    fn send_sticker_pack(&self, to: &str, pack: PendingStickerPack) -> SendBox<'_> {
+        let client = self.client.clone();
+        let to = to.to_string();
+        Box::pin(async move {
+            let jid: Jid = to
+                .parse()
+                .map_err(|e| format!("JID tidak valid {to}: {e}"))?;
+            let mut sticker_bytes: Vec<Vec<u8>> = Vec::new();
+            let mut cover = Vec::new();
+            for source in pack.stickers {
+                let Some(source) = source else {
+                    continue;
+                };
+                let bytes = load_media(&source).await.map_err(|e| e.to_string())?;
+                if cover.is_empty() {
+                    cover = bytes.clone();
+                }
+                sticker_bytes.push(bytes);
+            }
+            if sticker_bytes.is_empty() {
+                return Err("sticker pack kosong".to_string());
+            }
+            let stickers: Vec<_> = sticker_bytes
+                .iter()
+                .map(|bytes| {
+                    let mut input = whatsapp_rust::wacore::sticker_pack::StickerInput::new(bytes);
+                    input.emojis = pack.emojis.clone();
+                    input.accessibility_label = Some(String::new());
+                    input
+                })
+                .collect();
+            let pack_id = format!(
+                "{}-{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_nanos())
+                    .unwrap_or_default(),
+                std::process::id()
+            );
+            let zip = whatsapp_rust::wacore::sticker_pack::create_sticker_pack_zip(&pack_id, &stickers, &cover)
+                .map_err(|e| format!("gagal buat ZIP sticker pack: {e}"))?;
+            let media_key = oktz_plugin_api::buat_kunci_media();
+            let cover_jpeg = oktz_plugin_api::gambar::sharp(&cover)
+                .and_then(|g| g.ke_jpeg(80))
+                .unwrap_or_else(|_| cover.clone());
+            let zip_bytes = zip.zip_bytes.clone();
+            let zip_upload = client
+                .upload(zip_bytes, MediaType::StickerPack, UploadOptions::new().with_media_key(media_key))
+                .await
+                .map_err(|e| format!("upload ZIP sticker pack gagal: {e}"))?;
+            let thumb_upload = client
+                .upload(cover_jpeg, MediaType::StickerPackThumbnail, UploadOptions::new().with_media_key(media_key))
+                .await
+                .map_err(|e| format!("upload thumbnail sticker pack gagal: {e}"))?;
+            let metadata = whatsapp_rust::wacore::sticker_pack::StickerPackMetadata::new(
+                pack_id,
+                pack.name,
+                pack.publisher,
+            )
+            .with_description(pack.description);
+            let message = whatsapp_rust::wacore::sticker_pack::build_sticker_pack_message(
+                &zip,
+                &zip_upload.into(),
+                &thumb_upload.into(),
+                metadata,
+            )
+            .map_err(|e| format!("gagal rakit sticker pack: {e}"))?;
             client
                 .send_message_with_options(jid, message, SendOptions::default())
                 .await
@@ -1629,6 +1712,8 @@ pub struct Rendered {
     /// Kartu native-flow yang belum dirakit jadi proto. `Some` = kirim lewat
     /// [`MessageSender::send_card`].
     pub card: Option<oktz_plugin_api::kartu::Kartu>,
+    /// Sticker pack yang belum di-upload.
+    pub sticker_pack: Option<PendingStickerPack>,
     /// Media header kartu yang belum di-upload. Some = kartu harus lewat
     /// [`MessageSender::send_card`] supaya header gambarnya terpasang.
     pub card_header_media: Option<PendingMedia>,
@@ -1644,6 +1729,7 @@ impl Rendered {
             media: None,
             card: None,
             card_header_media: None,
+            sticker_pack: None,
             card_quote: None,
         }
     }
@@ -1705,6 +1791,18 @@ pub struct PendingMedia {
     pub preview: Option<PendingPreview>,
     /// Opsi sticker: wire metadata + EXIF input. `None` untuk media non-sticker.
     pub sticker: Option<oktz_plugin_api::StickerOpsi>,
+    /// Sticker pack yang menunggu upload ZIP/thumbnail.
+    pub sticker_pack: Option<PendingStickerPack>,
+}
+
+/// Sticker pack yang menunggu upload ZIP/thumbnail.
+#[derive(Debug, Clone)]
+pub struct PendingStickerPack {
+    pub stickers: Vec<Option<MediaSource>>,
+    pub name: String,
+    pub publisher: String,
+    pub description: String,
+    pub emojis: Vec<String>,
 }
 
 /// `sendPreview` (`socket.js:1206-1274`): `extendedTextMessage` yang sudah
@@ -2056,6 +2154,7 @@ pub fn render_reply(
             file_length: None,
             preview: None,
             sticker: None,
+            sticker_pack: None,
         })
     };
     match reply {
@@ -2078,22 +2177,41 @@ pub fn render_reply(
                 file_length: None,
                 preview: None,
                 sticker: Some(opsi.clone()),
+                sticker_pack: None,
             }),
             card: None,
             card_header_media: None,
+            sticker_pack: None,
             card_quote: None,
         })),
-        Reply::StickerPack { stickers, name, publisher, description, emojis } => {
+        Reply::StickerPack {
+            stickers,
+            name,
+            publisher,
+            description,
+            emojis,
+        } => {
             if stickers.iter().all(Option::is_none) {
                 return Err(PipelineError::MediaSourceMissing {
                     variant: "StickerPack",
                 });
             }
-            let _ = (name, publisher, description, emojis);
-            Err(PipelineError::Unsupported(
-                "Reply::StickerPack belum punya transport pack di Task 6".into(),
-            ))
-        }
+            Ok(Some(Rendered {
+                message: wa::Message::default(),
+                extra_nodes: Vec::new(),
+                media: None,
+                card: None,
+                card_header_media: None,
+                sticker_pack: Some(PendingStickerPack {
+                    stickers: stickers.clone(),
+                    name: name.clone(),
+                    publisher: publisher.clone(),
+                    description: description.clone(),
+                    emojis: emojis.clone(),
+                }),
+                card_quote: None,
+            }))
+        },
         Reply::Image {
             media: src,
             caption,
@@ -2104,6 +2222,7 @@ pub fn render_reply(
             media: Some(pending(MediaKind::Image, "Image", src, caption, mentions)?),
             card: None,
             card_header_media: None,
+            sticker_pack: None,
             card_quote: None,
         })),
         Reply::Video {
@@ -2120,6 +2239,7 @@ pub fn render_reply(
                 media: Some(media),
                 card: None,
                 card_header_media: None,
+            sticker_pack: None,
                 card_quote: None,
             }))
         }
@@ -2132,6 +2252,7 @@ pub fn render_reply(
                 media: Some(media),
                 card: None,
                 card_header_media: None,
+            sticker_pack: None,
                 card_quote: None,
             }))
         }
@@ -2149,6 +2270,7 @@ pub fn render_reply(
                 media: Some(media),
                 card: None,
                 card_header_media: None,
+            sticker_pack: None,
                 card_quote: None,
             }))
         }
@@ -2277,6 +2399,7 @@ pub fn render_reply(
                     file_length: None,
                     preview: None,
                     sticker: None,
+                    sticker_pack: None,
                 });
             Ok(Some(Rendered {
                 message: wa::Message::default(),
@@ -2284,6 +2407,7 @@ pub fn render_reply(
                 media: None,
                 card: Some((**kartu).clone()),
                 card_header_media: header_media,
+                sticker_pack: None,
                 card_quote: if kartu.quote { quote.cloned() } else { None },
             }))
         }
@@ -2471,7 +2595,8 @@ fn quoted_of(m: &InboundMessage) -> Option<QuotedMessage> {
         mimetype: quoted_mimetype(quoted),
         file_name: quoted_file_name(quoted),
         from_me: m.info.source.is_from_me,
-    })
+            timestamp: 0,
+        })
 }
 
 fn quoted_kind(m: &wa::Message) -> QuotedKind {
@@ -2832,6 +2957,8 @@ struct PluginCtxSource {
     /// `db.data.owner` (`owner.json`) untuk `.owner`. Bukan daftar config dan
     /// bukan daftar otorisasi — keduanya punya sumber berbeda di JS.
     db_owners: Vec<String>,
+    recent_media: Arc<Mutex<HashMap<String, VecDeque<AlbumMedia>>>>,
+    recent_media_data: Arc<Mutex<HashMap<String, crate::media_fetch::MediaData>>>,
 }
 
 impl PluginCtxSource {
@@ -2864,6 +2991,14 @@ impl PluginCtxSource {
         c.sock = self.sock.clone();
         c.berkas = self.berkas.clone();
         c.db_owners = self.db_owners.clone();
+        let album = self
+            .recent_media
+            .lock()
+            .unwrap()
+            .get(&c.chat)
+            .cloned()
+            .unwrap_or_default();
+        c.album_media = album.into_iter().collect();
         // Jumlah SELURUH store, bukan entri pengirim — `stats.js:54-56` dan
         // `ping2.js:100-102` membaca `db.data.users`/`groups` utuh, dan plugin
         // tidak punya akses store sendiri.
@@ -3062,6 +3197,8 @@ impl Pipeline {
                 sock: Arc::new(SockMati),
                 berkas: Arc::new(oktz_plugin_api::berkas::BerkasPalsu::baru()),
                 db_owners: Vec::new(),
+                recent_media: Arc::new(Mutex::new(HashMap::new())),
+                recent_media_data: Arc::new(Mutex::new(HashMap::new())),
             },
             ctx,
             sender,
@@ -3214,7 +3351,8 @@ impl Pipeline {
         // `Client`, jadi `media_fetch` tetap `None` dan `Ctx` memakai
         // `NoMediaFetch` — `Ctx::media` tetap terisi supaya plugin bisa
         // memeriksa `m.isImage` tanpa sesi WA.
-        let (media, media_fetch) = crate::media_fetch::ctx_media(self.sender.client(), m);
+        let recent = self.plugin_src.recent_media_data.lock().unwrap_or_else(|e: std::sync::PoisonError<_>| e.into_inner()).clone();
+        let (media, media_fetch) = crate::media_fetch::ctx_media(self.sender.client(), m, &recent);
         Caller {
             sender: sender.clone(),
             chat: s.chat.to_string(),
@@ -3407,6 +3545,7 @@ impl Pipeline {
                 media: Some(p),
                 card: None,
                 card_header_media: None,
+            sticker_pack: None,
                 card_quote: None,
             }),
         })
@@ -3456,6 +3595,16 @@ impl Pipeline {
                     }
                 }
             }
+            return Ok(SentMessage {
+                message_id: String::new(),
+                message: wa::Message::default(),
+            });
+        }
+        if let Some(pack) = rendered.sticker_pack {
+            self.sender
+                .send_sticker_pack(chat, pack)
+                .await
+                .map_err(|e| PipelineError::Other(format!("gagal kirim: {e}")))?;
             return Ok(SentMessage {
                 message_id: String::new(),
                 message: wa::Message::default(),
@@ -3642,6 +3791,34 @@ impl Pipeline {
         roster
     }
 
+    fn record_recent_media(&self, m: &InboundMessage) {
+        let Some(data) = crate::media_fetch::MediaData::of(&m.message) else {
+            return;
+        };
+        let chat = m.info.source.chat.to_string();
+        let item = oktz_plugin_api::AlbumMedia {
+            id: m.info.id.clone(),
+            timestamp: m.info.timestamp.timestamp(),
+            from_me: m.info.source.is_from_me,
+            media: None,
+        };
+        let mut guard = self
+            .plugin_src
+            .recent_media
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let entry = guard.entry(chat).or_default();
+        entry.push_back(item);
+        while entry.len() > 30 {
+            entry.pop_front();
+        }
+        self.plugin_src
+            .recent_media_data
+            .lock()
+            .unwrap_or_else(|e: std::sync::PoisonError<_>| e.into_inner())
+            .insert(m.info.id.clone(), data);
+    }
+
     /// Satu pesan inbound → satu keputusan → satu pengiriman.
     pub async fn process(&self, m: &InboundMessage, now_ms: i64) -> Result<Outcome, PipelineError> {
         let Some(body) = extract_body(&m.message) else {
@@ -3649,6 +3826,7 @@ impl Pipeline {
         };
 
         let mut caller = self.caller_of(m);
+        self.record_recent_media(m);
 
         // Dedup: kunci persis handler.js:926.
         let dedup_key = format!(
@@ -5463,6 +5641,7 @@ fn group_number_and_long_number_are_rejected() {
             file_length: None,
             preview: None,
             sticker: None,
+            sticker_pack: None,
         }
     }
 
@@ -6319,6 +6498,8 @@ fn group_number_and_long_number_are_rejected() {
             sock: Arc::new(SockMati),
             berkas: Arc::new(oktz_plugin_api::berkas::BerkasPalsu::baru()),
             db_owners: Vec::new(),
+            recent_media: Arc::new(Mutex::new(HashMap::new())),
+            recent_media_data: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 

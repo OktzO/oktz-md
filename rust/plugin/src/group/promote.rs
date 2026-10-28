@@ -183,6 +183,7 @@ mod tests {
             mimetype: None,
             file_name: None,
             from_me: false,
+            timestamp: 0,
         });
         let r = run(ctx);
         assert_eq!(body(&r), ALREADY_ADMIN, "quoted admin, bukan mention biasa");

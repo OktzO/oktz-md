@@ -35,8 +35,8 @@ pub mod kanvas;
 pub use kanvas::Kanvas;
 pub mod sticker;
 pub use sticker::{
-    OpsiS, StickerOpsi, STICKER_WEBP_VF, gambar_ke_stiker_webp, opsi_s, tempel_metadata_stiker,
-    video_ke_stiker_webp,
+    OpsiS, StickerOpsi, STICKER_WEBP_VF, buat_kunci_media, gambar_ke_stiker_webp, opsi_s,
+    tempel_metadata_stiker, video_ke_stiker_webp,
 };
 
 // Plugin butuh menyusun `Runtime` sendiri di test (untuk menguji jalur
@@ -47,6 +47,6 @@ pub use registry::{
     AnswerHandlerFn, Ctx, HandlerFn, HttpBody, HttpCall, HttpError, HttpGet, HttpMethod,
     HttpResponse, IncomingKind, IncomingMedia, MediaError, MediaFetch, MediaOrigin, MediaSource,
     MultipartPart, Mutation, NoHttp, NoMediaFetch, Participant, PluginEntry, QuotedKind,
-    QuotedMessage, Reply, SessionStore, all_answer_handlers, all_plugins, count, find,
-    new_session_store, run_answer_handlers,
+    QuotedMessage, Reply, SessionStore, AlbumMedia, all_answer_handlers, all_plugins, count, find,
+    pilih_album_media, new_session_store, run_answer_handlers,
 };

@@ -342,6 +342,7 @@ mod tests {
             mimetype: Some("image/jpeg".into()),
             file_name: None,
             from_me: false,
+            timestamp: 0,
         }
     }
 

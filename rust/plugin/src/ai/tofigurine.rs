@@ -204,7 +204,8 @@ mod tests {
                     mimetype: None,
                     file_name: None,
                     from_me: false,
-                })
+            timestamp: 0,
+        })
             } else {
                 None
             },
@@ -266,7 +267,8 @@ mod tests {
                 mimetype: None,
                 file_name: None,
                 from_me: false,
-            }),
+            timestamp: 0,
+        }),
             media_fetch: Arc::new(StubMedia::default()),
             http: StubHttp::offline(),
             ..Ctx::default()
@@ -360,7 +362,8 @@ mod tests {
                 mimetype: None,
                 file_name: None,
                 from_me: false,
-            }),
+            timestamp: 0,
+        }),
             media_fetch: Arc::new(StubMedia {
                 hasil: Ok(vec![5, 6]),
             }),

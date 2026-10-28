@@ -265,7 +265,8 @@ mod tests {
                 mimetype: None,
                 file_name: None,
                 from_me: false,
-            }),
+            timestamp: 0,
+        }),
             user_data: serde_json::json!({"koin": 5000}),
             roster: GroupRoster {
                 participants: vec![Participant {

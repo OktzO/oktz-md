@@ -23,6 +23,7 @@
 //!   (butuh `fs`); pemanggil menerima byte-nya dan yang berurusan dengan
 //!   berkas lokal tetap terblokir seperti sebelumnya.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use oktz_plugin_api::{
@@ -187,6 +188,7 @@ pub struct WaMediaFetch {
     client: Arc<Client>,
     trigger: Option<MediaData>,
     quoted: Option<MediaData>,
+    indexed: HashMap<String, MediaData>,
 }
 
 impl std::fmt::Debug for WaMediaFetch {
@@ -204,6 +206,7 @@ impl MediaFetch for WaMediaFetch {
         let data = match origin {
             MediaOrigin::Trigger => self.trigger.as_ref(),
             MediaOrigin::Quoted => self.quoted.as_ref(),
+            MediaOrigin::Indexed(ref id) => self.indexed.get(id),
         };
         let Some(data) = data else {
             return Err(MediaError {
@@ -258,15 +261,17 @@ fn quoted_media_of(m: &wa::Message) -> Option<MediaData> {
 pub fn ctx_media(
     client: Option<Arc<Client>>,
     m: &InboundMessage,
+    recent: &HashMap<String, MediaData>,
 ) -> (Option<IncomingMedia>, Option<Arc<dyn MediaFetch>>) {
     let trigger = MediaData::of(&m.message);
     let quoted = quoted_media_of(&m.message);
     let info = trigger.as_ref().map(|d| d.info.clone());
     let fetch: Option<Arc<dyn MediaFetch>> = match client {
-        Some(client) if trigger.is_some() || quoted.is_some() => Some(Arc::new(WaMediaFetch {
+        Some(client) if trigger.is_some() || quoted.is_some() || !recent.is_empty() => Some(Arc::new(WaMediaFetch {
             client,
             trigger,
             quoted,
+            indexed: recent.clone(),
         })),
         _ => None,
     };

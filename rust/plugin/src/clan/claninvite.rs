@@ -139,7 +139,8 @@ mod tests {
                 mimetype: None,
                 file_name: None,
                 from_me: false,
-            }),
+            timestamp: 0,
+        }),
             user_data: user,
             settings: serde_json::json!({ crate::clan::clancreate::CLANS_KEY: clans }),
             ..Default::default()

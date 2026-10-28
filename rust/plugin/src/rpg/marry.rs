@@ -180,7 +180,8 @@ mod tests {
                 mimetype: None,
                 file_name: None,
                 from_me: false,
-            }),
+            timestamp: 0,
+        }),
             user_data: user,
             roster: oktz_plugin_api::registry::GroupRoster {
                 participants: vec![Participant {

@@ -297,6 +297,7 @@ mod tests {
             mimetype: None,
             file_name: None,
             from_me: false,
+            timestamp: 0,
         });
         run(ctx.clone());
         let games = ctx.session_get(GAMES_KEY).unwrap();
