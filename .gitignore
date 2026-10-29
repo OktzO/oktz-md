@@ -16,3 +16,6 @@ sim-load.mjs
 run-sim.mjs
 AzusaMD_v0.zip
 tmp/
+
+# Spike S1: dump sesi Turso produksi (material kripto asli) — jangan commit
+rust-spike/fixtures/

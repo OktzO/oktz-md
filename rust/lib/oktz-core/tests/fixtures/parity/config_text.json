@@ -1,0 +1,28 @@
+{
+  "messages": {
+    "wait": "🕕 *Proses...* Mohon tunggu sebentar ya.",
+    "success": "✅ *Berhasil!* Permintaan kamu sudah selesai.",
+    "error": "❌ *Error!* Ada masalah pada sistem, coba lagi nanti.",
+    "ownerOnly": "*Akses Ditolak!* Fitur ini khusus untuk Owner bot.",
+    "premiumOnly": "💎 *Premium Only!* Fitur ini khusus member Premium. Ketik *.benefitpremium* untuk info upgrade.",
+    "groupOnly": "👥 *Group Only!* Fitur ini hanya bisa digunakan di dalam grup.",
+    "privateOnly": "� *Private Only!* Fitur ini hanya bisa digunakan di chat pribadi bot.",
+    "adminOnly": "�️ *Admin Only!* Kamu harus jadi Admin grup untuk pakai fitur ini.",
+    "botAdminOnly": "🤖 *Bot Bukan Admin!* Jadikan bot sebagai Admin grup dulu biar bisa kerja.",
+    "cooldown": "🕕 *Tunggu Dulu!* Kamu masih dalam cooldown. Tunggu %time% detik lagi ya.",
+    "energiExceeded": "⚡ *Energi Habis!* Energi kamu sudah habis. Tunggu reset besok atau beli Premium.",
+    "limitDeducted": "🔋 Limit kau berkurang sebanyak {amount}. Sisa limit: {sisa}",
+    "banned": "🚫 *Kamu Dibanned!* Kamu tidak bisa menggunakan bot ini karena telah melanggar aturan.",
+    "rejectCall": "🚫 JANGAN TELPON NOMOR INI WEH"
+  },
+  "info": {
+    "website": "https://oktzz.xyz",
+    "botName": "Oktz Bot",
+    "version": "3.3.1",
+    "developer": "Zann"
+  },
+  "saluran": {
+    "id": "120363411617217441@newsletter",
+    "name": "Join saluran resmi Oktz"
+  }
+}

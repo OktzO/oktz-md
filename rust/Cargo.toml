@@ -1,0 +1,53 @@
+[package]
+name = "oktz"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "oktz"
+path = "src/main.rs"
+
+[workspace]
+resolver = "3"
+members = ["lib/*", "plugin"]
+# Tanpa ini `cargo test` di root package hanya menguji binary, bukan crate
+# oktz-* dan plugin — test ribuan plugin jadi tidak jalan diam-diam.
+default-members = [".", "lib/*", "plugin"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+license = "ISC"
+
+[workspace.dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.151", features = ["preserve_order"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"
+thiserror = "2"
+
+[dependencies]
+oktz-core = { path = "lib/oktz-core" }
+oktz-store = { path = "lib/oktz-store" }
+oktz-wa = { path = "lib/oktz-wa" }
+oktz-plugin-api = { path = "lib/oktz-plugin-api" }
+oktz-router = { path = "lib/oktz-router" }
+# Crate plugin harus ikut ter-link ke binary; tanpa ini `linkme` mendaftarkan
+# nol plugin dan `all_plugins()` melaporkan angka yang menipu.
+oktz-plugins = { path = "plugin" }
+serde_json.workspace = true
+tracing.workspace = true
+tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "time", "signal"] }
+
+# panic=unwind (bukan abort) supaya catch_unwind per plugin handler bisa
+# menahan error plugin tanpa mematikan bot — syarat tests/handler-error-visibility.
+[profile.release]
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "unwind"

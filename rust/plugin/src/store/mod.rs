@@ -1,0 +1,16 @@
+pub mod addlist;
+pub mod addstok;
+pub mod beli;
+pub mod editlist;
+pub mod editstok;
+pub mod hapuslist;
+pub mod hapusproduk;
+pub mod hapusstok;
+pub mod list;
+pub mod listproduk;
+pub mod liststok;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod editproduk;

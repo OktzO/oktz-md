@@ -1,0 +1,12 @@
+{
+  "name": "oktz-rs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "launcher.js",
+  "scripts": {
+    "start": "node launcher.js",
+    "build": "cargo build --release",
+    "test": "node --test launcher.test.js"
+  }
+}

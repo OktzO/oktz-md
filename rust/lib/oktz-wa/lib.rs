@@ -1,0 +1,46 @@
+//! Lapisan WhatsApp produksi. Kode di sini dipromosikan dari spike yang sudah
+//! terverifikasi end-to-end (impor 514/514 sesi, decrypt pesan nyata, tombol
+//! WA ter-render). Spike di `rust-spike/` adalah throwaway; ini yang dipakai bot.
+
+pub mod bot;
+pub mod cards;
+pub mod tabel;
+pub mod creds;
+pub mod grup_event;
+pub mod load;
+pub mod pairing;
+pub mod pairing_run;
+pub mod media_fetch;
+pub mod pesan_grup;
+pub mod pipeline;
+pub mod pipeline_gate;
+pub mod reply_variant;
+// Builder wire balasan rich (V2, list, AIRich, prepared rich).
+pub mod rich;
+pub mod rss;
+pub mod session;
+pub mod sock_client;
+
+pub use bot::{build_device, connect_device, prepare_store};
+pub use cards::{biz_node, build_card, build_list};
+pub use creds::{DeviceMapping, inspect_creds};
+pub use load::{LoadReport, load_into_store};
+pub use pipeline::{
+    ClientSender, Dedup, Identity, MessageSender, Outcome, PendingMedia, Pipeline, PipelineError,
+    RosterSource, SendBox, SendBoxRoster, StoreContext, normalize_user_key,
+};
+pub use pipeline::ReplyTarget;
+pub use pipeline_gate::GateState;
+pub use session::{ImportStats, import_session_record};
+pub use whatsapp_rust::bot::BotHandle;
+
+// Re-export untuk konsumen (oktz-bin) supaya tidak perlu depend ke whatsapp-rust langsung.
+pub use whatsapp_rust::prelude::{InboundMessage, MessageInfo};
+pub use whatsapp_rust::types::message::MessageSource;
+pub use whatsapp_rust::wacore::proto_helpers::MessageBuilderExt;
+pub use whatsapp_rust::wacore_binary::Node;
+pub use whatsapp_rust::waproto::whatsapp::{Message, MessageKey};
+// Oneof `interactiveMessage` — dipakai consumer (test integrasi) untuk
+// memeriksa tombol native-flow yang benar-benar terkirim.
+pub use whatsapp_rust::waproto::whatsapp::__buffa::oneof::message::interactive_message::InteractiveMessage as ImOneof;
+pub use whatsapp_rust::{Jid, SendOptions};

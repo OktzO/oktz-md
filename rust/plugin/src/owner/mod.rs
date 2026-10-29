@@ -1,0 +1,125 @@
+pub mod addenergi;
+pub mod addexp;
+pub mod addkoin;
+pub mod addlevel;
+pub mod addlimitall;
+pub mod addpartner;
+pub mod addpremall;
+pub mod aktifaudiomenu;
+pub mod anticall;
+pub mod autobackup;
+pub mod autobio;
+pub mod autojoingc;
+pub mod autoreactsw;
+pub mod autoread;
+pub mod autoreadsw;
+pub mod autosambut;
+pub mod autosholat;
+pub mod autotyping;
+pub mod backupdb;
+pub mod ban;
+pub mod bcpcjeda;
+pub mod block;
+pub mod botafk;
+pub mod botmode;
+pub mod capenergi;
+pub mod capfree;
+pub mod capprem;
+pub mod checkban;
+pub mod cmdvn;
+pub mod cpuprofile;
+pub mod custompayment;
+pub mod delenergi;
+pub mod delexp;
+pub mod delkoin;
+pub mod dellevel;
+pub mod delpremall;
+pub mod energitoggle;
+pub mod goodbyeall;
+pub mod heapsnap;
+pub mod listban;
+pub mod onlyadmin;
+pub mod onlygc;
+pub mod onlypc;
+pub mod public;
+pub mod q;
+pub mod resetlimitdefault;
+pub mod resetrules;
+#[path = "self.rs"]
+pub mod self_mode;
+pub mod setaudioallmenu;
+pub mod setlimitdefault;
+pub mod setrules;
+pub mod similarity;
+pub mod sistemenergi;
+pub mod stop;
+pub mod stopbcpc;
+pub mod templateplugin;
+pub mod unban;
+pub mod unblock;
+pub mod welcomeall;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod akses;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod exec;
+#[path = "ganti-asset.rs"]
+pub mod ganti_asset;
+#[path = "ganti-rpg.rs"]
+pub mod ganti_rpg;
+pub mod ganti_demote;
+pub mod ganti_foto;
+pub mod ganti_goodbye;
+pub mod ganti_levelup;
+pub mod ganti_pp_kosong;
+pub mod ganti_rules;
+pub mod ganti_store;
+pub mod get;
+pub mod hapussaluran;
+pub mod listjadibotaktif;
+pub mod onlythisgrup;
+pub mod pinchat;
+pub mod ptvch;
+pub mod setmenu;
+pub mod setmenucat;
+pub mod setownertype;
+pub mod star;
+pub mod stopdandeletejadibot;
+pub mod stopschedule;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod hapusgrup;
+pub mod mutechat;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod renewsewa;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod ganti_namadev;
+pub mod leave;
+pub mod payment;
+pub mod prefix;
+pub mod sampah;
+pub mod setgoodbyetype;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod listsewa;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+#[path = "ganti-namaowner.rs"]
+pub mod ganti_namaowner;
+pub mod setreply;
+pub mod setwelcometype;
+pub mod sewabot;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod savedb;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod clearsessions;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod ganti_large;

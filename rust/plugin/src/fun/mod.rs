@@ -1,0 +1,42 @@
+pub mod akankah;
+pub mod apakah;
+pub mod bagaimana;
+pub mod berapa;
+pub mod bisakah;
+pub mod bucin;
+pub mod cekpacar;
+pub mod coba;
+pub mod dare;
+pub mod dimana;
+pub mod fuckmylife;
+pub mod gay;
+pub mod haruskah;
+pub mod husbualbum;
+pub mod jodoh;
+pub mod kapan;
+pub mod mengapa;
+pub mod mimpi;
+pub mod puisi;
+pub mod putus;
+pub mod rate;
+pub mod renungan;
+pub mod senja;
+pub mod siapa;
+pub mod soulmatch;
+pub mod tod;
+pub mod top;
+pub mod truth;
+pub mod waifualbum;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod husbupool;
+pub mod terima;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod cekkhodam;
+pub mod waifupool;
+
+// Ditambahkan scripts/pasang-modul.mjs.
+pub mod gachawaifu;

@@ -1,0 +1,9 @@
+pub mod clancreate;
+pub mod claninfo;
+pub mod claninvite;
+pub mod clanjoin;
+pub mod clankick;
+pub mod clanleaderboard;
+pub mod clanleave;
+pub mod clanmembers;
+pub mod clanwar;

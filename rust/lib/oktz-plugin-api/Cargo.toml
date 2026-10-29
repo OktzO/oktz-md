@@ -1,0 +1,26 @@
+[lib]
+path = "lib.rs"
+
+[package]
+name = "oktz-plugin-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+oktz-core = { path = "../oktz-core" }
+oktz-plugin-macros = { path = "../oktz-plugin-macros" }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+linkme = "0.3"
+async-trait = "0.1"
+ureq = { version = "3.4", features = ["multipart"] }
+image = { version = "0.24", default-features = false, features = ["jpeg", "png", "webp", "gif", "webp-encoder"] }
+rand = "0.9"
+ab_glyph = "0.2"
+
+
+[dev-dependencies]
+tokio = { version = "1.53", features = ["rt", "macros", "time"] }
