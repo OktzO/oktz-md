@@ -1,8 +1,7 @@
 //! `plugins/sticker/sticker.js` — command `.s`.
 
 
-use std::sync::Arc;
-use oktz_plugin_api::{Ctx, IncomingKind, MediaError, MediaFetch, MediaOrigin, MediaSource, OpsiS, Reply, StickerOpsi, plugin};
+use oktz_plugin_api::{Ctx, IncomingKind, MediaSource, OpsiS, Reply, StickerOpsi, plugin};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Jenis {
@@ -19,12 +18,12 @@ struct Unduhan {
 }
 
 #[cfg(test)]
-impl MediaFetch for Unduhan {
-    fn download(&self, origin: MediaOrigin) -> Result<Vec<u8>, MediaError> {
+impl oktz_plugin_api::MediaFetch for Unduhan {
+    fn download(&self, origin: oktz_plugin_api::MediaOrigin) -> Result<Vec<u8>, oktz_plugin_api::MediaError> {
         match origin {
-            MediaOrigin::Trigger => Ok(self.pemicu.clone()),
-            MediaOrigin::Quoted => Ok(self.kutipan.clone()),
-            MediaOrigin::Indexed(_) => Err(MediaError {
+            oktz_plugin_api::MediaOrigin::Trigger => Ok(self.pemicu.clone()),
+            oktz_plugin_api::MediaOrigin::Quoted => Ok(self.kutipan.clone()),
+            oktz_plugin_api::MediaOrigin::Indexed(_) => Err(oktz_plugin_api::MediaError {
                 message: "tidak ada media di pesan yang di-reply".to_string(),
             }),
         }
@@ -278,6 +277,7 @@ pub fn sticker(ctx: Ctx) -> Reply {
 mod tests {
     use super::*;
     use oktz_plugin_api::config::Runtime;
+    use std::sync::Arc;
     use oktz_plugin_api::IncomingMedia;
         use std::fs;
     use std::os::unix::fs::PermissionsExt;
@@ -318,7 +318,7 @@ mod tests {
                 file_name: None,
                 caption: String::new(),
             }),
-            media_fetch: Arc::new(Unduhan { pemicu, kutipan }),
+            media_fetch: std::sync::Arc::new(Unduhan { pemicu, kutipan }),
             ..Ctx::default()
         }
     }
